@@ -102,30 +102,30 @@ class ApplicationConfiguration:
         application_manifest.command = build_parameters.command
 
         application_manifest.environment = {}
-        application_manifest.environment[EnvironmentVariables.HOLOSCAN_APPLICATION] = str(
-            build_parameters.app_dir
+        application_manifest.environment[EnvironmentVariables.HOLOSCAN_APPLICATION] = (
+            str(build_parameters.app_dir)
         )
-        application_manifest.environment[EnvironmentVariables.HOLOSCAN_INPUT_PATH] = str(
-            build_parameters.input_dir
+        application_manifest.environment[EnvironmentVariables.HOLOSCAN_INPUT_PATH] = (
+            str(build_parameters.input_dir)
         )
-        application_manifest.environment[EnvironmentVariables.HOLOSCAN_OUTPUT_PATH] = str(
-            build_parameters.output_dir
+        application_manifest.environment[EnvironmentVariables.HOLOSCAN_OUTPUT_PATH] = (
+            str(build_parameters.output_dir)
         )
         application_manifest.environment[EnvironmentVariables.HOLOSCAN_WORKDIR] = str(
             build_parameters.working_dir
         )
-        application_manifest.environment[EnvironmentVariables.HOLOSCAN_MODEL_PATH] = str(
-            build_parameters.models_dir
+        application_manifest.environment[EnvironmentVariables.HOLOSCAN_MODEL_PATH] = (
+            str(build_parameters.models_dir)
         )
-        application_manifest.environment[EnvironmentVariables.HOLOSCAN_CONFIG_PATH] = str(
-            build_parameters.config_file_path
+        application_manifest.environment[EnvironmentVariables.HOLOSCAN_CONFIG_PATH] = (
+            str(build_parameters.config_file_path)
         )
-        application_manifest.environment[EnvironmentVariables.HOLOSCAN_APP_MANIFEST_PATH] = str(
-            build_parameters.app_manifest_path
-        )
-        application_manifest.environment[EnvironmentVariables.HOLOSCAN_PKG_MANIFEST_PATH] = str(
-            build_parameters.package_manifest_path
-        )
+        application_manifest.environment[
+            EnvironmentVariables.HOLOSCAN_APP_MANIFEST_PATH
+        ] = str(build_parameters.app_manifest_path)
+        application_manifest.environment[
+            EnvironmentVariables.HOLOSCAN_PKG_MANIFEST_PATH
+        ] = str(build_parameters.package_manifest_path)
         application_manifest.environment[EnvironmentVariables.HOLOSCAN_DOCS_PATH] = str(
             build_parameters.docs_dir
         )
@@ -162,7 +162,9 @@ class ApplicationConfiguration:
         package_manifest.models = {}
         if build_parameters.models is not None:
             for model in build_parameters.models:
-                package_manifest.models[model] = os.path.join(package_manifest.model_root, model)
+                package_manifest.models[model] = os.path.join(
+                    package_manifest.model_root, model
+                )
         package_manifest.resources = self._resource_object
         package_manifest.version = self._get_version(build_parameters)
 

@@ -20,7 +20,6 @@ import tempfile
 
 import pytest
 import yaml
-
 from holoscan.cli.common.constants import DefaultValues, EnvironmentVariables
 from holoscan.cli.common.enum_types import SdkType
 from holoscan.cli.common.exceptions import InvalidApplicationConfigurationError
@@ -126,7 +125,10 @@ class TestApplicationConfiguration:
         with pytest.raises(InvalidApplicationConfigurationError) as e:
             config.read(pathlib.Path(yaml_file))
 
-        assert str(e).find("Application ('application') configuration cannot be found in ") != -1
+        assert (
+            str(e).find("Application ('application') configuration cannot be found in ")
+            != -1
+        )
 
     def test_config_yaml_validate_missing_resources(self, monkeypatch):
         data = self._generate_yaml()
@@ -138,7 +140,10 @@ class TestApplicationConfiguration:
         with pytest.raises(InvalidApplicationConfigurationError) as e:
             config.read(pathlib.Path(yaml_file))
 
-        assert str(e).find("Resources ('resources') configuration cannot be found in ") != -1
+        assert (
+            str(e).find("Resources ('resources') configuration cannot be found in ")
+            != -1
+        )
 
     def test_config_yaml_validate_missing_application_title(self, monkeypatch):
         data = self._generate_yaml()
@@ -150,7 +155,10 @@ class TestApplicationConfiguration:
         with pytest.raises(InvalidApplicationConfigurationError) as e:
             config.read(pathlib.Path(yaml_file))
 
-        assert str(e).find("Application configuration key/value ('application>title')") != -1
+        assert (
+            str(e).find("Application configuration key/value ('application>title')")
+            != -1
+        )
 
     def test_populate_app_manifest(self):
         data = self._generate_yaml()
@@ -181,12 +189,12 @@ class TestApplicationConfiguration:
         assert result.environment[EnvironmentVariables.HOLOSCAN_CONFIG_PATH] == str(
             build_parameters.config_file_path
         )
-        assert result.environment[EnvironmentVariables.HOLOSCAN_APP_MANIFEST_PATH] == str(
-            build_parameters.app_manifest_path
-        )
-        assert result.environment[EnvironmentVariables.HOLOSCAN_PKG_MANIFEST_PATH] == str(
-            build_parameters.package_manifest_path
-        )
+        assert result.environment[
+            EnvironmentVariables.HOLOSCAN_APP_MANIFEST_PATH
+        ] == str(build_parameters.app_manifest_path)
+        assert result.environment[
+            EnvironmentVariables.HOLOSCAN_PKG_MANIFEST_PATH
+        ] == str(build_parameters.package_manifest_path)
         assert result.input["path"] == build_parameters.input_dir
         assert result.input["formats"] == data["application"]["input-formats"]
         assert result.output["path"] == build_parameters.output_dir
@@ -224,7 +232,10 @@ class TestApplicationConfiguration:
 
         with pytest.raises(InvalidApplicationConfigurationError) as e:
             config.populate_app_manifest(build_parameters)
-        assert str(e).find("Application configuration key/value ('application>version')") != -1
+        assert (
+            str(e).find("Application configuration key/value ('application>version')")
+            != -1
+        )
 
     def test_populate_package_manifest_single_model(self):
         data = self._generate_yaml()
@@ -249,7 +260,10 @@ class TestApplicationConfiguration:
         yaml_file = self._write_yaml(data)
         build_parameters = PackageBuildParameters()
         build_parameters._data["command"] = "/bin/bash my-command -and -args"
-        build_parameters.models = {"model-a": "/path/to/model-a", "model-b": "/path/to/model-b"}
+        build_parameters.models = {
+            "model-a": "/path/to/model-a",
+            "model-b": "/path/to/model-b",
+        }
         config = ApplicationConfiguration()
         config.read(pathlib.Path(yaml_file))
 

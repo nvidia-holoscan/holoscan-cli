@@ -22,5 +22,7 @@ import pytest
 def configure_version(monkeypatch):  # noqa: PT004
     with pytest.MonkeyPatch.context() as mp:
         version = "2.4.0"
-        mp.setattr("holoscan.cli.common.artifact_sources.holoscan_version_string", version)
+        mp.setattr(
+            "holoscan.cli.common.artifact_sources.holoscan_version_string", version
+        )
         yield mp

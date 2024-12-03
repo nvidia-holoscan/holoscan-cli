@@ -35,7 +35,9 @@ class DefaultValues:
 
     HOLOSCAN_APP_DIR = Path("/opt/holoscan/app")  # Path to user's application
     HOLOSCAN_LIB_DIR = Path("/opt/holoscan/lib")  # Path to user's application
-    HOLOSCAN_CONFIG_PATH = Path("/var/holoscan/app.yaml")  # Path to the application config file
+    HOLOSCAN_CONFIG_PATH = Path(
+        "/var/holoscan/app.yaml"
+    )  # Path to the application config file
     HOLOSCAN_DOCS_DIR = Path("/opt/holoscan/docs")  # Path to documentation
     HOLOSCAN_LOGS_DIR = Path("/var/holoscan/logs")  # Path to application logs
     INPUT_DIR = "input/"  # Relative path to application input data

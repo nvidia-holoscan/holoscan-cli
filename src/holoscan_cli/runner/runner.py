@@ -265,7 +265,9 @@ def _pkg_specific_dependency_verification(pkg_info: dict) -> bool:
         prog = "nvidia-ctk"
         logger.info('--> Verifying if "%s" is installed...\n', prog)
         if not shutil.which(prog):
-            logger.error('"%s" not installed, please install NVIDIA Container Toolkit.', prog)
+            logger.error(
+                '"%s" not installed, please install NVIDIA Container Toolkit.', prog
+            )
             return False
 
         logger.info('--> Verifying "%s" version...\n', prog)

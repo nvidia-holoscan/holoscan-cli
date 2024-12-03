@@ -25,7 +25,11 @@ from typing import Optional
 from jinja2 import Environment, FileSystemLoader, StrictUndefined
 
 from ..common.constants import Constants, DefaultValues
-from ..common.dockerutils import build_docker_image, create_and_get_builder, docker_export_tarball
+from ..common.dockerutils import (
+    build_docker_image,
+    create_and_get_builder,
+    docker_export_tarball,
+)
 from ..common.exceptions import WrongApplicationPathError
 from .parameters import PackageBuildParameters, PlatformBuildResults, PlatformParameters
 
@@ -95,9 +99,13 @@ class BuilderBase:
         cache_to = {"type": "local", "dest": self._build_parameters.build_cache}
         cache_from = [{"type": "local", "src": self._build_parameters.build_cache}]
         if platform_parameters.base_image is not None:
-            cache_from.append({"type": "registry", "ref": platform_parameters.base_image})
+            cache_from.append(
+                {"type": "registry", "ref": platform_parameters.base_image}
+            )
         if platform_parameters.build_image is not None:
-            cache_from.append({"type": "registry", "ref": platform_parameters.build_image})
+            cache_from.append(
+                {"type": "registry", "ref": platform_parameters.build_image}
+            )
 
         builds = {
             "builder": builder,
@@ -146,7 +154,9 @@ class BuilderBase:
             "GPU_TYPE": platform_parameters.platform_config.value,
         }
 
-        self._logger.debug(f"Building Holoscan Application Package: tag={platform_parameters.tag}")
+        self._logger.debug(
+            f"Building Holoscan Application Package: tag={platform_parameters.tag}"
+        )
 
         try:
             build_docker_image(**builds)
@@ -156,13 +166,17 @@ class BuilderBase:
                     self._logger.info(
                         f"Saving {platform_parameters.tag} to {build_result.tarball_filenaem}..."
                     )
-                    docker_export_tarball(build_result.tarball_filenaem, platform_parameters.tag)
+                    docker_export_tarball(
+                        build_result.tarball_filenaem, platform_parameters.tag
+                    )
                 except Exception as ex:
                     build_result.error = f"Error saving tarball: {ex}"
                     build_result.succeeded = False
         except Exception:
             build_result.succeeded = False
-            build_result.error = "Error building image: see Docker output for additional details."
+            build_result.error = (
+                "Error building image: see Docker output for additional details."
+            )
 
         return build_result
 
@@ -190,7 +204,9 @@ Building image for:                 {platform_parameters.platform.value}
     def _write_dockerignore(self):
         """Copy .dockerignore file to temporary location."""
         # Write out .dockerignore file
-        dockerignore_source_file_path = Path(__file__).parent / "templates" / "dockerignore"
+        dockerignore_source_file_path = (
+            Path(__file__).parent / "templates" / "dockerignore"
+        )
         dockerignore_dest_file_path = os.path.join(self._temp_dir, ".dockerignore")
         shutil.copyfile(dockerignore_source_file_path, dockerignore_dest_file_path)
         return dockerignore_dest_file_path
@@ -233,12 +249,16 @@ Building image for:                 {platform_parameters.platform.value}
             )
 
         if os.path.isfile(self._build_parameters.application):
-            shutil.copytree(self._build_parameters.application.parent, target_application_path)
+            shutil.copytree(
+                self._build_parameters.application.parent, target_application_path
+            )
         else:
             shutil.copytree(self._build_parameters.application, target_application_path)
 
         target_config_file_path = Path(os.path.join(self._temp_dir, "app.config"))
-        shutil.copyfile(self._build_parameters.app_config_file_path, target_config_file_path)
+        shutil.copyfile(
+            self._build_parameters.app_config_file_path, target_config_file_path
+        )
 
     def _copy_libs(self):
         """
@@ -262,7 +282,9 @@ Building image for:                 {platform_parameters.platform.value}
         subdirectories = [
             os.path.join(
                 DefaultValues.HOLOSCAN_LIB_DIR,
-                os.path.join(root, subdir).replace(str(target_libs_path), "").lstrip("/"),
+                os.path.join(root, subdir)
+                .replace(str(target_libs_path), "")
+                .lstrip("/"),
             )
             for root, dirs, _ in os.walk(target_libs_path)
             for subdir in dirs
@@ -278,7 +300,9 @@ Building image for:                 {platform_parameters.platform.value}
             for model in self._build_parameters.models:
                 target_model_path = os.path.join(target_models_root_path, model)
                 if self._build_parameters.models[model].is_dir():
-                    shutil.copytree(self._build_parameters.models[model], target_model_path)
+                    shutil.copytree(
+                        self._build_parameters.models[model], target_model_path
+                    )
                 elif self._build_parameters.models[model].is_file():
                     os.makedirs(target_model_path, exist_ok=True)
                     target_model_path = os.path.join(
@@ -329,7 +353,9 @@ Building image for:                 {platform_parameters.platform.value}
 
     def __init_subclass__(cls):
         if cls._copy_supporting_files is BuilderBase._copy_supporting_files:
-            raise NotImplementedError("{cls} has not overwritten method {_copy_supporting_files}!")
+            raise NotImplementedError(
+                "{cls} has not overwritten method {_copy_supporting_files}!"
+            )
 
 
 class PythonAppBuilder(BuilderBase):
@@ -362,7 +388,9 @@ class PythonAppBuilder(BuilderBase):
                 requirements_file.writelines("\n")
 
             if self._build_parameters.pip_packages:
-                requirements_file.writelines("\n".join(self._build_parameters.pip_packages))
+                requirements_file.writelines(
+                    "\n".join(self._build_parameters.pip_packages)
+                )
 
     def _copy_sdk_file(self, sdk_file: Optional[Path]):
         if sdk_file is not None and os.path.isfile(sdk_file):
@@ -389,7 +417,9 @@ class CppAppBuilder(BuilderBase):
         if platform_parameters.holoscan_sdk_file is not None and os.path.isfile(
             platform_parameters.holoscan_sdk_file
         ):
-            dest = os.path.join(self._temp_dir, platform_parameters.holoscan_sdk_file.name)
+            dest = os.path.join(
+                self._temp_dir, platform_parameters.holoscan_sdk_file.name
+            )
             if os.path.exists(dest):
                 os.remove(dest)
             shutil.copyfile(

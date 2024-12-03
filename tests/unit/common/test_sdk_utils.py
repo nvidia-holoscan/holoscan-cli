@@ -15,19 +15,21 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """  # noqa: E501
 
-import pytest
-from packaging.version import Version
-
 import holoscan.cli.common.sdk_utils
+import pytest
 from holoscan.cli.common.artifact_sources import ArtifactSources
 from holoscan.cli.common.enum_types import SdkType
-from holoscan.cli.common.exceptions import FailedToDetectSDKVersionError, InvalidSdkError
+from holoscan.cli.common.exceptions import (
+    FailedToDetectSDKVersionError,
+    InvalidSdkError,
+)
 from holoscan.cli.common.sdk_utils import (
     detect_holoscan_version,
     detect_monaideploy_version,
     detect_sdk,
     detect_sdk_version,
 )
+from packaging.version import Version
 
 
 class TestDetectSdk:
@@ -80,7 +82,9 @@ class TestDetectHoloscanVersion:
         self._artifact_source._supported_holoscan_versions = ["1.0.0"]
 
     def test_sdk_version_from_valid_user_input(self, monkeypatch):
-        assert detect_holoscan_version(self._artifact_source, Version("1.0.0")) == "1.0.0"
+        assert (
+            detect_holoscan_version(self._artifact_source, Version("1.0.0")) == "1.0.0"
+        )
 
     def test_sdk_version_from_invalid_user_input(self, monkeypatch):
         with pytest.raises(InvalidSdkError):
@@ -116,9 +120,16 @@ class TestDetectHoloscanVersion:
 
     @pytest.mark.parametrize(
         "version,expected",
-        [("1.0a2+4.gcaa3b3fe", "1.0.0"), ("1", "1.0.0"), ("1.0", "1.0.0"), ("1.0.0.1", "1.0.0")],
+        [
+            ("1.0a2+4.gcaa3b3fe", "1.0.0"),
+            ("1", "1.0.0"),
+            ("1.0", "1.0.0"),
+            ("1.0.0.1", "1.0.0"),
+        ],
     )
-    def test_detect_sdk_version_with_non_semver_string(self, monkeypatch, version, expected):
+    def test_detect_sdk_version_with_non_semver_string(
+        self, monkeypatch, version, expected
+    ):
         holoscan.cli.common.sdk_utils.holoscan_version_string = version
 
         result = detect_holoscan_version(self._artifact_source)
@@ -131,7 +142,10 @@ class TestDetectMonaiDeployVersion:
         self._artifact_source = ArtifactSources()
 
     def test_sdk_version_from_valid_user_input(self, monkeypatch):
-        assert detect_monaideploy_version(self._artifact_source, Version("0.6.0")) == "0.6.0"
+        assert (
+            detect_monaideploy_version(self._artifact_source, Version("0.6.0"))
+            == "0.6.0"
+        )
 
     def test_detect_sdk_version(self, monkeypatch):
         version = "0.6.0"

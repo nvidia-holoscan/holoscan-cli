@@ -21,14 +21,14 @@ from argparse import Namespace
 from pathlib import Path
 
 import pytest
-from packaging.version import Version
-
 from holoscan.cli.common.artifact_sources import ArtifactSources
 from holoscan.cli.common.constants import SDK
-from holoscan.cli.common.enum_types import ApplicationType, PlatformConfiguration, SdkType
+from holoscan.cli.common.enum_types import ApplicationType
 from holoscan.cli.common.enum_types import Platform as PlatformTypes
+from holoscan.cli.common.enum_types import PlatformConfiguration, SdkType
 from holoscan.cli.common.exceptions import IncompatiblePlatformConfigurationError
 from holoscan.cli.packager.platforms import Platform
+from packaging.version import Version
 
 
 class TestPlatforms:
@@ -100,10 +100,15 @@ class TestPlatforms:
         holoscan_version = "2.4.0"
         monai_deploy_version = "2.4.1"
         sdk_type = SdkType.MonaiDeploy
-        monkeypatch.setattr("holoscan.cli.packager.platforms.detect_sdk", lambda sdk: sdk_type)
+        monkeypatch.setattr(
+            "holoscan.cli.packager.platforms.detect_sdk", lambda sdk: sdk_type
+        )
         monkeypatch.setattr(
             "holoscan.cli.packager.platforms.detect_sdk_version",
-            lambda sdk, artifact_sources, sdk_version: (holoscan_version, monai_deploy_version),
+            lambda sdk, artifact_sources, sdk_version: (
+                holoscan_version,
+                monai_deploy_version,
+            ),
         )
 
         application_verison = "1.0.0"
@@ -141,7 +146,10 @@ class TestPlatforms:
                 ]
             )
             assert platform_parameters.build_image is None
-            assert platform_parameters.tag == "my-app-igx-orin-devkit-dgpu-linux-arm64:1.0.0"
+            assert (
+                platform_parameters.tag
+                == "my-app-igx-orin-devkit-dgpu-linux-arm64:1.0.0"
+            )
             assert platform_parameters.tag_prefix == "my-app"
             assert platform_parameters.custom_base_image is False
             assert platform_parameters.custom_holoscan_sdk is False
@@ -154,14 +162,17 @@ class TestPlatforms:
             assert platform_parameters.version == application_verison
             assert platform_parameters.health_probe is None
             assert (
-                platform_parameters.platform_arch == SDK.PLATFORM_MAPPINGS[input_args.platform[0]]
+                platform_parameters.platform_arch
+                == SDK.PLATFORM_MAPPINGS[input_args.platform[0]]
             )
             assert (
                 platform_parameters.docker_arch
                 == SDK.PLATFORM_MAPPINGS[input_args.platform[0]].value
             )
             assert platform_parameters.platform == input_args.platform[0]
-            assert platform_parameters.same_arch_as_system == (platform_lib.machine() == "aarch64")
+            assert platform_parameters.same_arch_as_system == (
+                platform_lib.machine() == "aarch64"
+            )
             assert platform_parameters.cuda_deb_arch == "sbsa"
             assert platform_parameters.holoscan_deb_arch == "arm64"
             assert platform_parameters.target_arch == "aarch64"
@@ -170,10 +181,15 @@ class TestPlatforms:
         holoscan_version = "2.4.0"
         monai_deploy_version = "2.4.1"
         sdk_type = SdkType.MonaiDeploy
-        monkeypatch.setattr("holoscan.cli.packager.platforms.detect_sdk", lambda sdk: sdk_type)
+        monkeypatch.setattr(
+            "holoscan.cli.packager.platforms.detect_sdk", lambda sdk: sdk_type
+        )
         monkeypatch.setattr(
             "holoscan.cli.packager.platforms.detect_sdk_version",
-            lambda sdk, artifact_sources, sdk_version: (holoscan_version, monai_deploy_version),
+            lambda sdk, artifact_sources, sdk_version: (
+                holoscan_version,
+                monai_deploy_version,
+            ),
         )
 
         application_verison = "1.0.0"
@@ -211,7 +227,10 @@ class TestPlatforms:
                 ]
             )
             assert platform_parameters.build_image is None
-            assert platform_parameters.tag == "my-app-igx-orin-devkit-dgpu-linux-arm64:1.0.0"
+            assert (
+                platform_parameters.tag
+                == "my-app-igx-orin-devkit-dgpu-linux-arm64:1.0.0"
+            )
             assert platform_parameters.tag_prefix == "my-app"
             assert platform_parameters.custom_base_image is False
             assert platform_parameters.custom_holoscan_sdk is False
@@ -220,18 +239,24 @@ class TestPlatforms:
                 == self._artifact_source.wheel_package_version(holoscan_version)
             )
             assert platform_parameters.custom_monai_deploy_sdk is True
-            assert platform_parameters.monai_deploy_sdk_file == input_args.monai_deploy_sdk_file
+            assert (
+                platform_parameters.monai_deploy_sdk_file
+                == input_args.monai_deploy_sdk_file
+            )
             assert platform_parameters.version == application_verison
             assert platform_parameters.health_probe is None
             assert (
-                platform_parameters.platform_arch == SDK.PLATFORM_MAPPINGS[input_args.platform[0]]
+                platform_parameters.platform_arch
+                == SDK.PLATFORM_MAPPINGS[input_args.platform[0]]
             )
             assert (
                 platform_parameters.docker_arch
                 == SDK.PLATFORM_MAPPINGS[input_args.platform[0]].value
             )
             assert platform_parameters.platform == input_args.platform[0]
-            assert platform_parameters.same_arch_as_system == (platform_lib.machine() == "aarch64")
+            assert platform_parameters.same_arch_as_system == (
+                platform_lib.machine() == "aarch64"
+            )
             assert platform_parameters.cuda_deb_arch == "sbsa"
             assert platform_parameters.holoscan_deb_arch == "arm64"
             assert platform_parameters.target_arch == "aarch64"
@@ -240,10 +265,15 @@ class TestPlatforms:
         holoscan_version = "2.4.0"
         monai_deploy_version = None
         sdk_type = SdkType.Holoscan
-        monkeypatch.setattr("holoscan.cli.packager.platforms.detect_sdk", lambda sdk: sdk_type)
+        monkeypatch.setattr(
+            "holoscan.cli.packager.platforms.detect_sdk", lambda sdk: sdk_type
+        )
         monkeypatch.setattr(
             "holoscan.cli.packager.platforms.detect_sdk_version",
-            lambda sdk, artifact_sources, sdk_version: (holoscan_version, monai_deploy_version),
+            lambda sdk, artifact_sources, sdk_version: (
+                holoscan_version,
+                monai_deploy_version,
+            ),
         )
 
         application_verison = "1.0.0"
@@ -288,7 +318,10 @@ class TestPlatforms:
                 platform_parameters.build_image
                 == "nvcr.io/nvidia/clara-holoscan/holoscan:v2.3.0-dgpu"
             )
-            assert platform_parameters.tag == "my-app-igx-orin-devkit-dgpu-linux-arm64:1.0.0"
+            assert (
+                platform_parameters.tag
+                == "my-app-igx-orin-devkit-dgpu-linux-arm64:1.0.0"
+            )
             assert platform_parameters.tag_prefix == "my-app"
             assert platform_parameters.custom_base_image is False
             assert platform_parameters.custom_holoscan_sdk is False
@@ -306,14 +339,17 @@ class TestPlatforms:
                 ]
             )
             assert (
-                platform_parameters.platform_arch == SDK.PLATFORM_MAPPINGS[input_args.platform[0]]
+                platform_parameters.platform_arch
+                == SDK.PLATFORM_MAPPINGS[input_args.platform[0]]
             )
             assert (
                 platform_parameters.docker_arch
                 == SDK.PLATFORM_MAPPINGS[input_args.platform[0]].value
             )
             assert platform_parameters.platform == input_args.platform[0]
-            assert platform_parameters.same_arch_as_system == (platform_lib.machine() == "aarch64")
+            assert platform_parameters.same_arch_as_system == (
+                platform_lib.machine() == "aarch64"
+            )
             assert platform_parameters.cuda_deb_arch == "sbsa"
             assert platform_parameters.holoscan_deb_arch == "arm64"
             assert platform_parameters.target_arch == "aarch64"
@@ -322,10 +358,15 @@ class TestPlatforms:
         holoscan_version = "2.4.0"
         monai_deploy_version = None
         sdk_type = SdkType.Holoscan
-        monkeypatch.setattr("holoscan.cli.packager.platforms.detect_sdk", lambda sdk: sdk_type)
+        monkeypatch.setattr(
+            "holoscan.cli.packager.platforms.detect_sdk", lambda sdk: sdk_type
+        )
         monkeypatch.setattr(
             "holoscan.cli.packager.platforms.detect_sdk_version",
-            lambda sdk, artifact_sources, sdk_version: (holoscan_version, monai_deploy_version),
+            lambda sdk, artifact_sources, sdk_version: (
+                holoscan_version,
+                monai_deploy_version,
+            ),
         )
         monkeypatch.setattr(
             "holoscan.cli.packager.platforms.image_exists",
@@ -362,7 +403,10 @@ class TestPlatforms:
             assert platform_parameters.platform == input_args.platform[0]
             assert platform_parameters.base_image == input_args.base_image
             assert platform_parameters.build_image == input_args.build_image
-            assert platform_parameters.tag == "my-app-igx-orin-devkit-dgpu-linux-arm64:1.0.0"
+            assert (
+                platform_parameters.tag
+                == "my-app-igx-orin-devkit-dgpu-linux-arm64:1.0.0"
+            )
             assert platform_parameters.tag_prefix == "my-app"
             assert platform_parameters.custom_base_image is True
             assert platform_parameters.custom_holoscan_sdk is False
@@ -380,14 +424,17 @@ class TestPlatforms:
                 ]
             )
             assert (
-                platform_parameters.platform_arch == SDK.PLATFORM_MAPPINGS[input_args.platform[0]]
+                platform_parameters.platform_arch
+                == SDK.PLATFORM_MAPPINGS[input_args.platform[0]]
             )
             assert (
                 platform_parameters.docker_arch
                 == SDK.PLATFORM_MAPPINGS[input_args.platform[0]].value
             )
             assert platform_parameters.platform == input_args.platform[0]
-            assert platform_parameters.same_arch_as_system == (platform_lib.machine() == "aarch64")
+            assert platform_parameters.same_arch_as_system == (
+                platform_lib.machine() == "aarch64"
+            )
             assert platform_parameters.cuda_deb_arch == "sbsa"
             assert platform_parameters.holoscan_deb_arch == "arm64"
             assert platform_parameters.target_arch == "aarch64"
@@ -396,10 +443,15 @@ class TestPlatforms:
         holoscan_version = "2.4.0"
         monai_deploy_version = None
         sdk_type = SdkType.Holoscan
-        monkeypatch.setattr("holoscan.cli.packager.platforms.detect_sdk", lambda sdk: sdk_type)
+        monkeypatch.setattr(
+            "holoscan.cli.packager.platforms.detect_sdk", lambda sdk: sdk_type
+        )
         monkeypatch.setattr(
             "holoscan.cli.packager.platforms.detect_sdk_version",
-            lambda sdk, artifact_sources, sdk_version: (holoscan_version, monai_deploy_version),
+            lambda sdk, artifact_sources, sdk_version: (
+                holoscan_version,
+                monai_deploy_version,
+            ),
         )
         monkeypatch.setattr(
             "holoscan.cli.packager.platforms.image_exists",
@@ -436,7 +488,10 @@ class TestPlatforms:
             assert platform_parameters.platform == input_args.platform[0]
             assert platform_parameters.base_image == input_args.base_image
             assert platform_parameters.build_image == input_args.build_image
-            assert platform_parameters.tag == "my-app-igx-orin-devkit-igpu-linux-arm64:1.0.0"
+            assert (
+                platform_parameters.tag
+                == "my-app-igx-orin-devkit-igpu-linux-arm64:1.0.0"
+            )
             assert platform_parameters.tag_prefix == "my-app"
             assert platform_parameters.custom_base_image is True
             assert platform_parameters.custom_holoscan_sdk is True
@@ -451,14 +506,17 @@ class TestPlatforms:
                 ]
             )
             assert (
-                platform_parameters.platform_arch == SDK.PLATFORM_MAPPINGS[input_args.platform[0]]
+                platform_parameters.platform_arch
+                == SDK.PLATFORM_MAPPINGS[input_args.platform[0]]
             )
             assert (
                 platform_parameters.docker_arch
                 == SDK.PLATFORM_MAPPINGS[input_args.platform[0]].value
             )
             assert platform_parameters.platform == input_args.platform[0]
-            assert platform_parameters.same_arch_as_system == (platform_lib.machine() == "aarch64")
+            assert platform_parameters.same_arch_as_system == (
+                platform_lib.machine() == "aarch64"
+            )
             assert platform_parameters.cuda_deb_arch == "sbsa"
             assert platform_parameters.holoscan_deb_arch == "arm64"
             assert platform_parameters.target_arch == "aarch64"
