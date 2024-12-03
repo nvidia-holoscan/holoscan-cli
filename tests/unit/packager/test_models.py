@@ -18,7 +18,7 @@ limitations under the License.
 import os
 import pathlib
 
-from holoscan.cli.packager.models import Models
+from holoscan_cli.packager.models import Models
 
 
 class TestModels:

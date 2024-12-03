@@ -19,7 +19,7 @@ import socket
 from collections import namedtuple
 
 import psutil
-from holoscan.cli.common.utils import compare_versions, get_host_ip_addresses
+from holoscan_cli.common.utils import compare_versions, get_host_ip_addresses
 
 
 class TestCompareVersions:

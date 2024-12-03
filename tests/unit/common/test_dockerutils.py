@@ -16,7 +16,7 @@ limitations under the License.
 """  # noqa: E501
 
 import pytest
-from holoscan.cli.common.dockerutils import parse_docker_image_name_and_tag
+from holoscan_cli.common.dockerutils import parse_docker_image_name_and_tag
 
 
 class TestParseDockerImageNameAndTag:

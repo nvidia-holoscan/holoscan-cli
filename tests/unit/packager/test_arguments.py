@@ -19,15 +19,15 @@ import pathlib
 from argparse import Namespace
 
 import pytest
-from holoscan.cli.common.enum_types import (
+from holoscan_cli.common.enum_types import (
     ApplicationType,
     Platform,
     PlatformConfiguration,
     SdkType,
 )
-from holoscan.cli.packager.arguments import PackagingArguments
-from holoscan.cli.packager.manifest_files import ApplicationManifest, PackageManifest
-from holoscan.cli.packager.parameters import DefaultValues
+from holoscan_cli.packager.arguments import PackagingArguments
+from holoscan_cli.packager.manifest_files import ApplicationManifest, PackageManifest
+from holoscan_cli.packager.parameters import DefaultValues
 
 
 class TestPackagingArguments:
@@ -60,11 +60,11 @@ class TestPackagingArguments:
 
     def _setup_mocks(self, monkeypatch):
         monkeypatch.setattr(
-            "holoscan.cli.packager.models.Models.build",
+            "holoscan_cli.packager.models.Models.build",
             lambda x, y: (None, self.input_args.models),
         )
         monkeypatch.setattr(
-            "holoscan.cli.packager.platforms.Platform.configure_platforms",
+            "holoscan_cli.packager.platforms.Platform.configure_platforms",
             lambda a, b, c, d, e: (
                 SdkType.Holoscan,
                 "HoloscanVersionNum",
@@ -73,35 +73,35 @@ class TestPackagingArguments:
             ),
         )
         monkeypatch.setattr(
-            "holoscan.cli.packager.config_reader.ApplicationConfiguration.read",
+            "holoscan_cli.packager.config_reader.ApplicationConfiguration.read",
             lambda x, y: (None, None),
         )
         monkeypatch.setattr(
-            "holoscan.cli.packager.config_reader.ApplicationConfiguration.title",
+            "holoscan_cli.packager.config_reader.ApplicationConfiguration.title",
             lambda x: "Title",
         )
         monkeypatch.setattr(
-            "holoscan.cli.packager.config_reader.ApplicationConfiguration.pip_packages",
+            "holoscan_cli.packager.config_reader.ApplicationConfiguration.pip_packages",
             lambda x: None,
         )
         monkeypatch.setattr(
-            "holoscan.cli.packager.config_reader.ApplicationConfiguration.populate_app_manifest",
+            "holoscan_cli.packager.config_reader.ApplicationConfiguration.populate_app_manifest",
             lambda x, y: ApplicationManifest(),
         )
         monkeypatch.setattr(
-            "holoscan.cli.packager.config_reader.ApplicationConfiguration.populate_package_manifest",
+            "holoscan_cli.packager.config_reader.ApplicationConfiguration.populate_package_manifest",
             lambda x, y: PackageManifest(),
         )
         monkeypatch.setattr(
-            "holoscan.cli.packager.config_reader.PackageBuildParameters._detect_application_type",
+            "holoscan_cli.packager.config_reader.PackageBuildParameters._detect_application_type",
             lambda x: ApplicationType.PythonFile,
         )
         monkeypatch.setattr(
-            "holoscan.cli.packager.config_reader.PackageBuildParameters._set_app_command",
+            "holoscan_cli.packager.config_reader.PackageBuildParameters._set_app_command",
             lambda x: None,
         )
         monkeypatch.setattr(
-            "holoscan.cli.common.artifact_sources.ArtifactSources.download_manifest",
+            "holoscan_cli.common.artifact_sources.ArtifactSources.download_manifest",
             lambda x: None,
         )
 
@@ -109,7 +109,7 @@ class TestPackagingArguments:
             self.source_load_called = True
 
         monkeypatch.setattr(
-            "holoscan.cli.common.artifact_sources.ArtifactSources.load",
+            "holoscan_cli.common.artifact_sources.ArtifactSources.load",
             mock_artifact_load,
         )
 
@@ -227,7 +227,7 @@ class TestPackagingArguments:
     def test_monai_app_sdk(self, monkeypatch):
         self._setup_mocks(monkeypatch)
         monkeypatch.setattr(
-            "holoscan.cli.packager.platforms.Platform.configure_platforms",
+            "holoscan_cli.packager.platforms.Platform.configure_platforms",
             lambda a, b, c, d, e: (
                 SdkType.MonaiDeploy,
                 "HoloscanVersionNum",

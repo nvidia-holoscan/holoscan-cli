@@ -20,12 +20,12 @@ import pathlib
 import shutil
 import tempfile
 
-import holoscan.cli.common.dockerutils
+import holoscan_cli.common.dockerutils
 import pytest
-from holoscan.cli.common.enum_types import Platform, PlatformConfiguration, SdkType
-from holoscan.cli.packager.container_builder import BuilderBase
-from holoscan.cli.packager.parameters import PackageBuildParameters
-from holoscan.cli.packager.platforms import PlatformParameters
+from holoscan_cli.common.enum_types import Platform, PlatformConfiguration, SdkType
+from holoscan_cli.packager.container_builder import BuilderBase
+from holoscan_cli.packager.parameters import PackageBuildParameters
+from holoscan_cli.packager.platforms import PlatformParameters
 
 
 class TestContainerBuilder:
@@ -43,12 +43,12 @@ class TestContainerBuilder:
             self._build_arguments = build_args
 
         monkeypatch.setattr(
-            holoscan.cli.packager.container_builder,
+            holoscan_cli.packager.container_builder,
             "create_and_get_builder",
             lambda x: "builder",
         )
         monkeypatch.setattr(
-            holoscan.cli.packager.container_builder,
+            holoscan_cli.packager.container_builder,
             "build_docker_image",
             build_docker_image,
         )

@@ -18,7 +18,7 @@ limitations under the License.
 from pathlib import Path
 
 import pytest
-from holoscan.cli.common.artifact_sources import ArtifactSources
+from holoscan_cli.common.artifact_sources import ArtifactSources
 
 
 class TestArtifactSource:

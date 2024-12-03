@@ -19,14 +19,14 @@ import os
 import pathlib
 
 import pytest
-from holoscan.cli.common.constants import Constants, DefaultValues
-from holoscan.cli.common.enum_types import (
+from holoscan_cli.common.constants import Constants, DefaultValues
+from holoscan_cli.common.enum_types import (
     ApplicationType,
     Platform,
     PlatformConfiguration,
 )
-from holoscan.cli.common.exceptions import UnknownApplicationTypeError
-from holoscan.cli.packager.parameters import PackageBuildParameters, PlatformParameters
+from holoscan_cli.common.exceptions import UnknownApplicationTypeError
+from holoscan_cli.packager.parameters import PackageBuildParameters, PlatformParameters
 
 
 class TestPlatformParameters:

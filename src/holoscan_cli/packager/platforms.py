@@ -25,7 +25,11 @@ from ..common.constants import Constants
 from ..common.dockerutils import image_exists
 from ..common.enum_types import ApplicationType, SdkType
 from ..common.exceptions import IncompatiblePlatformConfigurationError, InvalidSdkError
-from ..common.sdk_utils import detect_sdk, detect_sdk_version
+from ..common.sdk_utils import (
+    detect_sdk,
+    detect_sdk_version,
+    validate_holoscan_sdk_version,
+)
 from .parameters import PlatformParameters
 
 
@@ -66,8 +70,10 @@ class Platform:
         """
         sdk = detect_sdk(args.sdk)
         holoscan_sdk_version, monai_deploy_app_sdk_version = detect_sdk_version(
-            sdk, self._artifact_sources, args.sdk_version
+            sdk, args.sdk_version
         )
+
+        validate_holoscan_sdk_version(self._artifact_sources, holoscan_sdk_version)
 
         self._validate_platform_options(args, sdk)
 

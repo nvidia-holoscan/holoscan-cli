@@ -21,37 +21,39 @@ from argparse import Namespace
 from pathlib import Path
 
 import pytest
-from holoscan.cli.common.artifact_sources import ArtifactSources
-from holoscan.cli.common.constants import SDK
-from holoscan.cli.common.enum_types import ApplicationType
-from holoscan.cli.common.enum_types import Platform as PlatformTypes
-from holoscan.cli.common.enum_types import PlatformConfiguration, SdkType
-from holoscan.cli.common.exceptions import IncompatiblePlatformConfigurationError
-from holoscan.cli.packager.platforms import Platform
+from holoscan_cli.common.artifact_sources import ArtifactSources
+from holoscan_cli.common.constants import SDK
+from holoscan_cli.common.enum_types import ApplicationType
+from holoscan_cli.common.enum_types import Platform as PlatformTypes
+from holoscan_cli.common.enum_types import PlatformConfiguration, SdkType
+from holoscan_cli.common.exceptions import IncompatiblePlatformConfigurationError
+from holoscan_cli.packager.platforms import Platform
 from packaging.version import Version
 
 
 class TestPlatforms:
     @pytest.fixture(autouse=True)
     def _setup(self) -> None:
+        self._version = "2.4.0"
         self._artifact_source = ArtifactSources()
+        self._artifact_source._supported_holoscan_versions = [self._version]
         current_file_path = Path(__file__).parent.parent.resolve() / "common"
         source_file_sample = current_file_path / "./package-source.json"
         self._artifact_source.load(str(source_file_sample))
 
     def test_invalid_platform_options(self, monkeypatch):
         monkeypatch.setattr(
-            "holoscan.cli.packager.platforms.detect_sdk", lambda sdk: SdkType.Holoscan
+            "holoscan_cli.packager.platforms.detect_sdk", lambda sdk: SdkType.Holoscan
         )
         monkeypatch.setattr(
-            "holoscan.cli.packager.platforms.detect_sdk_version",
-            lambda sdk, artifact_sources, sdk_version: ("2.4.0", None),
+            "holoscan_cli.packager.platforms.detect_sdk_version",
+            lambda sdk, sdk_version: (self._version, None),
         )
 
         application_verison = "1.0.0"
         input_args = Namespace()
         input_args.sdk = SdkType.Holoscan
-        input_args.sdk_version = Version("2.4.0")
+        input_args.sdk_version = Version(self._version)
         input_args.platform = [PlatformTypes.IGXOrinDevIt, PlatformTypes.X64Workstation]
         input_args.holoscan_sdk_file = Path("some-random-file")
 
@@ -70,17 +72,17 @@ class TestPlatforms:
         self, monkeypatch
     ):
         monkeypatch.setattr(
-            "holoscan.cli.packager.platforms.detect_sdk", lambda sdk: SdkType.Holoscan
+            "holoscan_cli.packager.platforms.detect_sdk", lambda sdk: SdkType.Holoscan
         )
         monkeypatch.setattr(
-            "holoscan.cli.packager.platforms.detect_sdk_version",
-            lambda sdk, artifact_sources, sdk_version: ("2.4.0", None),
+            "holoscan_cli.packager.platforms.detect_sdk_version",
+            lambda sdk, sdk_version: (self._version, None),
         )
 
         application_verison = "1.0.0"
         input_args = Namespace()
         input_args.sdk = SdkType.Holoscan
-        input_args.sdk_version = Version("2.4.0")
+        input_args.sdk_version = Version(self._version)
         input_args.platform = [PlatformTypes.IGXOrinDevIt, PlatformTypes.X64Workstation]
         input_args.holoscan_sdk_file = None
         input_args.monai_deploy_sdk_file = Path("some-random-file")
@@ -97,15 +99,15 @@ class TestPlatforms:
             )
 
     def test_single_platform_with_monai_deploy(self, monkeypatch):
-        holoscan_version = "2.4.0"
+        holoscan_version = self._version
         monai_deploy_version = "2.4.1"
         sdk_type = SdkType.MonaiDeploy
         monkeypatch.setattr(
-            "holoscan.cli.packager.platforms.detect_sdk", lambda sdk: sdk_type
+            "holoscan_cli.packager.platforms.detect_sdk", lambda sdk: sdk_type
         )
         monkeypatch.setattr(
-            "holoscan.cli.packager.platforms.detect_sdk_version",
-            lambda sdk, artifact_sources, sdk_version: (
+            "holoscan_cli.packager.platforms.detect_sdk_version",
+            lambda sdk, sdk_version: (
                 holoscan_version,
                 monai_deploy_version,
             ),
@@ -178,15 +180,15 @@ class TestPlatforms:
             assert platform_parameters.target_arch == "aarch64"
 
     def test_single_platform_with_monai_deploy_using_custom_sdk(self, monkeypatch):
-        holoscan_version = "2.4.0"
+        holoscan_version = self._version
         monai_deploy_version = "2.4.1"
         sdk_type = SdkType.MonaiDeploy
         monkeypatch.setattr(
-            "holoscan.cli.packager.platforms.detect_sdk", lambda sdk: sdk_type
+            "holoscan_cli.packager.platforms.detect_sdk", lambda sdk: sdk_type
         )
         monkeypatch.setattr(
-            "holoscan.cli.packager.platforms.detect_sdk_version",
-            lambda sdk, artifact_sources, sdk_version: (
+            "holoscan_cli.packager.platforms.detect_sdk_version",
+            lambda sdk, sdk_version: (
                 holoscan_version,
                 monai_deploy_version,
             ),
@@ -262,15 +264,15 @@ class TestPlatforms:
             assert platform_parameters.target_arch == "aarch64"
 
     def test_multiple_platforms(self, monkeypatch):
-        holoscan_version = "2.4.0"
+        holoscan_version = self._version
         monai_deploy_version = None
         sdk_type = SdkType.Holoscan
         monkeypatch.setattr(
-            "holoscan.cli.packager.platforms.detect_sdk", lambda sdk: sdk_type
+            "holoscan_cli.packager.platforms.detect_sdk", lambda sdk: sdk_type
         )
         monkeypatch.setattr(
-            "holoscan.cli.packager.platforms.detect_sdk_version",
-            lambda sdk, artifact_sources, sdk_version: (
+            "holoscan_cli.packager.platforms.detect_sdk_version",
+            lambda sdk, sdk_version: (
                 holoscan_version,
                 monai_deploy_version,
             ),
@@ -355,21 +357,21 @@ class TestPlatforms:
             assert platform_parameters.target_arch == "aarch64"
 
     def test_platform_with_custom_base_image_and_build_image(self, monkeypatch):
-        holoscan_version = "2.4.0"
+        holoscan_version = self._version
         monai_deploy_version = None
         sdk_type = SdkType.Holoscan
         monkeypatch.setattr(
-            "holoscan.cli.packager.platforms.detect_sdk", lambda sdk: sdk_type
+            "holoscan_cli.packager.platforms.detect_sdk", lambda sdk: sdk_type
         )
         monkeypatch.setattr(
-            "holoscan.cli.packager.platforms.detect_sdk_version",
-            lambda sdk, artifact_sources, sdk_version: (
+            "holoscan_cli.packager.platforms.detect_sdk_version",
+            lambda sdk, sdk_version: (
                 holoscan_version,
                 monai_deploy_version,
             ),
         )
         monkeypatch.setattr(
-            "holoscan.cli.packager.platforms.image_exists",
+            "holoscan_cli.packager.platforms.image_exists",
             lambda img: True,
         )
 
@@ -440,21 +442,21 @@ class TestPlatforms:
             assert platform_parameters.target_arch == "aarch64"
 
     def test_platform_with_custom_sdk_file(self, monkeypatch):
-        holoscan_version = "2.4.0"
+        holoscan_version = self._version
         monai_deploy_version = None
         sdk_type = SdkType.Holoscan
         monkeypatch.setattr(
-            "holoscan.cli.packager.platforms.detect_sdk", lambda sdk: sdk_type
+            "holoscan_cli.packager.platforms.detect_sdk", lambda sdk: sdk_type
         )
         monkeypatch.setattr(
-            "holoscan.cli.packager.platforms.detect_sdk_version",
-            lambda sdk, artifact_sources, sdk_version: (
+            "holoscan_cli.packager.platforms.detect_sdk_version",
+            lambda sdk, sdk_version: (
                 holoscan_version,
                 monai_deploy_version,
             ),
         )
         monkeypatch.setattr(
-            "holoscan.cli.packager.platforms.image_exists",
+            "holoscan_cli.packager.platforms.image_exists",
             lambda img: True,
         )
 

@@ -16,9 +16,9 @@ limitations under the License.
 """  # noqa: E501
 
 import pytest
-from holoscan.cli.common.constants import Constants, DefaultValues
-from holoscan.cli.common.exceptions import InvalidSharedMemoryValueError
-from holoscan.cli.runner.resources import _convert_to_bytes, get_shared_memory_size
+from holoscan_cli.common.constants import Constants, DefaultValues
+from holoscan_cli.common.exceptions import InvalidSharedMemoryValueError
+from holoscan_cli.runner.resources import _convert_to_bytes, get_shared_memory_size
 
 
 class TestGetSharedMemorySize:

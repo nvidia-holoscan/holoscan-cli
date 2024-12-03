@@ -70,8 +70,8 @@ optional = true
 mkdocs = "*"
 
 [tool.poetry.scripts]
-holoscan = 'holoscan.cli:main'
-monai-deploy = 'holoscan.cli:main'
+holoscan = 'holoscan_cli.__main__:main'
+monai-deploy = 'holoscan_cli.__main__:main'
 
 [tool.codespell]
 skip = '.ruff_cache'
@@ -80,6 +80,12 @@ quiet-level = 3
 
 [tool.flake8]
 max-line-length = 160
+
+[tool.pytest.ini_options]
+pythonpath = "src"
+addopts = [
+    "--import-mode=importlib",
+]
 
 [build-system]
 requires = ["poetry-core"]
