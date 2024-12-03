@@ -83,8 +83,17 @@ max-line-length = 160
 
 [tool.pytest.ini_options]
 pythonpath = "src"
-addopts = [
-    "--import-mode=importlib",
+addopts = """
+--import-mode=importlib \
+--doctest-modules \
+--cov=./ \
+--cov-append \
+--cov-report json:tests/reports/coverage.json \
+--ignore=docs/
+"""
+
+testpaths = [
+    "tests/unit",
 ]
 
 [build-system]
