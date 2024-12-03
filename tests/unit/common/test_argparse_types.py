@@ -21,7 +21,6 @@ import pathlib
 from pathlib import PosixPath
 
 import pytest
-
 from holoscan.cli.common.argparse_types import (
     valid_dir_path,
     valid_existing_dir_path,
@@ -75,7 +74,9 @@ class TestValidExistingDirPath:
 
         assert type(result) is PosixPath
 
-    @pytest.mark.parametrize("exists,isdir", [(False, False), (True, False), (False, True)])
+    @pytest.mark.parametrize(
+        "exists,isdir", [(False, False), (True, False), (False, True)]
+    )
     def test_dir_path_exists_and_isdir_combo(self, monkeypatch, exists, isdir):
         monkeypatch.setattr(pathlib.Path, "exists", lambda x: exists)
         monkeypatch.setattr(pathlib.Path, "is_dir", lambda x: isdir)

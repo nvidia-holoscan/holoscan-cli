@@ -86,8 +86,12 @@ def create_package_parser(
         type=valid_existing_dir_path,
         help="include additional library files, python files into the application directory.",
     )
-    parser.add_argument("--timeout", type=int, help="override default application timeout")
-    parser.add_argument("--version", type=Version, help="set the version of the application")
+    parser.add_argument(
+        "--timeout", type=int, help="override default application timeout"
+    )
+    parser.add_argument(
+        "--version", type=Version, help="set the version of the application"
+    )
 
     advanced_group = parser.add_argument_group(title="advanced build options")
     advanced_group.add_argument(

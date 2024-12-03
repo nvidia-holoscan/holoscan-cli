@@ -107,7 +107,9 @@ def valid_platforms(platforms_str: str) -> list[Platform]:
     platform_enums = []
     for platform in platforms:
         if platform not in SDK.PLATFORMS:
-            raise argparse.ArgumentTypeError(f"{platform} is not a valid option for --platforms.")
+            raise argparse.ArgumentTypeError(
+                f"{platform} is not a valid option for --platforms."
+            )
         platform_enums.append(Platform(platform))
 
     return platform_enums

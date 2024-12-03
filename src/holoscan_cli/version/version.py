@@ -22,13 +22,19 @@ from argparse import Namespace
 
 from ..common.artifact_sources import ArtifactSources
 from ..common.enum_types import SdkType
-from ..common.sdk_utils import detect_holoscan_version, detect_monaideploy_version, detect_sdk
+from ..common.sdk_utils import (
+    detect_holoscan_version,
+    detect_monaideploy_version,
+    detect_sdk,
+)
 
 logger = logging.getLogger("version")
 
 
 def execute_version_command(args: Namespace, artifact_sources: ArtifactSources):
-    print(f"You are executing Holoscan CLI from: {os.path.dirname(os.path.abspath(sys.argv[0]))}\n")
+    print(
+        f"You are executing Holoscan CLI from: {os.path.dirname(os.path.abspath(sys.argv[0]))}\n"
+    )
 
     try:
         sdk = detect_sdk()

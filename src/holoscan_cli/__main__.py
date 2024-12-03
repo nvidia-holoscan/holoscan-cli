@@ -79,12 +79,18 @@ def parse_args(argv: Optional[list[str]] = None) -> argparse.Namespace:
 
     # Parser for `version` command
     subparser.add_parser(
-        "version", formatter_class=argparse.HelpFormatter, parents=[parent_parser], add_help=False
+        "version",
+        formatter_class=argparse.HelpFormatter,
+        parents=[parent_parser],
+        add_help=False,
     )
 
     # Parser for `nics` command
     subparser.add_parser(
-        "nics", formatter_class=argparse.HelpFormatter, parents=[parent_parser], add_help=False
+        "nics",
+        formatter_class=argparse.HelpFormatter,
+        parents=[parent_parser],
+        add_help=False,
     )
     args = parser.parse_args(argv[1:])
     args.argv = argv  # save argv for later use in runpy
@@ -98,12 +104,16 @@ def parse_args(argv: Optional[list[str]] = None) -> argparse.Namespace:
         if args.platform[0] == Platform.X64Workstation:
             args.platform_config = PlatformConfiguration.dGPU
         elif args.platform_config is None:
-            parser.error(f"'--platform-config' is required for '{args.platform[0].value}'")
+            parser.error(
+                f"'--platform-config' is required for '{args.platform[0].value}'"
+            )
 
     return args
 
 
-def set_up_logging(level: Optional[str], config_path: Union[str, Path] = LOG_CONFIG_FILENAME):
+def set_up_logging(
+    level: Optional[str], config_path: Union[str, Path] = LOG_CONFIG_FILENAME
+):
     """Initializes the logger and sets up logging level.
 
     Args:

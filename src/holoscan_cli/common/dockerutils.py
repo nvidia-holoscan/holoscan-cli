@@ -35,7 +35,9 @@ from .utils import get_gpu_count, get_requested_gpus
 logger = logging.getLogger("common")
 
 
-def parse_docker_image_name_and_tag(image_name: str) -> tuple[Optional[str], Optional[str]]:
+def parse_docker_image_name_and_tag(
+    image_name: str,
+) -> tuple[Optional[str], Optional[str]]:
     """Parse a given Docker image name and tag.
 
     Args:
@@ -137,7 +139,9 @@ def create_and_get_builder(builder_name: str):
             logger.info(f"Using existing Docker BuildKit builder `{builder_name}`")
             return builder_name
 
-    logger.info(f"Creating Docker BuildKit builder `{builder_name}` using `docker-container`")
+    logger.info(
+        f"Creating Docker BuildKit builder `{builder_name}` using `docker-container`"
+    )
     builder = docker.buildx.create(
         name=builder_name, driver="docker-container", driver_options={"network": "host"}
     )
@@ -238,7 +242,10 @@ def docker_run(
         environment_variables["NVIDIA_VISIBLE_DEVICES"] = gpu_enum
     # If the image was built for iGPU but the system is configured for dGPU, attempt
     # targeting the system's iGPU using the CDI spec
-    elif platform_config == PlatformConfiguration.iGPU.value and not _host_is_native_igpu():
+    elif (
+        platform_config == PlatformConfiguration.iGPU.value
+        and not _host_is_native_igpu()
+    ):
         environment_variables["NVIDIA_VISIBLE_DEVICES"] = "nvidia.com/igpu=0"
         logger.info(
             "Attempting to run an image for iGPU (integrated GPU) on a system configured "
@@ -329,7 +336,9 @@ def docker_run(
     additional_devices, group_adds = _additional_devices_to_mount(is_root)
     devices.extend(additional_devices)
 
-    video_group = run_cmd_output('/usr/bin/cat /etc/group | grep "video" | cut -d: -f3').strip()
+    video_group = run_cmd_output(
+        '/usr/bin/cat /etc/group | grep "video" | cut -d: -f3'
+    ).strip()
     if not is_root and video_group not in group_adds:
         group_adds.append(video_group)
 
@@ -406,7 +415,8 @@ def _start_container(
     container_id = container.id[:12]
 
     ulimit_str = ", ".join(
-        f"{ulimit.name}={ulimit.soft}:{ulimit.hard}" for ulimit in container.host_config.ulimits
+        f"{ulimit.name}={ulimit.soft}:{ulimit.hard}"
+        for ulimit in container.host_config.ulimits
     )
     logger.info(
         f"Launching container ({container_id}) using image '{image_name}'..."
@@ -500,16 +510,21 @@ def _additional_devices_to_mount(is_root: bool):
         and os.path.exists("/usr/bin/tegrastats")
         and not is_root
     ):
-        group = run_cmd_output('/usr/bin/cat /etc/group | grep "video" | cut -d: -f3').strip()
+        group = run_cmd_output(
+            '/usr/bin/cat /etc/group | grep "video" | cut -d: -f3'
+        ).strip()
         group_adds.append(group)
-        group = run_cmd_output('/usr/bin/cat /etc/group | grep "render" | cut -d: -f3').strip()
+        group = run_cmd_output(
+            '/usr/bin/cat /etc/group | grep "render" | cut -d: -f3'
+        ).strip()
         group_adds.append(group)
     return (devices, group_adds)
 
 
 def _host_is_native_igpu() -> bool:
     proc = subprocess.run(
-        ["nvidia-smi --query-gpu name --format=csv,noheader | grep nvgpu -q"], shell=True
+        ["nvidia-smi --query-gpu name --format=csv,noheader | grep nvgpu -q"],
+        shell=True,
     )
     result = proc.returncode
     return result == 0

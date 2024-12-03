@@ -20,9 +20,8 @@ import pathlib
 import shutil
 import tempfile
 
-import pytest
-
 import holoscan.cli.common.dockerutils
+import pytest
 from holoscan.cli.common.enum_types import Platform, PlatformConfiguration, SdkType
 from holoscan.cli.packager.container_builder import BuilderBase
 from holoscan.cli.packager.parameters import PackageBuildParameters

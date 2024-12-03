@@ -19,7 +19,6 @@ import socket
 from collections import namedtuple
 
 import psutil
-
 from holoscan.cli.common.utils import compare_versions, get_host_ip_addresses
 
 
@@ -38,7 +37,9 @@ class TestCompareVersions:
 
 
 class TestGetHostIpAddress:
-    snicaddr = namedtuple("snicaddr", ["family", "address", "netmask", "broadcast", "ptp"])
+    snicaddr = namedtuple(
+        "snicaddr", ["family", "address", "netmask", "broadcast", "ptp"]
+    )
     sample_data = dict(
         [
             (
@@ -166,7 +167,9 @@ class TestGetHostIpAddress:
     )
 
     def test_ips_are_returns_all_matching_ips(self, monkeypatch):
-        monkeypatch.setattr(psutil, "net_if_addrs", lambda: TestGetHostIpAddress.sample_data)
+        monkeypatch.setattr(
+            psutil, "net_if_addrs", lambda: TestGetHostIpAddress.sample_data
+        )
 
         ipv4, ipv6 = get_host_ip_addresses()
 

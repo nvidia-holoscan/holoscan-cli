@@ -21,9 +21,8 @@ import sys
 from pathlib import Path
 from typing import Optional
 
-from packaging.version import Version
-
 from holoscan import __version__ as holoscan_version_string
+from packaging.version import Version
 
 from .artifact_sources import ArtifactSources
 from .enum_types import SdkType
@@ -72,7 +71,9 @@ def detect_sdk(sdk: Optional[SdkType] = None) -> SdkType:
 
 
 def detect_sdk_version(
-    sdk: SdkType, artifact_sources: ArtifactSources, sdk_version: Optional[Version] = None
+    sdk: SdkType,
+    artifact_sources: ArtifactSources,
+    sdk_version: Optional[Version] = None,
 ) -> tuple[str, Optional[str]]:
     """
     Detects SDK version to use based on installed PyPI package or user input.

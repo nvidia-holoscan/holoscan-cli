@@ -87,7 +87,9 @@ def _package_application(args: Namespace):
         args (Namespace): Input arguments for Packager from CLI
     """
     # Initialize arguments for package
-    with tempfile.TemporaryDirectory(prefix="holoscan_tmp", dir=tempfile.gettempdir()) as temp_dir:
+    with tempfile.TemporaryDirectory(
+        prefix="holoscan_tmp", dir=tempfile.gettempdir()
+    ) as temp_dir:
         packaging_args = PackagingArguments(args, temp_dir)
 
         # Create Manifest Files

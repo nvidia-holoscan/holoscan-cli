@@ -26,7 +26,11 @@ logger = logging.getLogger("runner")
 
 
 def get_shared_memory_size(
-    pkg_info: dict, worker: bool, driver: bool, fragments: str, user_shm_size: Optional[str]
+    pkg_info: dict,
+    worker: bool,
+    driver: bool,
+    fragments: str,
+    user_shm_size: Optional[str],
 ) -> Optional[float]:
     """Queries the pkg.json file for shared memory requirement of the application
 
@@ -49,7 +53,9 @@ def get_shared_memory_size(
         return None
 
 
-def _read_shm_size_from_config(pkg_info: dict, worker: bool, driver: bool, fragments: str) -> float:
+def _read_shm_size_from_config(
+    pkg_info: dict, worker: bool, driver: bool, fragments: str
+) -> float:
     """Queries the pkg.json file for shared memory requirement of the application
 
     Args:
@@ -68,13 +74,17 @@ def _read_shm_size_from_config(pkg_info: dict, worker: bool, driver: bool, fragm
 
     max_value: float = 0
     global_shared_memory_size = _convert_to_bytes(
-        resources.get(Constants.RESOURCE_SHARED_MEMORY_KEY, DefaultValues.DEFAULT_SHM_SIZE)
+        resources.get(
+            Constants.RESOURCE_SHARED_MEMORY_KEY, DefaultValues.DEFAULT_SHM_SIZE
+        )
     )
 
     resources_fragments = resources.get("fragments", {})
     if worker:
         if fragments is None or fragments.lower() == "all":
-            max_value = _find_maximum_shared_memory_value_from_all_fragments(resources_fragments)
+            max_value = _find_maximum_shared_memory_value_from_all_fragments(
+                resources_fragments
+            )
         else:
             max_value = _find_maximum_shared_memory_value_from_matching_fragments(
                 resources_fragments, fragments
@@ -84,7 +94,9 @@ def _read_shm_size_from_config(pkg_info: dict, worker: bool, driver: bool, fragm
         if driver:
             max_value = global_shared_memory_size
         else:
-            max_value = _find_maximum_shared_memory_value_from_all_fragments(resources_fragments)
+            max_value = _find_maximum_shared_memory_value_from_all_fragments(
+                resources_fragments
+            )
             max_value = max(max_value, global_shared_memory_size)
 
     return max_value
@@ -171,4 +183,6 @@ def _convert_to_bytes(raw_value: Union[str, float, int]) -> float:
         if result.group(2) == "g":
             return value * 1000000000
 
-    raise InvalidSharedMemoryValueError(f"Invalid/unsupported shared memory value: {raw_value}. ")
+    raise InvalidSharedMemoryValueError(
+        f"Invalid/unsupported shared memory value: {raw_value}. "
+    )

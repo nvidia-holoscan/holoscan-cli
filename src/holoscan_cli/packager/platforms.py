@@ -75,15 +75,22 @@ class Platform:
         for platform in args.platform:
             platform_config = args.platform_config
 
-            platform_parameters = PlatformParameters(platform, platform_config, args.tag, version)
+            platform_parameters = PlatformParameters(
+                platform, platform_config, args.tag, version
+            )
 
             (
                 platform_parameters.custom_base_image,
                 platform_parameters.base_image,
-            ) = self._find_base_image(platform_parameters, holoscan_sdk_version, args.base_image)
+            ) = self._find_base_image(
+                platform_parameters, holoscan_sdk_version, args.base_image
+            )
 
             platform_parameters.build_image = self._find_build_image(
-                platform_parameters, holoscan_sdk_version, application_type, args.build_image
+                platform_parameters,
+                holoscan_sdk_version,
+                application_type,
+                args.build_image,
             )
 
             (
@@ -129,9 +136,9 @@ class Platform:
         Raises:
             IncompatiblePlatformConfigurationError: when validation fails
         """
-        if (args.holoscan_sdk_file is not None or args.monai_deploy_sdk_file is not None) and len(
-            args.platform
-        ) > 1:
+        if (
+            args.holoscan_sdk_file is not None or args.monai_deploy_sdk_file is not None
+        ) and len(args.platform) > 1:
             raise IncompatiblePlatformConfigurationError(
                 "Validation error: '--sdk-file' cannot be used with multiple platforms."
             )
@@ -165,7 +172,9 @@ class Platform:
             if image_exists(base_image):
                 return (True, base_image)
             else:
-                raise InvalidSdkError(f"Specified base image cannot be found: {base_image}")
+                raise InvalidSdkError(
+                    f"Specified base image cannot be found: {base_image}"
+                )
 
         try:
             return (
@@ -206,7 +215,9 @@ class Platform:
             if image_exists(build_image):
                 return build_image
             else:
-                raise InvalidSdkError(f"Specified build image cannot be found: {build_image}")
+                raise InvalidSdkError(
+                    f"Specified build image cannot be found: {build_image}"
+                )
 
         if application_type == ApplicationType.CppCMake:
             try:
@@ -235,7 +246,9 @@ class Platform:
         monai_deploy_sdk_file: Optional[Path] = None,
     ) -> tuple[
         tuple[bool, Union[Path, str]],
-        tuple[Union[Optional[Path], Optional[str]], Union[Optional[Path], Optional[str]]],
+        tuple[
+            Union[Optional[Path], Optional[str]], Union[Optional[Path], Optional[str]]
+        ],
     ]:
         """
         Detects the SDK distributable to use based on internal mapping or user input.
@@ -285,7 +298,9 @@ class Platform:
                     application_type,
                     holoscan_sdk_file,
                 ),
-                self._get_monai_deploy_sdk(monai_deploy_app_sdk_version, monai_deploy_sdk_file),
+                self._get_monai_deploy_sdk(
+                    monai_deploy_app_sdk_version, monai_deploy_sdk_file
+                ),
             )
         return (None, None)
 
@@ -349,7 +364,9 @@ class Platform:
                 ApplicationType.PythonModule,
                 ApplicationType.PythonFile,
             ]:
-                wheel_package_version = self._artifact_sources.wheel_package_version(sdk_version)
+                wheel_package_version = self._artifact_sources.wheel_package_version(
+                    sdk_version
+                )
 
                 if wheel_package_version is None:
                     raise InvalidSdkError(
@@ -362,7 +379,9 @@ class Platform:
                 ApplicationType.CppCMake,
                 ApplicationType.Binary,
             ]:
-                debian_package_version = self._artifact_sources.debian_package_version(sdk_version)
+                debian_package_version = self._artifact_sources.debian_package_version(
+                    sdk_version
+                )
 
                 if debian_package_version is None:
                     raise InvalidSdkError(
@@ -375,7 +394,9 @@ class Platform:
             raise InvalidSdkError(f"Unknown application type: {application_type.value}")
 
     def _get_monai_deploy_sdk(
-        self, monai_deploy_app_sdk_version: Optional[str], sdk_file: Optional[Path] = None
+        self,
+        monai_deploy_app_sdk_version: Optional[str],
+        sdk_file: Optional[Path] = None,
     ) -> tuple[bool, Union[Optional[Path], Optional[str]]]:
         """
         Validates MONAI Deploy SDK redistributable file if specified.

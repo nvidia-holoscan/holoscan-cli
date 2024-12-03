@@ -19,7 +19,6 @@ import os
 import sys
 
 import yaml
-
 from holoscan.conditions import CountCondition
 from holoscan.core import Application, Operator, OperatorSpec
 
@@ -85,7 +84,9 @@ class ListModelsOp(Operator):
                 if os.path.exists(pkg_manifest["models"][model]):
                     print(f"Model '{model}' found in {pkg_manifest['models'][model]}")
                 else:
-                    print(f"Error: model '{model}' missing from {pkg_manifest['models'][model]}")
+                    print(
+                        f"Error: model '{model}' missing from {pkg_manifest['models'][model]}"
+                    )
 
         print("ListModelsOp completed.")
         print("======================================================")
@@ -119,7 +120,9 @@ class ReadConfigOp(Operator):
 class CliTestApp(Application):
     def compose(self):
         # Define the operators
-        printt_args = PrintAppArguments(self, CountCondition(self, 1), name="print-args")
+        printt_args = PrintAppArguments(
+            self, CountCondition(self, 1), name="print-args"
+        )
         list_file = ListFilesOp(self, CountCondition(self, 1), name="list-files")
         print_config = ReadConfigOp(self, CountCondition(self, 1), name="print-config")
         list_models = ListModelsOp(self, CountCondition(self, 1), name="list-models")

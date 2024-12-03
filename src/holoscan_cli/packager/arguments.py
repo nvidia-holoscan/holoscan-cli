@@ -69,7 +69,9 @@ class PackagingArguments:
         self.build_parameters.gid = args.gid
         self.build_parameters.build_cache = args.build_cache
         self.build_parameters.app_config_file_path = args.config
-        self.build_parameters.timeout = args.timeout if args.timeout else DefaultValues.TIMEOUT
+        self.build_parameters.timeout = (
+            args.timeout if args.timeout else DefaultValues.TIMEOUT
+        )
         self.build_parameters.docs = args.docs if args.docs else None
         self.build_parameters.application = args.application
         self.build_parameters.no_cache = args.no_cache
@@ -93,7 +95,10 @@ class PackagingArguments:
             self.build_parameters.monai_deploy_app_sdk_version,
             self._platforms,
         ) = platform.configure_platforms(
-            args, temp_dir, self.build_parameters.version, self.build_parameters.application_type
+            args,
+            temp_dir,
+            self.build_parameters.version,
+            self.build_parameters.application_type,
         )
 
         if self.build_parameters.sdk == SdkType.Holoscan:
@@ -117,7 +122,9 @@ class PackagingArguments:
         self.application_manifest.sdk = self.build_parameters.sdk.value
 
         if self.build_parameters.sdk == SdkType.Holoscan:
-            self.application_manifest.sdk_version = self.build_parameters.holoscan_sdk_version
+            self.application_manifest.sdk_version = (
+                self.build_parameters.holoscan_sdk_version
+            )
         else:
             self.application_manifest.sdk_version = (
                 self.build_parameters.monai_deploy_app_sdk_version
@@ -126,13 +133,19 @@ class PackagingArguments:
         self._package_manifest.platform_config = args.platform_config.value
 
     def _read_application_config_file(self, config_file_path: Path):
-        self._logger.info(f"Reading application configuration from {config_file_path}...")
+        self._logger.info(
+            f"Reading application configuration from {config_file_path}..."
+        )
         app_config = ApplicationConfiguration()
         app_config.read(config_file_path)
         self.build_parameters.title = app_config.title()
         self.build_parameters.pip_packages = app_config.pip_packages()
 
         self._logger.info("Generating app.json...")
-        self._application_manifest = app_config.populate_app_manifest(self.build_parameters)
+        self._application_manifest = app_config.populate_app_manifest(
+            self.build_parameters
+        )
         self._logger.info("Generating pkg.json...")
-        self._package_manifest = app_config.populate_package_manifest(self.build_parameters)
+        self._package_manifest = app_config.populate_package_manifest(
+            self.build_parameters
+        )
