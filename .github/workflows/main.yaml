@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2024-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -110,6 +110,68 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           file: tests/reports/.coverage.lcov
+
+  test-app:
+    if: false # disable until GPU supported nodes become available
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest]
+        python-version: ["3.12"]
+    env:
+      PYTHON_VERSION: ${{ matrix.python-version }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install Poetry
+        uses: Gr1N/setup-poetry@v9
+
+      - name: Install library and dependencies
+        run: |
+          poetry run pip install --upgrade pip setuptools
+          poetry install --with test
+
+      - name: Build Application
+        run: |
+          poetry build
+          wheel=$(find dist/ -name holoscan_cli-*-py3-none-linux_x86_64.whl)
+          echo "Installing from ${wheel}"
+          pip install ${wheel}
+
+      - name: Version Check
+        run: |
+          output=$(holoscan version | tail -1 | tr -s ' ' | cut -d' ' -f3)
+          expected=$(grep -m 1 version pyproject.toml | tr -s ' ' | tr -d '"' | tr -d "'" | cut -d' ' -f3)
+          echo "Expected version: ${expected}"
+          echo "  Actual version: "$output""
+          test "$output" = "$expected"
+
+      - name: Package Test App
+        run: |
+          holoscan package --source tests/app/artifacts.json \
+                            -c tests/app/python/app.yaml \
+                            -t test-app-python \
+                            --platform x64-workstation \
+                            --sdk-version 0.0.0 \
+                            --holoscan-sdk-file $(find dist/ -name holoscan_cli-*-py3-none-linux_x86_64.whl) \
+                            tests/app/python/
+
+      - name: Run Test App
+        env:
+          HOLOSCAN_SKIP_NVIDIA_CTK_CHECK: true
+        run: |
+          mkdir input
+          mkdir output
+          touch input/file
+          touch output/file
+          holoscan run -r $(docker images | grep "test-app-python" | awk '{print $1":"$2}') -i input -o output
 
   # testpypi-deploy:
   #   name: Build and publish Python 🐍 distributions 📦 to TestPyPI
