@@ -21,7 +21,6 @@ import sys
 from pathlib import Path
 from typing import Optional
 
-from holoscan import __version__ as holoscan_version_string
 from packaging.version import Version
 
 from .artifact_sources import ArtifactSources
@@ -29,6 +28,30 @@ from .enum_types import SdkType
 from .exceptions import FailedToDetectSDKVersionError, InvalidSdkError
 
 logger = logging.getLogger("common")
+
+
+def validate_holoscan_sdk_version(
+    artifact_sources: ArtifactSources, version: str
+) -> None:
+    """
+    Validates specified Holoscan version with supported versions.
+
+    Args:
+        artifact_sources (ArtifactSources): ArtifactSources object to retrieve supported versions from
+        version (str): Holoscan SDK version from user input.
+
+    Raises:
+        InvalidSdkError: If specified SDK version is not supported.
+
+    Returns:
+        str: SDK version
+    """
+    sdk_version = Version(version)
+    if sdk_version.base_version not in artifact_sources.holoscan_versions:
+        raise InvalidSdkError(
+            f"Invalid SDK version specified ({version}): valid values are: "
+            f"{', '.join(artifact_sources.holoscan_versions)}"
+        )
 
 
 def detect_sdk(sdk: Optional[SdkType] = None) -> SdkType:
@@ -60,7 +83,7 @@ def detect_sdk(sdk: Optional[SdkType] = None) -> SdkType:
             getattr(sys, "orig_argv", None)
             and len(sys.orig_argv) >= 3
             and sys.orig_argv[0] == "python3"
-            and sys.orig_argv[2] == "holoscan.cli"
+            and sys.orig_argv[2] == "holoscan_cli"
         ):
             command = "holoscan"
         else:
@@ -72,7 +95,6 @@ def detect_sdk(sdk: Optional[SdkType] = None) -> SdkType:
 
 def detect_sdk_version(
     sdk: SdkType,
-    artifact_sources: ArtifactSources,
     sdk_version: Optional[Version] = None,
 ) -> tuple[str, Optional[str]]:
     """
@@ -90,46 +112,37 @@ def detect_sdk_version(
             use
 
     Raises:
-        InvalidSdkError: when failed to detect SDK version.
+        FailedToDetectSDKVersionError: When unable to detect the installed Holoscan PyPI package.
     """
     if sdk is SdkType.Holoscan:
-        return [detect_holoscan_version(artifact_sources, sdk_version), None]
+        return [detect_holoscan_version(sdk_version), None]
     else:
         return [
-            detect_holoscan_version(artifact_sources, None),
-            detect_monaideploy_version(artifact_sources, sdk_version),
+            detect_holoscan_version(None),
+            detect_monaideploy_version(sdk_version),
         ]
 
 
-def detect_holoscan_version(
-    artifact_sources: ArtifactSources, sdk_version: Optional[Version] = None
-) -> str:
+def detect_holoscan_version(sdk_version: Optional[Version] = None) -> str:
     """
     Validates Holoscan version if specified. Otherwise, attempt to detect the Holoscan PyPI
     package installed.
 
     Args:
-        sdk (SdkType): SDK for building the application
         sdk_version (Optional[str], optional): SDK version from user input. Defaults to None.
 
     Raises:
-        InvalidSdkError: If specified SDK version is not supported.
         FailedToDetectSDKVersionError: When unable to detect the installed Holoscan PyPI package.
 
     Returns:
         str: SDK version
     """
     if sdk_version is not None:
-        if sdk_version.base_version not in artifact_sources.holoscan_versions:
-            raise InvalidSdkError(
-                "Invalid SDK version specified: valid values are: "
-                f"{', '.join(artifact_sources.holoscan_versions)}"
-            )
-
         return sdk_version.base_version
     else:
         try:
-            ver = Version(holoscan_version_string)
+            ver_str = importlib.metadata.version("holoscan-cli").title()
+            ver = Version(ver_str)
             ver_str = ".".join(str(i) for i in ver.release)
 
             if len(ver.release) == 1 and ver.major == ver.release[0]:
@@ -148,11 +161,6 @@ def detect_holoscan_version(
             ):
                 ver_str = f"{ver.release[0]}.{ver.release[1]}.{ver.release[2]}"
 
-            if ver_str not in artifact_sources.holoscan_versions:
-                raise InvalidSdkError(
-                    f"Something must be wrong as we've detect Holoscan SDK v{ver_str}"
-                    f" which is not supported. Please reinstall Holoscan SDK."
-                )
             return ver_str
         except Exception as ex:
             raise FailedToDetectSDKVersionError(
@@ -160,19 +168,15 @@ def detect_holoscan_version(
             ) from ex
 
 
-def detect_monaideploy_version(
-    artifact_sources: ArtifactSources, sdk_version: Optional[Version] = None
-) -> str:
+def detect_monaideploy_version(sdk_version: Optional[Version] = None) -> str:
     """
     Validates MONAI Deploy version if specified. Otherwise, attempt to detect the MONAI Deploy
     PyPI package installed.
 
     Args:
-        sdk (SdkType): SDK for building the application
         sdk_version (Optional[str], optional): SDK version from user input. Defaults to None.
 
     Raises:
-        InvalidSdkError: If specified SDK version is not supported.
         FailedToDetectSDKVersionError: When unable to detect the installed MONAI Deploy PyPI
                                        package.
 

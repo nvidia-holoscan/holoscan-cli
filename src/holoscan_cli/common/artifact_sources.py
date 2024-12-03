@@ -20,7 +20,8 @@ import logging
 from typing import Any, Optional
 
 import requests
-from holoscan import __version__ as holoscan_version_string
+
+from holoscan_cli import __version__
 from packaging.version import InvalidVersion, Version
 
 from .enum_types import PlatformConfiguration, SdkType
@@ -41,10 +42,10 @@ class ArtifactSources:
 
     def __init__(self) -> None:
         self._logger = logging.getLogger("common")
-        self._supported_holoscan_versions = ["2.6.0", "2.7.0", "2.8.0"]
+        self._supported_holoscan_versions = ["3.0.0"]
         try:
             ArtifactSources.HoloscanVersion = ".".join(
-                str(i) for i in Version(holoscan_version_string).release[0:3]
+                str(i) for i in Version(__version__).release[0:3]
             )
         except InvalidVersion as ex:
             raise RuntimeError(

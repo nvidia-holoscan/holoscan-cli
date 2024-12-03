@@ -20,7 +20,6 @@ import os
 import sys
 from argparse import Namespace
 
-from ..common.artifact_sources import ArtifactSources
 from ..common.enum_types import SdkType
 from ..common.sdk_utils import (
     detect_holoscan_version,
@@ -31,7 +30,7 @@ from ..common.sdk_utils import (
 logger = logging.getLogger("version")
 
 
-def execute_version_command(args: Namespace, artifact_sources: ArtifactSources):
+def execute_version_command(args: Namespace):
     print(
         f"You are executing Holoscan CLI from: {os.path.dirname(os.path.abspath(sys.argv[0]))}\n"
     )
@@ -39,14 +38,14 @@ def execute_version_command(args: Namespace, artifact_sources: ArtifactSources):
     try:
         sdk = detect_sdk()
         try:
-            sdk_version = detect_holoscan_version(artifact_sources)
+            sdk_version = detect_holoscan_version()
             print(f"Holoscan SDK:           {sdk_version}")
         except Exception:
             print("Holoscan SDK:           N/A")
 
         if sdk == SdkType.MonaiDeploy:
             try:
-                sdk_version = detect_monaideploy_version(artifact_sources)
+                sdk_version = detect_monaideploy_version()
                 print(f"MONAI Deploy App SDK:   {sdk_version}")
             except Exception:
                 print("MONAI Deploy App SDK:   N/A")

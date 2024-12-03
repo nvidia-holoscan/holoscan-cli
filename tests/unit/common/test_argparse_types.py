@@ -21,7 +21,7 @@ import pathlib
 from pathlib import PosixPath
 
 import pytest
-from holoscan.cli.common.argparse_types import (
+from holoscan_cli.common.argparse_types import (
     valid_dir_path,
     valid_existing_dir_path,
     valid_existing_path,
@@ -29,7 +29,7 @@ from holoscan.cli.common.argparse_types import (
     valid_platforms,
     valid_sdk_type,
 )
-from holoscan.cli.common.enum_types import Platform, PlatformConfiguration, SdkType
+from holoscan_cli.common.enum_types import Platform, PlatformConfiguration, SdkType
 
 
 class TestValidDirPath:

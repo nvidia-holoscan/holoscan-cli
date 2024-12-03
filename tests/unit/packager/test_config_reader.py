@@ -20,11 +20,11 @@ import tempfile
 
 import pytest
 import yaml
-from holoscan.cli.common.constants import DefaultValues, EnvironmentVariables
-from holoscan.cli.common.enum_types import SdkType
-from holoscan.cli.common.exceptions import InvalidApplicationConfigurationError
-from holoscan.cli.packager.config_reader import ApplicationConfiguration
-from holoscan.cli.packager.parameters import PackageBuildParameters
+from holoscan_cli.common.constants import DefaultValues, EnvironmentVariables
+from holoscan_cli.common.enum_types import SdkType
+from holoscan_cli.common.exceptions import InvalidApplicationConfigurationError
+from holoscan_cli.packager.config_reader import ApplicationConfiguration
+from holoscan_cli.packager.parameters import PackageBuildParameters
 
 
 class TestApplicationConfiguration:

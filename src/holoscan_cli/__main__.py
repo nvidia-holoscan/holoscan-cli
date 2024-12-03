@@ -153,11 +153,9 @@ def main(argv: Optional[list[str]] = None):
         execute_run_command(args)
 
     elif args.command == "version":
-        from .common.artifact_sources import ArtifactSources
         from .version.version import execute_version_command
 
-        artifact_sources = ArtifactSources()
-        execute_version_command(args, artifact_sources)
+        execute_version_command(args)
 
     elif args.command == "nics":
         from .nics.nics import execute_nics_command
