@@ -43,7 +43,7 @@ poetry install
 pre-commit install
 
 # Run pre-commit against all files
-pre-commit run --all-files\
+pre-commit run --all-files
 
 # Build sdist package
 poetry build
