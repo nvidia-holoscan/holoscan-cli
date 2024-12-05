@@ -100,8 +100,9 @@ max-line-length = 160
 pythonpath = "src"
 addopts = """
 --import-mode=importlib \
---doctest-modules \
 --cov=holoscan_cli ./tests/unit \
+--cov-append \
+--cov-report lcov:tests/reports/.coverage.lcov \
 --ignore=docs/
 """
 
