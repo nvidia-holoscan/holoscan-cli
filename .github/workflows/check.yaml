@@ -75,16 +75,11 @@ jobs:
         env && ls -l ${{ runner.temp }} && echo ${{ runner.temp }}
         poetry run pytest
 
-  #   - name: Upload Results to CodeCov
-  #     if: success()
-  #     uses: codecov/codecov-action@v5
-  #     with:
-  #       env_vars: TOXENV
-  #       fail_ci_if_error: false
-  #       files: ./tests/reports/coverage-html/index.html,./tests/reports/coverage.xml
-  #       flags: unittests
-  #       name: ${{ matrix.os }} - Python ${{ matrix.python-version }}
-  #       token: ${{ secrets.CODECOV_TOKEN }}
+    - name: Coveralls GitHub Action
+      uses: coverallsapp/github-action@v2.3.4
+      with:
+        github-token: ${{ secrets.GITHUB_TOKEN }}
+
 
   # testpypi-deploy:
   #   name: Build and publish Python 🐍 distributions 📦 to TestPyPI
