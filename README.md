@@ -1,3 +1,6 @@
+![Build](https://github.com/nvidia-holoscan/holoscan-cli/actions/workflows/main.yml/badge.svg?branch=$%7BGH_BRANCH%7D)
+[![Coverage Status](https://coveralls.io/repos/github/nvidia-holoscan/holoscan-cli/badge.svg?branch=vchang/poetry-setup)](https://coveralls.io/github/nvidia-holoscan/holoscan-cli?branch=vchang/poetry-setup)
+
 # Holoscan CLI
 
 Command line interface for packaging and running Holoscan applications.
