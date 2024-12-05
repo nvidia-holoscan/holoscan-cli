@@ -24,62 +24,92 @@ name: Code Check
 
 on:
   push:
-    branches: [ "main" ]
+    branches: ["main"]
   pull_request:
-    branches: [ "main" ]
+    branches: ["main"]
 
 jobs:
+  pre-commit:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest]
+        python-version: ["3.12"]
+    env:
+      PYTHON_VERSION: ${{ matrix.python-version }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install Poetry
+        uses: Gr1N/setup-poetry@v9
+
+      - name: Install library and dependencies
+        run: |
+          poetry run pip install --upgrade pip setuptools
+          poetry install --with test
+
+      - name: Run pre-commit Check
+        uses: pre-commit/action@v3.0.1
+
   test:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
         os: [ubuntu-latest]
-        python-version: [
-          '3.9',
-          '3.10',
-          '3.11',
-          '3.12',
-        ]
+        python:
+          [
+            { version: "3.9", coveralls: false },
+            { version: "3.10", coveralls: false },
+            { version: "3.11", coveralls: false },
+            { version: "3.12", coveralls: true }, # publish coverage with latest version of Python
+          ]
     env:
-      PYTHON_VERSION: ${{ matrix.python-version }}
+      PYTHON_VERSION: ${{ matrix.python.version }}
 
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-    - name: Checkout repository
-      uses: actions/checkout@v4
+      - name: Set up Python ${{ matrix.python.version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python.version }}
 
-    - name: Set up Python ${{ matrix.python-version }}
-      uses: actions/setup-python@v5
-      with:
-        python-version: ${{ matrix.python-version }}
+      - name: Install Poetry
+        uses: Gr1N/setup-poetry@v9
 
-    - name: Install Poetry
-      uses: Gr1N/setup-poetry@v9
+      - name: Install library and dependencies
+        run: |
+          poetry run pip install --upgrade pip setuptools
+          poetry install --with test
 
-    - name: Install library and dependencies
-      run: |
-        poetry run pip install --upgrade pip setuptools
-        poetry install --with test
+      - name: Run Pytest + Coverage
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PLATFORM: ${{ matrix.os }}
+        run: |
+          poetry run pytest
 
-    - name: Run pre-commit Check
-      uses: pre-commit/action@v3.0.1
+      - name: Upload Coverage Report
+        uses: actions/upload-artifact@v4.4.3
+        if: ${{ matrix.python.coveralls }}
+        with:
+          name: coverage
+          path: tests/reports/.coverage.lcov
 
-    - name: Run Pytest + Coverage
-      env:
-        TMP: ${{ runner.temp }}
-        TEMP : ${{ runner.temp }}
-        TMPDIR: ${{ runner.temp }}
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        PLATFORM: ${{ matrix.os }}
-      run: |
-        env && ls -l ${{ runner.temp }} && echo ${{ runner.temp }}
-        poetry run pytest
-
-    - name: Coveralls GitHub Action
-      uses: coverallsapp/github-action@v2.3.4
-      with:
-        github-token: ${{ secrets.GITHUB_TOKEN }}
-
+      - name: Upload Coveralls Report
+        uses: coverallsapp/github-action@v2.3.4
+        if: ${{ matrix.python.coveralls }}
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          file: tests/reports/.coverage.lcov
 
   # testpypi-deploy:
   #   name: Build and publish Python 🐍 distributions 📦 to TestPyPI
