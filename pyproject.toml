@@ -55,6 +55,10 @@ classifiers = [
     "Typing :: Typed",
 ]
 
+[tool.poetry.build]
+script = "build.py"
+generate-setup-file = true
+
 [tool.poetry.dependencies]
 python = ">=3.9,<3.13"
 pip = ">22.0.2"
@@ -107,5 +111,5 @@ addopts = """
 """
 
 [build-system]
-requires = ["poetry-core"]
+requires = ["poetry-core", "setuptools"]
 build-backend = "poetry.core.masonry.api"
