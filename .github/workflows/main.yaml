@@ -137,6 +137,12 @@ jobs:
           poetry run pip install --upgrade pip setuptools
           poetry install --with test
 
+      - name: Build Application
+        run: |
+          poetry build
+          wheel=find dist/ -name holoscan_cli-*-py3-none-linux_x86_64.whl
+          pip install $(wheel)
+
       - name: Version Check
         run: |
           output=$(poetry run holoscan version | tail -1 | tr -s ' ' | cut -d' ' -f3)
@@ -144,6 +150,10 @@ jobs:
           echo "Expected version: ${expected}"
           echo "  Actual version: "$output""
           test "$output" = "$expected"
+
+      - name: Package Test App
+        run: |
+          poetry run holoscan package -c tests/app/python/app.yaml -t test-app-python --platform x64-workstation tests/app/python/
 
 
 
