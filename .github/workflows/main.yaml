@@ -111,6 +111,42 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           file: tests/reports/.coverage.lcov
 
+  test-app:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest]
+        python-version: ["3.12"]
+    env:
+      PYTHON_VERSION: ${{ matrix.python-version }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install Poetry
+        uses: Gr1N/setup-poetry@v9
+
+      - name: Install library and dependencies
+        run: |
+          poetry run pip install --upgrade pip setuptools
+          poetry install --with test
+
+      - name: Version Check
+        run: |
+          output=$(poetry run holoscan version | tail -1 | tr -s ' ' | cut -d' ' -f3)
+          expected=$(grep -m 1 version pyproject.toml | tr -s ' ' | tr -d '"' | tr -d "'" | cut -d' ' -f3)
+          echo "Expected version: ${expected}"
+          echo "  Actual version: "$output""
+          test "$output" = "$expected"
+
+
+
   # testpypi-deploy:
   #   name: Build and publish Python 🐍 distributions 📦 to TestPyPI
   #   runs-on: ubuntu-latest
