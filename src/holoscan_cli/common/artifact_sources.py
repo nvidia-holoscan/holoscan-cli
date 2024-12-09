@@ -33,7 +33,6 @@ class ArtifactSources:
     SectionBaseImages = "base-images"
     SectionBuildImages = "build-images"
     SectionHealthProbe = "health-probes"
-    EdgeROToken = "eyJ2ZXIiOiIyIiwidHlwIjoiSldUIiwiYWxnIjoiUlMyNTYiLCJraWQiOiJLcXV1ZVdTTlRjSkhqTFhGLTJCSnctX0lkRnY0eVhqREJyNEdWMU5Gc2NJIn0.eyJzdWIiOiJqZnJ0QDAxZHRqNnF0ZWNmcnB6MXJrNmg2cjAwd2FkXC91c2Vyc1wvc3ZjLWhvbG9zY2FuLWNsaS1wdWJsaWMtcm8iLCJzY3AiOiJtZW1iZXItb2YtZ3JvdXBzOnN2Yy1ob2xvc2Nhbi1jbGktcHVibGljLWdyb3VwIiwiYXVkIjoiamZydEAwMWR0ajZxdGVjZnJwejFyazZoNnIwMHdhZCIsImlzcyI6ImpmcnRAMDFkdGo2cXRlY2ZycHoxcms2aDZyMDB3YWRcL3VzZXJzXC9ycGFsYW5pc3dhbXkiLCJpYXQiOjE3MDY1NzA1NjUsImp0aSI6IjlmNmEyMmM1LTk5ZTItNGRlMi1hMDhiLTQxZjg2NzIyYmJjNyJ9.Y0gfyW2F0kxiKnMhGzNCyRRE2DNrDW6CUj5ozrQiIvAbSbhohskFcFmP836PU4p3ZQTzbYk9-bBwrqoPDUaZf8p9AW9GZ3mvlU2BxK0EQ-F4oKxA1_Z7agZ0KKcmcrfWnE4Ffy53qAD8PTk5vdcznpYOBpJtF4i16j2QcXvhVGGEqUyGa7_sONdK0sevb3ZztiEoupi4gD2wPTRn30rjpGIiFSDKiswAQwoyF_SqMCQWOBEeXMISp8hkEggUpvPrESv2lbpjgaKuEJ1CikbivYTJCcoqpgH7E72FXr1sB9jfwrFD8pkjtRpGGDxN43waXy4f3Ctr8_rpbmCvwSa9iw"  # noqa: E501
     HoloscanVersion = None
     ManifestFileUrl = None
 
@@ -49,7 +48,7 @@ class ArtifactSources:
                 "a Holoscan SDK version to use."
             ) from ex
 
-        ArtifactSources.ManifestFileUrl = f"https://edge.urm.nvidia.com/artifactory/sw-holoscan-cli-generic/{ArtifactSources.HoloscanVersion}/artifacts.json"
+        ArtifactSources.ManifestFileUrl = f"https://raw.githubusercontent.com/nvidia-holoscan/holoscan-cli/refs/heads/main/releases/{ArtifactSources.HoloscanVersion}/artifacts.json"  # noqa: E501
 
     @property
     def holoscan_versions(self) -> list[str]:
