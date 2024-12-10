@@ -31,27 +31,25 @@ from packaging.version import Version
 
 class TestPlatforms:
     @pytest.fixture(autouse=True)
-    def _setup(self) -> None:
-        self._version = "2.4.0"
+    def _setup(self, monkeypatch) -> None:
         self._artifact_source = ArtifactSources()
-        self._artifact_source._supported_holoscan_versions = [self._version]
-        current_file_path = Path(__file__).parent.parent.resolve() / "common"
-        source_file_sample = current_file_path / "./package-source.json"
+        source_file_sample = Path(__file__).parent.parent.resolve() / "./artifacts.json"
         self._artifact_source.load(str(source_file_sample))
 
     def test_invalid_platform_options(self, monkeypatch):
+        test_version = "1.0.0"
         monkeypatch.setattr(
             "holoscan_cli.packager.platforms.detect_sdk", lambda sdk: SdkType.Holoscan
         )
         monkeypatch.setattr(
             "holoscan_cli.packager.platforms.detect_sdk_version",
-            lambda sdk, sdk_version: (self._version, None),
+            lambda sdk, sdk_version: (test_version, None),
         )
 
         application_verison = "1.0.0"
         input_args = Namespace()
         input_args.sdk = SdkType.Holoscan
-        input_args.sdk_version = Version(self._version)
+        input_args.sdk_version = Version(test_version)
         input_args.platform = [PlatformTypes.IGXOrinDevIt, PlatformTypes.X64Workstation]
         input_args.holoscan_sdk_file = Path("some-random-file")
 
@@ -69,18 +67,19 @@ class TestPlatforms:
     def test_invalid_platform_options_holoscan_sdk_type_with_monai_deploy_sdk_file(
         self, monkeypatch
     ):
+        test_version = "1.0.0"
         monkeypatch.setattr(
             "holoscan_cli.packager.platforms.detect_sdk", lambda sdk: SdkType.Holoscan
         )
         monkeypatch.setattr(
             "holoscan_cli.packager.platforms.detect_sdk_version",
-            lambda sdk, sdk_version: (self._version, None),
+            lambda sdk, sdk_version: (test_version, None),
         )
 
         application_verison = "1.0.0"
         input_args = Namespace()
         input_args.sdk = SdkType.Holoscan
-        input_args.sdk_version = Version(self._version)
+        input_args.sdk_version = Version(test_version)
         input_args.platform = [PlatformTypes.IGXOrinDevIt, PlatformTypes.X64Workstation]
         input_args.holoscan_sdk_file = None
         input_args.monai_deploy_sdk_file = Path("some-random-file")
@@ -97,7 +96,7 @@ class TestPlatforms:
             )
 
     def test_single_platform_with_monai_deploy(self, monkeypatch):
-        holoscan_version = self._version
+        holoscan_version = "1.0.0"
         monai_deploy_version = "2.4.1"
         sdk_type = SdkType.MonaiDeploy
         monkeypatch.setattr(
@@ -178,7 +177,7 @@ class TestPlatforms:
             assert platform_parameters.target_arch == "aarch64"
 
     def test_single_platform_with_monai_deploy_using_custom_sdk(self, monkeypatch):
-        holoscan_version = self._version
+        holoscan_version = "1.0.0"
         monai_deploy_version = "2.4.1"
         sdk_type = SdkType.MonaiDeploy
         monkeypatch.setattr(
@@ -262,7 +261,7 @@ class TestPlatforms:
             assert platform_parameters.target_arch == "aarch64"
 
     def test_multiple_platforms(self, monkeypatch):
-        holoscan_version = self._version
+        holoscan_version = "1.0.0"
         monai_deploy_version = None
         sdk_type = SdkType.Holoscan
         monkeypatch.setattr(
@@ -316,7 +315,7 @@ class TestPlatforms:
             )
             assert (
                 platform_parameters.build_image
-                == "nvcr.io/nvidia/clara-holoscan/holoscan:v2.3.0-dgpu"
+                == "nvcr.io/nvidia/clara-holoscan/holoscan:v1.0.0-dgpu"
             )
             assert (
                 platform_parameters.tag
@@ -355,7 +354,7 @@ class TestPlatforms:
             assert platform_parameters.target_arch == "aarch64"
 
     def test_platform_with_custom_base_image_and_build_image(self, monkeypatch):
-        holoscan_version = self._version
+        holoscan_version = "1.0.0"
         monai_deploy_version = None
         sdk_type = SdkType.Holoscan
         monkeypatch.setattr(
@@ -440,7 +439,7 @@ class TestPlatforms:
             assert platform_parameters.target_arch == "aarch64"
 
     def test_platform_with_custom_sdk_file(self, monkeypatch):
-        holoscan_version = self._version
+        holoscan_version = "1.0.0"
         monai_deploy_version = None
         sdk_type = SdkType.Holoscan
         monkeypatch.setattr(
