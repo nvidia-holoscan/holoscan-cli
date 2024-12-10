@@ -140,12 +140,13 @@ jobs:
       - name: Build Application
         run: |
           poetry build
-          wheel=find dist/ -name holoscan_cli-*-py3-none-linux_x86_64.whl
-          pip install $(wheel)
+          wheel=$(find dist/ -name holoscan_cli-*-py3-none-linux_x86_64.whl)
+          echo "Installing from ${wheel}"
+          pip install ${wheel}
 
       - name: Version Check
         run: |
-          output=$(poetry run holoscan version | tail -1 | tr -s ' ' | cut -d' ' -f3)
+          output=$(holoscan version | tail -1 | tr -s ' ' | cut -d' ' -f3)
           expected=$(grep -m 1 version pyproject.toml | tr -s ' ' | tr -d '"' | tr -d "'" | cut -d' ' -f3)
           echo "Expected version: ${expected}"
           echo "  Actual version: "$output""
@@ -153,9 +154,23 @@ jobs:
 
       - name: Package Test App
         run: |
-          poetry run holoscan package -c tests/app/python/app.yaml -t test-app-python --platform x64-workstation tests/app/python/
+          holoscan package --source tests/app/artifacts.json \
+                            -c tests/app/python/app.yaml \
+                            -t test-app-python \
+                            --platform x64-workstation \
+                            --sdk-version 0.0.0 \
+                            --holoscan-sdk-file $(find dist/ -name holoscan_cli-*-py3-none-linux_x86_64.whl) \
+                            tests/app/python/
 
-
+      - name: Run Test App
+        env:
+          HOLOSCAN_SKIP_NVIDIA_CTK_CHECK: true
+        run: |
+          mkdir input
+          mkdir output
+          touch input/file
+          touch output/file
+          holoscan run -r $(docker images | grep "test-app-python" | awk '{print $1":"$2}') -i input -o output
 
   # testpypi-deploy:
   #   name: Build and publish Python 🐍 distributions 📦 to TestPyPI
