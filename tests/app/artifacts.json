@@ -1,0 +1,24 @@
+{
+  "0.0.0": {
+    "holoscan": {
+      "debian-version": "0.0.0",
+      "wheel-version": "0.0.0",
+      "base-images": {
+        "dgpu": "nvcr.io/nvidia/cuda:12.6.0-runtime-ubuntu22.04",
+        "igpu": "nvcr.io/nvidia/tensorrt:24.08-py3-igpu"
+      },
+      "build-images": {
+        "igpu": {
+        },
+        "dgpu": {
+        },
+        "cpu": {
+        }
+      }
+    },
+    "health-probes": {
+      "linux/amd64": "https://github.com/grpc-ecosystem/grpc-health-probe/releases/download/v0.4.19/grpc_health_probe-linux-amd64",
+      "linux/arm64": "https://github.com/grpc-ecosystem/grpc-health-probe/releases/download/v0.4.19/grpc_health_probe-linux-arm64"
+    }
+  }
+}
