@@ -39,7 +39,6 @@ class ArtifactSources:
 
     def __init__(self) -> None:
         self._logger = logging.getLogger("common")
-        self._supported_holoscan_versions = ["3.0.0"]
         try:
             ArtifactSources.HoloscanVersion = ".".join(
                 str(i) for i in Version(__version__).release[0:3]
@@ -55,7 +54,7 @@ class ArtifactSources:
     @property
     def holoscan_versions(self) -> list[str]:
         # logic to dynamically fetch the supported versions
-        return self._supported_holoscan_versions  # for now, return the hardcoded value
+        return self._data.keys()
 
     def base_image(self, version) -> str:
         return self._data[version][SdkType.Holoscan.value][
