@@ -15,6 +15,7 @@
 import json
 import logging
 import os
+import sys
 import tempfile
 from argparse import Namespace
 
@@ -119,3 +120,4 @@ def execute_package_command(args: Namespace):
     except Exception as e:
         logger.debug(e, exc_info=True)
         logger.error(f"Error packaging application:\n\n{str(e)}")
+        sys.exit(1)

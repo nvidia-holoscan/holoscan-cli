@@ -50,3 +50,4 @@ def execute_version_command(args: Namespace):
     except Exception as ex:
         logging.error("Error executing version command.")
         logger.debug(ex)
+        sys.exit(3)
