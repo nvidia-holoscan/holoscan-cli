@@ -99,7 +99,7 @@ class PackagingArguments:
         if self.build_parameters.sdk == SdkType.Holoscan:
             self.application_manifest.readiness = {
                 "type": "command",
-                "command": ["/bin/grpc_health_probe", "-addr", ":8777"],
+                "command": ["/bin/grpc_health_probe", "-addr", ":8765"],
                 "initialDelaySeconds": 1,
                 "periodSeconds": 10,
                 "timeoutSeconds": 1,
@@ -107,7 +107,7 @@ class PackagingArguments:
             }
             self.application_manifest.liveness = {
                 "type": "command",
-                "command": ["/bin/grpc_health_probe", "-addr", ":8777"],
+                "command": ["/bin/grpc_health_probe", "-addr", ":8765"],
                 "initialDelaySeconds": 1,
                 "periodSeconds": 10,
                 "timeoutSeconds": 1,

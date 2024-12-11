@@ -308,7 +308,7 @@ RUN curl -L -o /bin/grpc_health_probe {{ health_probe | pprint }} \
     && chmod +x /bin/grpc_health_probe && ls -l /bin/grpc_health_probe
 
 HEALTHCHECK --interval=10s --timeout=1s \
-    CMD /bin/grpc_health_probe -addr=:8777 || exit 1
+    CMD /bin/grpc_health_probe -addr=:8765 || exit 1
 
 # End install gRPC health probe
 {% endif %}
