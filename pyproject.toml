@@ -55,9 +55,9 @@ classifiers = [
     "Typing :: Typed",
 ]
 
-[tool.poetry.build]
-script = "build.py"
-generate-setup-file = false
+# [tool.poetry.build]
+# script = "build.py"
+# generate-setup-file = false
 
 [tool.poetry.dependencies]
 python = ">=3.9,<3.13"
@@ -116,7 +116,7 @@ vcs = "git"
 style = "pep440"
 format-jinja = """
     {%- if branch == 'main' -%}
-        {{ serialize_pep440(base, metadata=[branch_escaped] }}
+        {{ serialize_pep440(base, metadata=[branch_escaped]) }}
     {%- elif branch.startswith("release/") -%}
         {{ serialize_pep440(base, stage="rc", dev=distance, metadata=[commit]) }}
     {%- else -%}
