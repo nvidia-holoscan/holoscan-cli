@@ -113,8 +113,16 @@ addopts = """
 [tool.poetry-dynamic-versioning]
 enable = true
 vcs = "git"
-style = "semver"
-format-jinja = "{% if distance == 0 %}{{ base }}{% else %}{{ base }}+{{ branch_escaped }}.{{ commit }}{% endif %}"
+style = "pep440"
+format-jinja = """
+    {%- if branch == 'main' -%}
+        {{ serialize_pep440(base, metadata=[branch_escaped] }}
+    {%- elif branch.startswith("release/") -%}
+        {{ serialize_pep440(base, stage="rc", dev=distance, metadata=[commit]) }}
+    {%- else -%}
+        {{ serialize_pep440(base, stage="a", dev=distance, metadata=[branch_escaped, commit]) }}
+    {%- endif -%}
+"""
 
 [build-system]
 requires = ["poetry-core", "setuptools", "poetry-dynamic-versioning>=1.0.0,<2.0.0"]
