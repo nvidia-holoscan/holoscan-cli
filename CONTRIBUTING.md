@@ -20,12 +20,12 @@ git clone https://github.com/YOUR_USERNAME/YOUR_FORK.git holoscan-cli
 git push -u origin <local-branch>:<remote-branch>
 ```
 
-3. Once the code changes are staged on the fork and ready for review, please [submit](https://help.github.com/en/articles/creating-a-pull-request) a [Pull Request](https://help.github.com/en/articles/about-pull-requests) (PR) to merge the changes from a branch of the fork into a selected branch of upstream.
+1. Once the code changes are staged on the fork and ready for review, please [submit](https://help.github.com/en/articles/creating-a-pull-request) a [Pull Request](https://help.github.com/en/articles/about-pull-requests) (PR) to merge the changes from a branch of the fork into a selected branch of upstream.
 
 - Exercise caution when selecting the source and target branches for the PR.
 - Creation of a PR creation kicks off the code review process.
 
-4. Holoscan CLI maintainers will review the PR and accept the proposal if changes meet Holoscan CLI standards.
+1. Holoscan CLI maintainers will review the PR and accept the proposal if changes meet Holoscan CLI standards.
 
 Thanks in advance for your patience as we review your contributions. We do appreciate them!
 
