@@ -1,118 +1,66 @@
-# Contributing to Holoscan CLI
+# Contribute to Holoscan CLI
 
-## Prerequisites
+Welcome to Holoscan CLI! We're glad that you're considering contributing to the platform.
 
-To contribute to the Holoscan CLI repository, you will need to install the following dependencies:
+Holoscan CLI is released on GitHub as open source software to better support the community and facilitate feedback.
 
-- Python 3.9 or higher.
-- [poetry](https://python-poetry.org/docs/#installation)
+## Reporting Feedback
 
-### Workflow
+Community feedback helps us improve the Holoscan CLI to better meet user needs. We use GitHub [Issues](https://github.com/nvidia-holoscan/holoscan-cli/issues) to track feedback and problems over time, as well as to provide
+limited support to Holoscan CLI users.
 
-1. Developers must first [fork](https://help.github.com/en/articles/fork-a-repo) the [upstream](https://github.com/nvidia-holoscan/holoscan-cli) Holoscan CLI repository.
+Consider reviewing existing issues or opening a new issue if you:
 
-1. Git clone the forked repository and push changes to the personal fork.
+- Have a question about using a Holoscan CLI feature
+- Notice errors or unexpected behavior coming from Holoscan CLI
+- Have an idea for a change that might benefit other users
 
-```bash
-git clone https://github.com/YOUR_USERNAME/YOUR_FORK.git holoscan-cli
-# Checkout the targeted branch and commit changes
-# Push the commits to a branch on the fork (remote).
-git push -u origin <local-branch>:<remote-branch>
-```
+When reporting an error, please include relevant details that will help our team investigate the issue. Details might include:
 
-1. Once the code changes are staged on the fork and ready for review, please [submit](https://help.github.com/en/articles/creating-a-pull-request) a [Pull Request](https://help.github.com/en/articles/about-pull-requests) (PR) to merge the changes from a branch of the fork into a selected branch of upstream.
+- A summary of the problem
+- The behavior you have observed
+- The behavior you expected
+- Details about your PC, including the architecture (x86_64 or arm64) and GPU
+- The version of Holoscan CLI where you observed the problem
+- Any relevant logs or images to help investigate the issue
 
-- Exercise caution when selecting the source and target branches for the PR.
-- Creation of a PR creation kicks off the code review process.
+You can also refer to the [Discussions](https://github.com/nvidia-holoscan/holoscan-cli/discussions) section for support questions and community discussions.
 
-1. Holoscan CLI maintainers will review the PR and accept the proposal if changes meet Holoscan CLI standards.
+For Holoscan SDK related issues, visit [NVIDIA Developer Forums](https://forums.developer.nvidia.com/c/healthcare/holoscan-sdk/) for support questions and community discussions.
 
-Thanks in advance for your patience as we review your contributions. We do appreciate them!
+## Suggesting Changes
 
-### Development Environment
+Users are welcome to suggest code changes to Holoscan CLI in the form of [Issues](https://github.com/nvidia-holoscan/holoscan-cli/issues) or [Pull Requests](https://github.com/nvidia-holoscan/holoscan-cli/pulls).
 
-Holoscan CLI uses [Poetry](https://python-poetry.org/) for package and dependency management. After installing Poetry, run the following commands to get started:
+### Issues
 
-```bash
-# Create virtual environment
-poetry shell
+Please open a new [issue](https://github.com/nvidia-holoscan/holoscan-cli/issues) if you'd like to request a new feature
+or propose a feature design. You can tag a specific community maintainer in your post with "@", or we'll update
+when we've had a chance to review your post.
 
-# Install dependencies
-poetry install
+### Pull Requests
 
-# Configure pre-commmit hooks
-pre-commit install
+While we primarily develop Holoscan CLI internally, we also accept external contributions that help move the platform
+forward. We typically favor contributions that aim to fix an existing issue or improve documentation, but we'll also integrate new features
+and enhancements when they're aligned with the Holoscan CLI vision. Please check in with the development team to propose your idea before spending time working on new features. This will help prevent duplicate effort and avoid spending time on features that would be unlikely to be merged.
 
-# Run pre-commit against all files
-pre-commit run --all-files
+You might contribute to Holoscan to help us address fixes earlier in our development cycle, or to suggest improvements to Holoscan CLI that you believe would broadly benefit the Holoscan community.
 
-# Build sdist package
-poetry build
+Holoscan CLI follows a monthly release process that includes internal quality assurance. To add a fix or feature,
+we request that you [fork](https://docs.github.com/en/pull-requests/collaborating-with-pull-requests/working-with-forks/fork-a-repo) Holoscan CLI, develop in a branch, and submit your change as a [pull request](https://docs.github.com/en/pull-requests/collaborating-with-pull-requests/proposing-changes-to-your-work-with-pull-requests/creating-a-pull-request) against the latest Holoscan CLI release commit. If we accept your submission after external discussion, we will integrate those changes within our internal development and credit you in Git commit history. Any changes that we accept from community contributions will undergo quality assurance testing before they are included in the next Holoscan CLI release.
 
-# Run tests
-poetry run pytest
-```
+**Note**: We recommend that new GitHub users read GitHub's [Getting Started](https://docs.github.com/en/get-started/start-your-journey) guide before opening their first pull request.
 
-## Preparing Your Submission
+## Tracking Development
 
-### Coding Guidelines & Linting
+We take all community feedback into consideration. If we don't believe a proposed change aligns with our direction for Holoscan CLI, or if we don't expect we can prioritize a task within a reasonable time frame, we'll let you know by appropriately labeling or closing the issue or pull request with an explanatory comment.
 
-All source code contributions must strictly adhere to the Holoscan CLI coding style. This can easily be done with git hooks by using the `pre-commit` commands described in the [Development Environment](#development-environment) section.
+For items that we do plan to pursue or integrate, we use
+[GitHub Milestones](https://github.com/nvidia-holoscan/holoscan-cli/milestones)
+to communicate our release planning. We will add community issues and pull requests to the approximate monthly release
+milestone when we expect to pursue that development. Issues that we mark as "needs triage" are not part of a milestone
+and will be revisited once each month to determine our priorities.
 
-## Signing Your Contribution
+## Additional Information
 
-- We require that all contributors "sign-off" on their commits. This certifies that the contribution is your original work, or you have rights to submit it under the same license, or a compatible license.
-
-- Any contribution which contains commits that are not Signed-Off will not be accepted.
-
-- To sign off on a commit you simply use the `--signoff` (or `-s`) option when committing your changes:
-
-  ```bash
-  $ git commit -s -m "Add cool feature."
-  ```
-
-  This will append the following to your commit message:
-
-  ```
-  Signed-off-by: Your Name <your@email.com>
-  ```
-
-- Full text of the DCO:
-
-  ```
-    Developer Certificate of Origin
-    Version 1.1
-
-    Copyright (C) 2004, 2006 The Linux Foundation and its contributors.
-    1 Letterman Drive
-    Suite D4700
-    San Francisco, CA, 94129
-
-    Everyone is permitted to copy and distribute verbatim copies of this license document, but changing it is not allowed.
-  ```
-
-  ```
-    Developer's Certificate of Origin 1.1
-
-    By making a contribution to this project, I certify that:
-
-    (a) The contribution was created in whole or in part by me and I have the right to submit it under the open source license indicated in the file; or
-
-    (b) The contribution is based upon previous work that, to the best of my knowledge, is covered under an appropriate open source license and I have the right under that license to submit that work with modifications, whether created in whole or in part by me, under the same open source license (unless I am permitted to submit under a different license), as indicated in the file; or
-
-    (c) The contribution was provided directly to me by some other person who certified (a), (b) or (c) and I have not modified it.
-
-    (d) I understand and agree that this project and the contribution are public and that a record of the contribution (including all personal information I submit with it, including my sign-off) is maintained indefinitely and may be redistributed consistent with this project or the open source license(s) involved.
-  ```
-
-## Testing
-
-### Writing & Running Tests
-
-#### Unit Tests
-
-Ideally add unit test when possible using [Pytest](https://docs.pytest.org/). Run unit tests using `poetry run pytest`.
-
-## Reporting issues
-
-Please open a [HoloHub Issue Request](https://github.com/nvidia-holoscan/holoscan-cli/issues) to request an enhancement, bug fix, or other change in HoloHub.
+Please refer to the project [README](/README.md) document for additional developer information. Happy coding!
