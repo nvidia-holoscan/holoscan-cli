@@ -159,7 +159,7 @@ class TestPackagingArguments:
         assert args.application_manifest.readiness["command"] == [
             "/bin/grpc_health_probe",
             "-addr",
-            ":8777",
+            ":8765",
         ]
         assert args.application_manifest.readiness["initialDelaySeconds"] == 1
         assert args.application_manifest.readiness["periodSeconds"] == 10
@@ -171,7 +171,7 @@ class TestPackagingArguments:
         assert args.application_manifest.liveness["command"] == [
             "/bin/grpc_health_probe",
             "-addr",
-            ":8777",
+            ":8765",
         ]
         assert args.application_manifest.liveness["initialDelaySeconds"] == 1
         assert args.application_manifest.liveness["periodSeconds"] == 10
