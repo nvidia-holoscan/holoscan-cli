@@ -4,6 +4,7 @@
 
 To contribute to the Holoscan CLI repository, you will need to install the following dependencies:
 
+- Python 3.9 or higher.
 - [poetry](https://python-poetry.org/docs/#installation)
 
 ### Workflow
