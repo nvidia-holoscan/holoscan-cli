@@ -1,25 +1,22 @@
-"""
-SPDX-FileCopyrightText: Copyright (c) 2022-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
-SPDX-License-Identifier: Apache-2.0
-
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
-"""  # noqa: E501
+# SPDX-FileCopyrightText: Copyright (c) 2023-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 
 import pytest
-
-from holoscan.cli.common.constants import Constants, DefaultValues
-from holoscan.cli.common.exceptions import InvalidSharedMemoryValueError
-from holoscan.cli.runner.resources import _convert_to_bytes, get_shared_memory_size
+from holoscan_cli.common.constants import Constants, DefaultValues
+from holoscan_cli.common.exceptions import InvalidSharedMemoryValueError
+from holoscan_cli.runner.resources import _convert_to_bytes, get_shared_memory_size
 
 
 class TestGetSharedMemorySize:
@@ -46,7 +43,9 @@ class TestGetSharedMemorySize:
         result = get_shared_memory_size(pkg_info, False, False, None, "config")
         assert result == 5368709120
 
-    def test_worker_with_resource_fragments_but_no_fragments_specified(self, monkeypatch):
+    def test_worker_with_resource_fragments_but_no_fragments_specified(
+        self, monkeypatch
+    ):
         pkg_info = {
             "resources": {
                 Constants.RESOURCE_SHARED_MEMORY_KEY: "1Mi",
@@ -61,7 +60,9 @@ class TestGetSharedMemorySize:
         result = get_shared_memory_size(pkg_info, True, False, None, "config")
         assert result == 536870912
 
-    def test_worker_with_resource_fragments_but_all_fragments_specified(self, monkeypatch):
+    def test_worker_with_resource_fragments_but_all_fragments_specified(
+        self, monkeypatch
+    ):
         pkg_info = {
             "resources": {
                 Constants.RESOURCE_SHARED_MEMORY_KEY: "1Mi",
@@ -76,7 +77,9 @@ class TestGetSharedMemorySize:
         result = get_shared_memory_size(pkg_info, True, False, "all", "config")
         assert result == 536870912
 
-    def test_worker_with_no_resource_fragments_but_no_fragments_specified(self, monkeypatch):
+    def test_worker_with_no_resource_fragments_but_no_fragments_specified(
+        self, monkeypatch
+    ):
         pkg_info = {
             "resources": {
                 Constants.RESOURCE_SHARED_MEMORY_KEY: "1Mi",
@@ -86,7 +89,9 @@ class TestGetSharedMemorySize:
         result = get_shared_memory_size(pkg_info, True, False, None, "config")
         assert result == 1048576
 
-    def test_worker_with_no_resource_fragments_but_all_fragments_specified(self, monkeypatch):
+    def test_worker_with_no_resource_fragments_but_all_fragments_specified(
+        self, monkeypatch
+    ):
         pkg_info = {
             "resources": {
                 Constants.RESOURCE_SHARED_MEMORY_KEY: "1Mi",
@@ -96,7 +101,9 @@ class TestGetSharedMemorySize:
         result = get_shared_memory_size(pkg_info, True, False, "all", "config")
         assert result == 1048576
 
-    def test_worker_with_resource_fragments_and_multiple_fragments_specified(self, monkeypatch):
+    def test_worker_with_resource_fragments_and_multiple_fragments_specified(
+        self, monkeypatch
+    ):
         pkg_info = {
             "resources": {
                 Constants.RESOURCE_SHARED_MEMORY_KEY: "1Mi",
@@ -108,17 +115,23 @@ class TestGetSharedMemorySize:
             }
         }
 
-        result = get_shared_memory_size(pkg_info, True, False, "fragment-a,fragment-c", "config")
+        result = get_shared_memory_size(
+            pkg_info, True, False, "fragment-a,fragment-c", "config"
+        )
         assert result == 5242880
 
-    def test_worker_with_no_resource_fragments_and_multiple_fragments_specified(self, monkeypatch):
+    def test_worker_with_no_resource_fragments_and_multiple_fragments_specified(
+        self, monkeypatch
+    ):
         pkg_info = {
             "resources": {
                 Constants.RESOURCE_SHARED_MEMORY_KEY: "1Mi",
             }
         }
 
-        result = get_shared_memory_size(pkg_info, True, False, "fragment-a,fragment-c", "config")
+        result = get_shared_memory_size(
+            pkg_info, True, False, "fragment-a,fragment-c", "config"
+        )
         assert result == 1048576
 
     def test_driver_but_not_worker(self, monkeypatch):
@@ -133,7 +146,9 @@ class TestGetSharedMemorySize:
             }
         }
 
-        result = get_shared_memory_size(pkg_info, False, True, "fragment-a,fragment-c", "config")
+        result = get_shared_memory_size(
+            pkg_info, False, True, "fragment-a,fragment-c", "config"
+        )
         assert result == 1048576
 
     def test_not_driver_and_not_worker(self, monkeypatch):
@@ -148,7 +163,9 @@ class TestGetSharedMemorySize:
             }
         }
 
-        result = get_shared_memory_size(pkg_info, False, False, "fragment-a,fragment-c", "config")
+        result = get_shared_memory_size(
+            pkg_info, False, False, "fragment-a,fragment-c", "config"
+        )
         assert result == 536870912
 
     @pytest.mark.parametrize(
