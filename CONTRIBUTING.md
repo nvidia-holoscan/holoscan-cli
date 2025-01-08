@@ -44,7 +44,7 @@ While we primarily develop Holoscan CLI internally, we also accept external cont
 forward. We typically favor contributions that aim to fix an existing issue or improve documentation, but we'll also integrate new features
 and enhancements when they're aligned with the Holoscan CLI vision. Please check in with the development team to propose your idea before spending time working on new features. This will help prevent duplicate effort and avoid spending time on features that would be unlikely to be merged.
 
-You might contribute to Holoscan to help us address fixes earlier in our development cycle, or to suggest improvements to Holoscan CLI that you believe would broadly benefit the Holoscan community.
+You might contribute to Holoscan CLI to help us address fixes earlier in our development cycle, or to suggest improvements to Holoscan CLI that you believe would broadly benefit the Holoscan community.
 
 Holoscan CLI follows a monthly release process that includes internal quality assurance. To add a fix or feature,
 we request that you [fork](https://docs.github.com/en/pull-requests/collaborating-with-pull-requests/working-with-forks/fork-a-repo) Holoscan CLI, develop in a branch, and submit your change as a [pull request](https://docs.github.com/en/pull-requests/collaborating-with-pull-requests/proposing-changes-to-your-work-with-pull-requests/creating-a-pull-request) against the latest Holoscan CLI release commit. If we accept your submission after external discussion, we will integrate those changes within our internal development and credit you in Git commit history. Any changes that we accept from community contributions will undergo quality assurance testing before they are included in the next Holoscan CLI release.
