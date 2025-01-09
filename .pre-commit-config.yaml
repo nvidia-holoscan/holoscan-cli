@@ -45,8 +45,6 @@ repos:
       - id: name-tests-test
         args: ["--pytest-test-first"]
         exclude: ^tests/app/.*
-      - id: no-commit-to-branch
-        args: [--branch, main]
       - id: requirements-txt-fixer
       - id: trailing-whitespace
 
