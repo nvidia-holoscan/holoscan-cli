@@ -48,19 +48,36 @@ def _fetch_map_manifest(map_name: str) -> tuple[dict, dict]:
     Returns:
         app_info: application manifest as a python dict
         pkg_info: package manifest as a python dict
-        returncode: command return code
     """
+
+    def _ensure_valid_exit_code(returncode: int) -> None:
+        if returncode != 0:
+            raise ManifestReadError("Error reading manifest file from the package.")
+
     logger.info("Reading HAP/MAP manifest...")
 
     with tempfile.TemporaryDirectory() as info_dir:
-        cmd = f"""docker_id=$(docker create {map_name})
-docker cp $docker_id:/etc/holoscan/app.json "{info_dir}/app.json"
-docker cp $docker_id:/etc/holoscan/pkg.json "{info_dir}/pkg.json"
-docker rm -v $docker_id > /dev/null
-"""
-        returncode = run_cmd(cmd)
-        if returncode != 0:
-            raise ManifestReadError("Error reading manifest file form the package.")
+        docker_id = run_cmd_output(["docker", "create", map_name]).strip()
+        returncode = run_cmd(
+            [
+                "docker",
+                "cp",
+                f"{docker_id}:/etc/holoscan/app.json",
+                f"{info_dir}/app.json",
+            ]
+        )
+        _ensure_valid_exit_code(returncode)
+        returncode = run_cmd(
+            [
+                "docker",
+                "cp",
+                f"{docker_id}:/etc/holoscan/pkg.json",
+                f"{info_dir}/pkg.json",
+            ]
+        )
+        _ensure_valid_exit_code(returncode)
+        returncode = run_cmd(["docker", "rm", "-v", docker_id])
+        _ensure_valid_exit_code(returncode)
 
         app_json = Path(f"{info_dir}/app.json")
         pkg_json = Path(f"{info_dir}/pkg.json")
@@ -76,7 +93,7 @@ docker rm -v $docker_id > /dev/null
 
 def _run_app(args: Namespace, app_info: dict, pkg_info: dict):
     """
-    Executes the Holoscan Application.
+    Executes the Holoscan Application Package.
 
     Args:
         args: user arguments
@@ -94,17 +111,17 @@ def _run_app(args: Namespace, app_info: dict, pkg_info: dict):
     driver: bool = args.driver
     worker: bool = args.worker
     health_check: bool = args.health_check
-    fragments: str = args.fragments if args.fragments else None
+    fragments: Optional[str] = args.fragments
     network: str = create_or_use_network(args.network, map_name)
-    nic: str = args.nic if args.nic else None
+    nic: Optional[str] = args.nic if args.nic else None
     use_all_nics: bool = args.use_all_nics
-    gpus: str = args.gpus if args.gpus else None
-    config: Path = args.config if args.config else None
-    address: str = args.address if args.address else None
-    worker_address: str = args.worker_address if args.worker_address else None
+    gpus: Optional[str] = args.gpus if args.gpus else None
+    config: Optional[Path] = args.config if args.config else None
+    address: Optional[str] = args.address if args.address else None
+    worker_address: Optional[str] = args.worker_address if args.worker_address else None
     render: bool = args.render
     user: str = f"{args.uid}:{args.gid}"
-    hostname: str = None
+    hostname: Optional[str] = "driver" if driver else None
     terminal: bool = args.terminal
     platform_config: str = pkg_info.get("platformConfig")
     shared_memory_size: Optional[str] = (
@@ -114,7 +131,7 @@ def _run_app(args: Namespace, app_info: dict, pkg_info: dict):
     )
 
     commands = []
-    devices = _lookup_devices(args.device) if args.device else []
+    devices = _lookup_devices(args.device) if args.device is not None else []
 
     if driver:
         commands.append("--driver")
@@ -134,9 +151,6 @@ def _run_app(args: Namespace, app_info: dict, pkg_info: dict):
         commands.append("--worker_address")
         commands.append(worker_address)
         logger.info(f"App Worker address and port: {worker_address}")
-
-    if driver:
-        hostname = "driver"
 
     docker_run(
         hostname,
@@ -202,7 +216,7 @@ def _dependency_verification(map_name: str) -> bool:
 
     # check for docker
     prog = "docker"
-    logger.info('--> Verifying if "%s" is installed...\n', prog)
+    logger.info(f'--> Verifying if "{prog}" is installed...\n')
     if not shutil.which(prog):
         logger.error(
             '"%s" not installed, please install it from https://docs.docker.com/engine/install/.',
@@ -271,11 +285,18 @@ def _pkg_specific_dependency_verification(pkg_info: dict) -> bool:
             return False
 
         logger.info('--> Verifying "%s" version...\n', prog)
-        output = run_cmd_output("nvidia-ctk --version | grep version")
+        output = run_cmd_output(["nvidia-ctk", "--version"], "version")
         match = re.search(r"([0-9]+\.[0-9]+\.[0-9]+)", output)
         min_ctk_version = "1.12.0"
         recommended_ctk_version = "1.14.1"
-        if compare_versions(min_ctk_version, match.group()) > 0:
+
+        if match is None:
+            logger.error(
+                f"Error detecting NVIDIA Container Toolkit version. "
+                f"Version {min_ctk_version}+ is required ({recommended_ctk_version}+ recommended)."
+            )
+            return False
+        elif compare_versions(min_ctk_version, match.group()) > 0:
             logger.error(
                 f"Found '{prog}' Version {match.group()}. "
                 f"Version {min_ctk_version}+ is required ({recommended_ctk_version}+ recommended)."
@@ -286,6 +307,15 @@ def _pkg_specific_dependency_verification(pkg_info: dict) -> bool:
 
 
 def execute_run_command(args: Namespace):
+    """
+    Entrypoint for the Holoscan Run command.
+
+    Args:
+        args: Namespace object containing user arguments.
+
+    Returns:
+        None
+    """
     if not _dependency_verification(args.map):
         logger.error("Execution Aborted")
         sys.exit(2)

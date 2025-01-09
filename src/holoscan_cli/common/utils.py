@@ -14,8 +14,10 @@
 # limitations under the License.
 import json
 import logging
+import re
 import socket
 import subprocess
+from typing import List, Optional
 
 import psutil
 from packaging import version
@@ -47,7 +49,7 @@ def get_requested_gpus(pkg_info: dict) -> int:
 
 
 def get_gpu_count():
-    return len(run_cmd_output("nvidia-smi -L").splitlines())
+    return len(run_cmd_output(["nvidia-smi", "-L"]).splitlines())
 
 
 def run_cmd(cmd: str) -> int:
@@ -62,21 +64,29 @@ def run_cmd(cmd: str) -> int:
     Returns:
         output: child process returncode after the command has been executed.
     """
-    proc = subprocess.Popen(cmd, universal_newlines=True, shell=True)
+    proc = subprocess.Popen(cmd, universal_newlines=True, shell=False)
     return proc.wait()
 
 
-def run_cmd_output(cmd: str) -> str:
+def run_cmd_output(cmd: List[str], grep: Optional[str] = None) -> str:
     """
     Executes command and returns the output.
 
     Args:
         cmd: command to execute.
+        grep: string to search for matching line. The first match is returned.
 
     Returns:
         output: command output.
     """
-    proc = subprocess.run(cmd, capture_output=True, text=True, shell=True)
+    proc = subprocess.run(cmd, capture_output=True, text=True, shell=False)
+
+    if grep:
+        lines = proc.stdout.splitlines()
+        for line in lines:
+            if re.search(grep, line):
+                return line
+
     return proc.stdout
 
 

@@ -320,6 +320,7 @@ Building image for:                 {platform_parameters.platform.value}
             undefined=StrictUndefined,
             trim_blocks=True,
             lstrip_blocks=True,
+            autoescape=True,
         )
         self._logger.debug(
             f"""
