@@ -163,11 +163,10 @@ class TestValidateSupportedVersion:
     @pytest.fixture(autouse=True)
     def _setup(self) -> None:
         self._artifact_source = ArtifactSources()
-        self._artifact_source._supported_holoscan_versions = ["1.0.0"]
 
     def test_supported_version(self, monkeypatch):
         version = "1.0.0"
-
+        setattr(ArtifactSources, "holoscan_versions", property(lambda s: [version]))
         monkeypatch.setattr("importlib.metadata.version", lambda x: version)
 
         validate_holoscan_sdk_version(self._artifact_source, version)

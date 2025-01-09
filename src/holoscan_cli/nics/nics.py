@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import logging
+import sys
 from argparse import Namespace
 
 from ..common.utils import get_host_ip_addresses
@@ -29,3 +30,4 @@ def execute_nics_command(args: Namespace):
     except Exception as ex:
         logging.error("Error executing nics command.")
         logger.debug(ex)
+        sys.exit(4)

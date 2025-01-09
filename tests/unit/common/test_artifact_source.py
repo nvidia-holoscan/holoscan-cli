@@ -22,8 +22,8 @@ from holoscan_cli.common.artifact_sources import ArtifactSources
 class TestArtifactSource:
     def _init(self) -> None:
         self._artifact_source = ArtifactSources()
-        current_file_path = Path(__file__).parent.resolve()
-        source_file_sample = current_file_path / "./package-source.json"
+        current_file_path = Path(__file__).parent.parent.resolve()
+        source_file_sample = current_file_path / "./artifacts.json"
         self._artifact_source.load(str(source_file_sample))
 
     def test_loads_invalid_file(self, monkeypatch):
@@ -37,7 +37,7 @@ class TestArtifactSource:
 
     def test_debian_package_version(self):
         self._init()
-        assert self._artifact_source.debian_package_version("2.4.0") is not None
+        assert self._artifact_source.debian_package_version("1.0.0") is not None
 
     def test_debian_package_version_missing(self):
         self._init()
@@ -45,12 +45,12 @@ class TestArtifactSource:
 
     def test_base_images(self):
         self._init()
-        assert self._artifact_source.base_image("2.4.0") is not None
+        assert self._artifact_source.base_image("1.0.0") is not None
 
     def test_build_images(self):
         self._init()
-        assert self._artifact_source.build_images("2.4.0") is not None
+        assert self._artifact_source.build_images("1.0.0") is not None
 
     def test_health_probe(self):
         self._init()
-        assert self._artifact_source.health_probe("2.4.0") is not None
+        assert self._artifact_source.health_probe("1.0.0") is not None

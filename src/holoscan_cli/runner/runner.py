@@ -252,7 +252,10 @@ def _pkg_specific_dependency_verification(pkg_info: dict) -> bool:
     Returns:
         True if all dependencies are satisfied, otherwise False.
     """
-    if os.path.exists("/.dockerenv"):
+    if (
+        os.path.exists("/.dockerenv")
+        or os.environ.get("HOLOSCAN_SKIP_NVIDIA_CTK_CHECK") is not None
+    ):
         logger.info("--> Skipping nvidia-ctk check inside Docker...\n")
         return True
 
@@ -285,18 +288,18 @@ def _pkg_specific_dependency_verification(pkg_info: dict) -> bool:
 def execute_run_command(args: Namespace):
     if not _dependency_verification(args.map):
         logger.error("Execution Aborted")
-        sys.exit(1)
+        sys.exit(2)
 
     try:
         # Fetch application manifest from MAP
         app_info, pkg_info = _fetch_map_manifest(args.map)
     except Exception as e:
         logger.error(f"Failed to fetch MAP manifest: {e}")
-        sys.exit(1)
+        sys.exit(2)
 
     if not _pkg_specific_dependency_verification(pkg_info):
         logger.error("Execution Aborted")
-        sys.exit(1)
+        sys.exit(2)
 
     try:
         # Run Holoscan Application
@@ -304,4 +307,4 @@ def execute_run_command(args: Namespace):
     except Exception as ex:
         logger.debug(ex, exc_info=True)
         logger.error(f"Error executing {args.map}: {ex}")
-        sys.exit(1)
+        sys.exit(2)
