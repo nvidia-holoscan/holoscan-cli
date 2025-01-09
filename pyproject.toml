@@ -14,7 +14,7 @@
 # limitations under the License.
 [tool.poetry]
 name = "holoscan-cli"
-version = "2.9.0"
+version = "0.0.0"
 description = "Command line interface for packaging and running Holoscan applications."
 authors = ["NVIDIA"]
 maintainers = ["mocsharp"]
@@ -55,9 +55,9 @@ classifiers = [
     "Typing :: Typed",
 ]
 
-[tool.poetry.build]
-script = "build.py"
-generate-setup-file = true
+# [tool.poetry.build]
+# script = "build.py"
+# generate-setup-file = false
 
 [tool.poetry.dependencies]
 python = ">=3.9,<3.13"
@@ -110,6 +110,20 @@ addopts = """
 --ignore=docs/
 """
 
+[tool.poetry-dynamic-versioning]
+enable = true
+vcs = "git"
+style = "pep440"
+format-jinja = """
+    {%- if branch == 'main' -%}
+        {{ serialize_pep440(base, metadata=[branch_escaped]) }}
+    {%- elif branch.startswith("release/") -%}
+        {{ serialize_pep440(base, stage="rc", dev=distance, metadata=[commit]) }}
+    {%- else -%}
+        {{ serialize_pep440(base, stage="a", dev=distance, metadata=[branch_escaped, commit]) }}
+    {%- endif -%}
+"""
+
 [build-system]
-requires = ["poetry-core", "setuptools"]
-build-backend = "poetry.core.masonry.api"
+requires = ["poetry-core", "setuptools", "poetry-dynamic-versioning>=1.0.0,<2.0.0"]
+build-backend = "poetry_dynamic_versioning.backend"
