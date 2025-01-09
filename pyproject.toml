@@ -14,7 +14,7 @@
 # limitations under the License.
 [tool.poetry]
 name = "holoscan-cli"
-version = "3.0.0"
+version = "2.9.0"
 description = "Command line interface for packaging and running Holoscan applications."
 authors = ["NVIDIA"]
 maintainers = ["mocsharp"]
