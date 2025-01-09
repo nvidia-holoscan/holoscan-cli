@@ -333,9 +333,7 @@ def docker_run(
     additional_devices, group_adds = _additional_devices_to_mount(is_root)
     devices.extend(additional_devices)
 
-    video_group = run_cmd_output(
-        '/usr/bin/cat /etc/group | grep "video" | cut -d: -f3'
-    ).strip()
+    video_group = run_cmd_output(["/usr/bin/cat", "/etc/group"], "video").split(":")[2]
     if not is_root and video_group not in group_adds:
         group_adds.append(video_group)
 
@@ -507,21 +505,17 @@ def _additional_devices_to_mount(is_root: bool):
         and os.path.exists("/usr/bin/tegrastats")
         and not is_root
     ):
-        group = run_cmd_output(
-            '/usr/bin/cat /etc/group | grep "video" | cut -d: -f3'
-        ).strip()
+        group = run_cmd_output(["/usr/bin/cat", "/etc/group"], "video").split(":")[2]
         group_adds.append(group)
-        group = run_cmd_output(
-            '/usr/bin/cat /etc/group | grep "render" | cut -d: -f3'
-        ).strip()
+        group = run_cmd_output(["/usr/bin/cat", "/etc/group"], "render").split(":")[2]
         group_adds.append(group)
     return (devices, group_adds)
 
 
 def _host_is_native_igpu() -> bool:
     proc = subprocess.run(
-        ["nvidia-smi --query-gpu name --format=csv,noheader | grep nvgpu -q"],
-        shell=True,
+        ["nvidia-smi", "--query-gpu", "name", "--format=csv,noheader"],
+        shell=False,
+        capture_output=True,
     )
-    result = proc.returncode
-    return result == 0
+    return "nvgpu" in str(proc.stdout)
