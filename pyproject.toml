@@ -12,6 +12,9 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+[project]
+dynamic = ["version"]
+
 [tool.poetry]
 name = "holoscan-cli"
 version = "0.0.0"
@@ -125,5 +128,5 @@ format-jinja = """
 """
 
 [build-system]
-requires = ["poetry-core", "setuptools", "poetry-dynamic-versioning>=1.0.0,<2.0.0"]
+requires = ["poetry-core>=1.0.0", "poetry-dynamic-versioning>=1.0.0,<2.0.0"]
 build-backend = "poetry_dynamic_versioning.backend"
