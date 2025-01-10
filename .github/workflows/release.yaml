@@ -200,6 +200,8 @@ jobs:
   testpypi-deploy:
     if: ${{ inputs.ga == false }}
     name: publish-test-pypi
+    permissions:
+      id-token: write
     runs-on: ubuntu-latest
     needs: [verification-test]
     steps:
