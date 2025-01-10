@@ -189,8 +189,11 @@ jobs:
 
     - name: Build
       run: |
-        poetry build
-        rm dist/*.tar.gz
+        poetry run which python
+        source $(poetry env info --path)/bin/activate
+        poetry install
+        poetry dynamic-versioning -vvv
+        poetry build -vvv -f wheel --clean
 
     - name: Publish package distributions to TestPyPI
       uses: pypa/gh-action-pypi-publish@release/v1

@@ -17,8 +17,6 @@ dynamic = ["version"]
 name = "holoscan-cli"
 
 [tool.poetry]
-name = "holoscan-cli"
-version = "0.0.0"
 description = "Command line interface for packaging and running Holoscan applications."
 authors = ["NVIDIA"]
 maintainers = ["mocsharp"]
@@ -62,6 +60,7 @@ classifiers = [
 # [tool.poetry.build]
 # script = "build.py"
 # generate-setup-file = false
+version = "0.0.0"
 
 [tool.poetry.dependencies]
 python = ">=3.9,<3.13"
@@ -92,6 +91,9 @@ optional = true
 [tool.poetry.group.docs.dependencies]
 mkdocs = "*"
 
+[tool.poetry.requires-plugins]
+poetry-dynamic-versioning = { version = ">=1.5.0,<2.0.0", extras = ["plugin"] }
+
 [tool.poetry.scripts]
 holoscan = 'holoscan_cli.__main__:main'
 monai-deploy = 'holoscan_cli.__main__:main'
@@ -120,14 +122,14 @@ vcs = "git"
 style = "pep440"
 format-jinja = """
     {%- if branch == 'main' -%}
-        {{ serialize_pep440(base, metadata=[branch_escaped]) }}
-    {%- elif branch.startswith("release/") -%}
+        {{ serialize_pep440(base, metadata=[branch_escaped, commit]) }}
+    {%- elif branch and branch.startswith("release/") -%}
         {{ serialize_pep440(base, stage="rc", dev=distance, metadata=[commit]) }}
     {%- else -%}
-        {{ serialize_pep440(base, stage="a", dev=distance, metadata=[branch_escaped, commit]) }}
+        {{ serialize_pep440(base, stage="a", dev=distance) }}
     {%- endif -%}
 """
 
 [build-system]
-requires = ["poetry-core>=1.0.0", "poetry-dynamic-versioning>=1.0.0,<2.0.0"]
+requires = ["poetry-core>=2.0.0", "poetry-dynamic-versioning>=1.5.0,<2.0.0"]
 build-backend = "poetry_dynamic_versioning.backend"
