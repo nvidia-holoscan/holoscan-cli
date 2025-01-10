@@ -182,4 +182,7 @@ jobs:
           pip install ${wheel}
       - name: Verification Test
         working-directory: tests/verification
-        run: shellspec -e VERSION=${{ github.event.inputs.version }}
+        run: |
+          VERSION=${{ github.event.inputs.version }}
+          VERSION="${VERSION/?}"
+          shellspec -e VERSION=$VERSION
