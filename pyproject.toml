@@ -125,9 +125,9 @@ format-jinja = """
         {{ serialize_pep440(base, stage="dev", dev=distance, metadata=[commit]) }}
     {%- elif branch and branch.startswith("release/") -%}
         {%- if env.ga and env.ga == true -%}
-            {{ serialize_pep440(base, metadata=[commit]) }}
+            {{ serialize_pep440(base)}}
         {%- else -%}
-            {{ serialize_pep440(base, stage="rc", metadata=[commit]) }}
+            {{ serialize_pep440(base, stage="rc", dev=distance) }}
         {%- endif -%}
     {%- else -%}
         {{ serialize_pep440(base, stage="alpha", dev=distance) }}
