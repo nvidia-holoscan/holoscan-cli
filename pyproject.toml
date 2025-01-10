@@ -122,11 +122,15 @@ vcs = "git"
 style = "pep440"
 format-jinja = """
     {%- if branch == 'main' -%}
-        {{ serialize_pep440(base, metadata=[commit]) }}
+        {{ serialize_pep440(base, stage="dev", dev=distance, metadata=[commit]) }}
     {%- elif branch and branch.startswith("release/") -%}
-        {{ serialize_pep440(base, stage="rc", dev=distance, metadata=[commit]) }}
+        {%- if env.ga and env.ga == true -%}
+            {{ serialize_pep440(base, metadata=[commit]) }}
+        {%- else -%}
+            {{ serialize_pep440(base, stage="rc", metadata=[commit]) }}
+        {%- endif -%}
     {%- else -%}
-        {{ serialize_pep440(base, stage="a", dev=distance) }}
+        {{ serialize_pep440(base, stage="alpha", dev=distance) }}
     {%- endif -%}
 """
 
