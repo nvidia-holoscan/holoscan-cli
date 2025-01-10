@@ -1,0 +1,30 @@
+#!/bin/bash
+
+# SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#===============================================================================
+
+--require spec_helper
+
+## Default kcov (coverage) options
+# --kcov-options "--include-path=. --path-strip-level=1"
+# --kcov-options "--include-pattern=.sh"
+# --kcov-options "--exclude-pattern=/.shellspec,/spec/,/coverage/,/report/"
+
+## Example: Include script "myprog" with no extension
+# --kcov-options "--include-pattern=.sh,myprog"
+
+## Example: Only specified files/directories
+# --kcov-options "--include-pattern=myprog,/lib/"
