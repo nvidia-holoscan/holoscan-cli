@@ -207,9 +207,9 @@ jobs:
       uses: actions/download-artifact@v4.1.8
       with:
         name: build-artifact
+        path: dist/
     - name: Publish package distributions to TestPyPI
       uses: pypa/gh-action-pypi-publish@release/v1
       with:
         repository-url: https://test.pypi.org/legacy/
         verbose: true
-        path: dist/
