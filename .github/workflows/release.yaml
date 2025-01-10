@@ -198,7 +198,7 @@ jobs:
       #     report_paths: 'tests/verification/report/*.xml'
 
   testpypi-deploy:
-    if: ${{ inputs.ga == 'false' }}
+    if: ${{ inputs.ga == false }}
     name: publish-test-pypi
     runs-on: ubuntu-latest
     needs: [verification-test]
