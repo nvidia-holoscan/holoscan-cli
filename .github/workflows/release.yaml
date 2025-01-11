@@ -191,11 +191,11 @@ jobs:
           VERSION=${{ github.event.inputs.version }}
           VERSION="${VERSION/?}"
           shellspec -e VERSION=$VERSION -o j
-      # - name: JUnit Report Action
-      #   uses: mikepenz/action-junit-report@v5.2.0
-      #   if: false # success() || failure()
-      #   with:
-      #     report_paths: 'tests/verification/report/*.xml'
+      - name: Upload Test Report
+        uses: test-summary/action@v2.4
+        if: always()
+        with:
+          paths: 'tests/verification/report/*.xml'
 
   testpypi-deploy:
     if: ${{ inputs.ga == false }}
