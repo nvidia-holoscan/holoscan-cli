@@ -56,11 +56,11 @@ classifiers = [
     "Topic :: Software Development :: Libraries :: Python Modules",
     "Typing :: Typed",
 ]
-version = "0.0.0"
 
 # [tool.poetry.build]
 # script = "build.py"
 # generate-setup-file = false
+version = "0.0.0"
 
 [tool.poetry.dependencies]
 python = ">=3.9,<3.13"
