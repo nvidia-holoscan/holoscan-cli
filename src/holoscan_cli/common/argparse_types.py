@@ -85,7 +85,7 @@ def valid_existing_path(path: str) -> Path:
     file_path = Path(path).absolute()
     if file_path.exists():
         if os.path.isdir(file_path):
-            if os.listdir(path):
+            if os.listdir(file_path):
                 return file_path
             raise argparse.ArgumentTypeError(f"No such file/folder: '{file_path}'")
         return file_path
