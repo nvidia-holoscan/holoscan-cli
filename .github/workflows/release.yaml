@@ -30,6 +30,10 @@ on:
         required: true
         type: string
         default: v
+      rc:
+        description: 'RC Build Number'
+        required: false
+        type: number
       ga:
         description: 'GA (Official) Build'
         required: true
@@ -151,6 +155,8 @@ jobs:
       uses: Gr1N/setup-poetry@v9
 
     - name: Build
+      env:
+        rc: ${{ github.event.inputs.rc }}
       run: |
         git tag -l
         poetry run which python
