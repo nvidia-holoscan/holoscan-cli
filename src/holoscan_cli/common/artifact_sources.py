@@ -113,7 +113,6 @@ class ArtifactSources:
     def download_manifest(self):
         self._download_manifest_internal(
             ArtifactSources.ManifestFileUrl,
-            {"Authorization": f"Bearer {ArtifactSources.EdgeROToken}"},
         )
 
     def _download_manifest_internal(self, url, headers=None):
