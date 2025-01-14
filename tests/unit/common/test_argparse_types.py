@@ -95,15 +95,15 @@ class TestValidExistingPath:
 
     def test_empty_directory(self, monkeypatch):
         monkeypatch.setattr(pathlib.Path, "exists", lambda x: True)
-        monkeypatch.setattr(os.path, "isdir", lambda x: True)
-        monkeypatch.setattr(os, "listdir", lambda x: [])
+        monkeypatch.setattr(pathlib.Path, "is_dir", lambda x: True)
+        monkeypatch.setattr(os, "scandir", lambda x: [])
         with pytest.raises(argparse.ArgumentTypeError):
             valid_existing_path("this/is/some/path")
 
     def test_non_empty_directory(self, monkeypatch):
         monkeypatch.setattr(pathlib.Path, "exists", lambda x: True)
-        monkeypatch.setattr(os.path, "isdir", lambda x: True)
-        monkeypatch.setattr(os, "listdir", lambda x: ["/a"])
+        monkeypatch.setattr(pathlib.Path, "is_dir", lambda x: True)
+        monkeypatch.setattr(os, "scandir", lambda x: ["file"])
         result = valid_existing_path("this/is/some/path")
         assert type(result) is PosixPath
 
