@@ -1,7 +1,7 @@
 {
   "2.9.0": {
     "holoscan": {
-      "debian-version": "2.9.0.1-1",
+      "debian-version": "2.9.0.2-1",
       "wheel-version": "2.9.0",
       "base-images": {
         "dgpu": "nvcr.io/nvidia/cuda:12.6.0-runtime-ubuntu22.04",
@@ -9,18 +9,18 @@
       },
       "build-images": {
         "igpu": {
-          "jetson-agx-orin-devkit": "nvcr.io/nvstaging/holoscan/holoscan:v2.9.0.1-igpu",
-          "igx-orin-devkit": "nvcr.io/nvstaging/holoscan/holoscan:v2.9.0.1-igpu",
-          "sbsa": "nvcr.io/nvstaging/holoscan/holoscan:v2.9.0.1-igpu"
+          "jetson-agx-orin-devkit": "nvcr.io/nvstaging/holoscan/holoscan:v2.9.0.2-igpu",
+          "igx-orin-devkit": "nvcr.io/nvstaging/holoscan/holoscan:v2.9.0.2-igpu",
+          "sbsa": "nvcr.io/nvstaging/holoscan/holoscan:v2.9.0.2-igpu"
         },
         "dgpu": {
-          "x64-workstation": "nvcr.io/nvstaging/holoscan/holoscan:v2.9.0.1-dgpu",
-          "igx-orin-devkit": "nvcr.io/nvstaging/holoscan/holoscan:v2.9.0.1-dgpu",
-          "sbsa": "nvcr.io/nvstaging/holoscan/holoscan:v2.9.0.1-dgpu",
-          "clara-agx-devkit": "nvcr.io/nvstaging/holoscan/holoscan:v2.9.0.1-dgpu"
+          "x64-workstation": "nvcr.io/nvstaging/holoscan/holoscan:v2.9.0.2-dgpu",
+          "igx-orin-devkit": "nvcr.io/nvstaging/holoscan/holoscan:v2.9.0.2-dgpu",
+          "sbsa": "nvcr.io/nvstaging/holoscan/holoscan:v2.9.0.2-dgpu",
+          "clara-agx-devkit": "nvcr.io/nvstaging/holoscan/holoscan:v2.9.0.2-dgpu"
         },
         "cpu": {
-          "x64-workstation": "nvcr.io/nvstaging/holoscan/holoscan:v2.9.0.1-dgpu"
+          "x64-workstation": "nvcr.io/nvstaging/holoscan/holoscan:v2.9.0.2-dgpu"
         }
       }
     },
