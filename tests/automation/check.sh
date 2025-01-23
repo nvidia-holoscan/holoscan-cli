@@ -17,37 +17,34 @@
 #===============================================================================
 
 echo "Checking system requirements..."
-if ! command -v unzip 2>&1 >/dev/null
-then
-    echo "unzip could not be found, installing unzip"
-    echo "$ sudo apt install unzip"
-    exit -1
-fi
 
+status=0
 if ! command -v curl 2>&1 >/dev/null
 then
-    echo "jq could not be found, installing curl"
+    echo "jq could not be found, use the following command to install curl"
     echo "$ sudo apt install curl"
-    exit -1
+    status=-1
 fi
 
 if ! command -v jq 2>&1 >/dev/null
 then
-    echo "jq could not be found, installing jq"
+    echo "jq could not be found, use the following command to install jq"
     echo "$ sudo apt install jq"
-    exit -1
+    status=-1
 fi
 
 if ! command -v holoscan 2>&1 >/dev/null
 then
-    echo "Holoscan CLI could not be found, installing holoscan"
+    echo "Holoscan CLI could not be found, use the following command to install holoscan"
     echo "$ pip install holoscan-cli"
-    exit -1
+    status=-1
 fi
 
 if ! docker login nvcr.io < /dev/null >& /dev/null
 then
     echo "Please login to nvcr.io. For example:"
     echo "$ docker login nvcr.io"
-    exit -1
+    status=-1
 fi
+
+exit $status

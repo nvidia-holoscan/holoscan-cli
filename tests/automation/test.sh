@@ -154,7 +154,9 @@ fatal() {
     fi
 }
 #===============================================================================
-
+# Executes a specified command via bash shell
+# Parameters
+#  $@ accept any number of parameters
 run_command() {
     local status=0
     local cmd="$*"
@@ -169,6 +171,8 @@ run_command() {
     return $status
 }
 
+# Parse the specified JSON Path from the configuration file
+# Returns empty string if JSON path does not exist.
 get_config() {
     value=$(jq -r "$1" $test)
     if [[ "$value" == "null" ]]
@@ -178,15 +182,17 @@ get_config() {
     echo $value
 }
 
+# Run the HAP container using Holoscan CLI Runner
 # Parameters
-#  Data Dir
-run() {
+#  $1 Input Data Directory Path
+#  $2 Container Tag Prefix
+run_application() {
     info "===== Run Application ====="
     local data_dir=$1
     info "Starting application with data directory: $data_dir"
     run_args=$(get_config '.run.args')
-    tag_prefix=$(basename $(dirname $test))
-    tag=$(docker images | grep "$tag_prefix" | awk '{print $1":"$2}' | head -n 1)
+    tag_prefix=$2
+    local tag=$(docker images | grep "$tag_prefix" | awk '{print $1":"$2}' | head -n 1)
     info "Running application"
     info "  Tag: $tag"
     run_command xhost +local:docker
@@ -199,6 +205,12 @@ run() {
     fi
 }
 
+# Download user defined data. 
+#  NOTE: Only NGC is supported at the moment: the script parses the JSON returned by the NGC files API.
+#  E.g. https://api.ngc.nvidia.com/v2/resources/org/nvidia/team/clara-holoscan/holoscan_racerx_video/20231009/files
+# Parameters
+#  $1 Working directory path
+#  $2 Path to save the data to
 download_data() {
     info "===== Download Data ====="
     local source=$(get_config '.data.source')
@@ -213,6 +225,7 @@ download_data() {
             data_dir="$data_dir/$target"
         fi
         [[ ! -d "$data_dir" ]] && run_command mkdir -p $data_dir
+        
         for url in $(curl $source | jq -r .urls.[])
             do
                 info "Downloading $url"
@@ -227,6 +240,7 @@ download_data() {
     fi
 }
 
+# Get type of GPU running on the system
 get_host_gpu() {
     if ! command -v nvidia-smi >/dev/null; then
         error Y "Could not find any GPU drivers on host. Defaulting build to target dGPU/CPU stack."
@@ -238,10 +252,12 @@ get_host_gpu() {
     fi
 }
 
+# Build Holohub applications using Holohub's devcontainer script.
+# Since the devcontainer script embeds the version of the HSDK container to use, we must explicitly set the base image based on the version of the running CLI.
 # Parameters:
-#  Working Directory
-#  Application Name
-#  Application Language
+#  $1 Working Directory
+#  $2 Application Name
+#  $3 Application Language
 build_holohub_app() {
     info "===== Build Holohub Application ====="
     pushd $1
@@ -259,10 +275,12 @@ build_holohub_app() {
     popd
 }
 
+# Package the application using Holoscan CLI Packager
 # Parameters:
-#  Working Directory
-#  Source Code Directory
-#  Relative Application Path
+#  $1 Working Directory
+#  $2 Source Code Directory
+#  $3 Relative Application Path
+#  $4 Container Tag Prefix
 package() {
     info "===== Package Application ====="
     local run_args=$(get_config '.package.args')
@@ -291,7 +309,7 @@ package() {
     info "  App config: $config_file_path"
     run_command holoscan package -l DEBUG \
                      --config $config_file_path \
-                     --tag $(basename $dir) \
+                     --tag $4 \
                      --platform x64-workstation \
                      --source /home/vicchang/sc/github/holoscan-cli/tests/automation/artifacts.json \
                      --holoscan-sdk-file /home/vicchang/sc/github/holoscan-cli/dist/holoscan-2.9.0.1-cp310-cp310-manylinux_2_35_x86_64.whl \
@@ -308,6 +326,12 @@ package() {
     popd
 }
 
+# Clone the user-defined repository.
+#  For Holohub, clone entire repository. Otherwise, do a sparse clone of the application directory.
+# Parameters
+#  $1 Directory to clone to
+#  $2 Git Repository
+#  $3 Relative Application Path
 clone() {
     info "===== Clone Repository ====="
     info "Cloning repository $2 to $1"
@@ -335,6 +359,11 @@ clone() {
     popd
 }
 
+# For non-Holohub C++ applications, rename CMakeLists.min.txt to CMakeLists.txt if exists.
+#  This enables the Packager process to build the C++ application. 
+# Parameters
+#  $1 Source Code Directory Path
+#  $2 Relative Path to the Application
 prep_cpp_dir() {
     info "Preparing C++ source directory for packaging"
     info "  Source Dir: $1"
@@ -362,6 +391,7 @@ check_field() {
     fi
 }
 
+# Entrypoint of the scriptS
 main() {
     local repository=$(get_config '.source.repo')
     local path=$(get_config '.source.path')
@@ -371,6 +401,7 @@ main() {
     local data_dir="$tmp_dir/data"
     local app_name=$(get_config '.source.app')
     local package_path=$path
+    local tag="$(basename $(dirname $test))-$((1 + $RANDOM % 1000))"
 
     if [[ "$repository" =~ "holohub" ]]
     then
@@ -383,42 +414,54 @@ main() {
     info "Working Dir:  $tmp_dir"
     info "Source Dir:   $source_dir"
     info "Data Dir:     $data_dir"
+    info "Tag Prefix:   $tag"
 
     check_field $repository ".source.repo"
     check_field $path ".source.path"
     check_field $language ".source.lang"
 
+    # Clone configured git repository
     clone "$source_dir" "$repository" "$path"
 
+    # For non-Holohub repositories and C++ projects
     if [[ "$language" == "cpp" && "$repository" != *"holohub"* ]]
     then
         prep_cpp_dir "$source_dir" "$path"
     fi
 
+    # For Holohub C++ applications, append the application binary name to the package path
     if [[ "$repository" =~ "holohub" && "$language" == "cpp" ]]
     then
         package_path="install/bin/$path/$app_name"
     fi
 
+    # For Holohub applications, call the build script
     if [[ "$repository" =~ "holohub" ]]
     then
         build_holohub_app "$source_dir" "$app_name" "$language"
     fi
 
-    package "$tmp_dir" "$source_dir" "$package_path"
+    # Call Holoscan CLI Packager
+    package "$tmp_dir" "$source_dir" "$package_path" "$tag"
 
+    # Download specified data
     download_data "$tmp_dir" "$data_dir"
 
+    # Use test data downloaded by Holohub build script
     if [[ "$repository" =~ "holohub" && "$(get_config '.data.source')" == "local-holohub" ]]
     then
         data_dir="$source_dir/data/$(get_config '.data.dirname')"
         tree $data_dir
     fi
 
-    run "$data_dir"
+    # Call Holoscan CLI Runner
+    run_application "$data_dir" "$tag"
 
+    # Clean up the temporary directory
     info "Cleaning source code..."
     run_command rm -rf $tmp_dir
+    info "Deleting Containerized Application..."
+    run_command docker rmi $(docker images --filter=reference="${tag}*:*" -q)
 }
 
 if [ -z "$test" ]
@@ -442,3 +485,4 @@ version=$(holoscan version | tail -n 1 | awk '{print $3}')
 info "Using test configuration $test with Holoscan CLI v${version}"
 
 main
+
