@@ -134,3 +134,13 @@ In this case, the test automation script will clone the [Holohub](https://github
  }
 }
 ```
+
+
+## Links
+
+- [Holoscan SDK User Guide](https://docs.nvidia.com/holoscan/sdk-user-guide)
+- [Holoscan Application Package Specification (HAP)](https://docs.nvidia.com/holoscan/sdk-user-guide/cli/hap.html)
+- [Holscan SDK Github Repository](https://github.com/nvidia-holoscan/holoscan-sdk)
+- [Holohub Github Repository](https://github.com/nvidia-holoscan/holohub/)
+- [Holoscan CLI Github Repository](https://github.com/nvidia-holoscan/holoscan-cli)
+- [NGC](https://ngc.nvidia.com/)
