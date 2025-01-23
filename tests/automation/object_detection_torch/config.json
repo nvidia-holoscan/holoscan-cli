@@ -1,0 +1,23 @@
+{
+  "name": "object_detection_torch",
+  "source": {
+    "repo": "https://github.com/nvidia-holoscan/holohub.git",
+    "app": "object_detection_torch",
+    "lang": "cpp",
+    "path": "applications/object_detection_torch"
+  },
+  "config": {
+    "source": "local",
+    "path": "./app.yaml"
+  },
+  "package": {
+    "args": "--includes onnx holoviz torch"
+  },
+  "run": {
+    "args": "--render"
+  },
+  "data": {
+    "source" : "local-holohub",
+    "dirname" : "object_detection_torch"
+  }
+}

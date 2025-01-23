@@ -1,0 +1,23 @@
+{
+  "name": "<name of the application>",
+  "source": {
+    "repo": "<http-based git url>.git",
+    "path": "<application's relative path from the root of the repository",
+    "lang": "<cpp or python>",
+    "app": "holohub only: name of application"
+  },
+  "config": {
+    "source": "[local]",
+    "path": "./app.yaml"
+  },
+  "package": {
+    "args": "<additional arguments to be passed to the CLI Packager>"
+  },
+  "run": {
+    "args": "<additional arguments to be passed to the CLI Runner>"
+  },
+  "data": {
+    "source" : "<NGC URL|local-holohub>",
+    "dirname" : "<directory name where the data is saved to|or for 'local-holohub' the subdirectory where the data can be found"
+  }
+}

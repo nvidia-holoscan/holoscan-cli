@@ -1,0 +1,23 @@
+{
+  "name": "endoscopy-tool-tracking-cpp",
+  "source": {
+    "repo": "https://github.com/nvidia-holoscan/holohub.git",
+    "app": "endoscopy_tool_tracking",
+    "lang": "cpp",
+    "path": "applications/endoscopy_tool_tracking/cpp"
+  },
+  "config": {
+    "source": "local",
+    "path": "./app.yaml"
+  },
+  "package": {
+    "args": "--includes onnx holoviz --add <src>/install/lib"
+  },
+  "run": {
+    "args": "--render"
+  },
+  "data": {
+    "source" : "local-holohub",
+    "dirname" : "endoscopy"
+  }
+}
