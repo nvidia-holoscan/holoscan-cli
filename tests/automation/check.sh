@@ -21,7 +21,7 @@ echo "Checking system requirements..."
 status=0
 if ! command -v curl 2>&1 >/dev/null
 then
-    echo "jq could not be found, use the following command to install curl"
+    echo "curl could not be found, use the following command to install curl"
     echo "$ sudo apt install curl"
     status=-1
 fi
