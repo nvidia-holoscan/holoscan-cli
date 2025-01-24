@@ -311,7 +311,6 @@ package() {
                      --config $config_file_path \
                      --tag $4 \
                      --platform x64-workstation \
-                     --source /home/vicchang/sc/github/holoscan-cli/tests/automation/artifacts.json \
                      $app_dir \
                      $run_args
 
