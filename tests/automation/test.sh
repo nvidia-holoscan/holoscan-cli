@@ -312,11 +312,8 @@ package() {
                      --tag $4 \
                      --platform x64-workstation \
                      --source /home/vicchang/sc/github/holoscan-cli/tests/automation/artifacts.json \
-                     --holoscan-sdk-file /home/vicchang/sc/github/holoscan-cli/dist/holoscan-2.9.0.1-cp310-cp310-manylinux_2_35_x86_64.whl \
                      $app_dir \
                      $run_args
-                    #  --holoscan-sdk-file /home/vicchang/sc/github/holoscan-cli/dist/holoscan_2.9.0.1-1_amd64.deb \
-                    #  --holoscan-sdk-file /home/vicchang/sc/github/holoscan-cli/dist/holoscan-2.9.0.1-cp310-cp310-manylinux_2_35_x86_64.whl \
 
     if [[ $? -ne 0 ]]
     then
