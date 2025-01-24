@@ -356,7 +356,7 @@ clone() {
     popd
 }
 
-# For non-Holohub C++ applications, rename CMakeLists.min.txt to CMakeLists.txt if exists.
+# For Holoscan SDK example C++ applications, rename CMakeLists.min.txt to CMakeLists.txt if exists.
 #  This enables the Packager process to build the C++ application. 
 # Parameters
 #  $1 Source Code Directory Path
