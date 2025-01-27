@@ -157,6 +157,7 @@ jobs:
     - name: Build
       env:
         rc: ${{ github.event.inputs.rc }}
+        ga: ${{ github.event.inputs.ga }}
       run: |
         git tag -l
         poetry run which python
