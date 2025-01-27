@@ -1,10 +1,10 @@
 #!/bin/bash
 
-# SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2023-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.run_command
+# you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
 #
 # http://www.apache.org/licenses/LICENSE-2.0
@@ -14,6 +14,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
 #===============================================================================
 set -u
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" &> /dev/null && pwd)
@@ -205,7 +206,7 @@ run_application() {
     fi
 }
 
-# Download user defined data. 
+# Download user defined data.
 #  NOTE: Only NGC is supported at the moment: the script parses the JSON returned by the NGC files API.
 #  E.g. https://api.ngc.nvidia.com/v2/resources/org/nvidia/team/clara-holoscan/holoscan_racerx_video/20231009/files
 # Parameters
@@ -225,7 +226,7 @@ download_data() {
             data_dir="$data_dir/$target"
         fi
         [[ ! -d "$data_dir" ]] && run_command mkdir -p $data_dir
-        
+
         for url in $(curl $source | jq -r .urls.[])
             do
                 info "Downloading $url"
@@ -356,7 +357,7 @@ clone() {
 }
 
 # For Holoscan SDK example C++ applications, rename CMakeLists.min.txt to CMakeLists.txt if exists.
-#  This enables the Packager process to build the C++ application. 
+#  This enables the Packager process to build the C++ application.
 # Parameters
 #  $1 Source Code Directory Path
 #  $2 Relative Path to the Application
@@ -367,7 +368,7 @@ prep_cpp_dir() {
     pushd $1
 
     local path="$1/$2"
-    info "Searching $path for CMakeLists.min.txt" 
+    info "Searching $path for CMakeLists.min.txt"
     if [[ $(find $path -type f -name "CMakeLists.min.txt" | wc -l) -eq 1 ]]
     then
         info "Overwriting CMakeLists.txt with CMakeLists.min.txt"
@@ -481,4 +482,3 @@ version=$(holoscan version | tail -n 1 | awk '{print $3}')
 info "Using test configuration $test with Holoscan CLI v${version}"
 
 main
-
