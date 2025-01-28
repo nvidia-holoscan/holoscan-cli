@@ -112,6 +112,7 @@ def _package_application(args: Namespace):
     Error:  {result.error}
     """  # noqa: E501
                 )
+                sys.exit(1)
 
 
 def execute_package_command(args: Namespace):

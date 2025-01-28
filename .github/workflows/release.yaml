@@ -30,6 +30,10 @@ on:
         required: true
         type: string
         default: v
+      rc:
+        description: 'RC Build Number'
+        required: false
+        type: number
       ga:
         description: 'GA (Official) Build'
         required: true
@@ -151,6 +155,9 @@ jobs:
       uses: Gr1N/setup-poetry@v9
 
     - name: Build
+      env:
+        rc: ${{ github.event.inputs.rc }}
+        ga: ${{ github.event.inputs.ga }}
       run: |
         git tag -l
         poetry run which python
@@ -191,15 +198,17 @@ jobs:
           VERSION=${{ github.event.inputs.version }}
           VERSION="${VERSION/?}"
           shellspec -e VERSION=$VERSION -o j
-      # - name: JUnit Report Action
-      #   uses: mikepenz/action-junit-report@v5.2.0
-      #   if: false # success() || failure()
-      #   with:
-      #     report_paths: 'tests/verification/report/*.xml'
+      - name: Upload Test Report
+        uses: test-summary/action@v2.4
+        if: always()
+        with:
+          paths: 'tests/verification/report/*.xml'
 
   testpypi-deploy:
-    if: ${{ inputs.ga == 'false' }}
+    if: ${{ inputs.ga == false }}
     name: publish-test-pypi
+    permissions:
+      id-token: write
     runs-on: ubuntu-latest
     needs: [verification-test]
     steps:
@@ -207,9 +216,9 @@ jobs:
       uses: actions/download-artifact@v4.1.8
       with:
         name: build-artifact
+        path: dist/
     - name: Publish package distributions to TestPyPI
       uses: pypa/gh-action-pypi-publish@release/v1
       with:
         repository-url: https://test.pypi.org/legacy/
         verbose: true
-        path: dist/

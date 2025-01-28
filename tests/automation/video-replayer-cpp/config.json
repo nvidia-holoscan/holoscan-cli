@@ -1,0 +1,22 @@
+{
+  "name": "video-replayer-cpp",
+  "source": {
+    "repo": "https://github.com/nvidia-holoscan/holoscan-sdk.git",
+    "path": "examples/video_replayer/cpp",
+    "lang": "cpp"
+  },
+  "config": {
+    "source": "local",
+    "path": "./app.yaml"
+  },
+  "package": {
+    "args": "--includes holoviz"
+  },
+  "run": {
+    "args": "--render"
+  },
+  "data": {
+    "dirname" : "racerx",
+    "source" : "https://api.ngc.nvidia.com/v2/resources/org/nvidia/team/clara-holoscan/holoscan_racerx_video/20231009/files"
+  }
+}

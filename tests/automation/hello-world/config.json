@@ -1,0 +1,12 @@
+{
+  "name": "hello-world",
+  "source": {
+    "repo": "https://github.com/nvidia-holoscan/holoscan-sdk.git",
+    "path": "examples/hello_world/python/hello_world.py",
+    "lang": "python"
+  },
+  "config": {
+    "source": "local",
+    "path": "./app.yaml"
+  }
+}
