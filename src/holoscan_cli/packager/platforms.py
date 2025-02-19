@@ -76,11 +76,7 @@ class Platform:
 
         platforms = []
         for platform in args.platform:
-            platform_config = args.platform_config
-
-            platform_parameters = PlatformParameters(
-                platform, platform_config, args.tag, version
-            )
+            platform_parameters = PlatformParameters(platform, args.tag, version)
 
             (
                 platform_parameters.custom_base_image,

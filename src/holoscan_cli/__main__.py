@@ -20,7 +20,6 @@ import os
 from pathlib import Path
 from typing import Optional, Union
 
-from .common.enum_types import Platform, PlatformConfiguration
 
 logging.getLogger("docker.api.build").setLevel(logging.WARNING)
 logging.getLogger("docker.auth").setLevel(logging.WARNING)
@@ -96,14 +95,6 @@ def parse_args(argv: Optional[list[str]] = None) -> argparse.Namespace:
     if args.command is None:
         parser.print_help()
         parser.exit()
-
-    if args.command == "package":
-        if args.platform[0] == Platform.X64Workstation:
-            args.platform_config = PlatformConfiguration.dGPU
-        elif args.platform_config is None:
-            parser.error(
-                f"'--platform-config' is required for '{args.platform[0].value}'"
-            )
 
     return args
 

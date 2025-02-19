@@ -20,12 +20,12 @@ import pytest
 from holoscan_cli.common.enum_types import (
     ApplicationType,
     Platform,
-    PlatformConfiguration,
     SdkType,
 )
 from holoscan_cli.packager.arguments import PackagingArguments
 from holoscan_cli.packager.manifest_files import ApplicationManifest, PackageManifest
 from holoscan_cli.packager.parameters import DefaultValues
+from holoscan_cli.packager.platforms import PlatformParameters
 
 
 class TestPackagingArguments:
@@ -47,7 +47,6 @@ class TestPackagingArguments:
         self.input_args.cmake_args = "-DARG1=A -DARG2=B"
         self.input_args.source = pathlib.Path("/path/to/source.json")
         self.input_args.platform = Platform.X64Workstation
-        self.input_args.platform_config = PlatformConfiguration.dGPU
         self.input_args.includes = []
         self.input_args.additional_libs = [
             pathlib.Path("/path/to/lib"),
@@ -67,7 +66,7 @@ class TestPackagingArguments:
                 SdkType.Holoscan,
                 "HoloscanVersionNum",
                 "MonaiDeployVersionNum",
-                [],
+                [PlatformParameters(Platform.Jetson, "tag", "1.0")],
             ),
         )
         monkeypatch.setattr(
@@ -192,7 +191,7 @@ class TestPackagingArguments:
         assert args.application_manifest.liveness["timeoutSeconds"] == 1
         assert args.application_manifest.liveness["failureThreshold"] == 3
 
-        assert len(args.platforms) == 0
+        assert len(args.platforms) == 1
 
     def test_input_args_no_timeout(self, monkeypatch):
         self._setup_mocks(monkeypatch)
@@ -230,7 +229,7 @@ class TestPackagingArguments:
                 SdkType.MonaiDeploy,
                 "HoloscanVersionNum",
                 "MonaiDeployVersionNum",
-                [],
+                [PlatformParameters(Platform.x86_64, "tag", "2.0")],
             ),
         )
         args = PackagingArguments(self.input_args, pathlib.Path("/temp"))
@@ -238,4 +237,4 @@ class TestPackagingArguments:
         assert args.application_manifest.readiness is None
         assert args.application_manifest.liveness is None
 
-        assert len(args.platforms) == 0
+        assert len(args.platforms) == 1

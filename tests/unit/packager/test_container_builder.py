@@ -20,7 +20,7 @@ import tempfile
 
 import holoscan_cli.common.dockerutils
 import pytest
-from holoscan_cli.common.enum_types import Platform, PlatformConfiguration, SdkType
+from holoscan_cli.common.enum_types import Platform, SdkType
 from holoscan_cli.packager.container_builder import BuilderBase
 from holoscan_cli.packager.parameters import PackageBuildParameters
 from holoscan_cli.packager.platforms import PlatformParameters
@@ -59,9 +59,7 @@ class TestContainerBuilder:
         monkeypatch.setattr(shutil, "copy2", lambda src, dest: None)
         build_parameters = self._get_build_parameters()
         build_parameters.no_cache = no_cache
-        platform_parameters = PlatformParameters(
-            Platform.X64Workstation, PlatformConfiguration.dGPU, "image:tag", "1.0"
-        )
+        platform_parameters = PlatformParameters(Platform.x86_64, "image:tag", "1.0")
 
         try:
             with tempfile.TemporaryDirectory() as temp_dir:

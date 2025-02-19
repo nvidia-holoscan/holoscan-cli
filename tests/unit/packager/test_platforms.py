@@ -113,8 +113,7 @@ class TestPlatforms:
         application_verison = "1.0.0"
         input_args = Namespace()
         input_args.sdk = SdkType.Holoscan
-        input_args.platform = [PlatformTypes.IGXOrinDevIt]
-        input_args.platform_config = PlatformConfiguration.dGPU
+        input_args.platform = [PlatformTypes.IGX_dGPU]
         input_args.tag = "my-app"
         input_args.sdk_version = None
         input_args.holoscan_sdk_file = None
@@ -136,12 +135,14 @@ class TestPlatforms:
             assert len(platforms) == 1
 
             platform_parameters = platforms[0]
-
-            assert platform_parameters.platform == input_args.platform[0]
+            assert (
+                platform_parameters.platform
+                == SDK.INTERNAL_PLATFORM_MAPPINGS[input_args.platform[0]][0]
+            )
             assert (
                 platform_parameters.base_image
                 == self._artifact_source.base_image(holoscan_version)[
-                    input_args.platform_config.value
+                    PlatformConfiguration.dGPU.value
                 ]
             )
             assert platform_parameters.build_image is None
@@ -162,13 +163,12 @@ class TestPlatforms:
             assert platform_parameters.health_probe is None
             assert (
                 platform_parameters.platform_arch
-                == SDK.PLATFORM_MAPPINGS[input_args.platform[0]]
+                == SDK.PLATFORM_ARCH_MAPPINGS[input_args.platform[0]]
             )
             assert (
                 platform_parameters.docker_arch
-                == SDK.PLATFORM_MAPPINGS[input_args.platform[0]].value
+                == SDK.PLATFORM_ARCH_MAPPINGS[input_args.platform[0]].value
             )
-            assert platform_parameters.platform == input_args.platform[0]
             assert platform_parameters.same_arch_as_system == (
                 platform_lib.machine() == "aarch64"
             )
@@ -194,8 +194,7 @@ class TestPlatforms:
         application_verison = "1.0.0"
         input_args = Namespace()
         input_args.sdk = SdkType.Holoscan
-        input_args.platform = [PlatformTypes.IGXOrinDevIt]
-        input_args.platform_config = PlatformConfiguration.dGPU
+        input_args.platform = [PlatformTypes.IGX_iGPU]
         input_args.tag = "my-app"
         input_args.sdk_version = None
         input_args.holoscan_sdk_file = None
@@ -218,17 +217,20 @@ class TestPlatforms:
 
             platform_parameters = platforms[0]
 
-            assert platform_parameters.platform == input_args.platform[0]
+            assert (
+                platform_parameters.platform
+                == SDK.INTERNAL_PLATFORM_MAPPINGS[input_args.platform[0]][0]
+            )
             assert (
                 platform_parameters.base_image
                 == self._artifact_source.base_image(holoscan_version)[
-                    input_args.platform_config.value
+                    PlatformConfiguration.iGPU.value
                 ]
             )
             assert platform_parameters.build_image is None
             assert (
                 platform_parameters.tag
-                == "my-app-igx-orin-devkit-dgpu-linux-arm64:1.0.0"
+                == "my-app-igx-orin-devkit-igpu-linux-arm64:1.0.0"
             )
             assert platform_parameters.tag_prefix == "my-app"
             assert platform_parameters.custom_base_image is False
@@ -246,13 +248,12 @@ class TestPlatforms:
             assert platform_parameters.health_probe is None
             assert (
                 platform_parameters.platform_arch
-                == SDK.PLATFORM_MAPPINGS[input_args.platform[0]]
+                == SDK.PLATFORM_ARCH_MAPPINGS[input_args.platform[0]]
             )
             assert (
                 platform_parameters.docker_arch
-                == SDK.PLATFORM_MAPPINGS[input_args.platform[0]].value
+                == SDK.PLATFORM_ARCH_MAPPINGS[input_args.platform[0]].value
             )
-            assert platform_parameters.platform == input_args.platform[0]
             assert platform_parameters.same_arch_as_system == (
                 platform_lib.machine() == "aarch64"
             )
@@ -279,11 +280,10 @@ class TestPlatforms:
         input_args = Namespace()
         input_args.sdk = SdkType.Holoscan
         input_args.platform = [
-            PlatformTypes.IGXOrinDevIt,
-            PlatformTypes.X64Workstation,
+            PlatformTypes.Jetson,
+            PlatformTypes.IGX_iGPU,
             PlatformTypes.SBSA,
         ]
-        input_args.platform_config = PlatformConfiguration.dGPU
         input_args.tag = "my-app"
         input_args.sdk_version = None
         input_args.holoscan_sdk_file = None
@@ -299,59 +299,63 @@ class TestPlatforms:
                 input_args, temp_dir, application_verison, ApplicationType.CppCMake
             )
 
-            assert sdk == sdk_type
-            assert hsdk_version == holoscan_version
-            assert md_version == monai_deploy_version
-            assert len(platforms) == len(input_args.platform)
+            for index, platform_parameters in enumerate(platforms):
+                assert sdk == sdk_type
+                assert hsdk_version == holoscan_version
+                assert md_version == monai_deploy_version
+                assert len(platforms) == len(input_args.platform)
 
-            platform_parameters = platforms[0]
+                input_platform = input_args.platform[index]
+                expected_platform = SDK.INTERNAL_PLATFORM_MAPPINGS[input_platform][0]
+                expected_platform_config = SDK.INTERNAL_PLATFORM_MAPPINGS[
+                    input_platform
+                ][1]
 
-            assert platform_parameters.platform == input_args.platform[0]
-            assert (
-                platform_parameters.base_image
-                == self._artifact_source.base_image(holoscan_version)[
-                    input_args.platform_config.value
-                ]
-            )
-            assert (
-                platform_parameters.build_image
-                == "nvcr.io/nvidia/clara-holoscan/holoscan:v1.0.0-dgpu"
-            )
-            assert (
-                platform_parameters.tag
-                == "my-app-igx-orin-devkit-dgpu-linux-arm64:1.0.0"
-            )
-            assert platform_parameters.tag_prefix == "my-app"
-            assert platform_parameters.custom_base_image is False
-            assert platform_parameters.custom_holoscan_sdk is False
-            assert (
-                platform_parameters.holoscan_sdk_file
-                == self._artifact_source.debian_package_version(holoscan_version)
-            )
-            assert platform_parameters.custom_monai_deploy_sdk is None
-            assert platform_parameters.monai_deploy_sdk_file is None
-            assert platform_parameters.version == application_verison
-            assert (
-                platform_parameters.health_probe
-                == self._artifact_source.health_probe(holoscan_version)[
-                    SDK.PLATFORM_MAPPINGS[input_args.platform[0]].value
-                ]
-            )
-            assert (
-                platform_parameters.platform_arch
-                == SDK.PLATFORM_MAPPINGS[input_args.platform[0]]
-            )
-            assert (
-                platform_parameters.docker_arch
-                == SDK.PLATFORM_MAPPINGS[input_args.platform[0]].value
-            )
-            assert platform_parameters.platform == input_args.platform[0]
-            assert platform_parameters.same_arch_as_system == (
-                platform_lib.machine() == "aarch64"
-            )
-            assert platform_parameters.cuda_deb_arch == "sbsa"
-            assert platform_parameters.holoscan_deb_arch == "arm64"
-            assert platform_parameters.target_arch == "aarch64"
+                assert platform_parameters.platform == expected_platform
+                assert (
+                    platform_parameters.base_image
+                    == self._artifact_source.base_image(holoscan_version)[
+                        expected_platform_config.value
+                    ]
+                )
+                assert (
+                    platform_parameters.build_image
+                    == f"nvcr.io/nvidia/clara-holoscan/holoscan:v1.0.0-{expected_platform_config.value}"
+                )
+                assert (
+                    platform_parameters.tag
+                    == f"my-app-{expected_platform.value}-{expected_platform_config.value}-linux-arm64:1.0.0"
+                )
+                assert platform_parameters.tag_prefix == "my-app"
+                assert platform_parameters.custom_base_image is False
+                assert platform_parameters.custom_holoscan_sdk is False
+                assert (
+                    platform_parameters.holoscan_sdk_file
+                    == self._artifact_source.debian_package_version(holoscan_version)
+                )
+                assert platform_parameters.custom_monai_deploy_sdk is None
+                assert platform_parameters.monai_deploy_sdk_file is None
+                assert platform_parameters.version == application_verison
+                assert (
+                    platform_parameters.health_probe
+                    == self._artifact_source.health_probe(holoscan_version)[
+                        SDK.PLATFORM_ARCH_MAPPINGS[input_platform].value
+                    ]
+                )
+                assert (
+                    platform_parameters.platform_arch
+                    == SDK.PLATFORM_ARCH_MAPPINGS[input_platform]
+                )
+                assert (
+                    platform_parameters.docker_arch
+                    == SDK.PLATFORM_ARCH_MAPPINGS[input_platform].value
+                )
+                assert platform_parameters.same_arch_as_system == (
+                    platform_lib.machine() == "aarch64"
+                )
+                assert platform_parameters.cuda_deb_arch == "sbsa"
+                assert platform_parameters.holoscan_deb_arch == "arm64"
+                assert platform_parameters.target_arch == "aarch64"
 
     def test_platform_with_custom_base_image_and_build_image(self, monkeypatch):
         holoscan_version = "1.0.0"
@@ -375,8 +379,7 @@ class TestPlatforms:
         application_verison = "1.0.0"
         input_args = Namespace()
         input_args.sdk = SdkType.Holoscan
-        input_args.platform = [PlatformTypes.IGXOrinDevIt]
-        input_args.platform_config = PlatformConfiguration.dGPU
+        input_args.platform = [PlatformTypes.IGX_dGPU]
         input_args.tag = "my-app"
         input_args.sdk_version = None
         input_args.holoscan_sdk_file = None
@@ -399,7 +402,10 @@ class TestPlatforms:
 
             platform_parameters = platforms[0]
 
-            assert platform_parameters.platform == input_args.platform[0]
+            assert (
+                platform_parameters.platform
+                == SDK.INTERNAL_PLATFORM_MAPPINGS[input_args.platform[0]][0]
+            )
             assert platform_parameters.base_image == input_args.base_image
             assert platform_parameters.build_image == input_args.build_image
             assert (
@@ -419,18 +425,17 @@ class TestPlatforms:
             assert (
                 platform_parameters.health_probe
                 == self._artifact_source.health_probe(holoscan_version)[
-                    SDK.PLATFORM_MAPPINGS[input_args.platform[0]].value
+                    SDK.PLATFORM_ARCH_MAPPINGS[input_args.platform[0]].value
                 ]
             )
             assert (
                 platform_parameters.platform_arch
-                == SDK.PLATFORM_MAPPINGS[input_args.platform[0]]
+                == SDK.PLATFORM_ARCH_MAPPINGS[input_args.platform[0]]
             )
             assert (
                 platform_parameters.docker_arch
-                == SDK.PLATFORM_MAPPINGS[input_args.platform[0]].value
+                == SDK.PLATFORM_ARCH_MAPPINGS[input_args.platform[0]].value
             )
-            assert platform_parameters.platform == input_args.platform[0]
             assert platform_parameters.same_arch_as_system == (
                 platform_lib.machine() == "aarch64"
             )
@@ -460,8 +465,7 @@ class TestPlatforms:
         application_verison = "1.0.0"
         input_args = Namespace()
         input_args.sdk = SdkType.Holoscan
-        input_args.platform = [PlatformTypes.IGXOrinDevIt]
-        input_args.platform_config = PlatformConfiguration.iGPU
+        input_args.platform = [PlatformTypes.IGX_iGPU]
         input_args.tag = "my-app"
         input_args.sdk_version = None
         input_args.holoscan_sdk_file = Path("my-sdk-file.deb")
@@ -484,7 +488,10 @@ class TestPlatforms:
 
             platform_parameters = platforms[0]
 
-            assert platform_parameters.platform == input_args.platform[0]
+            assert (
+                platform_parameters.platform
+                == SDK.INTERNAL_PLATFORM_MAPPINGS[input_args.platform[0]][0]
+            )
             assert platform_parameters.base_image == input_args.base_image
             assert platform_parameters.build_image == input_args.build_image
             assert (
@@ -501,18 +508,17 @@ class TestPlatforms:
             assert (
                 platform_parameters.health_probe
                 == self._artifact_source.health_probe(holoscan_version)[
-                    SDK.PLATFORM_MAPPINGS[input_args.platform[0]].value
+                    SDK.PLATFORM_ARCH_MAPPINGS[input_args.platform[0]].value
                 ]
             )
             assert (
                 platform_parameters.platform_arch
-                == SDK.PLATFORM_MAPPINGS[input_args.platform[0]]
+                == SDK.PLATFORM_ARCH_MAPPINGS[input_args.platform[0]]
             )
             assert (
                 platform_parameters.docker_arch
-                == SDK.PLATFORM_MAPPINGS[input_args.platform[0]].value
+                == SDK.PLATFORM_ARCH_MAPPINGS[input_args.platform[0]].value
             )
-            assert platform_parameters.platform == input_args.platform[0]
             assert platform_parameters.same_arch_as_system == (
                 platform_lib.machine() == "aarch64"
             )

@@ -112,15 +112,17 @@ class TestValidPlatforms:
     @pytest.mark.parametrize(
         "platforms",
         [
-            ([Platform.IGXOrinDevIt]),
-            ([Platform.JetsonAgxOrinDevKit]),
-            ([Platform.X64Workstation]),
-            ([Platform.IGXOrinDevIt, Platform.X64Workstation]),
+            ([Platform.Jetson]),
+            ([Platform.IGX_dGPU]),
+            ([Platform.IGX_iGPU]),
+            ([Platform.SBSA]),
+            ([Platform.x86_64]),
+            ([Platform.SBSA, Platform.x86_64]),
             (
                 [
-                    Platform.IGXOrinDevIt,
-                    Platform.X64Workstation,
-                    Platform.JetsonAgxOrinDevKit,
+                    Platform.Jetson,
+                    Platform.IGX_dGPU,
+                    Platform.SBSA,
                 ]
             ),
         ],
@@ -136,7 +138,7 @@ class TestValidPlatforms:
         [
             ("bad-platform"),
             (f"{Platform.IGXOrinDevIt.value},bad-platform"),
-            (f"{Platform.IGXOrinDevIt.value},"),
+            (f"{Platform.IGX_iGPU.value},"),
         ],
     )
     def test_invalid_platforms(self, platforms: str):
