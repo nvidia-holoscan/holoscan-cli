@@ -64,13 +64,21 @@ class TestContainerBuilder:
         """Common fixture for mocking file system operations"""
         monkeypatch.setattr(pathlib.Path, "exists", lambda x: True)
         monkeypatch.setattr(os.path, "exists", lambda x: True)
-        monkeypatch.setattr(shutil, "rmtree", lambda path: None)
+        monkeypatch.setattr(
+            shutil,
+            "rmtree",
+            lambda path,
+            ignore_errors=False,
+            onerror=None,
+            *,
+            onexc=None,
+            dir_fd=None: None,
+        )
         monkeypatch.setattr(
             shutil, "copytree", lambda src, dest, dirs_exist_ok=True: None
         )
         monkeypatch.setattr(shutil, "copyfile", lambda src, dest: None)
         monkeypatch.setattr(shutil, "copy2", lambda src, dest: None)
-        # monkeypatch.setattr(os, "makedirs", lambda path, exist_ok=True: None)
         monkeypatch.setattr(os, "remove", lambda src: None)
         monkeypatch.setattr(BuilderBase, "_get_template", lambda x, y: "")
 
