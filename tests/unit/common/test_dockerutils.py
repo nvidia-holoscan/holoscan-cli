@@ -320,8 +320,25 @@ class TestDockerRun:
     def basic_pkg_info(self):
         return {"resources": {"gpu": 1}}
 
+    @pytest.fixture
+    def mock_dockerutils(self, monkeypatch):
+        monkeypatch.setattr(
+            "holoscan_cli.common.dockerutils.run_cmd_output",
+            lambda *args, **kwargs: "video:x:44",
+        )
+        monkeypatch.setattr(
+            "holoscan_cli.common.dockerutils._host_is_native_igpu", lambda: False
+        )
+        monkeypatch.setattr("holoscan_cli.common.dockerutils.get_gpu_count", lambda: 1)
+
     def test_basic_container_run(
-        self, mock_docker, mock_container, basic_app_info, basic_pkg_info, monkeypatch
+        self,
+        mock_docker,
+        mock_container,
+        basic_app_info,
+        basic_pkg_info,
+        mock_dockerutils,
+        monkeypatch,
     ):
         # Setup container creation mock
         mock_docker.container = type(
@@ -332,14 +349,6 @@ class TestDockerRun:
                 "run": lambda *args, **kwargs: None,
             },
         )()
-
-        # Mock video group lookup
-        def mock_run_cmd(*args, **kwargs):
-            return "video:x:44"
-
-        monkeypatch.setattr(
-            "holoscan_cli.common.dockerutils.run_cmd_output", mock_run_cmd
-        )
 
         docker_run(
             name="test-container",
@@ -366,7 +375,13 @@ class TestDockerRun:
         )
 
     def test_container_run_with_igpu(
-        self, mock_docker, mock_container, basic_app_info, basic_pkg_info, monkeypatch
+        self,
+        mock_docker,
+        mock_container,
+        basic_app_info,
+        basic_pkg_info,
+        mock_dockerutils,
+        monkeypatch,
     ):
         # Setup container creation mock
         mock_docker.container = type(
@@ -377,23 +392,6 @@ class TestDockerRun:
                 "run": lambda *args, **kwargs: None,
             },
         )()
-
-        # Mock video group lookup
-        def mock_run_cmd(*args, **kwargs):
-            return "video:x:44"
-
-        monkeypatch.setattr(
-            "holoscan_cli.common.dockerutils.run_cmd_output", mock_run_cmd
-        )
-
-        # Mock iGPU detection
-        def mock_host_is_native_igpu():
-            return False
-
-        monkeypatch.setattr(
-            "holoscan_cli.common.dockerutils._host_is_native_igpu",
-            mock_host_is_native_igpu,
-        )
 
         docker_run(
             name="test-container",
@@ -420,7 +418,13 @@ class TestDockerRun:
         )
 
     def test_container_run_with_render(
-        self, mock_docker, mock_container, basic_app_info, basic_pkg_info, monkeypatch
+        self,
+        mock_docker,
+        mock_container,
+        basic_app_info,
+        basic_pkg_info,
+        mock_dockerutils,
+        monkeypatch,
     ):
         # Setup container creation mock
         mock_docker.container = type(
@@ -440,14 +444,6 @@ class TestDockerRun:
             "WAYLAND_DISPLAY": "wayland-0",
         }
         monkeypatch.setattr(os, "environ", mock_env)
-
-        # Mock video group lookup
-        def mock_run_cmd(*args, **kwargs):
-            return "video:x:44"
-
-        monkeypatch.setattr(
-            "holoscan_cli.common.dockerutils.run_cmd_output", mock_run_cmd
-        )
 
         docker_run(
             name="test-container",
@@ -474,7 +470,13 @@ class TestDockerRun:
         )
 
     def test_container_run_with_terminal(
-        self, mock_docker, mock_container, basic_app_info, basic_pkg_info, monkeypatch
+        self,
+        mock_docker,
+        mock_container,
+        basic_app_info,
+        basic_pkg_info,
+        mock_dockerutils,
+        monkeypatch,
     ):
         # Setup container creation mock
         mock_docker.container = type(
@@ -485,14 +487,6 @@ class TestDockerRun:
                 "run": lambda *args, **kwargs: None,
             },
         )()
-
-        # Mock video group lookup
-        def mock_run_cmd(*args, **kwargs):
-            return "video:x:44"
-
-        monkeypatch.setattr(
-            "holoscan_cli.common.dockerutils.run_cmd_output", mock_run_cmd
-        )
 
         docker_run(
             name="test-container",
@@ -519,7 +513,7 @@ class TestDockerRun:
         )
 
     def test_container_run_gpu_resource_error(
-        self, mock_docker, mock_container, basic_app_info, monkeypatch
+        self, mock_docker, mock_container, basic_app_info, mock_dockerutils, monkeypatch
     ):
         # Setup container creation mock
         mock_docker.container = type(
@@ -530,14 +524,6 @@ class TestDockerRun:
                 "run": lambda *args, **kwargs: None,
             },
         )()
-
-        # Mock video group lookup
-        def mock_run_cmd(*args, **kwargs):
-            return "video:x:44"
-
-        monkeypatch.setattr(
-            "holoscan_cli.common.dockerutils.run_cmd_output", mock_run_cmd
-        )
 
         pkg_info = {"resources": {"gpu": 2}}  # Requesting more GPUs than available
 
@@ -568,7 +554,13 @@ class TestDockerRun:
         assert "Available GPUs (1) are less than required (2)" in str(exc_info.value)
 
     def test_container_run_with_holoscan_config(
-        self, mock_docker, mock_container, basic_app_info, basic_pkg_info, monkeypatch
+        self,
+        mock_docker,
+        mock_container,
+        basic_app_info,
+        basic_pkg_info,
+        mock_dockerutils,
+        monkeypatch,
     ):
         # Setup container creation mock
         mock_docker.container = type(
@@ -579,14 +571,6 @@ class TestDockerRun:
                 "run": lambda *args, **kwargs: None,
             },
         )()
-
-        # Mock video group lookup
-        def mock_run_cmd(*args, **kwargs):
-            return "video:x:44"
-
-        monkeypatch.setattr(
-            "holoscan_cli.common.dockerutils.run_cmd_output", mock_run_cmd
-        )
 
         # Add Holoscan SDK type and config path
         app_info_with_sdk = basic_app_info.copy()
