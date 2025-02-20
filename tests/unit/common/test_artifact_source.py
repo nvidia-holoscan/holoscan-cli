@@ -16,7 +16,10 @@
 from pathlib import Path
 
 import pytest
+import requests
+
 from holoscan_cli.common.artifact_sources import ArtifactSources
+from holoscan_cli.common.exceptions import ManifestDownloadError
 
 
 class TestArtifactSource:
@@ -34,6 +37,30 @@ class TestArtifactSource:
 
         with pytest.raises(FileNotFoundError):
             artifact_sources.load(str(source_file_sample))
+
+    def test_loads_from_https_with_error(self, monkeypatch):
+        def mock_get(*args, **kwargs):
+            response = requests.Response()
+            response.status_code = 500
+            response.reason = "error"
+            return response
+
+        monkeypatch.setattr(requests, "get", mock_get)
+        artifact_source = ArtifactSources()
+        with pytest.raises(ManifestDownloadError):
+            artifact_source.load("https://holoscan")
+
+    def test_loads_from_http_with_error(self, monkeypatch):
+        def mock_get(*args, **kwargs):
+            response = requests.Response()
+            response.status_code = 500
+            response.reason = "error"
+            return response
+
+        monkeypatch.setattr(requests, "get", mock_get)
+        artifact_source = ArtifactSources()
+        with pytest.raises(ManifestDownloadError):
+            artifact_source.load("http://holoscan")
 
     def test_debian_package_version(self):
         self._init()

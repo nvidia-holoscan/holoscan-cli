@@ -138,7 +138,7 @@ jobs:
           poetry run pip install --upgrade pip setuptools
           poetry install --with test
 
-      - name: Build Application
+      - name: Build and Install CLI
         run: |
           poetry build
           wheel=$(find dist/ -name holoscan_cli-*.whl)
@@ -160,7 +160,6 @@ jobs:
                             -t test-app-python \
                             --platform x64-workstation \
                             --sdk-version 0.0.0 \
-                            --holoscan-sdk-file $(find dist/ -name holoscan_cli-*-py3-none-linux_x86_64.whl) \
                             tests/app/python/
 
       - name: Run Test App

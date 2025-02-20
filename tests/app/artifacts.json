@@ -1,8 +1,8 @@
 {
   "0.0.0": {
     "holoscan": {
-      "debian-version": "0.0.0",
-      "wheel-version": "0.0.0",
+      "debian-version": "2.9.0.0-1",
+      "wheel-version": "2.9.0",
       "base-images": {
         "dgpu": "nvcr.io/nvidia/cuda:12.6.0-runtime-ubuntu22.04",
         "igpu": "nvcr.io/nvidia/tensorrt:24.08-py3-igpu"
