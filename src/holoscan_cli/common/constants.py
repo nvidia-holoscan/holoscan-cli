@@ -82,7 +82,6 @@ class SDK:
         Platform.IGX_iGPU: Arch.arm64,
         Platform.IGX_dGPU: Arch.arm64,
         Platform.SBSA: Arch.arm64,
-        Platform.X64Workstation: Arch.amd64,
         Platform.x86_64: Arch.amd64,
     }
 

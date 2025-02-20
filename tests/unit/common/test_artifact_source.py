@@ -29,11 +29,6 @@ class TestArtifactSource:
         source_file_sample = current_file_path / "./artifacts.json"
         self._artifact_source.load(str(source_file_sample))
 
-    def test_loads_from_http(self):
-        artifact_source = ArtifactSources()
-        with pytest.raises(ManifestDownloadError):
-            artifact_source.load("http://holoscan")
-
     def test_loads_invalid_file(self, monkeypatch):
         monkeypatch.setattr(Path, "read_text", lambda x: "{}")
 
@@ -43,7 +38,7 @@ class TestArtifactSource:
         with pytest.raises(FileNotFoundError):
             artifact_sources.load(str(source_file_sample))
 
-    def test_loads_from_custom_url_with_error(self, monkeypatch):
+    def test_loads_from_https_with_error(self, monkeypatch):
         def mock_get(*args, **kwargs):
             response = requests.Response()
             response.status_code = 500
@@ -54,6 +49,18 @@ class TestArtifactSource:
         artifact_source = ArtifactSources()
         with pytest.raises(ManifestDownloadError):
             artifact_source.load("https://holoscan")
+
+    def test_loads_from_http_with_error(self, monkeypatch):
+        def mock_get(*args, **kwargs):
+            response = requests.Response()
+            response.status_code = 500
+            response.reason = "error"
+            return response
+
+        monkeypatch.setattr(requests, "get", mock_get)
+        artifact_source = ArtifactSources()
+        with pytest.raises(ManifestDownloadError):
+            artifact_source.load("http://holoscan")
 
     def test_debian_package_version(self):
         self._init()

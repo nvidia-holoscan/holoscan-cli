@@ -299,11 +299,11 @@ class TestPlatforms:
                 input_args, temp_dir, application_verison, ApplicationType.CppCMake
             )
 
+            assert len(platforms) == len(input_args.platform)
             for index, platform_parameters in enumerate(platforms):
                 assert sdk == sdk_type
                 assert hsdk_version == holoscan_version
                 assert md_version == monai_deploy_version
-                assert len(platforms) == len(input_args.platform)
 
                 input_platform = input_args.platform[index]
                 expected_platform = SDK.INTERNAL_PLATFORM_MAPPINGS[input_platform][0]
