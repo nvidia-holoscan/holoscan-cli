@@ -40,12 +40,15 @@ Holoscan CLI uses [Poetry](https://python-poetry.org/) for package and dependenc
 
 ```bash
 # Create virtual environment
-poetry shell
+poetry env use python3.12
+
+# Activate virtual environment
+eval $(poetry env activate)
 
 # Install dependencies
 poetry install
 
-# Configure pre-commmit hooks
+# Configure pre-commit hooks
 pre-commit install
 
 # Run pre-commit against all files
@@ -57,6 +60,8 @@ poetry build
 # Run tests
 poetry run pytest
 ```
+
+For more information on Poetry and its usages, see the [Poetry documentation](https://python-poetry.org/docs/).
 
 ## Contributing to the Holoscan CLI
 
