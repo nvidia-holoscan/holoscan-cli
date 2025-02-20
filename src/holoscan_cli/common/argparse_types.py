@@ -107,6 +107,7 @@ def valid_platforms(platforms_str: str) -> list[Platform]:
     platforms = platforms_str.lower().split(",")
     platform_enums = []
     for platform in platforms:
+        platform = platform.strip()
         if platform not in SDK.PLATFORMS:
             raise argparse.ArgumentTypeError(
                 f"{platform} is not a valid option for --platforms."
@@ -128,7 +129,7 @@ def valid_platform_config(platform_config_str: str) -> PlatformConfiguration:
         Otherwise, raises argparse.ArgumentTypeError.
     """
 
-    platform_config_str = platform_config_str.lower()
+    platform_config_str = platform_config_str.lower().strip()
     if platform_config_str not in SDK.PLATFORM_CONFIGS:
         raise argparse.ArgumentTypeError(
             f"{platform_config_str} is not a valid option for --platform-config."
@@ -149,7 +150,7 @@ def valid_sdk_type(sdk_str: str) -> SdkType:
         Otherwise, raises argparse.ArgumentTypeError.
     """
 
-    sdk_str = sdk_str.lower()
+    sdk_str = sdk_str.lower().strip()
     if sdk_str not in SDK.SDKS:
         raise argparse.ArgumentTypeError(f"{sdk_str} is not a valid option for --sdk.")
 
