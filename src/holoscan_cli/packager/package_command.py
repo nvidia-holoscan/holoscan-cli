@@ -22,7 +22,6 @@ from ..common.argparse_types import (
     valid_dir_path,
     valid_existing_dir_path,
     valid_existing_path,
-    valid_platform_config,
     valid_platforms,
     valid_sdk_type,
 )
@@ -69,12 +68,6 @@ def create_package_parser(
         required=True,
         help="target platform(s) for the build output separated by comma. "
         f"Valid values: {str.join(', ', SDK.PLATFORMS)}.",
-    )
-    parser.add_argument(
-        "--platform-config",
-        type=valid_platform_config,
-        help="target platform configuration for the build output. "
-        f"Valid values: {str.join(', ', SDK.PLATFORM_CONFIGS)}.",
     )
     parser.add_argument(
         "--add",

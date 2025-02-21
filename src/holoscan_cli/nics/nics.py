@@ -28,6 +28,6 @@ def execute_nics_command(args: Namespace):
         strs = [f"\n\t{item[0]:<15} : {item[1]}" for item in ip_addresses]
         print(f"Available network interface cards/IP addresses: \n{''.join(strs)}")
     except Exception as ex:
-        logging.error("Error executing nics command.")
+        logger.error("Error executing nics command.")
         logger.debug(ex)
         sys.exit(4)

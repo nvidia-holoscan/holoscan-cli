@@ -34,14 +34,15 @@ class PlatformParameters:
     def __init__(
         self,
         platform: Platform,
-        platform_config: PlatformConfiguration,
         tag: str,
         version: str,
     ) -> None:
         self._logger = logging.getLogger("platform.parameters")
-        self._platform: Platform = platform
-        self._platform_config: PlatformConfiguration = platform_config
-        self._arch: Arch = SDK.PLATFORM_MAPPINGS[platform]
+        self._platform = SDK.INTERNAL_PLATFORM_MAPPINGS[platform][0]
+        self._platform_config: PlatformConfiguration = SDK.INTERNAL_PLATFORM_MAPPINGS[
+            platform
+        ][1]
+        self._arch: Arch = SDK.PLATFORM_ARCH_MAPPINGS[platform]
         self._tag_prefix: Optional[str]
         self._version: Optional[str]
 
