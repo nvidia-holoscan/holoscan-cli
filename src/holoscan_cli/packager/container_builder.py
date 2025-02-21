@@ -377,6 +377,7 @@ class PythonAppBuilder(BuilderBase):
         pip_folder = os.path.join(self._temp_dir, "pip")
         os.makedirs(pip_folder, exist_ok=True)
         pip_requirements_path = os.path.join(pip_folder, "requirements.txt")
+
         with open(pip_requirements_path, "w") as requirements_file:
             # Use local requirements.txt packages if provided, otherwise use sdk provided packages
             if self._build_parameters.requirements_file_path is not None:

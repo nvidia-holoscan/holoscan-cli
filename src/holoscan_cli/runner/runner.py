@@ -319,7 +319,6 @@ def execute_run_command(args: Namespace):
     if not _dependency_verification(args.map):
         logger.error("Execution Aborted")
         sys.exit(2)
-
     try:
         # Fetch application manifest from MAP
         app_info, pkg_info = _fetch_map_manifest(args.map)
@@ -330,7 +329,6 @@ def execute_run_command(args: Namespace):
     if not _pkg_specific_dependency_verification(pkg_info):
         logger.error("Execution Aborted")
         sys.exit(2)
-
     try:
         # Run Holoscan Application
         _run_app(args, app_info, pkg_info)
