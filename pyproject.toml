@@ -126,7 +126,11 @@ format-jinja = """
         {%- if env["ga"] == 'true' -%}
             {{ serialize_pep440(base)}}
         {%- else -%}
-            {{ serialize_pep440(base, stage="rc", revision=env["rc"] ) }}
+            {%- if 'rc' in env -%}
+                {{ serialize_pep440(base, stage="rc", revision=env["rc"] ) }}
+            {%- else -%}
+                {{ serialize_pep440(base, stage="rc", revision=distance) }}
+            {%- endif -%}
         {%- endif -%}
     {%- else -%}
         {{ serialize_pep440(base, stage="alpha", revision=distance) }}
