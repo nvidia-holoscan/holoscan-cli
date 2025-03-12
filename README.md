@@ -1,5 +1,5 @@
 [![Code Check](https://github.com/nvidia-holoscan/holoscan-cli/actions/workflows/check.yaml/badge.svg)](https://github.com/nvidia-holoscan/holoscan-cli/actions/workflows/check.yaml)
-[![Coverage Status](https://coveralls.io/repos/github/nvidia-holoscan/holoscan-cli/badge.svg?branch=vchang/poetry-setup)](https://coveralls.io/github/nvidia-holoscan/holoscan-cli)
+[![Coverage Status](https://coveralls.io/repos/github/nvidia-holoscan/holoscan-cli/badge.svg)](https://coveralls.io/github/nvidia-holoscan/holoscan-cli)
 
 # Holoscan CLI
 
