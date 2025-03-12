@@ -127,7 +127,9 @@ class PackagingArguments:
                 self.build_parameters.monai_deploy_app_sdk_version
             )
 
-        self._package_manifest.platform_config = args.platform_config.value
+        self._package_manifest.platform_config = self._platforms[
+            0
+        ].platform_config.value
 
     def _read_application_config_file(self, config_file_path: Path):
         self._logger.info(

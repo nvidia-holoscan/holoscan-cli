@@ -17,7 +17,11 @@ import socket
 from collections import namedtuple
 
 import psutil
-from holoscan_cli.common.utils import compare_versions, get_host_ip_addresses
+from holoscan_cli.common.utils import (
+    compare_versions,
+    get_host_ip_addresses,
+    run_cmd_output,
+)
 
 
 class TestCompareVersions:
@@ -184,3 +188,84 @@ class TestGetHostIpAddress:
         assert ("eth0", "fe80::e3cb:9e06:5545:817c%eth0") in ipv6
         assert ("eth1", "fe80::87d5:3875:5f6d:749f%eth1") in ipv6
         assert "docker0" not in [item[0] for item in ipv6]
+
+
+class TestRunCmdOutput:
+    def test_basic_command_output(self, monkeypatch):
+        # Create a simple completed process object
+        class CompletedProcess:
+            def __init__(self):
+                self.stdout = "command output\n"
+
+        monkeypatch.setattr(
+            "subprocess.run", lambda *args, **kwargs: CompletedProcess()
+        )
+        output = run_cmd_output(["echo", "hello"])
+        assert output == "command output\n"
+
+    def test_command_with_grep_match(self, monkeypatch):
+        class CompletedProcess:
+            def __init__(self):
+                self.stdout = "first line\nsecond line\nthird line\n"
+
+        monkeypatch.setattr(
+            "subprocess.run", lambda *args, **kwargs: CompletedProcess()
+        )
+        output = run_cmd_output(["ls", "-l"], grep="second")
+        assert output == "second line"
+
+    def test_command_with_grep_no_match(self, monkeypatch):
+        stdout = "first line\nsecond line\nthird line\n"
+
+        class CompletedProcess:
+            def __init__(self):
+                self.stdout = stdout
+
+        monkeypatch.setattr(
+            "subprocess.run", lambda *args, **kwargs: CompletedProcess()
+        )
+        output = run_cmd_output(["ls", "-l"], grep="nonexistent")
+        assert output == stdout
+
+    def test_empty_command_output(self, monkeypatch):
+        class CompletedProcess:
+            def __init__(self):
+                self.stdout = ""
+
+        monkeypatch.setattr(
+            "subprocess.run", lambda *args, **kwargs: CompletedProcess()
+        )
+        output = run_cmd_output(["some_command"])
+        assert output == ""
+
+    def test_command_with_special_characters(self, monkeypatch):
+        class CompletedProcess:
+            def __init__(self):
+                self.stdout = "line with * special ? characters\n"
+
+        monkeypatch.setattr(
+            "subprocess.run", lambda *args, **kwargs: CompletedProcess()
+        )
+        output = run_cmd_output(["command"], grep="special")
+        assert output == "line with * special ? characters"
+
+    def test_subprocess_run_called_correctly(self, monkeypatch):
+        calls = []
+
+        class CompletedProcess:
+            def __init__(self):
+                self.stdout = "output"
+
+        def mock_run(*args, **kwargs):
+            calls.append((args, kwargs))
+            return CompletedProcess()
+
+        monkeypatch.setattr("subprocess.run", mock_run)
+        run_cmd_output(["test", "command"])
+
+        assert len(calls) == 1
+        args, kwargs = calls[0]
+        assert args[0] == ["test", "command"]
+        assert kwargs["capture_output"] is True
+        assert kwargs["text"] is True
+        assert kwargs["shell"] is False

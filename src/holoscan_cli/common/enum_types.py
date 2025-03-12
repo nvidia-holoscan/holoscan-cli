@@ -37,10 +37,18 @@ class Arch(Enum):
 
 
 class Platform(Enum):
+    # User values - when a new value is added, please also update SDK.PLATFORMS
+    Jetson = "jetson"
+    IGX_iGPU = "igx-igpu"
+    IGX_dGPU = "igx-dgpu"
+    SBSA = "sbsa"
+    x86_64 = "x86_64"
+
+    # Internal use only - for mapping actual platform with platform configuration
+    #  as defined in SDK.INTERNAL_PLATFORM_MAPPINGS.
     IGXOrinDevIt = "igx-orin-devkit"
     JetsonAgxOrinDevKit = "jetson-agx-orin-devkit"
     X64Workstation = "x64-workstation"
-    SBSA = "sbsa"
 
 
 class PlatformConfiguration(Enum):

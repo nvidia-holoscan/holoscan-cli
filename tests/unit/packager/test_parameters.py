@@ -21,17 +21,24 @@ from holoscan_cli.common.constants import Constants, DefaultValues
 from holoscan_cli.common.enum_types import (
     ApplicationType,
     Platform,
-    PlatformConfiguration,
 )
 from holoscan_cli.common.exceptions import UnknownApplicationTypeError
 from holoscan_cli.packager.parameters import PackageBuildParameters, PlatformParameters
 
 
 class TestPlatformParameters:
-    def test_with_aarch64(self, monkeypatch):
+    @pytest.mark.parametrize(
+        "platform",
+        [
+            (Platform.Jetson),
+            (Platform.IGX_iGPU),
+            (Platform.IGX_dGPU),
+            (Platform.SBSA),
+        ],
+    )
+    def test_jetson(self, platform: Platform):
         build_parameters = PlatformParameters(
-            Platform.IGXOrinDevIt,
-            PlatformConfiguration.iGPU,
+            platform,
             "my-container-app",
             "1.2.3",
         )
@@ -41,8 +48,7 @@ class TestPlatformParameters:
 
     def test_with_x64(self, monkeypatch):
         build_parameters = PlatformParameters(
-            Platform.X64Workstation,
-            PlatformConfiguration.dGPU,
+            Platform.x86_64,
             "my-container-app",
             "1.2.3",
         )

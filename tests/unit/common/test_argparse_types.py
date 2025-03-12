@@ -62,6 +62,22 @@ class TestValidDirPath:
 
         assert str(result).startswith(os.path.expanduser("~"))
 
+    def test_dir_path_with_create_if_not_exists_false(self, monkeypatch):
+        monkeypatch.setattr(pathlib.Path, "exists", lambda x: False)
+
+        with pytest.raises(argparse.ArgumentTypeError):
+            valid_dir_path("this/is/some/path", create_if_not_exists=False)
+
+    def test_dir_path_mkdir_fails(self, monkeypatch):
+        def mkdir_raise(*args, **kwargs):
+            raise PermissionError()
+
+        monkeypatch.setattr(pathlib.Path, "exists", lambda x: False)
+        monkeypatch.setattr(pathlib.Path, "mkdir", mkdir_raise)
+
+        with pytest.raises(PermissionError):
+            valid_dir_path("this/is/some/path")
+
 
 class TestValidExistingDirPath:
     def test_dir_path_exists_and_isdir(self, monkeypatch):
@@ -107,20 +123,34 @@ class TestValidExistingPath:
         result = valid_existing_path("this/is/some/path")
         assert type(result) is PosixPath
 
+    def test_existing_path_with_file(self, monkeypatch):
+        monkeypatch.setattr(pathlib.Path, "exists", lambda x: True)
+        monkeypatch.setattr(pathlib.Path, "is_dir", lambda x: False)
+        result = valid_existing_path("this/is/some/file.txt")
+        assert type(result) is PosixPath
+
+    def test_existing_path_expands_user_dir(self, monkeypatch):
+        monkeypatch.setattr(pathlib.Path, "exists", lambda x: True)
+        monkeypatch.setattr(pathlib.Path, "is_dir", lambda x: False)
+        result = valid_existing_path("~/this/is/some/file.txt")
+        assert str(result).startswith(os.path.expanduser("~"))
+
 
 class TestValidPlatforms:
     @pytest.mark.parametrize(
         "platforms",
         [
-            ([Platform.IGXOrinDevIt]),
-            ([Platform.JetsonAgxOrinDevKit]),
-            ([Platform.X64Workstation]),
-            ([Platform.IGXOrinDevIt, Platform.X64Workstation]),
+            ([Platform.Jetson]),
+            ([Platform.IGX_dGPU]),
+            ([Platform.IGX_iGPU]),
+            ([Platform.SBSA]),
+            ([Platform.x86_64]),
+            ([Platform.SBSA, Platform.x86_64]),
             (
                 [
-                    Platform.IGXOrinDevIt,
-                    Platform.X64Workstation,
-                    Platform.JetsonAgxOrinDevKit,
+                    Platform.Jetson,
+                    Platform.IGX_dGPU,
+                    Platform.SBSA,
                 ]
             ),
         ],
@@ -136,12 +166,26 @@ class TestValidPlatforms:
         [
             ("bad-platform"),
             (f"{Platform.IGXOrinDevIt.value},bad-platform"),
-            (f"{Platform.IGXOrinDevIt.value},"),
+            (f"{Platform.IGX_iGPU.value},"),
         ],
     )
     def test_invalid_platforms(self, platforms: str):
         with pytest.raises(argparse.ArgumentTypeError):
             valid_platforms(platforms)
+
+    def test_valid_platforms_case_insensitive(self):
+        # Test that platform strings are case-insensitive
+        result = valid_platforms("JETSON,x86_64")
+        assert result == [Platform.Jetson, Platform.x86_64]
+
+    def test_valid_platforms_whitespace(self):
+        # Test handling of whitespace
+        result = valid_platforms(" jetson , x86_64 ")
+        assert result == [Platform.Jetson, Platform.x86_64]
+
+    def test_valid_platforms_empty_string(self):
+        with pytest.raises(argparse.ArgumentTypeError):
+            valid_platforms("")
 
 
 class TestValidPlatformConfiguration:
@@ -168,6 +212,14 @@ class TestValidPlatformConfiguration:
         with pytest.raises(argparse.ArgumentTypeError):
             valid_platform_config(platforms_config)
 
+    def test_valid_platform_config_case_insensitive(self):
+        result = valid_platform_config("DGPU")
+        assert result == PlatformConfiguration.dGPU
+
+    def test_valid_platform_config_whitespace(self):
+        result = valid_platform_config(" dgpu ")
+        assert result == PlatformConfiguration.dGPU
+
 
 class TestValidSdkType:
     @pytest.mark.parametrize(
@@ -192,3 +244,11 @@ class TestValidSdkType:
     def test_invalid_sdk_type(self, sdk_type: str):
         with pytest.raises(argparse.ArgumentTypeError):
             valid_sdk_type(sdk_type)
+
+    def test_valid_sdk_type_case_insensitive(self):
+        result = valid_sdk_type("HOLOSCAN")
+        assert result == SdkType.Holoscan
+
+    def test_valid_sdk_type_whitespace(self):
+        result = valid_sdk_type(" holoscan ")
+        assert result == SdkType.Holoscan

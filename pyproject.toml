@@ -17,6 +17,7 @@ dynamic = ["version"]
 name = "holoscan-cli"
 
 [tool.poetry]
+requires-poetry = ">=2.0"
 description = "Command line interface for packaging and running Holoscan applications."
 authors = ["NVIDIA"]
 maintainers = ["mocsharp"]
@@ -56,10 +57,6 @@ classifiers = [
     "Topic :: Software Development :: Libraries :: Python Modules",
     "Typing :: Typed",
 ]
-
-# [tool.poetry.build]
-# script = "build.py"
-# generate-setup-file = false
 version = "0.0.0"
 
 [tool.poetry.dependencies]
@@ -112,6 +109,7 @@ addopts = """
 --import-mode=importlib \
 --cov=holoscan_cli ./tests/unit \
 --cov-append \
+--cov-report=term-missing \
 --cov-report lcov:tests/reports/.coverage.lcov \
 --ignore=docs/
 """
@@ -128,7 +126,11 @@ format-jinja = """
         {%- if env["ga"] == 'true' -%}
             {{ serialize_pep440(base)}}
         {%- else -%}
-            {{ serialize_pep440(base, stage="rc", revision=env["rc"] ) }}
+            {%- if 'rc' in env -%}
+                {{ serialize_pep440(base, stage="rc", revision=env["rc"] ) }}
+            {%- else -%}
+                {{ serialize_pep440(base, stage="rc", revision=distance) }}
+            {%- endif -%}
         {%- endif -%}
     {%- else -%}
         {{ serialize_pep440(base, stage="alpha", revision=distance) }}

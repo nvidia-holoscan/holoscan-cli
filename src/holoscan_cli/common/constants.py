@@ -77,19 +77,21 @@ class SDK:
     """
 
     # Platform to architecture mappings
-    PLATFORM_MAPPINGS = {
-        Platform.IGXOrinDevIt: Arch.arm64,
-        Platform.JetsonAgxOrinDevKit: Arch.arm64,
+    PLATFORM_ARCH_MAPPINGS = {
+        Platform.Jetson: Arch.arm64,
+        Platform.IGX_iGPU: Arch.arm64,
+        Platform.IGX_dGPU: Arch.arm64,
         Platform.SBSA: Arch.arm64,
-        Platform.X64Workstation: Arch.amd64,
+        Platform.x86_64: Arch.amd64,
     }
 
     # Values of all platforms supported by the Packager
     PLATFORMS = [
-        Platform.IGXOrinDevIt.value,
-        Platform.JetsonAgxOrinDevKit.value,
+        Platform.Jetson.value,
+        Platform.IGX_iGPU.value,
+        Platform.IGX_dGPU.value,
         Platform.SBSA.value,
-        Platform.X64Workstation.value,
+        Platform.x86_64.value,
     ]
 
     # Values of all platform configurations supported by the Packager
@@ -97,6 +99,14 @@ class SDK:
         PlatformConfiguration.iGPU.value,
         PlatformConfiguration.dGPU.value,
     ]
+
+    INTERNAL_PLATFORM_MAPPINGS = {
+        Platform.Jetson: (Platform.JetsonAgxOrinDevKit, PlatformConfiguration.iGPU),
+        Platform.IGX_iGPU: (Platform.IGXOrinDevIt, PlatformConfiguration.iGPU),
+        Platform.IGX_dGPU: (Platform.IGXOrinDevIt, PlatformConfiguration.dGPU),
+        Platform.SBSA: (Platform.SBSA, PlatformConfiguration.dGPU),
+        Platform.x86_64: (Platform.X64Workstation, PlatformConfiguration.dGPU),
+    }
 
     # Values of SDKs supported by the Packager
     SDKS = [SdkType.Holoscan.value, SdkType.MonaiDeploy.value]
