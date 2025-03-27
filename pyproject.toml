@@ -128,6 +128,8 @@ format-jinja = """
         {%- else -%}
             {%- if 'rc' in env -%}
                 {{ serialize_pep440(base, stage="rc", revision=env["rc"] ) }}
+            {%- elif 'GITHUB_RUN_ID' in env -%}
+                {{ serialize_pep440(base, stage="rc", revision=env['GITHUB_RUN_ID']) }}
             {%- else -%}
                 {{ serialize_pep440(base, stage="rc", revision=distance) }}
             {%- endif -%}

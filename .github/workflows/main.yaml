@@ -113,7 +113,6 @@ jobs:
           file: tests/reports/.coverage.lcov
 
   test-app:
-    # runs-on: ${{ matrix.os }}
     runs-on: linux-amd64-gpu-l4-latest-1
     container:
       image: nvidia/cuda:12.8.1-runtime-ubuntu22.04
