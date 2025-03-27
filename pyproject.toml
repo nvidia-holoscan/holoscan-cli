@@ -128,14 +128,16 @@ format-jinja = """
         {%- else -%}
             {%- if 'rc' in env -%}
                 {{ serialize_pep440(base, stage="rc", revision=env["rc"] ) }}
-            {%- elif 'GITHUB_RUN_ID' in env -%}
-                {{ serialize_pep440(base, stage="rc", revision=env['GITHUB_RUN_ID']) }}
             {%- else -%}
                 {{ serialize_pep440(base, stage="rc", revision=distance) }}
             {%- endif -%}
         {%- endif -%}
     {%- else -%}
-        {{ serialize_pep440(base, stage="alpha", revision=distance) }}
+        {%- if 'GITHUB_RUN_ID' in env -%}
+            {{ serialize_pep440(base, stage="alpha", revision=env['GITHUB_RUN_ID']) }}
+        {%- else -%}
+            {{ serialize_pep440(base, stage="alpha", revision=distance) }}
+        {%- endif -%}
     {%- endif -%}
 """
 
