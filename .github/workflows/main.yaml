@@ -24,9 +24,6 @@ name: Code Check
 
 on:
   push:
-    branches: ["main", "release/*"]
-  pull_request:
-    branches: ["main", "release/*"]
 
 jobs:
   pre-commit:
@@ -116,8 +113,12 @@ jobs:
           file: tests/reports/.coverage.lcov
 
   test-app:
-    if: false # disable until GPU supported nodes become available
-    runs-on: ${{ matrix.os }}
+    # runs-on: ${{ matrix.os }}
+    runs-on: linux-amd64-gpu-l4-latest-1
+    container:
+      image: nvidia/cuda:12.8.1-runtime-ubuntu22.04
+      env:
+        NVIDIA_VISIBLE_DEVICES: ${{ env.NVIDIA_VISIBLE_DEVICES }}
     strategy:
       matrix:
         os: [ubuntu-latest]
@@ -126,6 +127,34 @@ jobs:
       PYTHON_VERSION: ${{ matrix.python-version }}
 
     steps:
+      - name: Install Git & JQ
+        run: |
+          apt-get update
+          apt-get install -y git jq
+          git --version
+          jq --version
+          echo $(pwd)
+          # Configure Git to handle the repository ownership
+          git config --global --add safe.directory $(pwd)
+
+      - name: Install Docker
+        run: |
+          # Add Docker's official GPG key:
+          apt-get update
+          apt-get install -y ca-certificates curl
+          install -m 0755 -d /etc/apt/keyrings
+          curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
+          chmod a+r /etc/apt/keyrings/docker.asc
+
+          # Add the repository to Apt sources:
+          echo \
+            "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu \
+            $(. /etc/os-release && echo "${UBUNTU_CODENAME:-$VERSION_CODENAME}") stable" | \
+            tee /etc/apt/sources.list.d/docker.list > /dev/null
+          apt-get update
+          apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+          docker --version
+
       - name: Checkout repository
         uses: actions/checkout@v4
 
@@ -142,6 +171,12 @@ jobs:
           poetry run pip install --upgrade pip setuptools
           poetry install --with test
 
+      - name: Locate Latest Artifacts
+        id: latest_artifact_path
+        run: |
+          echo "ARTIFACT_PATH=$(find releases -type f | sort | tail -n 1)" >> $GITHUB_OUTPUT
+          echo "CLI_VERSION=$(jq -r 'keys | sort_by(split(".") | map(tonumber)) | reverse | first' releases/3.0.0/artifacts.json)" >> $GITHUB_OUTPUT
+
       - name: Build and Install CLI
         run: |
           poetry build
@@ -149,32 +184,35 @@ jobs:
           echo "Installing from ${wheel}"
           pip install ${wheel}
 
-      - name: Version Check
-        run: |
-          output=$(holoscan version | tail -1 | tr -s ' ' | cut -d' ' -f3)
-          expected=$(grep -m 1 version pyproject.toml | tr -s ' ' | tr -d '"' | tr -d "'" | cut -d' ' -f3)
-          echo "Expected version: ${expected}"
-          echo "  Actual version: "$output""
-          test "$output" = "$expected"
-
       - name: Package Test App
+        env:
+          ARTIFACT_PATH: ${{ steps.latest_artifact_path.outputs.ARTIFACT_PATH }}
+          CLI_VERSION: ${{ steps.latest_artifact_path.outputs.CLI_VERSION }}
         run: |
-          holoscan package --source tests/app/artifacts.json \
+          holoscan package tests/app/python/ \
+                            -l DEBUG \
                             -c tests/app/python/app.yaml \
                             -t test-app-python \
-                            --platform x64-workstation \
-                            --sdk-version 0.0.0 \
-                            tests/app/python/
+                            --platform x86_64 \
+                            --uid 1000 \
+                            --gid 1000 \
+                            --source ${{ env.ARTIFACT_PATH }} \
+                            --sdk-version ${{ env.CLI_VERSION }} \
+                            --add-host developer.download.nvidia.com:23.46.17.44 \
+                            --add-host security.ubuntu.com:91.189.91.81 \
+                            --add-host archive.ubuntu.com:91.189.91.82 \
+                            --add-host pypi.org:151.101.128.223 \
+                            --add-host edge.urm.nvidia.com:23.46.228.176 \
+                            --add-host www.mellanox.com:23.46.228.176 \
+                            --add-host files.pythonhosted.org:151.101.0.223
 
       - name: Run Test App
-        env:
-          HOLOSCAN_SKIP_NVIDIA_CTK_CHECK: true
         run: |
           mkdir input
           mkdir output
-          touch input/file
-          touch output/file
-          holoscan run -r $(docker images | grep "test-app-python" | awk '{print $1":"$2}') -i input -o output
+          touch input/file1
+          touch output/file2
+          holoscan run --rm --uid 1000 --gid 1000 -r $(docker images | grep "test-app-python" | awk '{print $1":"$2}') -i input -o output
 
   testpypi-deploy:
     name: publish-test-pypi

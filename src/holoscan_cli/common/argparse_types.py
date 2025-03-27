@@ -15,7 +15,6 @@
 import argparse
 import os
 from pathlib import Path
-
 from .constants import SDK
 from .enum_types import Platform, PlatformConfiguration, SdkType
 
@@ -155,3 +154,18 @@ def valid_sdk_type(sdk_str: str) -> SdkType:
         raise argparse.ArgumentTypeError(f"{sdk_str} is not a valid option for --sdk.")
 
     return SdkType(sdk_str)
+
+
+def validate_host_ip(host_ip: str) -> str:
+    """Helper type checking and type converting method for ArgumentParser.add_argument
+    to convert check valid host:ip format.
+
+    Args:
+        host_ip: host ip string
+    """
+
+    host, ip = host_ip.split(":")
+    if host == "" or ip == "":
+        raise argparse.ArgumentTypeError(f"Invalid valid for --add-host: '{host_ip}'")
+
+    return host_ip
