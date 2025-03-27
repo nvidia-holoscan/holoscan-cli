@@ -183,6 +183,13 @@ jobs:
           echo "Installing from ${wheel}"
           pip install ${wheel}
 
+      - name: Restore cached Build Cache
+        id: cache-build-cache-restore
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.holoscan_build_cache
+          key: test-app-cache
+
       - name: Package Test App
         env:
           ARTIFACT_PATH: ${{ steps.latest_artifact_path.outputs.ARTIFACT_PATH }}
@@ -212,6 +219,13 @@ jobs:
           touch input/file1
           touch output/file2
           holoscan run --rm --uid 1000 --gid 1000 -r $(docker images | grep "test-app-python" | awk '{print $1":"$2}') -i input -o output
+
+      - name: Save Build Cache
+        id: cache-build-cache-save
+        uses: actions/cache/save@v4
+        with:
+          path: ~/.holoscan_build_cache
+          key: test-app-cache
 
   testpypi-deploy:
     name: publish-test-pypi
