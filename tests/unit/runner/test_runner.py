@@ -109,6 +109,7 @@ class TestRunApp:
             terminal=False,
             device=None,
             shm_size=None,
+            rm=False,
         )
 
         app_info = {"app": "test"}
@@ -157,6 +158,7 @@ class TestRunApp:
             terminal=False,
             device=None,
             shm_size=None,
+            rm=False,
         )
 
         app_info = {"app": "test"}

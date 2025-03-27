@@ -121,6 +121,7 @@ def _run_app(args: Namespace, app_info: dict, pkg_info: dict):
     worker_address: Optional[str] = args.worker_address if args.worker_address else None
     render: bool = args.render
     user: str = f"{args.uid}:{args.gid}"
+    remove: bool = args.rm
     hostname: Optional[str] = "driver" if driver else None
     terminal: bool = args.terminal
     platform_config: str = pkg_info.get("platformConfig")
@@ -174,6 +175,7 @@ def _run_app(args: Namespace, app_info: dict, pkg_info: dict):
         platform_config,
         shared_memory_size,
         args.uid == 0,
+        remove,
     )
 
 
@@ -266,10 +268,7 @@ def _pkg_specific_dependency_verification(pkg_info: dict) -> bool:
     Returns:
         True if all dependencies are satisfied, otherwise False.
     """
-    if (
-        os.path.exists("/.dockerenv")
-        or os.environ.get("HOLOSCAN_SKIP_NVIDIA_CTK_CHECK") is not None
-    ):
+    if os.path.exists("/.dockerenv"):
         logger.info("--> Skipping nvidia-ctk check inside Docker...\n")
         return True
 

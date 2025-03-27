@@ -292,6 +292,7 @@ class TestDockerRun:
                         "shm_size": "1GB",
                     },
                 )()
+                self.state = type("State", (), {"exit_code": 0})()
 
             def start(self, attach=False, stream=False):
                 if stream:
@@ -372,6 +373,7 @@ class TestDockerRun:
             platform_config=PlatformConfiguration.dGPU.value,
             shared_memory_size="1GB",
             is_root=False,
+            remove=False,
         )
 
     def test_container_run_with_igpu(
@@ -415,6 +417,7 @@ class TestDockerRun:
             platform_config=PlatformConfiguration.iGPU.value,
             shared_memory_size="1GB",
             is_root=False,
+            remove=False,
         )
 
     def test_container_run_with_render(
@@ -467,6 +470,7 @@ class TestDockerRun:
             platform_config=PlatformConfiguration.dGPU.value,
             shared_memory_size="1GB",
             is_root=False,
+            remove=False,
         )
 
     def test_container_run_with_terminal(
@@ -510,6 +514,7 @@ class TestDockerRun:
             platform_config=PlatformConfiguration.dGPU.value,
             shared_memory_size="1GB",
             is_root=False,
+            remove=False,
         )
 
     def test_container_run_gpu_resource_error(
@@ -550,6 +555,7 @@ class TestDockerRun:
                 platform_config=PlatformConfiguration.dGPU.value,
                 shared_memory_size="1GB",
                 is_root=False,
+                remove=False,
             )
         assert "Available GPUs (1) are less than required (2)" in str(exc_info.value)
 
@@ -601,4 +607,5 @@ class TestDockerRun:
             platform_config=PlatformConfiguration.dGPU.value,
             shared_memory_size="1GB",
             is_root=False,
+            remove=False,
         )

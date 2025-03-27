@@ -115,6 +115,7 @@ class TestContainerBuilder:
             parameters.sdk = SdkType.Holoscan
             parameters.models = None
             parameters.docs = None
+            parameters.add_hosts = ["domain:ip", "domain2:ip2"]
             return parameters
 
         def test_basic_module(
@@ -127,9 +128,43 @@ class TestContainerBuilder:
                     return False
                 return True
 
+            def build_docker_image(**build_args):
+                assert build_args["builder"] == "builder"
+                assert build_args["add_hosts"] == {"domain": "ip", "domain2": "ip2"}
+                assert build_args["builder"] == "builder"
+                assert build_args["cache"] is True
+                assert build_args["cache_from"] == [
+                    {"type": "local", "src": pathlib.Path("~/.holoscan_build_cache")}
+                ]
+                assert build_args["cache_to"] == {
+                    "type": "local",
+                    "dest": pathlib.Path("~/.holoscan_build_cache"),
+                }
+                assert isinstance(build_args["context_path"], str)
+                assert build_args["file"].endswith("/Dockerfile")
+                assert build_args["platforms"] == ["linux/amd64"]
+                assert build_args["progress"] == "auto"
+                assert build_args["pull"] is True
+                assert build_args["tags"] == [
+                    "image-x64-workstation-dgpu-linux-amd64:tag"
+                ]
+                assert build_args["load"] is True
+                assert build_args["build_args"] == {
+                    "UID": os.getuid(),
+                    "GID": os.getgid(),
+                    "UNAME": "holoscan",
+                    "GPU_TYPE": "dgpu",
+                }
+
             monkeypatch.setattr(os.path, "isfile", lambda x: True)
             monkeypatch.setattr(os.path, "isdir", lambda x: True)
             monkeypatch.setattr(os.path, "exists", mock_file_exists)
+
+            monkeypatch.setattr(
+                holoscan_cli.packager.container_builder,
+                "build_docker_image",
+                build_docker_image,
+            )
 
             build_parameters = self._get_build_parameters()
             platform_parameters = PlatformParameters(
@@ -176,6 +211,7 @@ class TestContainerBuilder:
             parameters.models = None
             parameters.docs = None
             parameters.tarball_output = pathlib.Path("/tarball/")
+            parameters.add_hosts = ["domain:ip"]
             return parameters
 
         def test_basic_file(
@@ -187,6 +223,34 @@ class TestContainerBuilder:
         ):
             """Test building a basic Python file application"""
 
+            def build_docker_image(**build_args):
+                assert build_args["builder"] == "builder"
+                assert build_args["add_hosts"] == {"domain": "ip"}
+                assert build_args["builder"] == "builder"
+                assert build_args["cache"] is True
+                assert build_args["cache_from"] == [
+                    {"type": "local", "src": pathlib.Path("~/.holoscan_build_cache")}
+                ]
+                assert build_args["cache_to"] == {
+                    "type": "local",
+                    "dest": pathlib.Path("~/.holoscan_build_cache"),
+                }
+                assert isinstance(build_args["context_path"], str)
+                assert build_args["file"].endswith("/Dockerfile")
+                assert build_args["platforms"] == ["linux/amd64"]
+                assert build_args["progress"] == "auto"
+                assert build_args["pull"] is True
+                assert build_args["tags"] == [
+                    "image-x64-workstation-dgpu-linux-amd64:tag"
+                ]
+                assert build_args["load"] is True
+                assert build_args["build_args"] == {
+                    "UID": os.getuid(),
+                    "GID": os.getgid(),
+                    "UNAME": "holoscan",
+                    "GPU_TYPE": "dgpu",
+                }
+
             def mock_file_exists(path):
                 if path == "/app/requirements.txt":
                     return False
@@ -195,6 +259,11 @@ class TestContainerBuilder:
             monkeypatch.setattr(os.path, "isfile", lambda x: True)
             monkeypatch.setattr(os.path, "isdir", lambda x: False)
             monkeypatch.setattr(os.path, "exists", lambda x: mock_file_exists)
+            monkeypatch.setattr(
+                holoscan_cli.packager.container_builder,
+                "build_docker_image",
+                build_docker_image,
+            )
 
             build_parameters = self._get_build_parameters()
             build_parameters.application = pathlib.Path("/app/script.py")
@@ -257,12 +326,47 @@ class TestContainerBuilder:
             parameters.models = None
             parameters.docs = None
             parameters.tarball_output = pathlib.Path("/tarball/")
+            parameters.add_hosts = ["domain:ip"]
             return parameters
 
         def test_basic_cpp_project(
             self, mock_fs_operations, mock_docker_operations, _fs_mocks, monkeypatch
         ):
             """Test building a basic C++ CMake project"""
+
+            def build_docker_image(**build_args):
+                assert build_args["builder"] == "builder"
+                assert build_args["add_hosts"] == {"domain": "ip"}
+                assert build_args["builder"] == "builder"
+                assert build_args["cache"] is True
+                assert build_args["cache_from"] == [
+                    {"type": "local", "src": pathlib.Path("~/.holoscan_build_cache")}
+                ]
+                assert build_args["cache_to"] == {
+                    "type": "local",
+                    "dest": pathlib.Path("~/.holoscan_build_cache"),
+                }
+                assert isinstance(build_args["context_path"], str)
+                assert build_args["file"].endswith("/Dockerfile")
+                assert build_args["platforms"] == ["linux/amd64"]
+                assert build_args["progress"] == "auto"
+                assert build_args["pull"] is True
+                assert build_args["tags"] == [
+                    "image-x64-workstation-dgpu-linux-amd64:tag"
+                ]
+                assert build_args["load"] is True
+                assert build_args["build_args"] == {
+                    "UID": os.getuid(),
+                    "GID": os.getgid(),
+                    "UNAME": "holoscan",
+                    "GPU_TYPE": "dgpu",
+                }
+
+            monkeypatch.setattr(
+                holoscan_cli.packager.container_builder,
+                "build_docker_image",
+                build_docker_image,
+            )
 
             build_parameters = self._get_build_parameters()
             platform_parameters = PlatformParameters(
@@ -315,6 +419,7 @@ class TestContainerBuilder:
             parameters.models = None
             parameters.docs = None
             parameters.tarball_output = pathlib.Path("/tarball/")
+            parameters.add_hosts = ["domain:ip"]
 
             assert parameters.application_type == ApplicationType.Binary
             return parameters
@@ -323,9 +428,43 @@ class TestContainerBuilder:
             self, mock_fs_operations, mock_docker_operations, monkeypatch
         ):
             """Test building a basic binary application"""
+
+            def build_docker_image(**build_args):
+                assert build_args["builder"] == "builder"
+                assert build_args["add_hosts"] == {"domain": "ip"}
+                assert build_args["builder"] == "builder"
+                assert build_args["cache"] is True
+                assert build_args["cache_from"] == [
+                    {"type": "local", "src": pathlib.Path("~/.holoscan_build_cache")}
+                ]
+                assert build_args["cache_to"] == {
+                    "type": "local",
+                    "dest": pathlib.Path("~/.holoscan_build_cache"),
+                }
+                assert isinstance(build_args["context_path"], str)
+                assert build_args["file"].endswith("/Dockerfile")
+                assert build_args["platforms"] == ["linux/amd64"]
+                assert build_args["progress"] == "auto"
+                assert build_args["pull"] is True
+                assert build_args["tags"] == [
+                    "image-x64-workstation-dgpu-linux-amd64:tag"
+                ]
+                assert build_args["load"] is True
+                assert build_args["build_args"] == {
+                    "UID": os.getuid(),
+                    "GID": os.getgid(),
+                    "UNAME": "holoscan",
+                    "GPU_TYPE": "dgpu",
+                }
+
             monkeypatch.setattr(os.path, "isfile", lambda x: True)
             monkeypatch.setattr(os.path, "isdir", lambda x: False)
             monkeypatch.setattr(os, "access", lambda x, y: True)
+            monkeypatch.setattr(
+                holoscan_cli.packager.container_builder,
+                "build_docker_image",
+                build_docker_image,
+            )
 
             build_parameters = self._get_build_parameters()
             platform_parameters = PlatformParameters(

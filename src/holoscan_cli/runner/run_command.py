@@ -92,6 +92,14 @@ def create_run_parser(
         "between 10000 and 32767 that is not currently in use.",
     )
 
+    parser.add_argument(
+        "--rm",
+        dest="rm",
+        action="store_true",
+        default=False,
+        help="remove the container after it exits.",
+    )
+
     advanced_group = parser.add_argument_group(title="advanced run options")
 
     advanced_group.add_argument(
