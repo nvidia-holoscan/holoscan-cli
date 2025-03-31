@@ -115,7 +115,7 @@ jobs:
   test-app:
     runs-on: linux-amd64-gpu-l4-latest-1
     container:
-      image: nvidia/cuda:12.8.1-runtime-ubuntu22.04
+      image: ghcr.io/nvidia-holoscan/holoscan-cli-build:cuda126-u2204
       env:
         NVIDIA_VISIBLE_DEVICES: ${{ env.NVIDIA_VISIBLE_DEVICES }}
     strategy:
@@ -126,33 +126,17 @@ jobs:
       PYTHON_VERSION: ${{ matrix.python-version }}
 
     steps:
-      - name: Install Git & JQ
+      - name: Verify and configure Git
         run: |
-          apt-get update
-          apt-get install -y git jq
+          command -v git
+          command -v jq
+          command -v docker
           git --version
           jq --version
+          docker --version
           echo $(pwd)
           # Configure Git to handle the repository ownership
           git config --global --add safe.directory $(pwd)
-
-      - name: Install Docker
-        run: |
-          # Add Docker's official GPG key:
-          apt-get update
-          apt-get install -y ca-certificates curl
-          install -m 0755 -d /etc/apt/keyrings
-          curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
-          chmod a+r /etc/apt/keyrings/docker.asc
-
-          # Add the repository to Apt sources:
-          echo \
-            "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu \
-            $(. /etc/os-release && echo "${UBUNTU_CODENAME:-$VERSION_CODENAME}") stable" | \
-            tee /etc/apt/sources.list.d/docker.list > /dev/null
-          apt-get update
-          apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
-          docker --version
 
       - name: Checkout repository
         uses: actions/checkout@v4
