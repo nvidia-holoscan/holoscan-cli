@@ -106,7 +106,7 @@ jobs:
           path: tests/reports/.coverage.lcov
 
       - name: Upload Coveralls Report
-        uses: coverallsapp/github-action@v2.3.4
+        uses: coverallsapp/github-action@v2.3.6
         if: ${{ matrix.python.coveralls }}
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
