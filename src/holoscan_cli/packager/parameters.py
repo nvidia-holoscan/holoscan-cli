@@ -16,7 +16,7 @@ import logging
 import os
 import platform
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, List, Optional
 
 from ..common.constants import SDK, Constants, DefaultValues
 from ..common.dockerutils import parse_docker_image_name_and_tag
@@ -205,7 +205,7 @@ class PlatformBuildResults:
     def __init__(self, parameters: PlatformParameters):
         self._parameters = parameters
         self._docker_tag: Optional[str] = None
-        self._tarball_filenaem: Optional[str] = None
+        self._tarball_filename: Optional[str] = None
         self._succeeded = False
         self._error: Optional[str] = None
 
@@ -230,12 +230,12 @@ class PlatformBuildResults:
         self._docker_tag = value
 
     @property
-    def tarball_filenaem(self) -> Optional[str]:
-        return self._tarball_filenaem
+    def tarball_filename(self) -> Optional[str]:
+        return self._tarball_filename
 
-    @tarball_filenaem.setter
-    def tarball_filenaem(self, value: Optional[str]):
-        self._tarball_filenaem = value
+    @tarball_filename.setter
+    def tarball_filename(self, value: Optional[str]):
+        self._tarball_filename = value
 
     @property
     def succeeded(self) -> bool:
@@ -278,7 +278,7 @@ class PackageBuildParameters:
         self._data["cmake_args"] = ""
         self._data["includes"] = []
         self._data["additional_lib_paths"] = ""
-
+        self._data["add_hosts"] = []
         self._data["application_directory"] = None
         self._data["application_type"] = None
         self._data["application"] = None
@@ -528,6 +528,14 @@ class PackageBuildParameters:
     @monai_deploy_app_sdk_version.setter
     def monai_deploy_app_sdk_version(self, value: str):
         self._data["monai_deploy_app_sdk_version"] = value
+
+    @property
+    def add_hosts(self) -> List[str]:
+        return self._data["add_hosts"]
+
+    @add_hosts.setter
+    def add_hosts(self, value: List[str]):
+        self._data["add_hosts"] = value
 
     @property
     def includes(self) -> str:

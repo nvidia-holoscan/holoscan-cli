@@ -88,7 +88,6 @@ class BuilderBase:
         Returns:
             PlatformBuildResults: build results
         """
-        self.print_build_info(platform_parameters)
         builder = create_and_get_builder(Constants.LOCAL_BUILDX_BUILDER_NAME)
 
         build_result = PlatformBuildResults(platform_parameters)
@@ -117,9 +116,15 @@ class BuilderBase:
             "tags": [platform_parameters.tag],
         }
 
+        if self._build_parameters.add_hosts:
+            builds["add_hosts"] = {}
+            for host in self._build_parameters.add_hosts:
+                host_name, host_ip = host.split(":")
+                builds["add_hosts"][host_name] = host_ip
+
         export_to_tar_ball = False
         if self._build_parameters.tarball_output is not None:
-            build_result.tarball_filenaem = str(
+            build_result.tarball_filename = str(
                 self._build_parameters.tarball_output
                 / f"{platform_parameters.tag}{Constants.TARBALL_FILE_EXTENSION}"
             ).replace(":", "-")
@@ -134,7 +139,7 @@ class BuilderBase:
                 builds["output"] = {
                     # type=oci cannot be loaded by docker: https://github.com/docker/buildx/issues/59
                     "type": "docker",
-                    "dest": build_result.tarball_filenaem,
+                    "dest": build_result.tarball_filename,
                 }
             else:
                 build_result.succeeded = False
@@ -155,21 +160,24 @@ class BuilderBase:
             f"Building Holoscan Application Package: tag={platform_parameters.tag}"
         )
 
+        self.print_build_info(platform_parameters)
+
         try:
             build_docker_image(**builds)
             build_result.succeeded = True
             if export_to_tar_ball:
                 try:
                     self._logger.info(
-                        f"Saving {platform_parameters.tag} to {build_result.tarball_filenaem}..."
+                        f"Saving {platform_parameters.tag} to {build_result.tarball_filename}..."
                     )
                     docker_export_tarball(
-                        build_result.tarball_filenaem, platform_parameters.tag
+                        build_result.tarball_filename, platform_parameters.tag
                     )
                 except Exception as ex:
                     build_result.error = f"Error saving tarball: {ex}"
                     build_result.succeeded = False
-        except Exception:
+        except Exception as e:
+            print(e)
             build_result.succeeded = False
             build_result.error = (
                 "Error building image: see Docker output for additional details."
@@ -378,18 +386,27 @@ class PythonAppBuilder(BuilderBase):
         os.makedirs(pip_folder, exist_ok=True)
         pip_requirements_path = os.path.join(pip_folder, "requirements.txt")
 
-        with open(pip_requirements_path, "w") as requirements_file:
-            # Use local requirements.txt packages if provided, otherwise use sdk provided packages
-            if self._build_parameters.requirements_file_path is not None:
-                with open(self._build_parameters.requirements_file_path) as lr:
-                    for line in lr:
-                        requirements_file.write(line)
-                requirements_file.writelines("\n")
+        # Build requirements content first
+        requirements_content = []
+        if self._build_parameters.requirements_file_path is not None:
+            with open(self._build_parameters.requirements_file_path) as lr:
+                requirements_content.extend(lr)
+            requirements_content.append("")
 
-            if self._build_parameters.pip_packages:
-                requirements_file.writelines(
-                    "\n".join(self._build_parameters.pip_packages)
-                )
+        if self._build_parameters.pip_packages:
+            requirements_content.extend(self._build_parameters.pip_packages)
+
+        # Write all content at once
+        with open(pip_requirements_path, "w") as requirements_file:
+            requirements_file.writelines(requirements_content)
+            self._logger.debug(
+                "================ Begin requirements.txt ================"
+            )
+            for req in requirements_content:
+                self._logger.debug(f"  {req.strip()}")
+            self._logger.debug(
+                "================ End requirements.txt =================="
+            )
 
     def _copy_sdk_file(self, sdk_file: Optional[Path]):
         if sdk_file is not None and os.path.isfile(sdk_file):

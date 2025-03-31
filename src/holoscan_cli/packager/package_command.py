@@ -19,6 +19,7 @@ from argparse import ArgumentParser, _SubParsersAction
 from packaging.version import Version
 
 from ..common.argparse_types import (
+    valid_host_ip,
     valid_dir_path,
     valid_existing_dir_path,
     valid_existing_path,
@@ -84,6 +85,13 @@ def create_package_parser(
     )
 
     advanced_group = parser.add_argument_group(title="advanced build options")
+    advanced_group.add_argument(
+        "--add-host",
+        action="append",
+        dest="add_hosts",
+        type=valid_host_ip,
+        help="Add a custom host-to-IP mapping (format: host:ip).",
+    )
     advanced_group.add_argument(
         "--base-image",
         type=str,

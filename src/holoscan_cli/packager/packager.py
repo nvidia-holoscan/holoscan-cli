@@ -103,7 +103,7 @@ def _package_application(args: Namespace):
                     f"""\nPlatform: {result.parameters.platform.value}/{result.parameters.platform_config.value}
     Status:     Succeeded
     Docker Tag: {result.docker_tag if result.docker_tag is not None else "N/A"}
-    Tarball:    {result.tarball_filenaem}"""  # noqa: E501
+    Tarball:    {result.tarball_filename}"""  # noqa: E501
                 )
             else:
                 print(

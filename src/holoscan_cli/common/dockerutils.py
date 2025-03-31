@@ -172,6 +172,7 @@ def docker_run(
     platform_config: str,
     shared_memory_size: str = "1GB",
     is_root: bool = False,
+    remove: bool = False,
 ):
     """Creates and runs a Docker container
 
@@ -351,6 +352,7 @@ def docker_run(
             ulimits,
             devices,
             group_adds,
+            remove,
         )
     else:
         _start_container(
@@ -368,6 +370,7 @@ def docker_run(
             ulimits,
             devices,
             group_adds,
+            remove,
         )
 
 
@@ -386,6 +389,7 @@ def _start_container(
     ulimits,
     devices,
     group_adds,
+    remove,
 ):
     container = docker.container.create(
         image_name,
@@ -394,7 +398,7 @@ def _start_container(
         hostname=name,
         name=name,
         networks=[network],
-        remove=True,
+        remove=False,
         shm_size=shared_memory_size,
         user=user,
         volumes=volumes,
@@ -441,7 +445,18 @@ def _start_container(
             except Exception:
                 print(str(log[1]))
 
-    logger.info(f"Container '{container_name}'({container_id}) exited.")
+    exit_code = container.state.exit_code
+    logger.info(
+        f"Container '{container_name}'({container_id}) exited with code {exit_code}."
+    )
+
+    if remove:
+        container.remove()
+
+    if exit_code != 0:
+        raise RuntimeError(
+            f"Container '{container_name}'({container_id}) exited with code {exit_code}."
+        )
 
 
 def _enter_terminal(
@@ -457,6 +472,7 @@ def _enter_terminal(
     ulimits,
     devices,
     group_adds,
+    remove,
 ):
     print("\n\nEntering terminal...")
     print(
@@ -475,7 +491,7 @@ def _enter_terminal(
         interactive=True,
         name=name,
         networks=[network],
-        remove=True,
+        remove=remove,
         shm_size=shared_memory_size,
         tty=True,
         user=user,

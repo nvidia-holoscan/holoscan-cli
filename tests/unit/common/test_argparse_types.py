@@ -25,6 +25,7 @@ from holoscan_cli.common.argparse_types import (
     valid_platform_config,
     valid_platforms,
     valid_sdk_type,
+    valid_host_ip,
 )
 from holoscan_cli.common.enum_types import Platform, PlatformConfiguration, SdkType
 
@@ -252,3 +253,65 @@ class TestValidSdkType:
     def test_valid_sdk_type_whitespace(self):
         result = valid_sdk_type(" holoscan ")
         assert result == SdkType.Holoscan
+
+
+class TestValidHostIp:
+    """Test cases for valid_host_ip function in argparse_types.py."""
+
+    def test_valid_host_ip(self) -> None:
+        """Test valid_host_ip with valid host:ip format."""
+        # Arrange
+        valid_inputs = [
+            "hostname:127.0.0.1",
+            "example.com:192.168.1.1",
+            "server-01:10.0.0.1",
+        ]
+
+        # Act & Assert
+        for host_ip in valid_inputs:
+            result = valid_host_ip(host_ip)
+            assert result == host_ip
+
+    def test_empty_host(self) -> None:
+        """Test valid_host_ip with empty host part."""
+        # Arrange
+        invalid_input = ":127.0.0.1"
+
+        # Act & Assert
+        with pytest.raises(argparse.ArgumentTypeError) as exc_info:
+            valid_host_ip(invalid_input)
+
+        assert "Invalid valid for --add-host" in str(exc_info.value)
+
+    def test_empty_ip(self) -> None:
+        """Test valid_host_ip with empty IP part."""
+        # Arrange
+        invalid_input = "hostname:"
+
+        # Act & Assert
+        with pytest.raises(argparse.ArgumentTypeError) as exc_info:
+            valid_host_ip(invalid_input)
+
+        assert "Invalid valid for --add-host" in str(exc_info.value)
+
+    def test_no_colon_separator(self) -> None:
+        """Test valid_host_ip with no colon separator."""
+        # Arrange
+        invalid_input = "hostname127.0.0.1"
+
+        # Act & Assert
+        with pytest.raises(ValueError) as exc_info:
+            valid_host_ip(invalid_input)
+
+        assert "not enough values to unpack" in str(exc_info.value)
+
+    def test_multiple_colons(self) -> None:
+        """Test valid_host_ip with multiple colons."""
+        # Arrange
+        invalid_input = "hostname:127.0.0.1:8080"
+
+        # Act & Assert
+        with pytest.raises(ValueError) as exc_info:
+            valid_host_ip(invalid_input)
+
+        assert "too many values to unpack" in str(exc_info.value)
