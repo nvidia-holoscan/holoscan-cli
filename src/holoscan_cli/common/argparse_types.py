@@ -156,7 +156,7 @@ def valid_sdk_type(sdk_str: str) -> SdkType:
     return SdkType(sdk_str)
 
 
-def validate_host_ip(host_ip: str) -> str:
+def valid_host_ip(host_ip: str) -> str:
     """Helper type checking and type converting method for ArgumentParser.add_argument
     to convert check valid host:ip format.
 
