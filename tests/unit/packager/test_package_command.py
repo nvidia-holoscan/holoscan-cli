@@ -421,3 +421,54 @@ class TestPackageCommand:
         assert args.no_cache is False
         assert args.includes == []
         assert str(args.build_cache) == os.path.expanduser("~/.holoscan_build_cache")
+
+    def test_input_data_parameter(
+        self,
+        parser: argparse.ArgumentParser,
+        valid_args: Dict[str, Any],
+        temp_dir: Path,
+    ) -> None:
+        """
+        Test the --input-data parameter.
+
+        Args:
+            parser: The argument parser to test
+            valid_args: Dictionary of valid arguments
+            temp_dir: Temporary directory path
+        """
+        # Create input data directory
+        input_data_dir = temp_dir / "input_data"
+        input_data_dir.mkdir()
+        (input_data_dir / "sample.dat").touch()
+
+        cmd_args = [
+            valid_args["application"],
+            "--config",
+            valid_args["config"],
+            "--platform",
+            valid_args["platform"],
+            "--tag",
+            valid_args["tag"],
+            "--input-data",
+            str(input_data_dir),
+        ]
+
+        args = parser.parse_args(cmd_args)
+        assert str(args.input_data) == str(input_data_dir)
+
+        # Test with non-existent directory (should still pass as valid_dir_path doesn't check existence)
+        non_existent_dir = temp_dir / "non_existent"
+        cmd_args = [
+            valid_args["application"],
+            "--config",
+            valid_args["config"],
+            "--platform",
+            valid_args["platform"],
+            "--tag",
+            valid_args["tag"],
+            "--input-data",
+            str(non_existent_dir),
+        ]
+
+        args = parser.parse_args(cmd_args)
+        assert str(args.input_data) == str(non_existent_dir)

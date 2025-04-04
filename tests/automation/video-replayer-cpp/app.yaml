@@ -53,6 +53,7 @@ holoviz:
       type: color
       opacity: 1.0
       priority: 0
+  headless: true
 
 event_based_scheduler:
   worker_thread_number: 3

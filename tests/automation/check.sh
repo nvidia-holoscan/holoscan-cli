@@ -40,11 +40,11 @@ then
     status=-1
 fi
 
-if ! docker login nvcr.io < /dev/null >& /dev/null
-then
-    echo "Please login to nvcr.io. For example:"
-    echo "$ docker login nvcr.io"
-    status=-1
-fi
+# if ! docker login nvcr.io < /dev/null >& /dev/null
+# then
+#     echo "Please login to nvcr.io. For example:"
+#     echo "$ docker login nvcr.io"
+#     status=-1
+# fi
 
 exit $status
