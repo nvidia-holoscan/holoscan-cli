@@ -70,6 +70,7 @@ detect_postprocessor:
 holoviz:  # Holoviz
   width: 1920
   height: 1080
+  headless: true
 
 recorder_format_converter:
   in_dtype: "rgba8888"

@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# SPDX-FileCopyrightText: Copyright (c) 2023-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -24,12 +24,18 @@ then
     exit 1
 fi
 
-version=
+ci_package_args=${ci_package_args:-}
+ci_run_args=${ci_run_args:-}
+
 test=$(realpath $1)
 repository=""
 path=""
 language=""
+tmp_dir=""
+tag=""
 
+artifact_source_path=${ARTIFACT_PATH:-}
+version=${VERSION:-}
 
 #===============================================================================
 # Logging utils
@@ -154,7 +160,29 @@ fatal() {
         kill -INT $$  # kill the current process instead of exit in shell environment.
     fi
 }
+
 #===============================================================================
+
+# Parameters
+#  $1 Exit Code
+#  $2 Error Message
+#  $3 Exit if true
+#  $4 Function to call if exit code is not 0
+check_exit_code() {
+    if [[ $1 -ne 0 ]]
+    then
+        error "$2"
+        if [ -n "$4" ]
+        then
+            $4
+        fi
+        if [ -n "$3" -a "$3" -eq 1 ]
+        then
+            exit $1
+        fi
+    fi
+}
+
 # Executes a specified command via bash shell
 # Parameters
 #  $@ accept any number of parameters
@@ -185,59 +213,60 @@ get_config() {
 
 # Run the HAP container using Holoscan CLI Runner
 # Parameters
-#  $1 Input Data Directory Path
-#  $2 Container Tag Prefix
+#  $1 Container Tag Prefix
 run_application() {
     info "===== Run Application ====="
-    local data_dir=$1
-    info "Starting application with data directory: $data_dir"
     run_args=$(get_config '.run.args')
-    tag_prefix=$2
+    tag_prefix=$1
     local tag=$(docker images | grep "$tag_prefix" | awk '{print $1":"$2}' | head -n 1)
     info "Running application"
     info "  Tag: $tag"
     run_command xhost +local:docker
-    run_command holoscan run -l DEBUG $run_args $tag --input $data_dir
-
-    if [[ $? -ne 0 ]]
-    then
-        error "Failed to run application"
-        exit 1
-    fi
+    run_command holoscan run -l DEBUG $run_args $tag $ci_run_args
+    check_exit_code $? "Failed to run the application" 1 clean_up
 }
 
 # Download user defined data.
 #  NOTE: Only NGC is supported at the moment: the script parses the JSON returned by the NGC files API.
 #  E.g. https://api.ngc.nvidia.com/v2/resources/org/nvidia/team/clara-holoscan/holoscan_racerx_video/20231009/files
 # Parameters
-#  $1 Working directory path
-#  $2 Path to save the data to
+#  $1 Path to save the data to
 download_data() {
     info "===== Download Data ====="
     local source=$(get_config '.data.source')
     local target=$(get_config '.data.dirname')
+    echo "Downloading data from $source to $target"
+
+    ## return if no data to download
+    if [ -z "$source" ]
+    then
+        info "No data to download"
+        return
+    fi
 
     if [[ "$source" != "local-holohub" ]]
     then
-        local tmp_dir=$1
-        local data_dir=$2
+        local data_dir=$1
         if [ -v target ]
         then
             data_dir="$data_dir/$target"
         fi
         [[ ! -d "$data_dir" ]] && run_command mkdir -p $data_dir
 
-        for url in $(curl $source | jq -r .urls.[])
-            do
-                info "Downloading $url"
-                run_command curl -S -# -LO --output-dir "$data_dir" "$url"
-                if [[ $? -ne 0 ]]
-                then
-                    error "Failed to download test data"
-                    exit 1
-                fi
-            done
-        tree $data_dir
+        local json_response=$(curl -s $source)
+
+        local urls=($(echo "$json_response" | jq -r '.urls[]'))
+
+        # Download each file with its corresponding name
+        for i in "${!urls[@]}"; do
+            local url="${urls[$i]}"
+            local filepath=$(echo "$json_response" | jq -r ".filepath[$i]")
+            info "Downloading $filepath from $url"
+            run_command curl -S -# -L "$url" -o "$data_dir/$filepath"
+            check_exit_code $? "Failed to download test data: $filepath" 1 clean_up
+        done
+        run_command ls -l $data_dir
+        check_exit_code $? "Failed to list data directory"
     fi
 }
 
@@ -253,26 +282,75 @@ get_host_gpu() {
     fi
 }
 
+# Parameters
+#  $1 Container Name
+#  $2 Volume Name
+clean_up_holohub_build() {
+    info "Cleaning up Holohub build"
+    run_command docker container kill $1
+    run_command docker container rm -f $1
+    run_command docker volume rm -f $2
+}
+
 # Build Holohub applications using Holohub's devcontainer script.
 # Since the devcontainer script embeds the version of the HSDK container to use, we must explicitly set the base image based on the version of the running CLI.
+# Next, we create a Docker volume to store the Holohub source code because we cannot a new container with a mount inside a container, when running on GitHub Actions.
+# Finally, we run the build command inside the container.
+#
 # Parameters:
 #  $1 Working Directory
 #  $2 Application Name
 #  $3 Application Language
+#  $4 Data Directory
 build_holohub_app() {
     info "===== Build Holohub Application ====="
     pushd $1
 
     local platform_config=$(get_host_gpu)
-    local build_image=$(jq -r --arg HSDKVERSION $version --arg PFC $platform_config '.[$HSDKVERSION].holoscan."build-images".[$PFC]."x64-workstation"' "$SCRIPT_DIR/artifacts.json")
-    info "Using base image $build_image"
-    run_command ./dev_container build_and_install $2 --base_img $build_image
-    if [[ $? -ne 0 ]]
+
+    info "Reading CLI manifest for version=${version} and platform=${platform_config}"
+    local build_image=$(curl -L -s https://raw.githubusercontent.com/nvidia-holoscan/holoscan-cli/refs/heads/main/releases/${version}/artifacts.json | jq -r --arg HSDKVERSION "$version" --arg PFC "$platform_config" '.[$HSDKVERSION|tostring].holoscan."build-images"[$PFC|tostring]."x64-workstation"')
+    local docker_file=$(./run get_app_dockerfile $2)
+
+    info "Building Holohub image using $build_image and $docker_file"
+    local image_name=holohub_builder:${version}
+    run_command ./dev_container build --base_img $build_image --img $image_name --docker_file $docker_file
+    check_exit_code $? "Failed to build Holohub image" 1 clean_up
+
+    local volume_name="repo_data_$(date +%s%N)"
+    local container_name="holohub_$(date +%s%N)"
+    info "Creating volume (${volume_name}) to store Holohub source code"
+    run_command docker volume create $volume_name
+    check_exit_code $? "Failed to create volume" 1 clean_up
+
+    run_command docker container create --name $container_name -v $volume_name:/workspace/holohub alpine:latest
+    check_exit_code $? "Failed to create data copy container" 1 clean_up
+
+    info "Copying Holohub source code to volume (${volume_name})"
+    run_command docker cp $1/. $container_name:/workspace/holohub
+    check_exit_code $? "Failed to copy Holohub source code to volume" 1 clean_up
+
+    run_command docker run --net host --interactive --rm -v $volume_name:/workspace/holohub -w /workspace/holohub --runtime=nvidia --gpus all --entrypoint=bash $image_name -c "pwd && ls -l && ./run build $2 --install"
+    exit_code=$?
+    check_exit_code $exit_code "Failed to build Holohub application: $2" 0
+    if [ $exit_code -ne 0 ]
     then
-        error "Failed to build Holohub application: $2"
-        exit 1
+        clean_up_holohub_build "$container_name" "$volume_name"
+        clean_up
+        exit
     fi
-    tree
+
+    info "Copy built application to $1"
+    run_command docker cp $container_name:/workspace/holohub/install $1
+    check_exit_code $? "Failed to copy built application to $1" 1 clean_up
+    run_command ls -lR $1/install
+
+    info "Copy data to $4"
+    run_command docker cp $container_name:/workspace/holohub/data $4
+    check_exit_code $? "Failed to copy data to $4" 1 clean_up
+    run_command ls -lR $4
+
+    clean_up_holohub_build "$container_name" "$volume_name"
     popd
 }
 
@@ -282,6 +360,7 @@ build_holohub_app() {
 #  $2 Source Code Directory
 #  $3 Relative Application Path
 #  $4 Container Tag Prefix
+#  $5 Input Data Directory Path
 package() {
     info "===== Package Application ====="
     local run_args=$(get_config '.package.args')
@@ -290,6 +369,7 @@ package() {
     local config_file_path=$(get_config '.config.path')
     local dir=
     local app_dir=
+    local input_data_dir=$5
 
     if [[ "$run_args" == "null" ]]
     then
@@ -308,18 +388,26 @@ package() {
     pushd $1
     info "Packaging application from $app_dir"
     info "  App config: $config_file_path"
-    run_command holoscan package -l DEBUG \
-                     --config $config_file_path \
-                     --tag $4 \
-                     --platform x64-workstation \
-                     $app_dir \
-                     $run_args
 
-    if [[ $? -ne 0 ]]
+    artifact_source=""
+
+    if [ -v artifact_source_path ]
     then
-        error "Failed to package application"
-        exit 1
+        info "Using artifact source path: $artifact_source_path"
+        artifact_source="--source $artifact_source_path"
     fi
+
+    run_command holoscan package -l DEBUG \
+                        --config $config_file_path \
+                        --tag $4 \
+                        --platform x86_64 \
+                        --input-data $input_data_dir \
+                        --sdk-version $version \
+                    $app_dir \
+                    $run_args \
+                    $ci_package_args \
+                    $artifact_source
+    check_exit_code $? "Failed to package application" 1 clean_up
     popd
 }
 
@@ -347,12 +435,16 @@ clone() {
     if [[ "$2" =~ "holohub" ]]
     then
         run_command git clone --depth 1 $2 .
+        check_exit_code $? "Failed to clone repository" 1 clean_up
     else
         run_command git clone --filter=blob:none --no-checkout --depth 1 --sparse $2 .
+        check_exit_code $? "Failed to clone repository" 1 clean_up
         run_command git sparse-checkout add "$path"
+        check_exit_code $? "Sparse checkout failed" 1 clean_up
         run_command git checkout
+        check_exit_code $? "Failed to checkout repository" 1 clean_up
     fi
-    run_command tree
+    run_command ls -l
     popd
 }
 
@@ -373,6 +465,7 @@ prep_cpp_dir() {
     then
         info "Overwriting CMakeLists.txt with CMakeLists.min.txt"
         run_command mv -f $path/CMakeLists.min.txt $path/CMakeLists.txt
+        check_exit_code $? "Failed to overwrite CMakeLists.txt with CMakeLists.min.txt" 1 clean_up
     fi
     popd
 }
@@ -388,17 +481,29 @@ check_field() {
     fi
 }
 
+clean_up() {
+    # Clean up the temporary directory
+    info "Cleaning source code..."
+    run_command rm -rf $tmp_dir
+    local image=$(docker images --filter=reference="${tag}*:*" -q)
+    if [ -n "$image" ]
+    then
+        info "Deleting Containerized Application..."
+        run_command docker rmi --force $image
+    fi
+}
+
 # Entrypoint of the scriptS
 main() {
     local repository=$(get_config '.source.repo')
     local path=$(get_config '.source.path')
     local language=$(get_config '.source.lang')
-    local tmp_dir=$(mktemp -d)
+    tmp_dir=$(mktemp -d)
     local source_dir="$tmp_dir/src"
     local data_dir="$tmp_dir/data"
     local app_name=$(get_config '.source.app')
     local package_path=$path
-    local tag="$(basename $(dirname $test))-$((1 + $RANDOM % 1000))"
+    tag="$(basename $(dirname $test))-$((1 + $RANDOM % 1000))"
 
     if [[ "$repository" =~ "holohub" ]]
     then
@@ -432,33 +537,31 @@ main() {
         package_path="install/bin/$path/$app_name"
     fi
 
-    # For Holohub applications, call the build script
+    # For Holohub applications, call the build script. Assume Holohub downloads the data.
     if [[ "$repository" =~ "holohub" ]]
     then
-        build_holohub_app "$source_dir" "$app_name" "$language"
+        build_holohub_app "$source_dir" "$app_name" "$language" "$data_dir"
+    else
+        # Download specified data
+        download_data "$data_dir"
     fi
-
-    # Call Holoscan CLI Packager
-    package "$tmp_dir" "$source_dir" "$package_path" "$tag"
-
-    # Download specified data
-    download_data "$tmp_dir" "$data_dir"
 
     # Use test data downloaded by Holohub build script
     if [[ "$repository" =~ "holohub" && "$(get_config '.data.source')" == "local-holohub" ]]
     then
-        data_dir="$source_dir/data/$(get_config '.data.dirname')"
-        tree $data_dir
+        data_dir="$data_dir/$(get_config '.data.dirname')"
+        info "Switching to data directory $data_dir for Holohub"
+        run_command ls -l $data_dir
     fi
 
-    # Call Holoscan CLI Runner
-    run_application "$data_dir" "$tag"
+    # Call Holoscan CLI Packager
+    package "$tmp_dir" "$source_dir" "$package_path" "$tag" "$data_dir"
 
-    # Clean up the temporary directory
-    info "Cleaning source code..."
-    run_command rm -rf $tmp_dir
-    info "Deleting Containerized Application..."
-    run_command docker rmi $(docker images --filter=reference="${tag}*:*" -q)
+    # Call Holoscan CLI Runner
+    run_application "$tag"
+
+    # Clean up
+    clean_up
 }
 
 if [ -z "$test" ]
@@ -477,8 +580,17 @@ then
         exit 1
     fi
 fi
+if [ -z "$version" ]
+then
+    version=$(holoscan version | tail -n 1 | awk '{print $3}')
+fi
 
-version=$(holoscan version | tail -n 1 | awk '{print $3}')
+# if version is 0.0.0, then we use the latest artifacts.json from the release directory
+if [[ "$version" == "0.0.0" ]]
+then
+    artifact_source_path=$(find ${SCRIPT_DIR}/../../releases -type f -exec realpath {} \; | sort | tail -n 1)
+    version=$(jq -r 'keys | sort_by(split(".") | map(tonumber)) | reverse | first' ${artifact_source_path})
+fi
 info "Using test configuration $test with Holoscan CLI v${version}"
 
 main

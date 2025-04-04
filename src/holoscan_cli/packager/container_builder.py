@@ -58,6 +58,8 @@ class BuilderBase:
         self._copy_model_files()
         self._copy_docs()
         self._copy_libs()
+        self._copy_input_data()
+
         _ = self._write_dockerignore()
         _ = self._copy_script()
 
@@ -184,6 +186,13 @@ class BuilderBase:
             )
 
         return build_result
+
+    def _copy_input_data(self):
+        """Copy input data to temporary location"""
+        if self._build_parameters.input_data is not None:
+            shutil.copytree(
+                self._build_parameters.input_data, os.path.join(self._temp_dir, "input")
+            )
 
     def print_build_info(self, platform_parameters):
         """Print build information for the platform."""

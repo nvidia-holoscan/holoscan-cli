@@ -11,7 +11,7 @@
     "path": "./app.yaml"
   },
   "package": {
-    "args": "--includes onnx holoviz torch"
+    "args": "--includes onnx holoviz torch --add <src>/install/lib"
   },
   "run": {
     "args": "--render"

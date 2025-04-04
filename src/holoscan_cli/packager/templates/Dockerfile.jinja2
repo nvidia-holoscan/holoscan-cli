@@ -476,4 +476,8 @@ ENV PYTHONPATH=$PYTHONPATH:{{ additional_lib_paths }}:{{ lib_dir }}
 
 {% endif %}
 
+{% if input_data != None %}
+COPY ./input $HOLOSCAN_INPUT_PATH
+{% endif %}
+
 ENTRYPOINT ["/var/holoscan/tools"]

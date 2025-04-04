@@ -145,7 +145,7 @@ holoviz:
         - Clipper
         - Irrigator
         - Spec.Bag
-  headless: false
+  headless: true
 
 holoviz_overlay:
   headless: true

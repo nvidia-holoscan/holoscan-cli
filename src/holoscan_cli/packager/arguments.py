@@ -77,6 +77,7 @@ class PackagingArguments:
         self.build_parameters.includes = args.includes
         self.build_parameters.additional_libs = args.additional_libs
         self.build_parameters.add_hosts = args.add_hosts
+        self.build_parameters.input_data = args.input_data
 
         models = Models()
         platform = Platform(self._artifact_sources)

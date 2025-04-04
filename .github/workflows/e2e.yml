@@ -1,0 +1,144 @@
+# SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# This workflow runs end-to-end tests for the Holoscan CLI.
+name: End-to-End Tests
+
+on:
+  # This can be used to automatically publish nightlies at UTC nighttime
+  schedule:
+    - cron: '0 2 * * *' # run at 2 AM UTC
+  # This can be used to allow manually triggering nightlies from the web interface
+  workflow_dispatch:
+    inputs:
+      pypi:
+        description: 'Use latest build from PyPI'
+        required: false
+        type: boolean
+        default: false
+
+jobs:
+  e2e:
+    runs-on: linux-amd64-gpu-h100-latest-1
+    container:
+      image: ghcr.io/nvidia-holoscan/holoscan-cli-build:cuda126-u2204
+      env:
+        NVIDIA_VISIBLE_DEVICES: ${{ env.NVIDIA_VISIBLE_DEVICES }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest]
+        python-version: ["3.12"]
+        # if the sample app contains both cpp and python, use "-LANG" to indicate the test case name so we can run both cpp and python tests in a single batch
+        test: ["hello-world", "video-replayer-LANG", "endoscopy-tool-tracking-LANG","object-detection-torch"]
+    env:
+      PYTHON_VERSION: ${{ matrix.python-version }}
+
+    steps:
+      - name: Verify and configure Git
+        run: |
+          command -v git
+          command -v jq
+          command -v docker
+          command -v nvidia-ctk
+          git --version
+          jq --version
+          docker --version
+          nvidia-ctk --version
+          echo $(pwd)
+          # Configure Git to handle the repository ownership
+          git config --global --add safe.directory $(pwd)
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install Poetry
+        if: ${{ inputs.pypi == false }}
+        uses: Gr1N/setup-poetry@v9
+
+      - name: Install library and dependencies
+        if: ${{ inputs.pypi == false }}
+        run: |
+          poetry run pip install --upgrade pip setuptools
+          poetry install --with test
+
+      - name: Locate Latest Artifacts
+        if: ${{ inputs.pypi == false }}
+        id: latest_artifact_path
+        run: |
+          ARTIFACT_PATH=$(find releases -type f -exec realpath {} \; | sort | tail -n 1)
+          echo "ARTIFACT_PATH=${ARTIFACT_PATH}" >> $GITHUB_OUTPUT
+          echo "CLI_VERSION=$(jq -r 'keys | sort_by(split(".") | map(tonumber)) | reverse | first' ${ARTIFACT_PATH})" >> $GITHUB_OUTPUT
+
+      - name: Build and Install CLI
+        if: ${{ inputs.pypi == false }}
+        run: |
+          poetry build
+          wheel=$(find dist/ -name holoscan_cli-*.whl)
+          echo "Installing from ${wheel}"
+          pip install ${wheel}
+
+      - name: Install CLI
+        if: ${{ inputs.pypi == true }}
+        run: |
+          pip install holoscan-cli
+
+      - name: Restore cached Build Cache
+        id: cache-build-cache-restore
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.holoscan_build_cache
+          key: e2e-cache-${{ matrix.test }}
+
+      - name: Run e2e-test ${{ matrix.test }}
+        env:
+          ARTIFACT_PATH: ${{ steps.latest_artifact_path.outputs.ARTIFACT_PATH }}
+          CLI_VERSION: ${{ steps.latest_artifact_path.outputs.CLI_VERSION }}
+        shell: bash
+        run: |
+          export hosts=("developer.download.nvidia.com" "security.ubuntu.com" "archive.ubuntu.com" "pypi.org" "edge.urm.nvidia.com" "www.mellanox.com" "content.mellanox.com" "files.pythonhosted.org" "download.docker.com")
+          export ci_package_args=
+          for host in "${hosts[@]}"; do
+            export ip=$(ping -q -W1 -c1 $host | head -n1 | cut -d '(' -f2 | cut -d ')' -f1)
+            export ci_package_args="$ci_package_args --add-host $host:$ip"
+          done
+          export ci_package_args="$ci_package_args --uid 1000 --gid 1000"
+          export ci_run_args="--uid 1000 --gid 1000"
+
+          cd tests/automation
+          # if test case name ends with "-LANG" then we always run both cpp and python tests
+          if [[ ${{ matrix.test }} == *-LANG ]]; then
+            test_name=${{ matrix.test }}
+            test_name=${test_name%-LANG}
+            VERSION=${{ env.CLI_VERSION }} ARTIFACT_PATH=${{ env.ARTIFACT_PATH }} ./test.sh ${test_name}-cpp
+            VERSION=${{ env.CLI_VERSION }} ARTIFACT_PATH=${{ env.ARTIFACT_PATH }} ./test.sh ${test_name}-python
+          else
+            VERSION=${{ env.CLI_VERSION }} ARTIFACT_PATH=${{ env.ARTIFACT_PATH }} ./test.sh ${{ matrix.test }}
+          fi
+
+      - name: Calculate Cache Size
+        run: |
+          du -sh ~/.holoscan_build_cache
+
+      - name: Save Build Cache
+        id: cache-build-cache-save
+        uses: actions/cache/save@v4
+        with:
+          path: ~/.holoscan_build_cache
+          key: e2e-cache-${{ matrix.test }}

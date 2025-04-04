@@ -200,6 +200,37 @@ class TestContainerBuilder:
                 result = builder.build(platform_parameters)
                 assert result.succeeded is True
 
+        def test_module_with_input_data(
+            self,
+            mock_fs_operations,
+            mock_docker_operations,
+            mock_open_file,
+            monkeypatch,
+        ):
+            """Test Python module with input data directory."""
+
+            def mock_copytree_with_verification(src, dest, dirs_exist_ok=True):
+                if str(src) == "/input/data" and str(dest).endswith("/input"):
+                    # This is the call we're interested in
+                    return None
+                return None
+
+            monkeypatch.setattr(os.path, "isfile", lambda x: False)
+            monkeypatch.setattr(os.path, "isdir", lambda x: True)
+            monkeypatch.setattr(shutil, "copytree", mock_copytree_with_verification)
+
+            build_parameters = self._get_build_parameters()
+            build_parameters.input_data = pathlib.Path("/input/data")
+            platform_parameters = PlatformParameters(
+                Platform.x86_64, "image:tag", "1.0"
+            )
+            platform_parameters.holoscan_sdk_file = pathlib.Path("/sdk/holoscan.whl")
+
+            with tempfile.TemporaryDirectory() as temp_dir:
+                builder = PythonAppBuilder(build_parameters, temp_dir)
+                result = builder.build(platform_parameters)
+                assert result.succeeded is True
+
     class TestPythonFileApplication:
         """Test cases for single Python file applications"""
 

@@ -277,6 +277,7 @@ class PackageBuildParameters:
         self._data["tarball_output"] = None
         self._data["cmake_args"] = ""
         self._data["includes"] = []
+        self._data["input_data"] = None
         self._data["additional_lib_paths"] = ""
         self._data["add_hosts"] = []
         self._data["application_directory"] = None
@@ -544,6 +545,14 @@ class PackageBuildParameters:
     @includes.setter
     def includes(self, value: str):
         self._data["includes"] = value
+
+    @property
+    def input_data(self) -> Path:
+        return self._data["input_data"]
+
+    @input_data.setter
+    def input_data(self, value: Path):
+        self._data["input_data"] = value
 
     @property
     def additional_lib_paths(self) -> str:

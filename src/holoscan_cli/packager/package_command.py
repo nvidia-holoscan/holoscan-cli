@@ -103,13 +103,6 @@ def create_package_parser(
         help="container image name for building the C++ application.",
     )
     advanced_group.add_argument(
-        "--includes",
-        nargs="*",
-        default=[],
-        choices=["debug", "holoviz", "torch", "onnx"],
-        help="additional packages to include in the container.",
-    )
-    advanced_group.add_argument(
         "--build-cache",
         type=valid_dir_path,
         default="~/.holoscan_build_cache",
@@ -121,11 +114,23 @@ def create_package_parser(
         help='additional CMAKE build arguments. E.g. "-DCMAKE_BUILD_TYPE=DEBUG -DCMAKE_ARG=VALUE"',
     )
     advanced_group.add_argument(
+        "--input-data",
+        type=valid_dir_path,
+        help="sample input data to be embedded in the container.",
+    )
+    advanced_group.add_argument(
         "--holoscan-sdk-file",
         type=valid_existing_path,
         help="path to the Holoscan SDK Debian or PyPI package. "
         "If not specified, the packager downloads "
         "the SDK file from the internet based on the SDK version.",
+    )
+    advanced_group.add_argument(
+        "--includes",
+        nargs="*",
+        default=[],
+        choices=["debug", "holoviz", "torch", "onnx"],
+        help="additional packages to include in the container.",
     )
     advanced_group.add_argument(
         "--monai-deploy-sdk-file",
@@ -148,16 +153,16 @@ def create_package_parser(
         f"Valid values: {str.join(', ', SDK.SDKS)}.",
     )
     advanced_group.add_argument(
-        "--source",
-        type=str,
-        help="override Debian package, build container image and run container image from a "
-        "JSON formatted file or a secured web server (HTTPS).",
-    )
-    advanced_group.add_argument(
         "--sdk-version",
         type=Version,
         help="set the version of the SDK that is used to build and package the application. "
         "If not specified, the packager attempts to detect the installed version.",
+    )
+    advanced_group.add_argument(
+        "--source",
+        type=str,
+        help="override Debian package, build container image and run container image from a "
+        "JSON formatted file or a secured web server (HTTPS).",
     )
 
     output_group = parser.add_argument_group(title="output options")

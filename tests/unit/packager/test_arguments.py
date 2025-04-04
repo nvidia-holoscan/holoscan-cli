@@ -48,6 +48,7 @@ class TestPackagingArguments:
         self.input_args.source = pathlib.Path("/path/to/source.json")
         self.input_args.platform = Platform.X64Workstation
         self.input_args.includes = []
+        self.input_args.input_data = pathlib.Path("/path/to/input_data")
         self.input_args.add_hosts = ["domain:ip", "domain2:ip2"]
         self.input_args.additional_libs = [
             pathlib.Path("/path/to/lib"),
@@ -165,6 +166,7 @@ class TestPackagingArguments:
         assert args.build_parameters.additional_libs == self.input_args.additional_libs
         assert args.application_manifest is not None
         assert args.package_manifest is not None
+        assert args.build_parameters.input_data == self.input_args.input_data
         assert args.build_parameters.build_cache == self.input_args.build_cache
         assert args.build_parameters.cmake_args == self.input_args.cmake_args
         assert args.build_parameters.add_hosts == self.input_args.add_hosts
