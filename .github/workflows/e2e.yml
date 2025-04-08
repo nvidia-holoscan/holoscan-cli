@@ -112,7 +112,7 @@ jobs:
           CLI_VERSION: ${{ steps.latest_artifact_path.outputs.CLI_VERSION }}
         shell: bash
         run: |
-          export hosts=("developer.download.nvidia.com" "security.ubuntu.com" "archive.ubuntu.com" "pypi.org" "edge.urm.nvidia.com" "www.mellanox.com" "content.mellanox.com" "files.pythonhosted.org" "download.docker.com")
+          export hosts=("developer.download.nvidia.com" "security.ubuntu.com" "archive.ubuntu.com" "pypi.org" "edge.urm.nvidia.com" "www.mellanox.com" "content.mellanox.com" "files.pythonhosted.org" "download.docker.com" "apt.kitware.com")
           export ci_package_args=
           for host in "${hosts[@]}"; do
             export ip=$(ping -q -W1 -c1 $host | head -n1 | cut -d '(' -f2 | cut -d ')' -f1)
