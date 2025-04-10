@@ -1,0 +1,13 @@
+======================================================
+
+Printing arguments:
+
+/opt/holoscan/app
+
+--config
+
+/var/holoscan/app.yaml
+
+PrintAppArguments completed.
+
+======================================================

@@ -41,6 +41,10 @@ repos:
       - id: check-yaml
       - id: detect-private-key
       - id: end-of-file-fixer
+        exclude: |
+            (?x)(
+                tests/app/expected-output/.*
+            )$
       - id: mixed-line-ending
       - id: name-tests-test
         args: ["--pytest-test-first"]
@@ -76,6 +80,7 @@ repos:
         exclude: |
             (?x)(
                 src/holoscan_cli/packager/templates/Dockerfile.jinja2|
+                tests/app/expected-output/.*|
                 src/license-header.txt|
                 LICENSE|
                 poetry.lock|

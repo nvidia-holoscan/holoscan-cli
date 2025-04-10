@@ -1,0 +1,15 @@
+USAGE: /var/holoscan/tools [command] [arguments]...
+ Command List
+    extract  ---------------------------  Extract data based on mounted volume paths.
+        /var/run/holoscan/export/app        extract the application
+        /var/run/holoscan/export/config     extract app.json and pkg.json manifest files and application YAML.
+        /var/run/holoscan/export/models     extract models
+        /var/run/holoscan/export/docs       extract documentation files
+        /var/run/holoscan/export            extract all of the above
+        IMPORTANT: ensure the directory to be mounted for data extraction is created first on the host system
+                   and has the correct permissions. If the directory had been created by the container previously
+                   with the user and group being root, please delete it and manually create it again.
+    show  -----------------------------  Print manifest file(s): [app|pkg] to the terminal.
+        app                                 print app.json
+        pkg                                 print pkg.json
+    env  -------------------------  Print all environment variables to the terminal.

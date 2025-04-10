@@ -178,33 +178,101 @@ jobs:
 
       - name: Package Test App
         env:
+          TMPDIR: ${{ runner.temp }}
           ARTIFACT_PATH: ${{ steps.latest_artifact_path.outputs.ARTIFACT_PATH }}
           CLI_VERSION: ${{ steps.latest_artifact_path.outputs.CLI_VERSION }}
+        shell: bash
         run: |
+          export hosts=("developer.download.nvidia.com" "security.ubuntu.com" "archive.ubuntu.com" "pypi.org" "edge.urm.nvidia.com" "www.mellanox.com" "content.mellanox.com" "files.pythonhosted.org" "download.docker.com" "apt.kitware.com")
+          export ci_package_args=
+          for host in "${hosts[@]}"; do
+            export ip=$(ping -q -W1 -c1 $host | head -n1 | cut -d '(' -f2 | cut -d ')' -f1)
+            export ci_package_args="$ci_package_args --add-host $host:$ip"
+          done
+
+          # Create model directory and files
+          mkdir -p ${{ env.TMPDIR }}/models/model-1
+          mkdir -p ${{ env.TMPDIR }}/models/model-2
+          touch ${{ env.TMPDIR }}/models/model-1/model1.txt
+          touch ${{ env.TMPDIR }}/models/model-2/model2.txt
+
           holoscan package tests/app/python/ \
                             -l DEBUG \
                             -c tests/app/python/app.yaml \
                             -t test-app-python \
                             --platform x86_64 \
+                            --model ${{ env.TMPDIR }}/models \
                             --uid 1000 \
                             --gid 1000 \
                             --source ${{ env.ARTIFACT_PATH }} \
                             --sdk-version ${{ env.CLI_VERSION }} \
-                            --add-host developer.download.nvidia.com:23.46.17.44 \
-                            --add-host security.ubuntu.com:91.189.91.81 \
-                            --add-host archive.ubuntu.com:91.189.91.82 \
-                            --add-host pypi.org:151.101.128.223 \
-                            --add-host edge.urm.nvidia.com:23.46.228.176 \
-                            --add-host www.mellanox.com:23.46.228.176 \
-                            --add-host files.pythonhosted.org:151.101.0.223
+                            ${ci_package_args}
 
       - name: Run Test App
         run: |
-          mkdir input
-          mkdir output
-          touch input/file1
-          touch output/file2
-          holoscan run --rm --uid 1000 --gid 1000 -r $(docker images | grep "test-app-python" | awk '{print $1":"$2}') -i input -o output
+          holoscan run --rm --uid 1000 --gid 1000 -r $(docker images | grep "test-app-python" | awk '{print $1":"$2}') -i input -o output | tee /tmp/test-app-output.log
+
+      - name: Validate Test Output
+        run: |
+          ./tests/app/validate.sh /tmp/test-app-output.log tests/app/expected-output/app/
+
+      - name: CLI Tools - help
+        run: |
+          docker run -i --rm $(docker images | grep "test-app-python" | awk '{print $1":"$2}') help | tee /tmp/cli-tools-help-output.log
+
+      - name: Validate CLI Tools - help Output
+        run: |
+          ./tests/app/validate.sh /tmp/cli-tools-help-output.log tests/app/expected-output/tools/help.txt
+
+      - name: CLI Tools - show
+        env:
+          CLI_VERSION: ${{ steps.latest_artifact_path.outputs.CLI_VERSION }}
+        run: |
+          docker run -i --rm $(docker images | grep "test-app-python" | awk '{print $1":"$2}') show | tee /tmp/cli-tools-show-output.log
+          sed -i "s/SDKVERSION/${{ env.CLI_VERSION }}/" tests/app/expected-output/tools/show.txt
+
+      - name: Validate CLI Tools - show Output
+        run: |
+          ./tests/app/validate.sh /tmp/cli-tools-show-output.log tests/app/expected-output/tools/show.txt
+
+      - name: CLI Tools - env
+        env:
+          CLI_VERSION: ${{ steps.latest_artifact_path.outputs.CLI_VERSION }}
+        run: |
+          docker run -i --rm $(docker images | grep "test-app-python" | awk '{print $1":"$2}') env | tee /tmp/cli-tools-env-output.log
+          if ! grep -q "HOLOSCAN_SDK_VERSION=${{ env.CLI_VERSION }}" /tmp/cli-tools-env-output.log; then
+            echo "HOLOSCAN_SDK_VERSION is not ${{ env.CLI_VERSION }}"
+            exit 1
+          fi
+
+      - name: Validate CLI Tools - env Output
+        run: |
+          ./tests/app/validate.sh /tmp/cli-tools-env-output.log tests/app/expected-output/tools/env.txt
+
+      - name: CLI Tools - extract
+        env:
+          TMPDIR: ${{ runner.temp }}
+          CLI_VERSION: ${{ steps.latest_artifact_path.outputs.CLI_VERSION }}
+        run: |
+          mkdir -p ${{ env.TMPDIR }}/extract
+          docker run -i --rm ${{ env.TMPDIR }}/extract:/var/run/holoscan/export $(docker images | grep "test-app-python" | awk '{print $1":"$2}') extract
+
+      - name: Validate CLI Tools - extract Output
+        run: |
+          ls -lR ${{ env.TMPDIR }}/extract
+          error_found=0
+
+          FILE_PATHS=("app/app-map.yaml" "app/app.yaml" "app/cli_test_app.py" "app/__init__.py" "app/__main__.py" "app/requirements.txt" "config/app.json" "config/app.yaml" "config/pkg.json")
+          for file_path in "${FILE_PATHS[@]}"; do
+            if [ ! -f ${{ env.TMPDIR }}/extract/${file_path} ]; then
+              echo "${file_path} does not exist"
+              error_found=1
+            fi
+          done
+
+          if [ $error_found -eq 1 ]; then
+            exit 1
+          fi
 
       - name: Save Build Cache
         id: cache-build-cache-save
