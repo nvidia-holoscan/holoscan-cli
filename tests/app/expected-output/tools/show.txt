@@ -51,7 +51,7 @@
     "failureThreshold": 3
   },
   "sdk": "holoscan",
-  "sdkVersion": "SDKVERSION",
+  "sdkVersion": "3.0.0",
   "timeout": 0,
   "version": 0.1,
   "workingDirectory": "/var/holoscan"
@@ -62,7 +62,10 @@
   "apiVersion": "1.0.0",
   "applicationRoot": "/opt/holoscan/app",
   "modelRoot": "/opt/holoscan/models",
-  "models": {},
+  "models": {
+    "model-2": "/opt/holoscan/models/model-2",
+    "model-1": "/opt/holoscan/models/model-1"
+  },
   "resources": {
     "cpu": 1,
     "gpu": 1,
