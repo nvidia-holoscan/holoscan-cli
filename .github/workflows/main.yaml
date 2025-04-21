@@ -240,31 +240,38 @@ jobs:
           CLI_VERSION: ${{ steps.latest_artifact_path.outputs.CLI_VERSION }}
         run: |
           docker run -i --rm $(docker images | grep "test-app-python" | awk '{print $1":"$2}') env | tee /tmp/cli-tools-env-output.log
-          if ! grep -q "HOLOSCAN_SDK_VERSION=${{ env.CLI_VERSION }}" /tmp/cli-tools-env-output.log; then
-            echo "HOLOSCAN_SDK_VERSION is not ${{ env.CLI_VERSION }}"
+          if ! grep -q "HOLOSCAN_VERSION=${{ env.CLI_VERSION }}" /tmp/cli-tools-env-output.log; then
+            echo "HOLOSCAN_VERSION is not ${{ env.CLI_VERSION }}"
             exit 1
           fi
 
       - name: Validate CLI Tools - env Output
         run: |
+          # remove line that contains "HOSTNAME="
+          sed -i '/HOSTNAME=/d' /tmp/cli-tools-env-output.log
+          # remove line that contains "PWD="
+          sed -i '/PWD=/d' /tmp/cli-tools-env-output.log
+          # remove line that contains "***"
+          sed -i '/^[*]/d' /tmp/cli-tools-env-output.log
           ./tests/app/validate.sh /tmp/cli-tools-env-output.log tests/app/expected-output/tools/env.txt
 
       - name: CLI Tools - extract
         env:
-          TMPDIR: ${{ runner.temp }}
-          CLI_VERSION: ${{ steps.latest_artifact_path.outputs.CLI_VERSION }}
+          EXTRACT_DIR: ${{ github.workspace }}/extract
         run: |
-          mkdir -p ${{ env.TMPDIR }}/extract
-          docker run -i --rm ${{ env.TMPDIR }}/extract:/var/run/holoscan/export $(docker images | grep "test-app-python" | awk '{print $1":"$2}') extract
+          mkdir -p ${{ env.EXTRACT_DIR }} && [ -d ${{ env.EXTRACT_DIR }} ] && ls -lR ${{ env.EXTRACT_DIR }}
+          docker run -i --rm -v ${{ env.EXTRACT_DIR }}:/var/run/holoscan/export $(docker images | grep "test-app-python" | awk '{print $1":"$2}') extract
 
       - name: Validate CLI Tools - extract Output
+        env:
+          EXTRACT_DIR: ${{ github.workspace }}/extract
         run: |
-          ls -lR ${{ env.TMPDIR }}/extract
+          ls -lR ${{ env.EXTRACT_DIR }}
           error_found=0
 
           FILE_PATHS=("app/app-map.yaml" "app/app.yaml" "app/cli_test_app.py" "app/__init__.py" "app/__main__.py" "app/requirements.txt" "config/app.json" "config/app.yaml" "config/pkg.json")
           for file_path in "${FILE_PATHS[@]}"; do
-            if [ ! -f ${{ env.TMPDIR }}/extract/${file_path} ]; then
+            if [ ! -f ${{ env.EXTRACT_DIR }}/${file_path} ]; then
               echo "${file_path} does not exist"
               error_found=1
             fi
