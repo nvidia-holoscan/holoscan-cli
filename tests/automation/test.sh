@@ -391,7 +391,7 @@ package() {
 
     artifact_source=""
 
-    if [ -n artifact_source_path ]
+    if [ -v artifact_source_path ] && [ -n "$artifact_source_path" ]
     then
         info "Using artifact source path: $artifact_source_path"
         artifact_source="--source $artifact_source_path"
