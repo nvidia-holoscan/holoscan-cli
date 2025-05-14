@@ -307,10 +307,17 @@ build_holohub_app() {
     pushd $1
 
     local platform_config=$(get_host_gpu)
+    local build_image=
+    local docker_file=
 
     info "Reading CLI manifest for version=${version} and platform=${platform_config}"
-    local build_image=$(curl -L -s https://raw.githubusercontent.com/nvidia-holoscan/holoscan-cli/refs/heads/main/releases/${version}/artifacts.json | jq -r --arg HSDKVERSION "$version" --arg PFC "$platform_config" '.[$HSDKVERSION|tostring].holoscan."build-images"[$PFC|tostring]."x64-workstation"')
-    local docker_file=$(./run get_app_dockerfile $2)
+    if [ -v artifact_source_path ] && [ -n "$artifact_source_path" ]
+    then
+        build_image=$(cat $artifact_source_path | jq -r --arg HSDKVERSION "$version" --arg PFC "$platform_config" '.[$HSDKVERSION|tostring].holoscan."build-images"[$PFC|tostring]."x64-workstation"')
+    else
+        build_image=$(curl -L -s https://raw.githubusercontent.com/nvidia-holoscan/holoscan-cli/refs/heads/main/releases/${version}/artifacts.json | jq -r --arg HSDKVERSION "$version" --arg PFC "$platform_config" '.[$HSDKVERSION|tostring].holoscan."build-images"[$PFC|tostring]."x64-workstation"')
+    fi
+    docker_file=$(./run get_app_dockerfile $2)
 
     info "Building Holohub image using $build_image and $docker_file"
     local image_name=holohub_builder:${version}
@@ -561,7 +568,7 @@ main() {
     run_application "$tag"
 
     # Clean up
-    clean_up
+    # clean_up
 }
 
 if [ -z "$test" ]
