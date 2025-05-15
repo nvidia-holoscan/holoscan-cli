@@ -155,8 +155,12 @@ jobs:
       - name: Locate Latest Artifacts
         id: latest_artifact_path
         run: |
-          echo "ARTIFACT_PATH=$(find releases -type f | sort | tail -n 1)" >> $GITHUB_OUTPUT
-          echo "CLI_VERSION=$(jq -r 'keys | sort_by(split(".") | map(tonumber)) | reverse | first' $ARTIFACT_PATH)" >> $GITHUB_OUTPUT
+          export ARTIFACT_PATH=$(find releases -type f | sort | tail -n 1)
+          export CLI_VERSION=$(jq -r 'keys | sort_by(split(".") | map(tonumber)) | reverse | first' $ARTIFACT_PATH)
+          echo "ARTIFACT_PATH=${ARTIFACT_PATH}"
+          echo "CLI_VERSION=${CLI_VERSION}"
+          echo "ARTIFACT_PATH=${ARTIFACT_PATH}" >> $GITHUB_OUTPUT
+          echo "CLI_VERSION=${CLI_VERSION}" >> $GITHUB_OUTPUT
 
       - name: Build and Install CLI
         run: |
