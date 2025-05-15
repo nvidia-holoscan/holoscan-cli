@@ -10,8 +10,7 @@
       "build-images": {
         "igpu": {
           "jetson-agx-orin-devkit": "nvcr.io/nvstaging/holoscan/holoscan:v3.3.0.0-igpu",
-          "igx-orin-devkit": "nvcr.io/nvstaging/holoscan/holoscan:v3.3.0.0-igpu",
-          "sbsa": "nvcr.io/nvstaging/holoscan/holoscan:v3.3.0.0-igpu"
+          "igx-orin-devkit": "nvcr.io/nvstaging/holoscan/holoscan:v3.3.0.0-igpu"
         },
         "dgpu": {
           "x64-workstation": "nvcr.io/nvstaging/holoscan/holoscan:v3.3.0.0-dgpu",
@@ -40,8 +39,7 @@
       "build-images": {
         "igpu": {
           "jetson-agx-orin-devkit": "nvcr.io/nvidia/clara-holoscan/holoscan:v3.2.0-igpu",
-          "igx-orin-devkit": "nvcr.io/nvidia/clara-holoscan/holoscan:v3.2.0-igpu",
-          "sbsa": "nvcr.io/nvidia/clara-holoscan/holoscan:v3.2.0-igpu"
+          "igx-orin-devkit": "nvcr.io/nvidia/clara-holoscan/holoscan:v3.2.0-igpu"
         },
         "dgpu": {
           "x64-workstation": "nvcr.io/nvidia/clara-holoscan/holoscan:v3.2.0-dgpu",
@@ -70,8 +68,7 @@
       "build-images": {
         "igpu": {
           "jetson-agx-orin-devkit": "nvcr.io/nvidia/clara-holoscan/holoscan:v3.1.0-igpu",
-          "igx-orin-devkit": "nvcr.io/nvidia/clara-holoscan/holoscan:v3.1.0-igpu",
-          "sbsa": "nvcr.io/nvidia/clara-holoscan/holoscan:v3.1.0-igpu"
+          "igx-orin-devkit": "nvcr.io/nvidia/clara-holoscan/holoscan:v3.1.0-igpu"
         },
         "dgpu": {
           "x64-workstation": "nvcr.io/nvidia/clara-holoscan/holoscan:v3.1.0-dgpu",
@@ -100,8 +97,7 @@
       "build-images": {
         "igpu": {
           "jetson-agx-orin-devkit": "nvcr.io/nvidia/clara-holoscan/holoscan:v3.0.0-igpu",
-          "igx-orin-devkit": "nvcr.io/nvidia/clara-holoscan/holoscan:v3.0.0-igpu",
-          "sbsa": "nvcr.io/nvidia/clara-holoscan/holoscan:v3.0.0-igpu"
+          "igx-orin-devkit": "nvcr.io/nvidia/clara-holoscan/holoscan:v3.0.0-igpu"
         },
         "dgpu": {
           "x64-workstation": "nvcr.io/nvidia/clara-holoscan/holoscan:v3.0.0-dgpu",
@@ -130,8 +126,7 @@
       "build-images": {
         "igpu": {
           "jetson-agx-orin-devkit": "nvcr.io/nvidia/clara-holoscan/holoscan:v2.9.0-igpu",
-          "igx-orin-devkit": "nvcr.io/nvidia/clara-holoscan/holoscan:v2.9.0-igpu",
-          "sbsa": "nvcr.io/nvidia/clara-holoscan/holoscan:v2.9.0-igpu"
+          "igx-orin-devkit": "nvcr.io/nvidia/clara-holoscan/holoscan:v2.9.0-igpu"
         },
         "dgpu": {
           "x64-workstation": "nvcr.io/nvidia/clara-holoscan/holoscan:v2.9.0-dgpu",
@@ -160,8 +155,7 @@
       "build-images": {
         "igpu": {
           "jetson-agx-orin-devkit": "nvcr.io/nvidia/clara-holoscan/holoscan:v2.8.0-igpu",
-          "igx-orin-devkit": "nvcr.io/nvidia/clara-holoscan/holoscan:v2.8.0-igpu",
-          "sbsa": "nvcr.io/nvidia/clara-holoscan/holoscan:v2.8.0-igpu"
+          "igx-orin-devkit": "nvcr.io/nvidia/clara-holoscan/holoscan:v2.8.0-igpu"
         },
         "dgpu": {
           "x64-workstation": "nvcr.io/nvidia/clara-holoscan/holoscan:v2.8.0-dgpu",
@@ -190,8 +184,7 @@
       "build-images": {
         "igpu": {
           "jetson-agx-orin-devkit": "nvcr.io/nvidia/clara-holoscan/holoscan:v2.7.0-igpu",
-          "igx-orin-devkit": "nvcr.io/nvidia/clara-holoscan/holoscan:v2.7.0-igpu",
-          "sbsa": "nvcr.io/nvidia/clara-holoscan/holoscan:v2.7.0-igpu"
+          "igx-orin-devkit": "nvcr.io/nvidia/clara-holoscan/holoscan:v2.7.0-igpu"
         },
         "dgpu": {
           "x64-workstation": "nvcr.io/nvidia/clara-holoscan/holoscan:v2.7.0-dgpu",
@@ -220,8 +213,7 @@
       "build-images": {
         "igpu": {
           "jetson-agx-orin-devkit": "nvcr.io/nvidia/clara-holoscan/holoscan:v2.6.0-igpu",
-          "igx-orin-devkit": "nvcr.io/nvidia/clara-holoscan/holoscan:v2.6.0-igpu",
-          "sbsa": "nvcr.io/nvidia/clara-holoscan/holoscan:v2.6.0-igpu"
+          "igx-orin-devkit": "nvcr.io/nvidia/clara-holoscan/holoscan:v2.6.0-igpu"
         },
         "dgpu": {
           "x64-workstation": "nvcr.io/nvidia/clara-holoscan/holoscan:v2.6.0-dgpu",
