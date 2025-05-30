@@ -44,6 +44,14 @@ def create_package_parser(
         help="Holoscan application path: Python application directory with __main__.py, "
         "Python file, C++ source directory with CMakeLists.txt, or path to an executable.",
     )
+
+    parser.add_argument(
+        "--add",
+        action="append",
+        dest="additional_libs",
+        type=valid_existing_dir_path,
+        help="include additional library files, python files into the application directory.",
+    )
     parser.add_argument(
         "--config",
         "-c",
@@ -69,13 +77,6 @@ def create_package_parser(
         required=True,
         help="target platform(s) for the build output separated by comma. "
         f"Valid values: {str.join(', ', SDK.PLATFORMS)}.",
-    )
-    parser.add_argument(
-        "--add",
-        action="append",
-        dest="additional_libs",
-        type=valid_existing_dir_path,
-        help="include additional library files, python files into the application directory.",
     )
     parser.add_argument(
         "--timeout", type=int, help="override default application timeout"
@@ -114,11 +115,6 @@ def create_package_parser(
         help='additional CMAKE build arguments. E.g. "-DCMAKE_BUILD_TYPE=DEBUG -DCMAKE_ARG=VALUE"',
     )
     advanced_group.add_argument(
-        "--input-data",
-        type=valid_dir_path,
-        help="sample input data to be embedded in the container.",
-    )
-    advanced_group.add_argument(
         "--holoscan-sdk-file",
         type=valid_existing_path,
         help="path to the Holoscan SDK Debian or PyPI package. "
@@ -131,6 +127,11 @@ def create_package_parser(
         default=[],
         choices=["debug", "holoviz", "torch", "onnx"],
         help="additional packages to include in the container.",
+    )
+    advanced_group.add_argument(
+        "--input-data",
+        type=valid_dir_path,
+        help="sample input data to be embedded in the container.",
     )
     advanced_group.add_argument(
         "--monai-deploy-sdk-file",

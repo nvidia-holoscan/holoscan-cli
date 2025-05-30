@@ -378,8 +378,6 @@ main() {
         if [ -n "${command}" ]; then
             args=$(printf " %s" "${@}")
             info "Launching application ${command} ${args:1}..."
-            echo "Files in /var/holoscan/input"
-            ls -laR /var/holoscan/input
             eval ${command} "$@"
             exit_code=$?
             info "Application exited with ${exit_code}."
