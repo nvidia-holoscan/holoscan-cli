@@ -321,7 +321,7 @@ build_holohub_app() {
 
     info "Building Holohub image using $build_image and $docker_file"
     local image_name=holohub_builder:${version}
-    run_command ./dev_container build --base_img $build_image --img $image_name --docker_file $docker_file
+    run_command ./holohub build-container --base-img $build_image --img $image_name --docker-file $docker_file
     check_exit_code $? "Failed to build Holohub image" 1 clean_up
 
     local volume_name="repo_data_$(date +%s%N)"
