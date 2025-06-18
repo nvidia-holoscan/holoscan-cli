@@ -169,6 +169,7 @@ fatal() {
 #  $3 Exit if true
 #  $4 Function to call if exit code is not 0
 check_exit_code() {
+    set +u
     if [[ $1 -ne 0 ]]
     then
         error "$2"
@@ -181,6 +182,7 @@ check_exit_code() {
             exit $1
         fi
     fi
+    set -u
 }
 
 # Executes a specified command via bash shell
@@ -317,11 +319,10 @@ build_holohub_app() {
     else
         build_image=$(curl -L -s https://raw.githubusercontent.com/nvidia-holoscan/holoscan-cli/refs/heads/main/releases/${version}/artifacts.json | jq -r --arg HSDKVERSION "$version" --arg PFC "$platform_config" '.[$HSDKVERSION|tostring].holoscan."build-images"[$PFC|tostring]."x64-workstation"')
     fi
-    docker_file=$(./run get_app_dockerfile $2)
 
-    info "Building Holohub image using $build_image and $docker_file"
+    info "Building Holohub image using $build_image"
     local image_name=holohub_builder:${version}
-    run_command ./dev_container build --base_img $build_image --img $image_name --docker_file $docker_file
+    run_command ./holohub build-container --base-img $build_image --img $image_name $2
     check_exit_code $? "Failed to build Holohub image" 1 clean_up
 
     local volume_name="repo_data_$(date +%s%N)"
@@ -337,7 +338,7 @@ build_holohub_app() {
     run_command docker cp $1/. $container_name:/workspace/holohub
     check_exit_code $? "Failed to copy Holohub source code to volume" 1 clean_up
 
-    run_command docker run --net host --interactive --rm -v $volume_name:/workspace/holohub -w /workspace/holohub --runtime=nvidia --gpus all --entrypoint=bash $image_name -c "pwd && ls -l && ./run build $2 --install"
+    run_command docker run --net host --interactive --rm -v $volume_name:/workspace/holohub -w /workspace/holohub --runtime=nvidia --gpus all --entrypoint=bash $image_name -c "pwd && ls -l && ./holohub install --local $2 && ls -l ./install"
     exit_code=$?
     check_exit_code $exit_code "Failed to build Holohub application: $2" 0
     if [ $exit_code -ne 0 ]
