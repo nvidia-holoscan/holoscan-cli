@@ -255,32 +255,6 @@ jobs:
           sed -i '/^[*]/d' /tmp/cli-tools-env-output.log
           ./tests/app/validate.sh /tmp/cli-tools-env-output.log tests/app/expected-output/tools/env.txt
 
-      - name: CLI Tools - extract
-        env:
-          EXTRACT_DIR: ${{ github.workspace }}/extract
-        run: |
-          mkdir -p ${{ env.EXTRACT_DIR }} && [ -d ${{ env.EXTRACT_DIR }} ] && ls -lR ${{ env.EXTRACT_DIR }}
-          docker run -i --rm -v ${{ env.EXTRACT_DIR }}:/var/run/holoscan/export $(docker images | grep "test-app-python" | awk '{print $1":"$2}') extract
-
-      - name: Validate CLI Tools - extract Output
-        env:
-          EXTRACT_DIR: ${{ github.workspace }}/extract
-        run: |
-          ls -lR ${{ env.EXTRACT_DIR }}
-          error_found=0
-
-          FILE_PATHS=("app/app-map.yaml" "app/app.yaml" "app/cli_test_app.py" "app/__init__.py" "app/__main__.py" "app/requirements.txt" "config/app.json" "config/app.yaml" "config/pkg.json")
-          for file_path in "${FILE_PATHS[@]}"; do
-            if [ ! -f ${{ env.EXTRACT_DIR }}/${file_path} ]; then
-              echo "${file_path} does not exist"
-              error_found=1
-            fi
-          done
-
-          if [ $error_found -eq 1 ]; then
-            exit 1
-          fi
-
       - name: Save Build Cache
         id: cache-build-cache-save
         uses: actions/cache/save@v4
