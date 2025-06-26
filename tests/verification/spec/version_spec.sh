@@ -19,6 +19,7 @@
 Describe 'version Command'
   It 'prints version'
     When run command holoscan version
-    The line 3 of output should equal "Holoscan SDK:           ${VERSION}"
+    The line 3 of output should equal "Holoscan SDK:           ${HOLOSCAN_VERSION}"
+    The line 4 of output should equal "Holoscan CLI:           ${VERSION}"
   End
 End

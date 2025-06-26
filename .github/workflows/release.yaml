@@ -192,12 +192,17 @@ jobs:
         run: |
           wheel=$(find . -name holoscan_cli-*.whl)
           pip install ${wheel}
+      - name: Install Holoscan SDK
+        env:
+          HOLOSCAN_VERSION: 3.0.0
+        run: |
+          pip install holoscan==${{ env.HOLOSCAN_VERSION }}
       - name: Verification Test
         working-directory: tests/verification
         run: |
           VERSION=${{ github.event.inputs.version }}
           VERSION="${VERSION/?}"
-          shellspec -e VERSION=$VERSION -o j
+          shellspec -e VERSION=$VERSION -e HOLOSCAN_VERSION=$HOLOSCAN_VERSION -o j
       - name: Upload Test Report
         uses: test-summary/action@v2.4
         if: always()
