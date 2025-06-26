@@ -162,6 +162,25 @@ jobs:
           echo "ARTIFACT_PATH=${ARTIFACT_PATH}" >> $GITHUB_OUTPUT
           echo "CLI_VERSION=${CLI_VERSION}" >> $GITHUB_OUTPUT
 
+      - name: Determine SDK Version
+        id: sdk_version
+        env:
+          CLI_VERSION: ${{ steps.latest_artifact_path.outputs.CLI_VERSION }}
+        run: |
+          # Check if CLI_VERSION is available on PyPI
+          echo "Checking if holoscan version ${CLI_VERSION} is available on PyPI..."
+          if curl -s "https://pypi.org/pypi/holoscan/${CLI_VERSION}/json" | jq -e . > /dev/null 2>&1; then
+            echo "Version ${CLI_VERSION} found on PyPI"
+            SDK_VERSION="${CLI_VERSION}"
+          else
+            echo "Version ${CLI_VERSION} not found on PyPI, getting latest available version..."
+            # Get the latest available version from PyPI
+            SDK_VERSION=$(curl -s "https://pypi.org/pypi/holoscan/json" | jq -r '.releases | keys | map(select(split(".") | length == 3 and all(test("^[0-9]+$")))) | sort_by(split(".") | map(tonumber)) | reverse | first')
+            echo "Using latest PyPI version: ${SDK_VERSION}"
+          fi
+          echo "SDK_VERSION=${SDK_VERSION}"
+          echo "SDK_VERSION=${SDK_VERSION}" >> $GITHUB_OUTPUT
+
       - name: Build and Install CLI
         run: |
           poetry build
@@ -181,6 +200,7 @@ jobs:
           TMPDIR: ${{ runner.temp }}
           ARTIFACT_PATH: ${{ steps.latest_artifact_path.outputs.ARTIFACT_PATH }}
           CLI_VERSION: ${{ steps.latest_artifact_path.outputs.CLI_VERSION }}
+          SDK_VERSION: ${{ steps.sdk_version.outputs.SDK_VERSION }}
         shell: bash
         run: |
           export hosts=("developer.download.nvidia.com" "security.ubuntu.com" "archive.ubuntu.com" "pypi.org" "edge.urm.nvidia.com" "www.mellanox.com" "content.mellanox.com" "files.pythonhosted.org" "download.docker.com" "apt.kitware.com")
@@ -205,7 +225,14 @@ jobs:
                             --uid 1000 \
                             --gid 1000 \
                             --source ${{ env.ARTIFACT_PATH }} \
-                            --sdk-version ${{ env.CLI_VERSION }} \
+                            --sdk-version ${{ env.SDK_VERSION }} \
+                            --add-host developer.download.nvidia.com:23.46.17.44 \
+                            --add-host security.ubuntu.com:91.189.91.81 \
+                            --add-host archive.ubuntu.com:91.189.91.82 \
+                            --add-host pypi.org:151.101.128.223 \
+                            --add-host edge.urm.nvidia.com:23.46.228.176 \
+                            --add-host www.mellanox.com:23.46.228.176 \
+                            --add-host files.pythonhosted.org:151.101.0.223
                             ${ci_package_args}
 
       - name: Run Test App
