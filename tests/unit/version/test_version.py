@@ -104,11 +104,11 @@ def test_execute_version_command_holoscan_version_error(mock_stdout):
     ):
         mock_detect_sdk.return_value = SdkType.Holoscan
         mock_holoscan_version.side_effect = Exception("Version detection failed")
-        mock_holoscan_cli_version.return_value = "0.1.0"
+        mock_holoscan_cli_version.side_effect = Exception("Version detection failed")
         execute_version_command(args)
 
         assert any("Holoscan SDK:           N/A" in line for line in mock_stdout)
-        assert any("Holoscan CLI:           0.1.0" in line for line in mock_stdout)
+        assert any("Holoscan CLI:           N/A" in line for line in mock_stdout)
 
 
 def test_execute_version_command_sdk_detection_error(mock_stdout):
