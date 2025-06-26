@@ -190,13 +190,14 @@ jobs:
           name: build-artifact
       - name: Install ShellSpec
         run: curl -fsSL https://git.io/shellspec | sh -s -- --yes
+      - name: Install Holoscan SDK
+        run: |
+          pip install holoscan==${{ env.HOLOSCAN_VERSION }}
       - name: Install Holoscan CLI
         run: |
           wheel=$(find . -name holoscan_cli-*.whl)
           pip install ${wheel}
-      - name: Install Holoscan SDK
-        run: |
-          pip install holoscan==${{ env.HOLOSCAN_VERSION }}
+          holoscan version
       - name: Verification Test
         working-directory: tests/verification
         run: |
