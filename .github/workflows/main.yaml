@@ -246,6 +246,8 @@ jobs:
           fi
 
       - name: Validate CLI Tools - env Output
+        env:
+          CLI_VERSION: ${{ steps.latest_artifact_path.outputs.CLI_VERSION }}
         run: |
           # remove line that contains "HOSTNAME="
           sed -i '/HOSTNAME=/d' /tmp/cli-tools-env-output.log
@@ -253,6 +255,13 @@ jobs:
           sed -i '/PWD=/d' /tmp/cli-tools-env-output.log
           # remove line that contains "***"
           sed -i '/^[*]/d' /tmp/cli-tools-env-output.log
+          # Update SDk version
+          sed -i "s/SDKVERSION/${{ env.CLI_VERSION }}/" tests/app/expected-output/tools/env.txt
+          echo "================================================"
+          cat /tmp/cli-tools-env-output.log
+          echo "================================================"
+          cat tests/app/expected-output/tools/env.txt
+          echo "================================================"
           ./tests/app/validate.sh /tmp/cli-tools-env-output.log tests/app/expected-output/tools/env.txt
 
       - name: Save Build Cache
