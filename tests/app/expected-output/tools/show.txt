@@ -1,0 +1,77 @@
+============================== app.json ==============================
+{
+  "apiVersion": "1.0.0",
+  "command": "[\"python3\", \"/opt/holoscan/app\"]",
+  "environment": {
+    "HOLOSCAN_APPLICATION": "/opt/holoscan/app",
+    "HOLOSCAN_INPUT_PATH": "input/",
+    "HOLOSCAN_OUTPUT_PATH": "output/",
+    "HOLOSCAN_WORKDIR": "/var/holoscan",
+    "HOLOSCAN_MODEL_PATH": "/opt/holoscan/models",
+    "HOLOSCAN_CONFIG_PATH": "/var/holoscan/app.yaml",
+    "HOLOSCAN_APP_MANIFEST_PATH": "/etc/holoscan/app.json",
+    "HOLOSCAN_PKG_MANIFEST_PATH": "/etc/holoscan/pkg.json",
+    "HOLOSCAN_DOCS_PATH": "/opt/holoscan/docs",
+    "HOLOSCAN_LOGS_PATH": "/var/holoscan/logs"
+  },
+  "input": {
+    "path": "input/",
+    "formats": [
+      "files"
+    ]
+  },
+  "liveness": {
+    "type": "command",
+    "command": [
+      "/bin/grpc_health_probe",
+      "-addr",
+      ":8765"
+    ],
+    "initialDelaySeconds": 1,
+    "periodSeconds": 10,
+    "timeoutSeconds": 1,
+    "failureThreshold": 3
+  },
+  "output": {
+    "path": "output/",
+    "formats": [
+      "screen"
+    ]
+  },
+  "readiness": {
+    "type": "command",
+    "command": [
+      "/bin/grpc_health_probe",
+      "-addr",
+      ":8765"
+    ],
+    "initialDelaySeconds": 1,
+    "periodSeconds": 10,
+    "timeoutSeconds": 1,
+    "failureThreshold": 3
+  },
+  "sdk": "holoscan",
+  "sdkVersion": "SDKVERSION",
+  "timeout": 0,
+  "version": 0.1,
+  "workingDirectory": "/var/holoscan"
+}
+
+============================== pkg.json ==============================
+{
+  "apiVersion": "1.0.0",
+  "applicationRoot": "/opt/holoscan/app",
+  "modelRoot": "/opt/holoscan/models",
+  "models": {
+    "model-2": "/opt/holoscan/models/model-2",
+    "model-1": "/opt/holoscan/models/model-1"
+  },
+  "resources": {
+    "cpu": 1,
+    "gpu": 1,
+    "memory": "1Gi",
+    "gpu-memory": "1Gi"
+  },
+  "version": 0.1,
+  "platformConfig": "dgpu"
+}
