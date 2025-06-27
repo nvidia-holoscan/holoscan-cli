@@ -43,13 +43,17 @@ def test_execute_version_command_holoscan_sdk(mock_stdout):
         patch(
             "holoscan_cli.version.version.detect_holoscan_version"
         ) as mock_holoscan_version,
+        patch(
+            "holoscan_cli.version.version.detect_holoscan_cli_version"
+        ) as mock_holoscan_cli_version,
     ):
         mock_detect_sdk.return_value = SdkType.Holoscan
         mock_holoscan_version.return_value = "1.0.0"
-
+        mock_holoscan_cli_version.return_value = "0.1.0"
         execute_version_command(args)
 
         assert any("Holoscan SDK:           1.0.0" in line for line in mock_stdout)
+        assert any("Holoscan CLI:           0.1.0" in line for line in mock_stdout)
         assert any(
             f"You are executing Holoscan CLI from: {os.path.dirname(os.path.abspath(sys.argv[0]))}"
             in line
@@ -67,16 +71,21 @@ def test_execute_version_command_monai_sdk(mock_stdout):
             "holoscan_cli.version.version.detect_holoscan_version"
         ) as mock_holoscan_version,
         patch(
+            "holoscan_cli.version.version.detect_holoscan_cli_version"
+        ) as mock_holoscan_cli_version,
+        patch(
             "holoscan_cli.version.version.detect_monaideploy_version"
         ) as mock_monai_version,
     ):
         mock_detect_sdk.return_value = SdkType.MonaiDeploy
         mock_holoscan_version.return_value = "1.0.0"
+        mock_holoscan_cli_version.return_value = "0.1.0"
         mock_monai_version.return_value = "0.6.0"
 
         execute_version_command(args)
 
         assert any("Holoscan SDK:           1.0.0" in line for line in mock_stdout)
+        assert any("Holoscan CLI:           0.1.0" in line for line in mock_stdout)
         assert any("MONAI Deploy App SDK:   0.6.0" in line for line in mock_stdout)
 
 
@@ -89,13 +98,17 @@ def test_execute_version_command_holoscan_version_error(mock_stdout):
         patch(
             "holoscan_cli.version.version.detect_holoscan_version"
         ) as mock_holoscan_version,
+        patch(
+            "holoscan_cli.version.version.detect_holoscan_cli_version"
+        ) as mock_holoscan_cli_version,
     ):
         mock_detect_sdk.return_value = SdkType.Holoscan
         mock_holoscan_version.side_effect = Exception("Version detection failed")
-
+        mock_holoscan_cli_version.side_effect = Exception("Version detection failed")
         execute_version_command(args)
 
         assert any("Holoscan SDK:           N/A" in line for line in mock_stdout)
+        assert any("Holoscan CLI:           N/A" in line for line in mock_stdout)
 
 
 def test_execute_version_command_sdk_detection_error(mock_stdout):
@@ -107,7 +120,6 @@ def test_execute_version_command_sdk_detection_error(mock_stdout):
         patch("holoscan_cli.version.version.logging.error") as mock_error,
     ):
         mock_detect_sdk.side_effect = Exception("SDK detection failed")
-
         with pytest.raises(SystemExit) as exc_info:
             execute_version_command(args)
 

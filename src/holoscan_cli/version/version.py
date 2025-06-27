@@ -20,6 +20,7 @@ from argparse import Namespace
 from ..common.enum_types import SdkType
 from ..common.sdk_utils import (
     detect_holoscan_version,
+    detect_holoscan_cli_version,
     detect_monaideploy_version,
     detect_sdk,
 )
@@ -39,6 +40,12 @@ def execute_version_command(args: Namespace):
             print(f"Holoscan SDK:           {sdk_version}")
         except Exception:
             print("Holoscan SDK:           N/A")
+
+        try:
+            cli_version = detect_holoscan_cli_version()
+            print(f"Holoscan CLI:           {cli_version}")
+        except Exception:
+            print("Holoscan CLI:           N/A")
 
         if sdk == SdkType.MonaiDeploy:
             try:
