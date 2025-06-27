@@ -232,7 +232,7 @@ jobs:
                             --add-host pypi.org:151.101.128.223 \
                             --add-host edge.urm.nvidia.com:23.46.228.176 \
                             --add-host www.mellanox.com:23.46.228.176 \
-                            --add-host files.pythonhosted.org:151.101.0.223
+                            --add-host files.pythonhosted.org:151.101.0.223 \
                             ${ci_package_args}
 
       - name: Run Test App
@@ -254,27 +254,35 @@ jobs:
       - name: CLI Tools - show
         env:
           CLI_VERSION: ${{ steps.latest_artifact_path.outputs.CLI_VERSION }}
+          SDK_VERSION: ${{ steps.sdk_version.outputs.SDK_VERSION }}
         run: |
           docker run -i --rm $(docker images | grep "test-app-python" | awk '{print $1":"$2}') show | tee /tmp/cli-tools-show-output.log
-          sed -i "s/SDKVERSION/${{ env.CLI_VERSION }}/" tests/app/expected-output/tools/show.txt
+          sed -i "s/SDKVERSION/${{ env.SDK_VERSION }}/" tests/app/expected-output/tools/show.txt
 
       - name: Validate CLI Tools - show Output
         run: |
+          echo "================================================"
+          cat /tmp/cli-tools-show-output.log
+          echo "================================================"
+          cat tests/app/expected-output/tools/show.txt
+          echo "================================================"
           ./tests/app/validate.sh /tmp/cli-tools-show-output.log tests/app/expected-output/tools/show.txt
 
       - name: CLI Tools - env
         env:
           CLI_VERSION: ${{ steps.latest_artifact_path.outputs.CLI_VERSION }}
+          SDK_VERSION: ${{ steps.sdk_version.outputs.SDK_VERSION }}
         run: |
           docker run -i --rm $(docker images | grep "test-app-python" | awk '{print $1":"$2}') env | tee /tmp/cli-tools-env-output.log
-          if ! grep -q "HOLOSCAN_VERSION=${{ env.CLI_VERSION }}" /tmp/cli-tools-env-output.log; then
-            echo "HOLOSCAN_VERSION is not ${{ env.CLI_VERSION }}"
+          if ! grep -q "HOLOSCAN_VERSION=${{ env.SDK_VERSION }}" /tmp/cli-tools-env-output.log; then
+            echo "HOLOSCAN_VERSION is not ${{ env.SDK_VERSION }}"
             exit 1
           fi
 
       - name: Validate CLI Tools - env Output
         env:
           CLI_VERSION: ${{ steps.latest_artifact_path.outputs.CLI_VERSION }}
+          SDK_VERSION: ${{ steps.sdk_version.outputs.SDK_VERSION }}
         run: |
           # remove line that contains "NVIDIA_REQUIRE_CUDA="
           sed -i '/NVIDIA_REQUIRE_CUDA=/d' /tmp/cli-tools-env-output.log
@@ -285,7 +293,7 @@ jobs:
           # remove line that contains "***"
           sed -i '/^[*]/d' /tmp/cli-tools-env-output.log
           # Update SDk version
-          sed -i "s/SDKVERSION/${{ env.CLI_VERSION }}/" tests/app/expected-output/tools/env.txt
+          sed -i "s/SDKVERSION/${{ env.SDK_VERSION }}/" tests/app/expected-output/tools/env.txt
           echo "================================================"
           cat /tmp/cli-tools-env-output.log
           echo "================================================"
