@@ -51,7 +51,7 @@
     "failureThreshold": 3
   },
   "sdk": "holoscan",
-  "sdkVersion": "3.0.0",
+  "sdkVersion": "SDKVERSION",
   "timeout": 0,
   "version": 0.1,
   "workingDirectory": "/var/holoscan"

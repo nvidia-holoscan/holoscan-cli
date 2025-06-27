@@ -69,7 +69,7 @@ for expected_file in "${EXPECTED_OUTPUT_FILES[@]}"; do
             match_found=1
             break # Found the block, no need to check other potential start lines
         fi
-    done < <(grep -F -n "$first_line" "$OUTPUT_LOG") # Use -F for fixed string, -x for full line match
+    done < <(grep -F -x -n "$first_line" "$OUTPUT_LOG") # Use -F for fixed string, -x for full line match
 
     # If no match was found after checking all potential start lines
     if [ $match_found -eq 0 ]; then
