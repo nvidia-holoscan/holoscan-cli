@@ -27,9 +27,6 @@ dependencies = [
 ]
 
 [tool.poetry]
-version = "0.0.0"
-
-[project.poetry]
 requires-poetry = ">=2.0"
 description = "Command line interface for packaging and running Holoscan applications."
 authors = ["NVIDIA"]
@@ -70,6 +67,7 @@ classifiers = [
     "Topic :: Software Development :: Libraries :: Python Modules",
     "Typing :: Typed",
 ]
+version = "0.0.0"
 
 
 [tool.poetry.group.dev.dependencies]
