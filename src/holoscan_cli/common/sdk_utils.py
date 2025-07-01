@@ -138,7 +138,7 @@ def detect_holoscan_version(sdk_version: Optional[Version] = None) -> str:
         return sdk_version.base_version
     else:
         try:
-            ver_str = importlib.metadata.version("holoscan-cli").title()
+            ver_str = importlib.metadata.version("holoscan").title()
             ver = Version(ver_str)
             ver_str = ".".join(str(i) for i in ver.release)
 
@@ -193,3 +193,17 @@ def detect_monaideploy_version(sdk_version: Optional[Version] = None) -> str:
             raise FailedToDetectSDKVersionError(
                 "Failed to detect installed MONAI Deploy App SDK PyPI version.", ex
             ) from ex
+
+
+def detect_holoscan_cli_version() -> str:
+    """
+    Detects Holoscan CLI version to use based on installed PyPI package.
+    """
+    try:
+        ver_str = importlib.metadata.version("holoscan-cli").title()
+        ver = Version(ver_str)
+        return ver.base_version
+    except Exception as ex:
+        raise FailedToDetectSDKVersionError(
+            "Failed to detect installed Holoscan CLI PyPI version.", ex
+        ) from ex

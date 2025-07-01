@@ -22,6 +22,7 @@ from holoscan_cli.common.exceptions import (
 )
 from holoscan_cli.common.sdk_utils import (
     detect_holoscan_version,
+    detect_holoscan_cli_version,
     detect_monaideploy_version,
     detect_sdk,
     detect_sdk_version,
@@ -111,6 +112,30 @@ class TestDetectHoloscanVersion:
 
         with pytest.raises(FailedToDetectSDKVersionError):
             detect_holoscan_version()
+
+
+class TestDetectHoloscanCliVersion:
+    def test_detect_holoscan_cli_version(self, monkeypatch):
+        version = "1.0.0"
+        monkeypatch.setattr("importlib.metadata.version", lambda x: version)
+        result = detect_holoscan_cli_version()
+        assert result == version
+
+    def test_detect_holoscan_cli_version_with_patch(self, monkeypatch):
+        version = "1.0.0-beta-1"
+        monkeypatch.setattr("importlib.metadata.version", lambda x: version)
+
+        result = detect_holoscan_cli_version()
+        assert result == "1.0.0"
+
+    def test_detect_holoscan_cli_version_wiht_invalid_metadata(self, monkeypatch):
+        def raise_error():
+            raise Exception("error")
+
+        monkeypatch.setattr("importlib.metadata.version", raise_error)
+
+        with pytest.raises(FailedToDetectSDKVersionError):
+            detect_holoscan_cli_version()
 
 
 class TestDetectMonaiDeployVersion:

@@ -15,8 +15,21 @@
 [project]
 dynamic = ["version"]
 name = "holoscan-cli"
+requires-python = ">=3.9,<3.13"
+dependencies = [
+    "pip (>25.1.0)",
+    "python-on-whales (>=0.77.0)",
+    "Jinja2 (>=3.1.6,<4.0.0)",
+    "packaging (>=25.0,<26.0)",
+    "pyyaml (>=6.0,<7.0)",
+    "requests (>=2.32,<3.0)",
+    "psutil (>=7.0.0,<8.0)",
+]
 
 [tool.poetry]
+version = "0.0.0"
+
+[project.poetry]
 requires-poetry = ">=2.0"
 description = "Command line interface for packaging and running Holoscan applications."
 authors = ["NVIDIA"]
@@ -57,17 +70,6 @@ classifiers = [
     "Topic :: Software Development :: Libraries :: Python Modules",
     "Typing :: Typed",
 ]
-version = "0.0.0"
-
-[tool.poetry.dependencies]
-python = ">=3.9,<3.13"
-pip = ">22.0.2"
-python-on-whales = "^0.60.1"
-Jinja2 = "^3.1.6"
-packaging = "^23.1"
-pyyaml = "^6.0"
-requests = "^2.31.0"
-psutil = "^6.0.0"
 
 
 [tool.poetry.group.dev.dependencies]
@@ -75,11 +77,11 @@ gitchangelog = "^3.0.4"
 
 [tool.poetry.group.test.dependencies]
 coverage= "^7.9.1"
-mypy= "^1.13.0"
-pre-commit = "^4.0.1"
-pytest-cov= "^6.0.0"
-pytest-mock= "^3.12.0"
-pytest = "^8.3.4"
+mypy= "^1.16.1"
+pre-commit = "^4.2.0"
+pytest-cov= "^6.2.1"
+pytest-mock= "^3.14.1"
+pytest = "^8.4.1"
 coveralls = "^4.0.1"
 
 [tool.poetry.group.docs]
@@ -91,7 +93,7 @@ mkdocs = "*"
 [tool.poetry.requires-plugins]
 poetry-dynamic-versioning = { version = ">=1.5.0,<2.0.0", extras = ["plugin"] }
 
-[tool.poetry.scripts]
+[project.scripts]
 holoscan = 'holoscan_cli.__main__:main'
 monai-deploy = 'holoscan_cli.__main__:main'
 
