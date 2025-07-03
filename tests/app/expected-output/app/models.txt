@@ -2,9 +2,9 @@
 
 Listing models in /opt/holoscan/models:
 
-Model 'model-2' found in /opt/holoscan/models/model-2
-
 Model 'model-1' found in /opt/holoscan/models/model-1
+
+Model 'model-2' found in /opt/holoscan/models/model-2
 
 ListModelsOp completed.
 
