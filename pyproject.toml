@@ -15,7 +15,7 @@
 [project]
 dynamic = ["version"]
 name = "holoscan-cli"
-requires-python = ">=3.9,<3.13"
+requires-python = ">=3.10,<3.13"
 dependencies = [
     "pip (>25.1.0)",
     "python-on-whales (>=0.77.0)",
@@ -59,7 +59,6 @@ classifiers = [
     "License :: OSI Approved :: Apache Software License",
     "Operating System :: POSIX :: Linux",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",

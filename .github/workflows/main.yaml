@@ -62,10 +62,10 @@ jobs:
         os: [ubuntu-latest]
         python:
           [
-            { version: "3.9", coveralls: false },
             { version: "3.10", coveralls: false },
             { version: "3.11", coveralls: false },
             { version: "3.12", coveralls: true }, # publish coverage with latest version of Python
+            { version: "3.13", coveralls: false },
           ]
     env:
       PYTHON_VERSION: ${{ matrix.python.version }}
