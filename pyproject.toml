@@ -15,7 +15,7 @@
 [project]
 dynamic = ["version"]
 name = "holoscan-cli"
-requires-python = ">=3.10,<3.13"
+requires-python = ">=3.10,<3.14"
 dependencies = [
     "pip (>25.1.0)",
     "python-on-whales (>=0.77.0)",
@@ -62,6 +62,7 @@ classifiers = [
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
     "Topic :: Software Development :: Libraries :: Python Modules",
     "Typing :: Typed",
@@ -79,7 +80,7 @@ pre-commit = "^4.2.0"
 pytest-cov= "^6.2.1"
 pytest-mock= "^3.14.1"
 pytest = "^8.4.1"
-coveralls = "^4.0.1"
+coveralls = { version = "^4.0.1", markers = "python_version < '3.13'" }
 
 [tool.poetry.group.docs]
 optional = true
