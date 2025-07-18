@@ -31,7 +31,7 @@ Holoscan CLI is delivered as a Python package and can be installed from PyPI.org
 
 To build the Holoscan CLI from source, you will need to clone this repository and install the following dependencies:
 
-- Python 3.9+.
+- Python 3.10+.
 - [poetry 2.0+](https://python-poetry.org/docs/#installation)
 
 ### Development Environment

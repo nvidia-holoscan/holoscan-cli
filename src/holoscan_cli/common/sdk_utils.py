@@ -72,19 +72,7 @@ def detect_sdk(sdk: Optional[SdkType] = None) -> SdkType:
 
     command = None
     try:
-        # For Python 3.10+, this check is to support use of the holoscan cli bash script bundled
-        # with the Debian package.
-        # Since the Debian package bundles with 3.10, we don't need to handle 3.9 but
-        # we still need to check if `orig_argv` is supported to avoid breaking unit test.
-        if (
-            getattr(sys, "orig_argv", None)
-            and len(sys.orig_argv) >= 3
-            and sys.orig_argv[0] == "python3"
-            and sys.orig_argv[2] == "holoscan_cli"
-        ):
-            command = "holoscan"
-        else:
-            command = Path(sys.argv[0]).name.lower()
+        command = Path(sys.argv[0]).name.lower()
         return SdkType(command)
     except Exception as ex:
         raise InvalidSdkError(f"Invalid SDK value provided: {command}") from ex
