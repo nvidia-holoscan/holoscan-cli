@@ -77,14 +77,13 @@ class ListModelsOp(Operator):
         pkg_file_path = os.getenv("HOLOSCAN_PKG_MANIFEST_PATH")
         with open(pkg_file_path) as pkg_manifest_file:
             pkg_manifest = yaml.load(pkg_manifest_file, yaml.SafeLoader)
-            for model in pkg_manifest["models"]:
+            for model in sorted(pkg_manifest["models"]):
                 if os.path.exists(pkg_manifest["models"][model]):
                     print(f"Model '{model}' found in {pkg_manifest['models'][model]}")
                 else:
                     print(
                         f"Error: model '{model}' missing from {pkg_manifest['models'][model]}"
                     )
-
         print("ListModelsOp completed.")
         print("======================================================")
 
