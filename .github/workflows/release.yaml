@@ -172,6 +172,28 @@ jobs:
         name: build-artifact
         path: dist/*.whl
 
+    - name: Remove tag
+      uses: actions/github-script@v7.0.1
+      if: ${{ inputs.ga == false }}
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        script: |
+          try {
+            await github.rest.git.deleteRef({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              ref: 'tags/${{ github.event.inputs.version }}'
+            });
+            console.log('Tag ${{ github.event.inputs.version }} deleted successfully');
+          } catch (error) {
+            if (error.status === 422) {
+              console.log('Tag ${{ github.event.inputs.version }} does not exist, skipping deletion');
+            } else {
+              throw error;
+            }
+          }
+
   verification-test:
     runs-on: ${{ matrix.os }}
     env:
