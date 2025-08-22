@@ -134,7 +134,11 @@ jobs:
 
       - name: Calculate Cache Size
         run: |
-          du -sh ~/.holoscan_build_cache
+          if [ -d ~/.holoscan_build_cache ]; then
+            du -sh ~/.holoscan_build_cache
+          else
+            echo "~/.holoscan_build_cache does not exist"
+          fi
 
       - name: Save Build Cache
         id: cache-build-cache-save
