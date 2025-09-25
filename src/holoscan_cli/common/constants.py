@@ -69,6 +69,9 @@ class Constants:
 
     RESOURCE_SHARED_MEMORY_KEY = "sharedMemory"
 
+    # Include "holoscan" for backward compatibility; remove post 3.7.0 release
+    PYPI_PACKAGE_NAMES = ["holoscan-cu12", "holoscan-cu13", "holoscan"]
+
 
 class SDK:
     """

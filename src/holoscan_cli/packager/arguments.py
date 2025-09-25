@@ -54,7 +54,7 @@ class PackagingArguments:
 
         self._platforms: list[PlatformParameters]
         self._build_parameters = PackageBuildParameters()
-        self._artifact_sources = ArtifactSources()
+        self._artifact_sources = ArtifactSources(args.cuda)
 
         if args.source is not None:
             self._artifact_sources.load(args.source)

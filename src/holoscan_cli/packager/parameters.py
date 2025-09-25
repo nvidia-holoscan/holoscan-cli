@@ -36,6 +36,7 @@ class PlatformParameters:
         platform: Platform,
         tag: str,
         version: str,
+        cuda_version: int = 13,
     ) -> None:
         self._logger = logging.getLogger("platform.parameters")
         self._platform = SDK.INTERNAL_PLATFORM_MAPPINGS[platform][0]
@@ -67,6 +68,7 @@ class PlatformParameters:
         self._data["custom_base_image"] = False
         self._data["custom_holoscan_sdk"] = False
         self._data["custom_monai_deploy_sdk"] = False
+        self._data["cuda_version"] = cuda_version
         self._data["target_arch"] = "aarch64" if self._arch == Arch.arm64 else "x86_64"
         self._data["cuda_deb_arch"] = "sbsa" if self._arch == Arch.arm64 else "x86_64"
         self._data["holoscan_deb_arch"] = (
@@ -127,6 +129,10 @@ class PlatformParameters:
     @build_image.setter
     def build_image(self, value: str):
         self._data["build_image"] = value
+
+    @property
+    def cuda_version(self) -> int:
+        return self._data["cuda_version"]
 
     @property
     def holoscan_sdk_file(self) -> Optional[Path]:

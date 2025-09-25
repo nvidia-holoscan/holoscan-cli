@@ -56,6 +56,30 @@ class TestPlatformParameters:
         assert build_parameters.cuda_deb_arch == "x86_64"
         assert build_parameters.target_arch == "x86_64"
 
+    def test_cuda_version_default(self):
+        """Test that default CUDA version is set correctly"""
+        build_parameters = PlatformParameters(
+            Platform.x86_64,
+            "my-container-app",
+            "1.2.3",
+        )
+        # Default CUDA version should be 13
+        assert build_parameters.cuda_version == 13
+
+    def test_cuda_version_specified(self):
+        """Test that specified CUDA version is set correctly"""
+        # Test CUDA 12
+        build_parameters = PlatformParameters(
+            Platform.x86_64, "my-container-app", "1.2.3", 12
+        )
+        assert build_parameters.cuda_version == 12
+
+        # Test CUDA 13
+        build_parameters = PlatformParameters(
+            Platform.Jetson, "my-container-app", "1.2.3", 13
+        )
+        assert build_parameters.cuda_version == 13
+
 
 class TestPackageBuildParameters:
     def test_set_application_python_dir(self, monkeypatch):
@@ -185,3 +209,16 @@ class TestPackageBuildParameters:
 
         with pytest.raises(UnknownApplicationTypeError):
             build_parameters.application = input_dir
+
+    def test_invalid_tag_value_error(self):
+        """Test InvalidTagValueError for invalid Docker tag (line 53)"""
+        from holoscan_cli.common.exceptions import InvalidTagValueError
+
+        with pytest.raises(InvalidTagValueError):
+            # This should trigger the tag_prefix is None case
+            PlatformParameters(
+                Platform.x86_64,
+                "",  # Empty tag should cause tag_prefix to be None
+                "1.2.3",
+                13,
+            )
