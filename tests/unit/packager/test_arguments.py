@@ -54,6 +54,7 @@ class TestPackagingArguments:
             pathlib.Path("/path/to/lib"),
             pathlib.Path("/path/to/so"),
         ]
+        self.input_args.cuda = 13  # Add CUDA version argument
 
         self.source_load_called = False
 
@@ -241,3 +242,35 @@ class TestPackagingArguments:
         assert args.application_manifest.liveness is None
 
         assert len(args.platforms) == 1
+
+    def test_cuda_version_argument(self, monkeypatch):
+        """Test that CUDA version is passed correctly to ArtifactSources"""
+        self._setup_mocks(monkeypatch)
+
+        # Test CUDA 12
+        self.input_args.cuda = 12
+        cuda_version_passed = None
+
+        def mock_artifact_sources_init(cuda_version):
+            nonlocal cuda_version_passed
+            cuda_version_passed = cuda_version
+            # Mock the ArtifactSources class
+            mock_sources = type(
+                "MockArtifactSources",
+                (),
+                {"load": lambda self, x: None, "download_manifest": lambda self: None},
+            )()
+            return mock_sources
+
+        monkeypatch.setattr(
+            "holoscan_cli.packager.arguments.ArtifactSources",
+            mock_artifact_sources_init,
+        )
+
+        _ = PackagingArguments(self.input_args, pathlib.Path("/temp"))
+        assert cuda_version_passed == 12
+
+        # Test CUDA 13
+        self.input_args.cuda = 13
+        _ = PackagingArguments(self.input_args, pathlib.Path("/temp"))
+        assert cuda_version_passed == 13

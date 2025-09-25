@@ -27,7 +27,10 @@ from ..common.dockerutils import (
     create_and_get_builder,
     docker_export_tarball,
 )
-from ..common.exceptions import WrongApplicationPathError
+from ..common.exceptions import (
+    IncompatiblePlatformConfigurationError,
+    WrongApplicationPathError,
+)
 from .parameters import PackageBuildParameters, PlatformBuildResults, PlatformParameters
 
 
@@ -203,6 +206,7 @@ Building image for:                 {platform_parameters.platform.value}
     Architecture:                   {platform_parameters.platform_arch.value}
     Base Image:                     {platform_parameters.base_image}
     Build Image:                    {platform_parameters.build_image if platform_parameters.build_image is not None else "N/A"}
+    CUDA Version:                   {platform_parameters.cuda_version}
     Cache:                          {'Disabled' if self._build_parameters.no_cache else 'Enabled'}
     Configuration:                  {platform_parameters.platform_config.value}
     Holoscan SDK Package:           {platform_parameters.holoscan_sdk_file if platform_parameters.holoscan_sdk_file is not None else "N/A"}
@@ -354,7 +358,15 @@ Building image for:                 {platform_parameters.platform.value}
 """
         )
 
-        jinja_template = jinja_env.get_template("Dockerfile.jinja2")
+        if platform_parameters.cuda_version == 12:
+            jinja_template = jinja_env.get_template("Dockerfile-cu12.jinja2")
+        elif platform_parameters.cuda_version == 13:
+            jinja_template = jinja_env.get_template("Dockerfile.jinja2")
+        else:
+            raise IncompatiblePlatformConfigurationError(
+                f"Invalid CUDA version: {platform_parameters.cuda_version}"
+            )
+
         return jinja_template.render(
             {
                 **self._build_parameters.to_jinja,

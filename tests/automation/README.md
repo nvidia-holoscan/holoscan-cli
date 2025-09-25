@@ -15,11 +15,20 @@ To successfully execute the test automation script, the system must meet the req
 
 To run the test automation script, navigate to the automation directory, then execute the script with the application directory as an argument:
 
-```
+```bash
 cd tests/automation
 ./test.sh [application-directory]
 # for example
 ./tests.sh ./endoscopy_tool_tracking_cpp
+```
+
+For executions using a non-released version of artifacts.json:
+
+```bash
+ARTIFACT_PATH=[path-to-artifacts.json] ./test.sh [application-directory]
+
+# to override SDK file, use ci_package_args
+export ci_package_args="--holoscan-sdk-file [path-to-sdk-file].[whl|deb]"
 ```
 
 The `test.sh` script invokes `check.sh` to verify that all system requirements are met. It will exit if any of the requirements are missing.

@@ -21,6 +21,7 @@ from typing import Optional
 from packaging.version import Version
 
 from .artifact_sources import ArtifactSources
+from .constants import Constants
 from .enum_types import SdkType
 from .exceptions import FailedToDetectSDKVersionError, InvalidSdkError
 
@@ -125,32 +126,37 @@ def detect_holoscan_version(sdk_version: Optional[Version] = None) -> str:
     if sdk_version is not None:
         return sdk_version.base_version
     else:
-        try:
-            ver_str = importlib.metadata.version("holoscan").title()
-            ver = Version(ver_str)
-            ver_str = ".".join(str(i) for i in ver.release)
-
-            if len(ver.release) == 1 and ver.major == ver.release[0]:
-                ver_str = ver_str + ".0.0"
-            elif (
-                len(ver.release) == 2
-                and ver.major == ver.release[0]
-                and ver.minor == ver.release[1]
-            ):
-                ver_str = ver_str + ".0"
-            elif (
-                len(ver.release) == 4
-                and ver.major == ver.release[0]
-                and ver.minor == ver.release[1]
-                and ver.micro == ver.release[2]
-            ):
-                ver_str = f"{ver.release[0]}.{ver.release[1]}.{ver.release[2]}"
-
-            return ver_str
-        except Exception as ex:
+        # Scan for installed packages with prefix "holoscan"
+        holoscan_pkgs = [
+            dist.metadata["Name"]
+            for dist in importlib.metadata.distributions()
+            if dist.metadata["Name"].lower() in Constants.PYPI_PACKAGE_NAMES
+        ]
+        if not holoscan_pkgs:
             raise FailedToDetectSDKVersionError(
-                "Failed to detect installed Holoscan PyPI version.", ex
-            ) from ex
+                "No installed Holoscan PyPI package found."
+            )
+        ver_str = importlib.metadata.version(holoscan_pkgs[0]).title()
+        ver = Version(ver_str)
+        ver_str = ".".join(str(i) for i in ver.release)
+
+        if len(ver.release) == 1 and ver.major == ver.release[0]:
+            ver_str = ver_str + ".0.0"
+        elif (
+            len(ver.release) == 2
+            and ver.major == ver.release[0]
+            and ver.minor == ver.release[1]
+        ):
+            ver_str = ver_str + ".0"
+        elif (
+            len(ver.release) == 4
+            and ver.major == ver.release[0]
+            and ver.minor == ver.release[1]
+            and ver.micro == ver.release[2]
+        ):
+            ver_str = f"{ver.release[0]}.{ver.release[1]}.{ver.release[2]}"
+
+        return ver_str
 
 
 def detect_monaideploy_version(sdk_version: Optional[Version] = None) -> str:
