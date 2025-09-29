@@ -269,9 +269,9 @@ RUN if [ "{{ holoscan_deb_arch }}" = "arm64" ]; then \
     else \
         GDR_REPO_ARCH=x64 ; \
     fi \
-    && curl -O https://developer.download.nvidia.com/compute/redist/gdrcopy/CUDA%2012.8/ubuntu22_04/${GDR_REPO_ARCH}/libgdrapi_2.5.1-1_{{ holoscan_deb_arch }}.Ubuntu22_04.deb \
-    && dpkg -i ibgdrapi_2.5.1-1_{{ holoscan_deb_arch }}.Ubuntu22_04.deb \
-    && rm -f ibgdrapi_2.5.1-1_{{ holoscan_deb_arch }}.Ubuntu22_04.deb \
+    && curl -O https://developer.download.nvidia.com/compute/redist/gdrcopy/CUDA%2012.8/ubuntu24_04/${GDR_REPO_ARCH}/libgdrapi_2.5.1-1_{{ holoscan_deb_arch }}.Ubuntu24_04.deb \
+    && dpkg -i libgdrapi_2.5.1-1_{{ holoscan_deb_arch }}.Ubuntu24_04.deb \
+    && rm -f libgdrapi_2.5.1-1_{{ holoscan_deb_arch }}.Ubuntu24_04.deb \
     && rm -rf /var/lib/apt/lists/*
 
 {% if custom_holoscan_sdk == True %}
