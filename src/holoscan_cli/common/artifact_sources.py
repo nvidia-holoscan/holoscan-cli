@@ -14,6 +14,7 @@
 # limitations under the License.
 import json
 import logging
+import os
 from typing import Any, Optional
 
 import requests
@@ -36,8 +37,9 @@ class ArtifactSources:
     HoloscanVersion = None
     ManifestFileUrl = None
 
-    def __init__(self) -> None:
+    def __init__(self, cuda_version: int) -> None:
         self._logger = logging.getLogger("common")
+        self._cuda_version = cuda_version
         try:
             ArtifactSources.HoloscanVersion = ".".join(
                 str(i) for i in Version(__version__).release[0:3]
@@ -48,7 +50,10 @@ class ArtifactSources:
                 "a Holoscan SDK version to use."
             ) from ex
 
-        ArtifactSources.ManifestFileUrl = f"https://raw.githubusercontent.com/nvidia-holoscan/holoscan-cli/refs/heads/main/releases/{ArtifactSources.HoloscanVersion}/artifacts.json"  # noqa: E501
+        if self._cuda_version == 12:
+            ArtifactSources.ManifestFileUrl = f"https://raw.githubusercontent.com/nvidia-holoscan/holoscan-cli/refs/heads/main/releases/{ArtifactSources.HoloscanVersion}/artifacts-cu12.json"  # noqa: E501
+        else:
+            ArtifactSources.ManifestFileUrl = f"https://raw.githubusercontent.com/nvidia-holoscan/holoscan-cli/refs/heads/main/releases/{ArtifactSources.HoloscanVersion}/artifacts.json"  # noqa: E501
 
     @property
     def holoscan_versions(self) -> list[str]:
@@ -82,6 +87,12 @@ class ArtifactSources:
                 "Downloading manifest files from non-HTTPS servers is not supported."
             )
         else:
+            if os.path.isdir(uri):
+                if self._cuda_version == 12:
+                    uri = os.path.join(uri, "artifacts-cu12.json")
+                else:
+                    uri = os.path.join(uri, "artifacts.json")
+
             self._logger.info(f"Using CLI manifest file from {uri}...")
             with open(uri) as file:
                 temp = json.load(file)
@@ -116,7 +127,7 @@ class ArtifactSources:
         )
 
     def _download_manifest_internal(self, url, headers=None):
-        self._logger.info("Downloading CLI manifest file...")
+        self._logger.info(f"Downloading CLI manifest file from {url}...")
         manifest = requests.get(url, headers=headers)
 
         try:

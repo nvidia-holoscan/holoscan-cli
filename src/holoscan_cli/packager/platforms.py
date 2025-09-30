@@ -76,7 +76,9 @@ class Platform:
 
         platforms = []
         for platform in args.platform:
-            platform_parameters = PlatformParameters(platform, args.tag, version)
+            platform_parameters = PlatformParameters(
+                platform, args.tag, version, args.cuda
+            )
 
             (
                 platform_parameters.custom_base_image,
@@ -90,6 +92,7 @@ class Platform:
                 holoscan_sdk_version,
                 application_type,
                 args.build_image,
+                platform_parameters.cuda_version,
             )
 
             (
@@ -187,7 +190,10 @@ class Platform:
                 f"""No base image found for the selected configuration:
                         Platform: {platform_parameters.platform}
                         Configuration: {platform_parameters.platform_config}
-                        Version: {sdk_version}"""
+                        Version: {sdk_version}
+                        CUDA Version: {platform_parameters.cuda_version}
+                    Try to use a different CUDA version with '--cuda' option.
+                    """
             ) from ex
 
     def _find_build_image(
@@ -196,6 +202,7 @@ class Platform:
         sdk_version: str,
         application_type: ApplicationType,
         build_image: Optional[str] = None,
+        cuda_version: int = 13,
     ) -> Optional[str]:
         """
         Ensure user provided build image exists or locate the build image to use based on the
@@ -206,6 +213,7 @@ class Platform:
             sdk_version (str): SDK version
             application_type (ApplicationType): application type
             build_image (Optional[str]): user provided build image
+            cuda_version (int): CUDA version
 
         Returns:
             (str): build image for building the image based on the given platform and SDK version.
@@ -229,6 +237,8 @@ class Platform:
                     f"\n   Platform: {platform_parameters.platform.value}"
                     f"\n   Configuration: {platform_parameters.platform_config.value}"
                     f"\n   Version: {sdk_version}"
+                    f"\n   CUDA Version: {cuda_version}"
+                    "\n Try to use a different CUDA version with '--cuda' option."
                 ) from ex
         else:
             return None

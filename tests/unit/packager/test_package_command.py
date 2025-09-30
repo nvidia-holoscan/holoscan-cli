@@ -107,6 +107,7 @@ class TestPackageCommand:
             "username": "testuser",
             "uid": "1001",
             "gid": "1001",
+            "cuda": 13,  # Add CUDA version argument
         }
 
     def test_parser_creation(self) -> None:
@@ -472,3 +473,106 @@ class TestPackageCommand:
 
         args = parser.parse_args(cmd_args)
         assert str(args.input_data) == str(non_existent_dir)
+
+    def test_cuda_argument(
+        self,
+        parser: argparse.ArgumentParser,
+        valid_args: Dict[str, Any],
+        temp_dir: Path,
+    ) -> None:
+        """
+        Test the --cuda parameter.
+
+        Args:
+            parser: The argument parser to test
+            valid_args: Dictionary of valid arguments
+            temp_dir: Temporary directory path
+        """
+        # Test CUDA 12
+        cmd_args = [
+            valid_args["application"],
+            "--config",
+            valid_args["config"],
+            "--platform",
+            valid_args["platform"],
+            "--tag",
+            valid_args["tag"],
+            "--cuda",
+            "12",
+        ]
+
+        args = parser.parse_args(cmd_args)
+        assert args.cuda == 12
+
+        # Test CUDA 13
+        cmd_args = [
+            valid_args["application"],
+            "--config",
+            valid_args["config"],
+            "--platform",
+            valid_args["platform"],
+            "--tag",
+            valid_args["tag"],
+            "--cuda",
+            "13",
+        ]
+
+        args = parser.parse_args(cmd_args)
+        assert args.cuda == 13
+
+    def test_cuda_argument_invalid_value(
+        self,
+        parser: argparse.ArgumentParser,
+        valid_args: Dict[str, Any],
+        temp_dir: Path,
+    ) -> None:
+        """
+        Test the --cuda parameter with invalid values.
+
+        Args:
+            parser: The argument parser to test
+            valid_args: Dictionary of valid arguments
+            temp_dir: Temporary directory path
+        """
+        # Test invalid CUDA version
+        cmd_args = [
+            valid_args["application"],
+            "--config",
+            valid_args["config"],
+            "--platform",
+            valid_args["platform"],
+            "--tag",
+            valid_args["tag"],
+            "--cuda",
+            "11",  # Invalid CUDA version
+        ]
+
+        with pytest.raises(SystemExit):
+            parser.parse_args(cmd_args)
+
+    def test_cuda_argument_default(
+        self,
+        parser: argparse.ArgumentParser,
+        valid_args: Dict[str, Any],
+        temp_dir: Path,
+    ) -> None:
+        """
+        Test the --cuda parameter default value.
+
+        Args:
+            parser: The argument parser to test
+            valid_args: Dictionary of valid arguments
+            temp_dir: Temporary directory path
+        """
+        cmd_args = [
+            valid_args["application"],
+            "--config",
+            valid_args["config"],
+            "--platform",
+            valid_args["platform"],
+            "--tag",
+            valid_args["tag"],
+        ]
+
+        args = parser.parse_args(cmd_args)
+        assert args.cuda == 13  # Default should be CUDA 13

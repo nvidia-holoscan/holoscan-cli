@@ -30,34 +30,148 @@ from holoscan_cli.packager.parameters import PackageBuildParameters
 from holoscan_cli.packager.platforms import PlatformParameters
 
 
+class MockFile:
+    def __init__(self):
+        self.lines = []
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        pass
+
+    def write(self, content):
+        self.lines.append(content)
+
+    def writelines(self, lines):
+        self.lines.extend(lines)
+
+    def read(self):
+        return "".join(self.lines)
+
+    def __iter__(self):
+        return iter(self.lines)
+
+
+@pytest.fixture
+def mock_open_file(monkeypatch):
+    def mock_open(path, mode="r", encoding=None, **kwargs):
+        return MockFile()
+
+    monkeypatch.setattr("builtins.open", mock_open)
+
+
 class TestContainerBuilder:
     """Test cases for container builder functionality, organized by application type."""
 
-    class MockFile:
-        def __init__(self):
-            self.lines = []
+    class TestTemplateSelection:
+        """Test cases for template selection logic based on GPU type."""
 
-        def __enter__(self):
-            return self
+        @pytest.fixture
+        def template_selection_mocks(self, monkeypatch, mock_open_file):
+            """Comprehensive mocking for template selection tests"""
 
-        def __exit__(self, *args):
-            pass
+            # Mock file system operations
+            monkeypatch.setattr(pathlib.Path, "exists", lambda x: True)
+            monkeypatch.setattr(os.path, "exists", lambda x: True)
+            monkeypatch.setattr(os.path, "isfile", lambda x: True)
+            monkeypatch.setattr(os.path, "isdir", lambda x: True)
+            monkeypatch.setattr(os, "makedirs", lambda path, exist_ok=True: None)
+            monkeypatch.setattr(
+                shutil, "copytree", lambda src, dest, dirs_exist_ok=True: None
+            )
+            monkeypatch.setattr(shutil, "copyfile", lambda src, dest: None)
 
-        def write(self, content):
-            self.lines.append(content)
+            # Mock rmtree with proper signature for Python 3.13
+            def mock_rmtree(
+                path, ignore_errors=False, onerror=None, *, onexc=None, dir_fd=None
+            ):
+                pass
 
-        def writelines(self, lines):
-            self.lines.extend(lines)
+            monkeypatch.setattr(shutil, "rmtree", mock_rmtree)
 
-        def __iter__(self):
-            return iter(self.lines)
+            # Mock jinja template loading with template name tracking
+            class MockTemplate:
+                def __init__(self, template_name):
+                    self.template_name = template_name
 
-    @pytest.fixture
-    def mock_open_file(self, monkeypatch):
-        def mock_open(path, mode="r"):
-            return TestContainerBuilder.MockFile()
+                def render(self, context):
+                    return f"# Generated from {self.template_name}\n"
 
-        monkeypatch.setattr("builtins.open", mock_open)
+            class MockJinjaEnv:
+                def get_template(self, template_name):
+                    return MockTemplate(template_name)
+
+            # Patch at the module level where it's used
+            import holoscan_cli.packager.container_builder as cb
+
+            monkeypatch.setattr(cb, "Environment", lambda **kwargs: MockJinjaEnv())
+
+        def test_cuda_12_uses_cu12_template(self, template_selection_mocks):
+            """Test that CUDA 12 configuration uses Dockerfile-cu12.jinja2 template"""
+            # Create build parameters
+            build_parameters = PackageBuildParameters()
+            build_parameters.application = pathlib.Path("/app/")
+            build_parameters.config_file = pathlib.Path("/app/config.yaml")
+            build_parameters.sdk = SdkType.Holoscan
+
+            # Create platform parameters with CUDA 12
+            platform_parameters = PlatformParameters(
+                Platform.x86_64, "image:tag", "1.0", 12
+            )
+
+            # Create builder
+            with tempfile.TemporaryDirectory() as temp_dir:
+                builder = PythonAppBuilder(build_parameters, temp_dir)
+                result = builder._get_template(platform_parameters)
+
+                # Verify that the template content indicates it's from the cu12 template
+                assert "Dockerfile-cu12.jinja2" in result
+
+        def test_cuda_13_uses_default_template(self, template_selection_mocks):
+            """Test that CUDA 13 configuration uses default Dockerfile.jinja2 template"""
+            # Create build parameters
+            build_parameters = PackageBuildParameters()
+            build_parameters.application = pathlib.Path("/app/")
+            build_parameters.config_file = pathlib.Path("/app/config.yaml")
+            build_parameters.sdk = SdkType.Holoscan
+
+            # Create platform parameters with CUDA 13
+            platform_parameters = PlatformParameters(
+                Platform.x86_64, "image:tag", "1.0", 13
+            )
+
+            # Create builder
+            with tempfile.TemporaryDirectory() as temp_dir:
+                builder = PythonAppBuilder(build_parameters, temp_dir)
+                result = builder._get_template(platform_parameters)
+
+                # Verify that the template content indicates it's from the default template
+                assert "Dockerfile.jinja2" in result
+
+        def test_invalid_cuda_version_raises_error(self, template_selection_mocks):
+            """Test that invalid CUDA version raises an error"""
+            # Create build parameters
+            build_parameters = PackageBuildParameters()
+            build_parameters.application = pathlib.Path("/app/")
+            build_parameters.config_file = pathlib.Path("/app/config.yaml")
+            build_parameters.sdk = SdkType.Holoscan
+
+            # Create platform parameters with invalid CUDA version
+            platform_parameters = PlatformParameters(
+                Platform.x86_64,
+                "image:tag",
+                "1.0",
+                11,  # Invalid CUDA version
+            )
+
+            # Create builder and expect an error
+            with tempfile.TemporaryDirectory() as temp_dir:
+                builder = PythonAppBuilder(build_parameters, temp_dir)
+                with pytest.raises(
+                    Exception
+                ):  # Should raise IncompatiblePlatformConfigurationError
+                    builder._get_template(platform_parameters)
 
     @pytest.fixture
     def mock_fs_operations(self, monkeypatch):
@@ -80,7 +194,11 @@ class TestContainerBuilder:
         monkeypatch.setattr(shutil, "copyfile", lambda src, dest: None)
         monkeypatch.setattr(shutil, "copy2", lambda src, dest: None)
         monkeypatch.setattr(os, "remove", lambda src: None)
-        monkeypatch.setattr(BuilderBase, "_get_template", lambda x, y: "")
+
+        # Mock the _get_template method directly instead of jinja internals for existing tests
+        monkeypatch.setattr(
+            BuilderBase, "_get_template", lambda x, y: "# Mock Dockerfile content\n"
+        )
 
     @pytest.fixture
     def mock_docker_operations(self, monkeypatch):
@@ -168,7 +286,7 @@ class TestContainerBuilder:
 
             build_parameters = self._get_build_parameters()
             platform_parameters = PlatformParameters(
-                Platform.x86_64, "image:tag", "1.0"
+                Platform.x86_64, "image:tag", "1.0", 13
             )
             platform_parameters.holoscan_sdk_file = pathlib.Path("/sdk/holoscan.whl")
 
@@ -191,7 +309,7 @@ class TestContainerBuilder:
             build_parameters = self._get_build_parameters()
             build_parameters.application = pathlib.Path("/app/mymodule")
             platform_parameters = PlatformParameters(
-                Platform.x86_64, "image:tag", "1.0"
+                Platform.x86_64, "image:tag", "1.0", 13
             )
             platform_parameters.holoscan_sdk_file = pathlib.Path("/sdk/holoscan.whl")
 
@@ -222,7 +340,7 @@ class TestContainerBuilder:
             build_parameters = self._get_build_parameters()
             build_parameters.input_data = pathlib.Path("/input/data")
             platform_parameters = PlatformParameters(
-                Platform.x86_64, "image:tag", "1.0"
+                Platform.x86_64, "image:tag", "1.0", 13
             )
             platform_parameters.holoscan_sdk_file = pathlib.Path("/sdk/holoscan.whl")
 
@@ -299,7 +417,7 @@ class TestContainerBuilder:
             build_parameters = self._get_build_parameters()
             build_parameters.application = pathlib.Path("/app/script.py")
             platform_parameters = PlatformParameters(
-                Platform.x86_64, "image:tag", "1.0"
+                Platform.x86_64, "image:tag", "1.0", 13
             )
             platform_parameters.holoscan_sdk_file = pathlib.Path("/sdk/holoscan.whl")
 
@@ -322,7 +440,7 @@ class TestContainerBuilder:
             build_parameters = self._get_build_parameters()
             build_parameters.application = pathlib.Path("/app/script.py")
             platform_parameters = PlatformParameters(
-                Platform.x86_64, "image:tag", "1.0"
+                Platform.x86_64, "image:tag", "1.0", 13
             )
             platform_parameters.holoscan_sdk_file = pathlib.Path("/sdk/holoscan.whl")
 
@@ -401,7 +519,7 @@ class TestContainerBuilder:
 
             build_parameters = self._get_build_parameters()
             platform_parameters = PlatformParameters(
-                Platform.x86_64, "image:tag", "1.0"
+                Platform.x86_64, "image:tag", "1.0", 13
             )
             platform_parameters.holoscan_sdk_file = pathlib.Path("/sdk/holoscan.deb")
 
@@ -426,7 +544,7 @@ class TestContainerBuilder:
                 pathlib.Path("/lib2"),
             ]
             platform_parameters = PlatformParameters(
-                Platform.x86_64, "image:tag", "1.0"
+                Platform.x86_64, "image:tag", "1.0", 13
             )
             platform_parameters.holoscan_sdk_file = pathlib.Path("/sdk/holoscan.deb")
 
@@ -499,7 +617,7 @@ class TestContainerBuilder:
 
             build_parameters = self._get_build_parameters()
             platform_parameters = PlatformParameters(
-                Platform.x86_64, "image:tag", "1.0"
+                Platform.x86_64, "image:tag", "1.0", 13
             )
             platform_parameters.holoscan_sdk_file = pathlib.Path("/sdk/holoscan.deb")
 
@@ -527,7 +645,7 @@ class TestContainerBuilder:
                 pathlib.Path("/my-other/libs/lib2"),
             ]
             platform_parameters = PlatformParameters(
-                Platform.x86_64, "image:tag", "1.0"
+                Platform.x86_64, "image:tag", "1.0", 13
             )
             platform_parameters.holoscan_sdk_file = pathlib.Path("/sdk/holoscan.deb")
 

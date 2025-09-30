@@ -60,6 +60,14 @@ def create_package_parser(
         help="Holoscan application configuration file (.yaml)",
     )
     parser.add_argument(
+        "--cuda",
+        type=int,
+        default=13,
+        choices=[12, 13],
+        help="set the version of the CUDA that is used to build the application. "
+        "Valid values: 12, 13. (default: 13)",
+    )
+    parser.add_argument(
         "--docs",
         "-d",
         type=valid_existing_dir_path,

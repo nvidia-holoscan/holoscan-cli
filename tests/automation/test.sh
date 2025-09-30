@@ -36,6 +36,18 @@ tag=""
 
 artifact_source_path=${ARTIFACT_PATH:-}
 version=${VERSION:-}
+cuda_version=${CUDA_VERSION:-13}
+
+if [ -v artifact_source_path ] && [ -d "$artifact_source_path" ]
+then
+    if [ $cuda_version -eq 12 ]
+    then
+        artifact_source_path="$artifact_source_path/artifacts-cu12.json"
+    else
+        artifact_source_path="$artifact_source_path/artifacts.json"
+    fi
+    echo "Using artifact source path: $artifact_source_path"
+fi
 
 #===============================================================================
 # Logging utils
