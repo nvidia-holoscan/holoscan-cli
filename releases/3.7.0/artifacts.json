@@ -1,19 +1,19 @@
 {
   "3.7.0": {
     "holoscan": {
-      "debian-version": "3.7.0.0-1",
+      "debian-version": "3.7.0.1-1",
       "wheel-version": "3.7.0",
       "base-images": {
         "dgpu": "nvcr.io/nvidia/cuda:13.0.0-runtime-ubuntu24.04"
       },
       "build-images": {
         "dgpu": {
-          "x64-workstation": "nvcr.io/nvstaging/holoscan/holoscan:v3.7.0.0-cuda13",
-          "sbsa": "nvcr.io/nvstaging/holoscan/holoscan:v3.7.0.0-cuda13"
+          "x64-workstation": "nvcr.io/nvstaging/holoscan/holoscan:v3.7.0.1-cuda13",
+          "sbsa": "nvcr.io/nvstaging/holoscan/holoscan:v3.7.0.1-cuda13"
         },
         "igpu": {},
         "cpu": {
-          "x64-workstation": "nvcr.io/nvstaging/holoscan/holoscan:v3.7.0.0-cuda13"
+          "x64-workstation": "nvcr.io/nvstaging/holoscan/holoscan:v3.7.0.1-cuda13"
         }
       }
     },
