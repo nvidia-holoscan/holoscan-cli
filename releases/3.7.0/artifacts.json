@@ -8,12 +8,12 @@
       },
       "build-images": {
         "dgpu": {
-          "x64-workstation": "nvcr.io/nvstaging/holoscan/holoscan:v3.7.0.1-cuda13",
-          "sbsa": "nvcr.io/nvstaging/holoscan/holoscan:v3.7.0.1-cuda13"
+          "x64-workstation": "nvcr.io/nvidia/clara-holoscan/holoscan:v3.7.0-cuda13",
+          "sbsa": "nvcr.io/nvidia/clara-holoscan/holoscan:v3.7.0-cuda13"
         },
         "igpu": {},
         "cpu": {
-          "x64-workstation": "nvcr.io/nvstaging/holoscan/holoscan:v3.7.0.1-cuda13"
+          "x64-workstation": "nvcr.io/nvidia/clara-holoscan/holoscan:v3.7.0-cuda13"
         }
       }
     },
