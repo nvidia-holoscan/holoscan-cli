@@ -23,6 +23,7 @@ from holoscan_cli.common.dockerutils import (
     image_exists,
     create_and_get_builder,
     docker_export_tarball,
+    build_docker_image,
     _host_is_native_igpu,
     _additional_devices_to_mount,
     parse_docker_image_name_and_tag,
@@ -44,15 +45,16 @@ def mock_docker(monkeypatch):
         class MockNetwork:
             def __init__(self):
                 self.networks = []
-                self.should_raise = False
+                self.should_raise_list = False
+                self.should_raise_create = False
 
             def list(self, filters=None):
-                if self.should_raise:
+                if self.should_raise_list:
                     raise Exception("Network error")
                 return self.networks
 
             def create(self, name, driver=None):
-                if self.should_raise:
+                if self.should_raise_create:
                     raise Exception("Creation error")
                 network = type("Network", (), {"name": name})()
                 self.networks.append(network)
@@ -152,16 +154,19 @@ class TestCreateOrUseNetwork:
         assert mock_docker.network.networks[0].name == "myapp-network"
 
     def test_network_list_error(self, mock_docker):
-        mock_docker.network.should_raise = True
+        mock_docker.network.should_raise_list = True
         with pytest.raises(RunContainerError) as exc_info:
             create_or_use_network("test-network", None)
         assert "error retrieving network information" in str(exc_info.value)
 
     def test_network_create_error(self, mock_docker):
-        mock_docker.network.should_raise = True
+        # First allow list to succeed, then fail on create
+        mock_docker.network.should_raise_list = False
+        mock_docker.network.networks = []  # No existing networks
+        mock_docker.network.should_raise_create = True
         with pytest.raises(RunContainerError) as exc_info:
             create_or_use_network("test-network", None)
-        assert "error retrieving network information" in str(exc_info.value)
+        assert "error creating Docker network" in str(exc_info.value)
 
 
 class TestImageExists:
@@ -200,6 +205,17 @@ class TestDockerExportTarball:
     def test_export_tarball(self, mock_docker):
         docker_export_tarball("test.tar", "test-image:latest")
         # Since we can't easily verify the file was saved, we just ensure no exception is raised
+
+
+class TestBuildDockerImage:
+    def test_build_docker_image(self, mock_docker):
+        # Mock buildx.build method
+        mock_docker.buildx.build = lambda **kwargs: None
+
+        # Test that build_docker_image calls docker.buildx.build
+        build_docker_image(path=".", tags=["test-image:latest"])
+        # Since we can't easily verify the build was called with correct args,
+        # we just ensure no exception is raised
 
 
 class TestHostIsNativeIGPU:
@@ -375,6 +391,288 @@ class TestDockerRun:
             is_root=False,
             remove=False,
         )
+
+    def test_container_run_with_default_paths(
+        self,
+        mock_docker,
+        mock_container,
+        basic_pkg_info,
+        mock_dockerutils,
+        monkeypatch,
+    ):
+        # Setup container creation mock
+        mock_docker.container = type(
+            "Container",
+            (),
+            {
+                "create": lambda *args, **kwargs: mock_container(),
+                "run": lambda *args, **kwargs: None,
+            },
+        )()
+
+        # App info without input/output path specified (should trigger lines 275, 285)
+        app_info_no_paths = {
+            "input": {},  # No "path" key
+            "output": {},  # No "path" key
+            "workingDirectory": "/app",
+            "environment": {
+                EnvironmentVariables.HOLOSCAN_INPUT_PATH: "/input",
+                EnvironmentVariables.HOLOSCAN_OUTPUT_PATH: "/output",
+            },
+        }
+
+        docker_run(
+            name="test-container",
+            image_name="test-image:latest",
+            input_path=Path("/host/input"),
+            output_path=Path("/host/output"),
+            app_info=app_info_no_paths,
+            pkg_info=basic_pkg_info,
+            quiet=False,
+            commands=[],
+            health_check=False,
+            network="test-network",
+            network_interface=None,
+            use_all_nics=False,
+            gpu_enum=None,
+            config=None,
+            render=False,
+            user="1000:1000",
+            terminal=False,
+            devices=[],
+            platform_config=PlatformConfiguration.dGPU.value,
+            shared_memory_size="1GB",
+            is_root=False,
+            remove=False,
+        )
+
+    def test_container_run_with_stderr_decode_error(
+        self,
+        mock_docker,
+        basic_app_info,
+        basic_pkg_info,
+        mock_dockerutils,
+        monkeypatch,
+    ):
+        # Setup container with stderr decoding error (lines 445-446)
+        class MockContainerWithBadStderr:
+            def __init__(self):
+                self.name = "test-container"
+                self.id = "123456789abc"
+                self.config = type(
+                    "Config",
+                    (),
+                    {
+                        "hostname": "test-host",
+                        "user": "test-user",
+                    },
+                )()
+                self.host_config = type(
+                    "HostConfig",
+                    (),
+                    {
+                        "ulimits": [
+                            type(
+                                "Ulimit",
+                                (),
+                                {"name": "memlock", "soft": -1, "hard": -1},
+                            )(),
+                        ],
+                        "cap_add": ["CAP_SYS_PTRACE"],
+                        "ipc_mode": "host",
+                        "shm_size": "1GB",
+                    },
+                )()
+                self.state = type("State", (), {"exit_code": 0})()
+
+            def start(self, attach=False, stream=False):
+                # Return bad stderr that can't be decoded as UTF-8
+                return [("stderr", b"\xff\xfe")]  # Invalid UTF-8
+
+            def remove(self):
+                pass
+
+        mock_docker.container = type(
+            "Container",
+            (),
+            {
+                "create": lambda *args, **kwargs: MockContainerWithBadStderr(),
+                "run": lambda *args, **kwargs: None,
+            },
+        )()
+
+        docker_run(
+            name="test-container",
+            image_name="test-image:latest",
+            input_path=Path("/host/input"),
+            output_path=Path("/host/output"),
+            app_info=basic_app_info,
+            pkg_info=basic_pkg_info,
+            quiet=False,
+            commands=[],
+            health_check=False,
+            network="test-network",
+            network_interface=None,
+            use_all_nics=False,
+            gpu_enum=None,
+            config=None,
+            render=False,
+            user="1000:1000",
+            terminal=False,
+            devices=[],
+            platform_config=PlatformConfiguration.dGPU.value,
+            shared_memory_size="1GB",
+            is_root=False,
+            remove=False,
+        )
+
+    def test_container_run_with_remove_true(
+        self,
+        mock_docker,
+        basic_app_info,
+        basic_pkg_info,
+        mock_dockerutils,
+        monkeypatch,
+    ):
+        # Setup container that tests remove=True (line 454)
+        class MockContainerWithRemove:
+            def __init__(self):
+                self.name = "test-container"
+                self.id = "123456789abc"
+                self.config = type(
+                    "Config",
+                    (),
+                    {
+                        "hostname": "test-host",
+                        "user": "test-user",
+                    },
+                )()
+                self.host_config = type(
+                    "HostConfig",
+                    (),
+                    {
+                        "ulimits": [],
+                        "cap_add": ["CAP_SYS_PTRACE"],
+                        "ipc_mode": "host",
+                        "shm_size": "1GB",
+                    },
+                )()
+                self.state = type("State", (), {"exit_code": 0})()
+
+            def start(self, attach=False, stream=False):
+                return []
+
+            def remove(self):
+                pass
+
+        mock_docker.container = type(
+            "Container",
+            (),
+            {
+                "create": lambda *args, **kwargs: MockContainerWithRemove(),
+                "run": lambda *args, **kwargs: None,
+            },
+        )()
+
+        docker_run(
+            name="test-container",
+            image_name="test-image:latest",
+            input_path=Path("/host/input"),
+            output_path=Path("/host/output"),
+            app_info=basic_app_info,
+            pkg_info=basic_pkg_info,
+            quiet=False,
+            commands=[],
+            health_check=False,
+            network="test-network",
+            network_interface=None,
+            use_all_nics=False,
+            gpu_enum=None,
+            config=None,
+            render=False,
+            user="1000:1000",
+            terminal=False,
+            devices=[],
+            platform_config=PlatformConfiguration.dGPU.value,
+            shared_memory_size="1GB",
+            is_root=False,
+            remove=True,  # This should trigger line 454
+        )
+
+    def test_container_run_with_non_zero_exit_code(
+        self,
+        mock_docker,
+        basic_app_info,
+        basic_pkg_info,
+        mock_dockerutils,
+        monkeypatch,
+    ):
+        # Setup container with non-zero exit code (line 457)
+        class MockContainerWithError:
+            def __init__(self):
+                self.name = "test-container"
+                self.id = "123456789abc"
+                self.config = type(
+                    "Config",
+                    (),
+                    {
+                        "hostname": "test-host",
+                        "user": "test-user",
+                    },
+                )()
+                self.host_config = type(
+                    "HostConfig",
+                    (),
+                    {
+                        "ulimits": [],
+                        "cap_add": ["CAP_SYS_PTRACE"],
+                        "ipc_mode": "host",
+                        "shm_size": "1GB",
+                    },
+                )()
+                self.state = type("State", (), {"exit_code": 1})()  # Non-zero exit code
+
+            def start(self, attach=False, stream=False):
+                return []
+
+            def remove(self):
+                pass
+
+        mock_docker.container = type(
+            "Container",
+            (),
+            {
+                "create": lambda *args, **kwargs: MockContainerWithError(),
+                "run": lambda *args, **kwargs: None,
+            },
+        )()
+
+        with pytest.raises(RuntimeError) as exc_info:
+            docker_run(
+                name="test-container",
+                image_name="test-image:latest",
+                input_path=Path("/host/input"),
+                output_path=Path("/host/output"),
+                app_info=basic_app_info,
+                pkg_info=basic_pkg_info,
+                quiet=False,
+                commands=[],
+                health_check=False,
+                network="test-network",
+                network_interface=None,
+                use_all_nics=False,
+                gpu_enum=None,
+                config=None,
+                render=False,
+                user="1000:1000",
+                terminal=False,
+                devices=[],
+                platform_config=PlatformConfiguration.dGPU.value,
+                shared_memory_size="1GB",
+                is_root=False,
+                remove=False,
+            )
+        assert "exited with code 1" in str(exc_info.value)
 
     def test_container_run_with_igpu(
         self,
@@ -600,6 +898,233 @@ class TestDockerRun:
             use_all_nics=False,
             gpu_enum=None,
             config=Path("/host/config.yaml"),
+            render=False,
+            user="1000:1000",
+            terminal=False,
+            devices=[],
+            platform_config=PlatformConfiguration.dGPU.value,
+            shared_memory_size="1GB",
+            is_root=False,
+            remove=False,
+        )
+
+    def test_container_run_with_network_interface(
+        self,
+        mock_docker,
+        mock_container,
+        basic_app_info,
+        basic_pkg_info,
+        mock_dockerutils,
+        monkeypatch,
+    ):
+        # Setup container creation mock
+        mock_docker.container = type(
+            "Container",
+            (),
+            {
+                "create": lambda *args, **kwargs: mock_container(),
+                "run": lambda *args, **kwargs: None,
+            },
+        )()
+
+        docker_run(
+            name="test-container",
+            image_name="test-image:latest",
+            input_path=Path("/host/input"),
+            output_path=Path("/host/output"),
+            app_info=basic_app_info,
+            pkg_info=basic_pkg_info,
+            quiet=False,
+            commands=[],
+            health_check=False,
+            network="test-network",
+            network_interface="eth0",  # This should trigger line 213
+            use_all_nics=False,
+            gpu_enum=None,
+            config=None,
+            render=False,
+            user="1000:1000",
+            terminal=False,
+            devices=[],
+            platform_config=PlatformConfiguration.dGPU.value,
+            shared_memory_size="1GB",
+            is_root=False,
+            remove=False,
+        )
+
+    def test_container_run_with_health_check(
+        self,
+        mock_docker,
+        mock_container,
+        basic_app_info,
+        basic_pkg_info,
+        mock_dockerutils,
+        monkeypatch,
+    ):
+        # Setup container creation mock
+        mock_docker.container = type(
+            "Container",
+            (),
+            {
+                "create": lambda *args, **kwargs: mock_container(),
+                "run": lambda *args, **kwargs: None,
+            },
+        )()
+
+        docker_run(
+            name="test-container",
+            image_name="test-image:latest",
+            input_path=Path("/host/input"),
+            output_path=Path("/host/output"),
+            app_info=basic_app_info,
+            pkg_info=basic_pkg_info,
+            quiet=False,
+            commands=[],
+            health_check=True,  # This should trigger line 216
+            network="test-network",
+            network_interface=None,
+            use_all_nics=False,
+            gpu_enum=None,
+            config=None,
+            render=False,
+            user="1000:1000",
+            terminal=False,
+            devices=[],
+            platform_config=PlatformConfiguration.dGPU.value,
+            shared_memory_size="1GB",
+            is_root=False,
+            remove=False,
+        )
+
+    def test_container_run_with_debug_logging(
+        self,
+        mock_docker,
+        mock_container,
+        basic_app_info,
+        basic_pkg_info,
+        mock_dockerutils,
+        monkeypatch,
+    ):
+        # Setup container creation mock
+        mock_docker.container = type(
+            "Container",
+            (),
+            {
+                "create": lambda *args, **kwargs: mock_container(),
+                "run": lambda *args, **kwargs: None,
+            },
+        )()
+
+        # Mock logger to be at DEBUG level
+        import logging
+
+        monkeypatch.setattr(logging.getLogger("common").root, "level", logging.DEBUG)
+
+        docker_run(
+            name="test-container",
+            image_name="test-image:latest",
+            input_path=Path("/host/input"),
+            output_path=Path("/host/output"),
+            app_info=basic_app_info,
+            pkg_info=basic_pkg_info,
+            quiet=False,
+            commands=[],
+            health_check=False,
+            network="test-network",
+            network_interface=None,
+            use_all_nics=False,
+            gpu_enum=None,
+            config=None,
+            render=False,
+            user="1000:1000",
+            terminal=False,
+            devices=[],
+            platform_config=PlatformConfiguration.dGPU.value,
+            shared_memory_size="1GB",
+            is_root=False,
+            remove=False,
+        )
+
+    def test_container_run_with_gpu_enum(
+        self,
+        mock_docker,
+        mock_container,
+        basic_app_info,
+        basic_pkg_info,
+        mock_dockerutils,
+        monkeypatch,
+    ):
+        # Setup container creation mock
+        mock_docker.container = type(
+            "Container",
+            (),
+            {
+                "create": lambda *args, **kwargs: mock_container(),
+                "run": lambda *args, **kwargs: None,
+            },
+        )()
+
+        docker_run(
+            name="test-container",
+            image_name="test-image:latest",
+            input_path=Path("/host/input"),
+            output_path=Path("/host/output"),
+            app_info=basic_app_info,
+            pkg_info=basic_pkg_info,
+            quiet=False,
+            commands=[],
+            health_check=False,
+            network="test-network",
+            network_interface=None,
+            use_all_nics=False,
+            gpu_enum="0,1",  # This should trigger line 240
+            config=None,
+            render=False,
+            user="1000:1000",
+            terminal=False,
+            devices=[],
+            platform_config=PlatformConfiguration.dGPU.value,
+            shared_memory_size="1GB",
+            is_root=False,
+            remove=False,
+        )
+
+    def test_container_run_with_zero_gpus(
+        self,
+        mock_docker,
+        mock_container,
+        basic_app_info,
+        mock_dockerutils,
+        monkeypatch,
+    ):
+        # Setup container creation mock
+        mock_docker.container = type(
+            "Container",
+            (),
+            {
+                "create": lambda *args, **kwargs: mock_container(),
+                "run": lambda *args, **kwargs: None,
+            },
+        )()
+
+        # Package info requesting 0 GPUs
+        pkg_info_zero_gpus = {"resources": {"gpu": 0}}
+
+        docker_run(
+            name="test-container",
+            image_name="test-image:latest",
+            input_path=Path("/host/input"),
+            output_path=Path("/host/output"),
+            app_info=basic_app_info,
+            pkg_info=pkg_info_zero_gpus,  # This should trigger line 266
+            quiet=False,
+            commands=[],
+            health_check=False,
+            network="test-network",
+            network_interface=None,
+            use_all_nics=False,
+            gpu_enum=None,
+            config=None,
             render=False,
             user="1000:1000",
             terminal=False,

@@ -33,7 +33,7 @@ jobs:
   e2e:
     runs-on: linux-amd64-gpu-h100-latest-1
     container:
-      image: ghcr.io/nvidia-holoscan/holoscan-cli-build:cuda126-u2204
+      image: ghcr.io/nvidia-holoscan/holoscan-cli-build:cuda130-u2404
       env:
         NVIDIA_VISIBLE_DEVICES: ${{ env.NVIDIA_VISIBLE_DEVICES }}
     strategy:

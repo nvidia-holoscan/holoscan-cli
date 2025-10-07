@@ -20,10 +20,10 @@ You will need a platform supported by [NVIDIA Holoscan SDK](https://docs.nvidia.
 
 Holoscan CLI is delivered as a Python package and can be installed from PyPI.org using one of the following commands:
 
-| Holoscan SDK Version | Installation Command       |
-| -------------------- | -------------------------- |
-| 2.8 or earlier       | `pip install holoscan`     |
-| 2.9 or later         | `pip install holoscan-cli` |
+| Holoscan SDK Version | Installation Command       | CUDA Version |
+| -------------------- | -------------------------- | ------------ |
+| 2.8 or earlier       | `pip install holoscan`     | 12.6         |
+| 2.9 or later         | `pip install holoscan-cli` | 12.6         |
 
 ## Build From Source
 

@@ -14,9 +14,8 @@
 # limitations under the License.
 
 ARG GPU_TYPE=dgpu
-ARG LIBTORCH_VERSION_ARM64="2.9.0.dev20250828+cu130"
-ARG LIBTORCH_VERSION_AMD64="2.9.0.dev20250829+cu130"
-ARG LIBTORCH_VISION_VERSION="0.24.0.dev20250829"
+ARG LIBTORCH_VERSION=2.8.0
+ARG LIBTORCH_VISION_VERSION="0.23.0"
 
 {% if application_type == 'CppCMake' %}
 # Build C++ application in the builder stage
@@ -61,7 +60,7 @@ ARG ONNX_RUNTIME_VERSION=1.22.1
 WORKDIR /opt/onnxruntime
 
 # Download onnx binaries
-RUN CUDA_MAJOR_MINOR=$(echo ${CUDA_VERSION} | cut -d. -f1-2) \
+RUN CUDA_MAJOR_MINOR=12.6 \
     && echo "Downloading from https://edge.urm.nvidia.com/artifactory/sw-holoscan-thirdparty-generic-local/onnxruntime/onnxruntime-${ONNX_RUNTIME_VERSION}-cuda-${CUDA_MAJOR_MINOR}-$(uname -m).tar.gz" \
     && curl -S -L -# -o ort.tgz \
     https://edge.urm.nvidia.com/artifactory/sw-holoscan-thirdparty-generic-local/onnxruntime/onnxruntime-${ONNX_RUNTIME_VERSION}-cuda-${CUDA_MAJOR_MINOR}-$(uname -m).tar.gz
@@ -80,8 +79,7 @@ ARG GPU_TYPE
 ARG UNAME
 ARG UID
 ARG GID
-ARG LIBTORCH_VERSION_ARM64
-ARG LIBTORCH_VERSION_AMD64
+ARG LIBTORCH_VERSION
 ARG LIBTORCH_VISION_VERSION
 
 RUN mkdir -p /etc/holoscan/ \
@@ -175,25 +173,20 @@ RUN apt update \
         libopenblas0="0.3.26+ds-*" \
         libevent-core-2.1-7 \
         libevent-pthreads-2.1-7 \
-        cuda-cupti-$(echo ${CUDA_VERSION} | sed 's/\./-/g' | cut -d- -f1,2)  \
-        libcudnn9-cuda-$(echo ${CUDA_VERSION} | cut -d. -f1) \
+        $([ "${GPU_TYPE}" != "igpu" ] && echo "cuda-cupti-$(echo ${CUDA_VERSION} | sed 's/\./-/g' | cut -d- -f1,2)") \
+        $([ "${GPU_TYPE}" != "igpu" ] && echo "libcudnn9-cuda-$(echo ${CUDA_VERSION} | cut -d. -f1)") \
     && rm -rf /var/lib/apt/lists/*
+
 RUN rm -rf /usr/lib/python3.12/EXTERNALLY-MANAGED \
     && if [ "${GPU_TYPE}" = "igpu" ]; then \
-        echo "Torch installation is not supported for iGPU."; \
-        exit 1; \
+        PYTORCH_WHEEL_VERSION="${LIBTORCH_VERSION}"; \
+        INDEX_URL="https://pypi.jetson-ai-lab.io/jp6/cu129"; \
     else \
-        INDEX_URL="https://download.pytorch.org/whl/nightly/cu130"; \
-        if [ "${GPU_TYPE}" = "dgpu" ]; then \
-            if [ $(uname -m) = "aarch64" ]; then \
-            LIBTORCH_VERSION="${LIBTORCH_VERSION_ARM64}"; \
-        else \
-                LIBTORCH_VERSION="${LIBTORCH_VERSION_AMD64}"; \
-            fi; \
-        fi; \
+        PYTORCH_WHEEL_VERSION="${LIBTORCH_VERSION}+cu129"; \
+        INDEX_URL="https://download.pytorch.org/whl"; \
     fi; \
-    echo "Installing torch==${LIBTORCH_VERSION} from $INDEX_URL"; \
-    python3 -m pip install --break-system-packages --force-reinstall torch==${LIBTORCH_VERSION} torchvision==${LIBTORCH_VISION_VERSION} torchaudio --index-url $INDEX_URL; \
+    echo "Installing torch==${PYTORCH_WHEEL_VERSION} from $INDEX_URL"; \
+    python3 -m pip install --break-system-packages --force-reinstall torch==${PYTORCH_WHEEL_VERSION} torchvision==${LIBTORCH_VISION_VERSION} torchaudio --index-url $INDEX_URL; \
     if ! find /usr/local/lib/python3.12/dist-packages/torch -name libtorch_cuda.so | grep -q .; then \
         echo "libtorch_cuda.so not found, torch installation failed"; \
         exit 1; \
@@ -215,25 +208,20 @@ ENV LD_LIBRARY_PATH=$LD_LIBRARY_PATH:${ONNX_RUNTIME}
 # Copy ONNX Runtime
 COPY --from=onnx-dependencies ${ONNX_RUNTIME} ${ONNX_RUNTIME}
 
-
-# CLARAHOLOS-1689 requires libnvinfer_plugin
 {% if gpu_type == "dgpu" %}
-
 RUN apt-get update \
-    && CUDA_MAJOR_VERSION=$(echo ${CUDA_VERSION} | cut -d. -f1) \
-    && TRT_VERSION_VAR_NAME="TENSORRT_CU${CUDA_MAJOR_VERSION}" \
-    && TRT_VERSION=$(apt-cache madison libnvinfer10 | grep "+cuda${CUDA_MAJOR_VERSION}" | head -n 1 | awk '{print $3}') \
     && apt-get install --no-install-recommends --no-install-suggests --allow-downgrades -y \
-        libnvinfer10="${TRT_VERSION}" \
-        libnvinfer-plugin10="${TRT_VERSION}" \
-        libnvonnxparsers10="${TRT_VERSION}" \
-        libcusparselt0 \
-        libcudnn9-cuda-${CUDA_MAJOR_VERSION} \
-    && rm -f /usr/lib/*/libcudnn*train.so* \
-    && rm -rf /var/lib/apt/lists/*
+        libnvinfer10="10.9.0.34-1+cuda12.8" \
+        libnvinfer-plugin10="10.9.0.34-1+cuda12.8" \
+        libnvonnxparsers10="10.9.0.34-1+cuda12.8" \
+        libcusparselt0="0.7.1.0-*" \
+        libcudnn9-cuda-12  \
+    && rm -rf /var/lib/apt/lists/* \
+    && rm -f /usr/lib/*/libcudnn*train.so*
 {% endif %}
 ### End install onnx dependencies
 {% endif %}
+
 {% if health_probe is defined %}
 # Install gRPC health probe
 RUN curl -L -o /bin/grpc_health_probe {{ health_probe | pprint }} \
@@ -281,7 +269,7 @@ RUN if [ "{{ holoscan_deb_arch }}" = "arm64" ]; then \
     else \
         GDR_REPO_ARCH=x64 ; \
     fi \
-    && curl -O https://developer.download.nvidia.com/compute/redist/gdrcopy/CUDA%2013.0/ubuntu24_04/${GDR_REPO_ARCH}/libgdrapi_2.5.1-1_{{ holoscan_deb_arch }}.Ubuntu24_04.deb \
+    && curl -O https://developer.download.nvidia.com/compute/redist/gdrcopy/CUDA%2012.8/ubuntu24_04/${GDR_REPO_ARCH}/libgdrapi_2.5.1-1_{{ holoscan_deb_arch }}.Ubuntu24_04.deb \
     && dpkg -i libgdrapi_2.5.1-1_{{ holoscan_deb_arch }}.Ubuntu24_04.deb \
     && rm -f libgdrapi_2.5.1-1_{{ holoscan_deb_arch }}.Ubuntu24_04.deb \
     && rm -rf /var/lib/apt/lists/*
@@ -357,7 +345,7 @@ RUN pip install /tmp/{{ holoscan_sdk_filename }}
 
 {% else %}
 # Install Holoscan SDK wheel from PyPI
-RUN pip install holoscan-cu13=={{holoscan_sdk_filename}}
+RUN pip install holoscan-cu12=={{holoscan_sdk_filename}}
 {% endif %}
 {% else %}
 

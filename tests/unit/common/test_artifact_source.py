@@ -24,7 +24,9 @@ from holoscan_cli.common.exceptions import ManifestDownloadError
 
 class TestArtifactSource:
     def _init(self) -> None:
-        self._artifact_source = ArtifactSources()
+        self._artifact_source = ArtifactSources(
+            13
+        )  # Default CUDA 13 for existing tests
         current_file_path = Path(__file__).parent.parent.resolve()
         source_file_sample = current_file_path / "./artifacts.json"
         self._artifact_source.load(str(source_file_sample))
@@ -33,7 +35,7 @@ class TestArtifactSource:
         monkeypatch.setattr(Path, "read_text", lambda x: "{}")
 
         source_file_sample = Path("some-bogus-file.json")
-        artifact_sources = ArtifactSources()
+        artifact_sources = ArtifactSources(13)
 
         with pytest.raises(FileNotFoundError):
             artifact_sources.load(str(source_file_sample))
@@ -46,7 +48,7 @@ class TestArtifactSource:
             return response
 
         monkeypatch.setattr(requests, "get", mock_get)
-        artifact_source = ArtifactSources()
+        artifact_source = ArtifactSources(13)
         with pytest.raises(ManifestDownloadError):
             artifact_source.load("https://holoscan")
 
@@ -58,7 +60,7 @@ class TestArtifactSource:
             return response
 
         monkeypatch.setattr(requests, "get", mock_get)
-        artifact_source = ArtifactSources()
+        artifact_source = ArtifactSources(13)
         with pytest.raises(ManifestDownloadError):
             artifact_source.load("http://holoscan")
 
@@ -103,7 +105,7 @@ class TestArtifactSource:
             return response
 
         monkeypatch.setattr(requests, "get", mock_get)
-        artifact_source = ArtifactSources()
+        artifact_source = ArtifactSources(13)
         artifact_source.download_manifest()
         assert artifact_source.base_image("1.0.0") == "test-base"
 
@@ -115,7 +117,137 @@ class TestArtifactSource:
             return response
 
         monkeypatch.setattr(requests, "get", mock_get)
-        artifact_source = ArtifactSources()
+        artifact_source = ArtifactSources(13)
         with pytest.raises(ManifestDownloadError) as exc_info:
             artifact_source.download_manifest()
         assert "Error downloading manifest file" in str(exc_info.value)
+
+    def test_cuda_12_url_selection(self, monkeypatch):
+        """Test that CUDA 12 selects the cu12 artifacts URL"""
+        # Mock the version detection to return a known version
+        monkeypatch.setattr(
+            "holoscan_cli.common.artifact_sources.Version",
+            lambda x: type("Version", (), {"release": (3, 7, 0)}),
+        )
+
+        artifact_source = ArtifactSources(12)
+        expected_url = "https://raw.githubusercontent.com/nvidia-holoscan/holoscan-cli/refs/heads/main/releases/3.7.0/artifacts-cu12.json"
+        assert artifact_source.ManifestFileUrl == expected_url
+
+    def test_cuda_13_url_selection(self, monkeypatch):
+        """Test that CUDA 13 selects the standard artifacts URL"""
+        # Mock the version detection to return a known version
+        monkeypatch.setattr(
+            "holoscan_cli.common.artifact_sources.Version",
+            lambda x: type("Version", (), {"release": (3, 7, 0)}),
+        )
+
+        artifact_source = ArtifactSources(13)
+        expected_url = "https://raw.githubusercontent.com/nvidia-holoscan/holoscan-cli/refs/heads/main/releases/3.7.0/artifacts.json"
+        assert artifact_source.ManifestFileUrl == expected_url
+
+    def test_cuda_12_directory_selection(self, tmp_path, monkeypatch):
+        """Test that CUDA 12 selects artifacts-cu12.json from directory"""
+        import json
+
+        # Create test directory structure
+        artifacts_dir = tmp_path / "artifacts"
+        artifacts_dir.mkdir()
+
+        # Create both artifact files with valid structure
+        artifacts_cu12 = artifacts_dir / "artifacts-cu12.json"
+        artifacts_standard = artifacts_dir / "artifacts.json"
+
+        test_data_cu12 = {
+            "1.0.0": {
+                "holoscan": {
+                    "wheel-version": "1.0.0-cu12",
+                    "debian-version": "1.0.0-cu12",
+                    "base-images": {
+                        "dgpu": "test-base-cu12",
+                        "igpu": "test-base-igpu-cu12",
+                    },
+                    "build-images": {
+                        "igpu": {"jetson-agx-orin-devkit": "test-build-igpu-cu12"},
+                        "dgpu": {"x64-workstation": "test-build-dgpu-cu12"},
+                        "cpu": {"x64-workstation": "test-build-cpu-cu12"},
+                    },
+                }
+            }
+        }
+        test_data_standard = {
+            "1.0.0": {
+                "holoscan": {
+                    "wheel-version": "1.0.0",
+                    "debian-version": "1.0.0",
+                    "base-images": {"dgpu": "test-base", "igpu": "test-base-igpu"},
+                    "build-images": {
+                        "igpu": {"jetson-agx-orin-devkit": "test-build-igpu"},
+                        "dgpu": {"x64-workstation": "test-build-dgpu"},
+                        "cpu": {"x64-workstation": "test-build-cpu"},
+                    },
+                }
+            }
+        }
+
+        artifacts_cu12.write_text(json.dumps(test_data_cu12))
+        artifacts_standard.write_text(json.dumps(test_data_standard))
+
+        artifact_source = ArtifactSources(12)
+        artifact_source.load(str(artifacts_dir))
+
+        # Should have loaded the cu12 data
+        assert artifact_source.debian_package_version("1.0.0") == "1.0.0-cu12"
+
+    def test_cuda_13_directory_selection(self, tmp_path, monkeypatch):
+        """Test that CUDA 13 selects artifacts.json from directory"""
+        import json
+
+        # Create test directory structure
+        artifacts_dir = tmp_path / "artifacts"
+        artifacts_dir.mkdir()
+
+        # Create both artifact files with valid structure
+        artifacts_cu12 = artifacts_dir / "artifacts-cu12.json"
+        artifacts_standard = artifacts_dir / "artifacts.json"
+
+        test_data_cu12 = {
+            "1.0.0": {
+                "holoscan": {
+                    "wheel-version": "1.0.0-cu12",
+                    "debian-version": "1.0.0-cu12",
+                    "base-images": {
+                        "dgpu": "test-base-cu12",
+                        "igpu": "test-base-igpu-cu12",
+                    },
+                    "build-images": {
+                        "igpu": {"jetson-agx-orin-devkit": "test-build-igpu-cu12"},
+                        "dgpu": {"x64-workstation": "test-build-dgpu-cu12"},
+                        "cpu": {"x64-workstation": "test-build-cpu-cu12"},
+                    },
+                }
+            }
+        }
+        test_data_standard = {
+            "1.0.0": {
+                "holoscan": {
+                    "wheel-version": "1.0.0",
+                    "debian-version": "1.0.0",
+                    "base-images": {"dgpu": "test-base", "igpu": "test-base-igpu"},
+                    "build-images": {
+                        "igpu": {"jetson-agx-orin-devkit": "test-build-igpu"},
+                        "dgpu": {"x64-workstation": "test-build-dgpu"},
+                        "cpu": {"x64-workstation": "test-build-cpu"},
+                    },
+                }
+            }
+        }
+
+        artifacts_cu12.write_text(json.dumps(test_data_cu12))
+        artifacts_standard.write_text(json.dumps(test_data_standard))
+
+        artifact_source = ArtifactSources(13)
+        artifact_source.load(str(artifacts_dir))
+
+        # Should have loaded the standard data
+        assert artifact_source.debian_package_version("1.0.0") == "1.0.0"

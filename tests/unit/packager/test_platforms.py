@@ -32,7 +32,9 @@ from packaging.version import Version
 class TestPlatforms:
     @pytest.fixture(autouse=True)
     def _setup(self, monkeypatch) -> None:
-        self._artifact_source = ArtifactSources()
+        self._artifact_source = ArtifactSources(
+            13
+        )  # Default CUDA 13 for existing tests
         source_file_sample = Path(__file__).parent.parent.resolve() / "./artifacts.json"
         self._artifact_source.load(str(source_file_sample))
 
@@ -52,6 +54,7 @@ class TestPlatforms:
         input_args.sdk_version = Version(test_version)
         input_args.platform = [PlatformTypes.IGXOrinDevIt, PlatformTypes.X64Workstation]
         input_args.holoscan_sdk_file = Path("some-random-file")
+        input_args.cuda = 13
 
         platform = Platform(self._artifact_source)
         with (
@@ -83,6 +86,7 @@ class TestPlatforms:
         input_args.platform = [PlatformTypes.IGXOrinDevIt, PlatformTypes.X64Workstation]
         input_args.holoscan_sdk_file = None
         input_args.monai_deploy_sdk_file = Path("some-random-file")
+        input_args.cuda = 13
 
         platform = Platform(self._artifact_source)
         with (
@@ -120,6 +124,7 @@ class TestPlatforms:
         input_args.monai_deploy_sdk_file = None
         input_args.base_image = None
         input_args.build_image = None
+        input_args.cuda = 13
 
         platform = Platform(self._artifact_source)
         with tempfile.TemporaryDirectory(
@@ -201,6 +206,7 @@ class TestPlatforms:
         input_args.monai_deploy_sdk_file = Path("my-monai-deploy-sdk.whl")
         input_args.base_image = None
         input_args.build_image = None
+        input_args.cuda = 13
 
         platform = Platform(self._artifact_source)
         with tempfile.TemporaryDirectory(
@@ -290,6 +296,7 @@ class TestPlatforms:
         input_args.monai_deploy_sdk_file = None
         input_args.base_image = None
         input_args.build_image = None
+        input_args.cuda = 13
 
         platform = Platform(self._artifact_source)
         with tempfile.TemporaryDirectory(
@@ -386,6 +393,7 @@ class TestPlatforms:
         input_args.monai_deploy_sdk_file = None
         input_args.base_image = "my-base-image"
         input_args.build_image = "my-build-image"
+        input_args.cuda = 13
 
         platform = Platform(self._artifact_source)
         with tempfile.TemporaryDirectory(
@@ -472,6 +480,7 @@ class TestPlatforms:
         input_args.monai_deploy_sdk_file = None
         input_args.base_image = "my-base-image"
         input_args.build_image = "my-build-image"
+        input_args.cuda = 13
 
         platform = Platform(self._artifact_source)
         with tempfile.TemporaryDirectory(

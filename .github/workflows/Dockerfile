@@ -14,7 +14,7 @@
 # limitations under the License.
 
 # This Dockerfile is used to build the Docker image for the NVIDIA GitHub Runners.
-FROM nvcr.io/nvidia/cuda:12.6.0-runtime-ubuntu22.04
+FROM nvcr.io/nvidia/cuda:13.0.0-runtime-ubuntu24.04
 
 # Install Docker
 RUN apt-get update && \
