@@ -111,7 +111,7 @@ jobs:
           poetry run pytest
 
       - name: Upload Coverage Report
-        uses: actions/upload-artifact@v4.4.3
+        uses: actions/upload-artifact@v5
         if: ${{ matrix.python.coveralls }}
         with:
           name: coverage
@@ -166,7 +166,7 @@ jobs:
         poetry dynamic-versioning -vvv
         poetry build -vvv -f wheel --clean
 
-    - uses: actions/upload-artifact@v4
+    - uses: actions/upload-artifact@v5
       name: Upload build
       with:
         name: build-artifact
