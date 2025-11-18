@@ -288,15 +288,15 @@ toml = ["tomli ; python_full_version <= \"3.11.0a6\""]
 
 [[package]]
 name = "coveralls"
-version = "4.0.1"
+version = "4.0.2"
 description = "Show coverage stats online via coveralls.io"
 optional = false
-python-versions = "<3.13,>=3.8"
+python-versions = "<4.0,>=3.10"
 groups = ["test"]
 markers = "python_version < \"3.13\""
 files = [
-    {file = "coveralls-4.0.1-py3-none-any.whl", hash = "sha256:7a6b1fa9848332c7b2221afb20f3df90272ac0167060f41b5fe90429b30b1809"},
-    {file = "coveralls-4.0.1.tar.gz", hash = "sha256:7b2a0a2bcef94f295e3cf28dcc55ca40b71c77d1c2446b538e85f0f7bc21aa69"},
+    {file = "coveralls-4.0.2-py3-none-any.whl", hash = "sha256:3940f613eac6b3c14d1425741929e1d15f57666f5e7ae0572bbe92357bd6f7ee"},
+    {file = "coveralls-4.0.2.tar.gz", hash = "sha256:7c21ffa2808d3052fa0cfca3842a9f3d21cc8eada02538c192d932199e5f07d4"},
 ]
 
 [package.dependencies]
@@ -1324,4 +1324,4 @@ watchmedo = ["PyYAML (>=3.10)"]
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.10,<3.14"
-content-hash = "c69881147f133e0b4d72cfd9a904e298cf04c720acc7b863722fb4c7453addd6"
+content-hash = "5449db7bf32eba6383f42e916f7aa9309e8feb29a3140d264e9870b2c1dd7582"
