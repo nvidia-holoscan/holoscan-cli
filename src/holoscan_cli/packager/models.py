@@ -63,7 +63,7 @@ class Models:
             models_path (Path): Path to the model file.
             models (Dict[str, Path]): Where models are added to.
         """
-        model_dirs = os.listdir(models_path)
+        model_dirs = sorted(os.listdir(models_path))
 
         for model_dir in model_dirs:
             if os.path.isfile(models_path / model_dir):
