@@ -63,8 +63,8 @@
   "applicationRoot": "/opt/holoscan/app",
   "modelRoot": "/opt/holoscan/models",
   "models": {
-    "model-2": "/opt/holoscan/models/model-2",
-    "model-1": "/opt/holoscan/models/model-1"
+    "model-1": "/opt/holoscan/models/model-1",
+    "model-2": "/opt/holoscan/models/model-2"
   },
   "resources": {
     "cpu": 1,
