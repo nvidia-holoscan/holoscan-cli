@@ -296,6 +296,10 @@ jobs:
         run: |
           # remove line that contains "NVIDIA_REQUIRE_CUDA="
           sed -i '/NVIDIA_REQUIRE_CUDA=/d' /tmp/cli-tools-env-output.log
+          # remove line that contains "NVIDIA_VISIBLE_DEVICES="
+          sed -i '/NVIDIA_VISIBLE_DEVICES=/d' /tmp/cli-tools-env-output.log
+          # remove line that contains "NVIDIA_CTK_LIBCUDA_DIR="
+          sed -i '/NVIDIA_CTK_LIBCUDA_DIR=/d' /tmp/cli-tools-env-output.log
           # remove line that contains "HOSTNAME="
           sed -i '/HOSTNAME=/d' /tmp/cli-tools-env-output.log
           # remove line that contains "PWD="
