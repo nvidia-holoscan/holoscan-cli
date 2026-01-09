@@ -101,7 +101,7 @@ jobs:
 
       - name: Restore cached Build Cache
         id: cache-build-cache-restore
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v5
         with:
           path: ~/.holoscan_build_cache
           key: e2e-cache-${{ matrix.test }}
@@ -142,7 +142,7 @@ jobs:
 
       - name: Save Build Cache
         id: cache-build-cache-save
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@v5
         with:
           path: ~/.holoscan_build_cache
           key: e2e-cache-${{ matrix.test }}
