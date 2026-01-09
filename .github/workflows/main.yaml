@@ -99,7 +99,7 @@ jobs:
           poetry run pytest
 
       - name: Upload Coverage Report
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         if: ${{ matrix.python.coveralls }}
         with:
           name: coverage
