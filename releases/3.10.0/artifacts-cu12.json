@@ -1,11 +1,11 @@
 {
   "3.10.0": {
     "holoscan": {
-      "debian-version": "3.10.0.1-1",
+      "debian-version": "3.10.0.0-1",
       "wheel-version": "3.10.0",
       "base-images": {
         "dgpu": "nvcr.io/nvidia/cuda:12.8.1-runtime-ubuntu24.04",
-        "igpu": "nvcr.io/nvidia/tensorrt:25.03-py3-igpu"
+        "igpu": "nvcr.io/nvidia/l4t-tensorrt:r10.3.0-devel"
       },
       "build-images": {
         "igpu": {
