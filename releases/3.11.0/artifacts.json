@@ -1,0 +1,117 @@
+{
+  "3.11.0": {
+    "holoscan": {
+      "debian-version": "3.11.0.2-1",
+      "wheel-version": "3.11.0",
+      "base-images": {
+        "dgpu": "nvcr.io/nvidia/cuda:13.0.0-runtime-ubuntu24.04"
+      },
+      "build-images": {
+        "dgpu": {
+          "x64-workstation": "nvcr.io/nvidia/clara-holoscan/holoscan:v3.11.0-cuda13",
+          "sbsa": "nvcr.io/nvidia/clara-holoscan/holoscan:v3.11.0-cuda13"
+        },
+        "igpu": {},
+        "cpu": {
+          "x64-workstation": "nvcr.io/nvidia/clara-holoscan/holoscan:v3.11.0-cuda13"
+        }
+      }
+    },
+    "health-probes": {
+      "linux/amd64": "https://github.com/grpc-ecosystem/grpc-health-probe/releases/download/v0.4.38/grpc_health_probe-linux-amd64",
+      "linux/arm64": "https://github.com/grpc-ecosystem/grpc-health-probe/releases/download/v0.4.38/grpc_health_probe-linux-arm64"
+    }
+  },
+  "3.10.0": {
+    "holoscan": {
+      "debian-version": "3.10.0.0-1",
+      "wheel-version": "3.10.0",
+      "base-images": {
+        "dgpu": "nvcr.io/nvidia/cuda:13.0.0-runtime-ubuntu24.04"
+      },
+      "build-images": {
+        "dgpu": {
+          "x64-workstation": "nvcr.io/nvidia/clara-holoscan/holoscan:v3.10.0-cuda13",
+          "sbsa": "nvcr.io/nvidia/clara-holoscan/holoscan:v3.10.0-cuda13"
+        },
+        "igpu": {},
+        "cpu": {
+          "x64-workstation": "nvcr.io/nvidia/clara-holoscan/holoscan:v3.10.0-cuda13"
+        }
+      }
+    },
+    "health-probes": {
+      "linux/amd64": "https://github.com/grpc-ecosystem/grpc-health-probe/releases/download/v0.4.38/grpc_health_probe-linux-amd64",
+      "linux/arm64": "https://github.com/grpc-ecosystem/grpc-health-probe/releases/download/v0.4.38/grpc_health_probe-linux-arm64"
+    }
+  },
+  "3.9.0": {
+    "holoscan": {
+      "debian-version": "3.9.0.1-1",
+      "wheel-version": "3.9.0",
+      "base-images": {
+        "dgpu": "nvcr.io/nvidia/cuda:13.0.0-runtime-ubuntu24.04"
+      },
+      "build-images": {
+        "dgpu": {
+          "x64-workstation": "nvcr.io/nvidia/clara-holoscan/holoscan:v3.9.0-cuda13",
+          "sbsa": "nvcr.io/nvidia/clara-holoscan/holoscan:v3.9.0-cuda13"
+        },
+        "igpu": {},
+        "cpu": {
+          "x64-workstation": "nvcr.io/nvidia/clara-holoscan/holoscan:v3.9.0-cuda13"
+        }
+      }
+    },
+    "health-probes": {
+      "linux/amd64": "https://github.com/grpc-ecosystem/grpc-health-probe/releases/download/v0.4.38/grpc_health_probe-linux-amd64",
+      "linux/arm64": "https://github.com/grpc-ecosystem/grpc-health-probe/releases/download/v0.4.38/grpc_health_probe-linux-arm64"
+    }
+  },
+  "3.8.0": {
+    "holoscan": {
+      "debian-version": "3.8.0.1-1",
+      "wheel-version": "3.8.0",
+      "base-images": {
+        "dgpu": "nvcr.io/nvidia/cuda:13.0.0-runtime-ubuntu24.04"
+      },
+      "build-images": {
+        "dgpu": {
+          "x64-workstation": "nvcr.io/nvidia/clara-holoscan/holoscan:v3.8.0-cuda13",
+          "sbsa": "nvcr.io/nvidia/clara-holoscan/holoscan:v3.8.0-cuda13"
+        },
+        "igpu": {},
+        "cpu": {
+          "x64-workstation": "nvcr.io/nvidia/clara-holoscan/holoscan:v3.8.0-cuda13"
+        }
+      }
+    },
+    "health-probes": {
+      "linux/amd64": "https://github.com/grpc-ecosystem/grpc-health-probe/releases/download/v0.4.38/grpc_health_probe-linux-amd64",
+      "linux/arm64": "https://github.com/grpc-ecosystem/grpc-health-probe/releases/download/v0.4.38/grpc_health_probe-linux-arm64"
+    }
+  },
+  "3.7.0": {
+    "holoscan": {
+      "debian-version": "3.7.0.1-1",
+      "wheel-version": "3.7.0",
+      "base-images": {
+        "dgpu": "nvcr.io/nvidia/cuda:13.0.0-runtime-ubuntu24.04"
+      },
+      "build-images": {
+        "dgpu": {
+          "x64-workstation": "nvcr.io/nvidia/clara-holoscan/holoscan:v3.7.0-cuda13",
+          "sbsa": "nvcr.io/nvidia/clara-holoscan/holoscan:v3.7.0-cuda13"
+        },
+        "igpu": {},
+        "cpu": {
+          "x64-workstation": "nvcr.io/nvidia/clara-holoscan/holoscan:v3.7.0-cuda13"
+        }
+      }
+    },
+    "health-probes": {
+      "linux/amd64": "https://github.com/grpc-ecosystem/grpc-health-probe/releases/download/v0.4.38/grpc_health_probe-linux-amd64",
+      "linux/arm64": "https://github.com/grpc-ecosystem/grpc-health-probe/releases/download/v0.4.38/grpc_health_probe-linux-arm64"
+    }
+  }
+}
