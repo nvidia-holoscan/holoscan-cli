@@ -227,7 +227,7 @@ jobs:
           VERSION="${VERSION/?}"
           shellspec -e VERSION=$VERSION -e HOLOSCAN_VERSION=$HOLOSCAN_VERSION -o j
       - name: Upload Test Report
-        uses: test-summary/action@v2.4
+        uses: test-summary/action@v2.6
         if: always()
         with:
           paths: 'tests/verification/report/*.xml'
