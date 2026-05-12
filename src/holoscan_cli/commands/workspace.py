@@ -14,13 +14,19 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Developer-tooling subcommands: lint, setup, clear-cache, vscode, create.
+"""Workspace-touching subcommands: lint, setup, clear-cache, vscode, create.
 
-These five don't share a build/run pipeline; they're grouped because
-they're the "convenience" commands that act on the developer's
-environment rather than on a project's build artifacts. Each has its
-own private helpers — pre-commit installation for lint, cookiecutter
-+ metadata validation for create, etc. — bundled here as module-level
+Each of these acts on the developer's local workspace state rather than
+on a specific project's build artifacts:
+
+- lint reads workspace files and runs pre-commit hooks against them
+- setup installs system + Python dev dependencies into the host
+- clear-cache deletes workspace build/data/install directories
+- vscode launches the editor against the workspace via a dev container
+- create scaffolds a new project into the workspace from a template
+
+The private helpers (pre-commit installation for lint, cookiecutter +
+metadata validation for create, etc.) are bundled here as module-level
 functions instead of methods on HoloHubCLI.
 """
 
