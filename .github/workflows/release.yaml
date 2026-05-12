@@ -13,9 +13,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# This workflow will install Python dependencies,
-# run tests with a variety of Python versions,
-# and upload a new build to TestPyPI.
+# Manual release workflow: lint, unit tests, wheel + sdist build,
+# package metadata + content validation, installed-wheel smoke tests,
+# and (for non-GA dispatches only) TestPyPI publish.
 #
 # For more information see:
 # https://help.github.com/actions/language-and-framework-guides/using-python-with-github-actions
@@ -154,7 +154,7 @@ jobs:
     - name: Install Poetry
       uses: Gr1N/setup-poetry@v9
 
-    - name: Build
+    - name: Build wheel and sdist
       env:
         rc: ${{ github.event.inputs.rc }}
         ga: ${{ github.event.inputs.ga }}
@@ -164,13 +164,38 @@ jobs:
         source $(poetry env info --path)/bin/activate
         poetry install
         poetry dynamic-versioning -vvv
-        poetry build -vvv -f wheel --clean
+        poetry build -vvv --clean
+
+    - name: Validate package metadata
+      run: |
+        source $(poetry env info --path)/bin/activate
+        python -m pip install --upgrade twine
+        python -m twine check dist/*
+
+    - name: Assert wheel package contents
+      run: |
+        wheel=$(find dist -name 'holoscan_cli-*.whl' | head -n1)
+        echo "Inspecting $wheel"
+        listing=$(unzip -l "$wheel")
+        required=(
+          'holoscan_cli/logging\.json$'
+          'holoscan_cli/py\.typed$'
+          'holoscan_cli/project/metadata/.+\.schema\.json$'
+          'holoscan_cli/project/cmake/'
+          'holoscan_cli/project/testing/'
+        )
+        for pattern in "${required[@]}"; do
+          if ! echo "$listing" | grep -qE "$pattern"; then
+            echo "Missing from wheel: $pattern" >&2
+            exit 1
+          fi
+        done
 
     - uses: actions/upload-artifact@v6
       name: Upload build
       with:
         name: build-artifact
-        path: dist/*.whl
+        path: dist/*
 
     - name: Remove tag
       uses: actions/github-script@v8.0.0
@@ -212,18 +237,23 @@ jobs:
         uses: actions/setup-python@v6
         with:
           python-version: ${{ matrix.python-version }}
-      - name: Install Holoscan CLI
+      - name: Install Holoscan CLI in clean venv
         run: |
-          wheel=$(find . -name holoscan_cli-*.whl)
-          pip install ${wheel}
+          python -m venv /tmp/holoscan-cli-smoke
+          wheel=$(find . -name 'holoscan_cli-*.whl' | head -n1)
+          /tmp/holoscan-cli-smoke/bin/pip install "${wheel}"
       - name: Smoke Test
         run: |
-          holoscan --help
-          holoscan version
-          holoscan lint --dryrun
-          if holoscan package --help; then exit 1; fi
-          if holoscan hap-run --help; then exit 1; fi
-          if holoscan nics; then exit 1; fi
+          /tmp/holoscan-cli-smoke/bin/holoscan --help
+          /tmp/holoscan-cli-smoke/bin/holoscan version
+          /tmp/holoscan-cli-smoke/bin/holoscan lint --dryrun
+      - name: Negative command surface
+        run: |
+          if /tmp/holoscan-cli-smoke/bin/holoscan package --help; then exit 1; fi
+          if /tmp/holoscan-cli-smoke/bin/holoscan hap-run --help; then exit 1; fi
+          if /tmp/holoscan-cli-smoke/bin/holoscan nics; then exit 1; fi
+          if [ -x /tmp/holoscan-cli-smoke/bin/holohub ]; then exit 1; fi
+          if [ -x /tmp/holoscan-cli-smoke/bin/monai-deploy ]; then exit 1; fi
 
   testpypi-deploy:
     if: ${{ inputs.ga == false }}
