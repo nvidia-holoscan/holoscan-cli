@@ -15,7 +15,9 @@
 
 # Manual release workflow: lint, unit tests, wheel + sdist build,
 # package metadata + content validation, installed-wheel smoke tests,
-# and (for non-GA dispatches only) TestPyPI publish.
+# and (for non-GA dispatches only) TestPyPI publish. GA publication
+# is handed off to the K2 Kitmaker wheel-release flow using the
+# wheel artifact produced here.
 #
 # For more information see:
 # https://help.github.com/actions/language-and-framework-guides/using-python-with-github-actions
@@ -196,6 +198,13 @@ jobs:
       with:
         name: build-artifact
         path: dist/*
+
+    - uses: actions/upload-artifact@v6
+      name: Upload wheel for K2 Kitmaker
+      with:
+        name: wheel-artifact
+        path: dist/holoscan_cli-*.whl
+        if-no-files-found: error
 
     - name: Remove tag
       uses: actions/github-script@v8.0.0
