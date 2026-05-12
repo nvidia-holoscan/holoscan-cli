@@ -31,38 +31,32 @@ from typing import List, Optional, Tuple, Union
 # import from holoscan_cli.utils.<module> directly; util.py keeps these names
 # until external callers have migrated. See docs/cli-migration-consolidation-plan.md
 # ("Decompose cli.py, container.py, and util.py").
-from holoscan_cli.utils.env import (  # noqa: E402,F401
-    get_cli_arg_value,
-    get_env_bool,
-    normalize_args_str,
-)
-from holoscan_cli.utils.formatting import (  # noqa: E402,F401
-    format_long_command,
-    levenshtein_distance,
-)
-from holoscan_cli.utils.logging import (  # noqa: E402,F401
+from holoscan_cli.utils.io import (  # noqa: E402,F401
     Color,
-    fatal,
-    format_cmd,
-    get_timestamp,
-    info,
-    warn,
-)
-from holoscan_cli.utils.paths import (  # noqa: E402,F401
-    _slugify,
-    dir_size_mb,
-    format_size,
-    list_metadata_json_dir,
-    relative_time,
-)
-from holoscan_cli.utils.subprocess import (  # noqa: E402,F401
     _classify_sudo_requirement,
     _get_maybe_sudo,
     _process_command_with_sudo,
+    fatal,
+    format_cmd,
+    format_long_command,
+    get_timestamp,
+    info,
     run_command,
     run_info_command,
+    warn,
 )
-from holoscan_cli.utils.versions import parse_semantic_version  # noqa: E402,F401
+from holoscan_cli.utils.text import (  # noqa: E402,F401
+    _slugify,
+    dir_size_mb,
+    format_size,
+    get_cli_arg_value,
+    get_env_bool,
+    levenshtein_distance,
+    list_metadata_json_dir,
+    normalize_args_str,
+    parse_semantic_version,
+    relative_time,
+)
 
 DEFAULT_BASE_SDK_VERSION = "4.2.0"
 
