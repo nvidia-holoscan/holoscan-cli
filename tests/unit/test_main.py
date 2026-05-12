@@ -204,7 +204,7 @@ class TestSetUpLogging:
 class TestMain:
     def test_main_source_run_dispatches_to_project_cli(self):
         mock_project_main = MagicMock()
-        with patch("holoscan_cli.project.cli.main", mock_project_main):
+        with patch("holoscan_cli.cli.main", mock_project_main):
             main(["holoscan", "run", "endoscopy_tool_tracking", "--dryrun"])
         mock_project_main.assert_called_once_with(
             ["holoscan", "run", "endoscopy_tool_tracking", "--dryrun"]
@@ -212,14 +212,14 @@ class TestMain:
 
     def test_main_image_like_run_stays_source_project_dispatch(self):
         mock_project_main = MagicMock()
-        with patch("holoscan_cli.project.cli.main", mock_project_main):
+        with patch("holoscan_cli.cli.main", mock_project_main):
             main(["holoscan", "run", "some-image:tag", "--driver"])
         mock_project_main.assert_called_once_with(["holoscan", "run", "some-image:tag", "--driver"])
 
     def test_main_project_dispatch_strips_top_level_log_level(self):
         mock_project_main = MagicMock()
         with patch("holoscan_cli.__main__.set_up_logging") as mock_logging:
-            with patch("holoscan_cli.project.cli.main", mock_project_main):
+            with patch("holoscan_cli.cli.main", mock_project_main):
                 main(["holoscan", "--log-level", "debug", "list"])
         mock_logging.assert_called_once_with("DEBUG")
         mock_project_main.assert_called_once_with(["holoscan", "list"])
@@ -227,7 +227,7 @@ class TestMain:
     def test_main_wrapper_source_command_dispatches_to_project_cli(self, monkeypatch):
         mock_project_main = MagicMock()
         monkeypatch.setenv("HOLOHUB_CMD_NAME", "./holohub")
-        with patch("holoscan_cli.project.cli.main", mock_project_main):
+        with patch("holoscan_cli.cli.main", mock_project_main):
             main(["holoscan", "list"])
         mock_project_main.assert_called_once_with(["holoscan", "list"])
 
@@ -252,7 +252,7 @@ class TestMain:
         ],
     )
     def test_main_rejects_removed_commands(self, argv):
-        with patch("holoscan_cli.project.cli.main") as mock_project_main:
+        with patch("holoscan_cli.cli.main") as mock_project_main:
             with pytest.raises(SystemExit):
                 main(argv)
         mock_project_main.assert_not_called()

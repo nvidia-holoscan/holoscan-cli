@@ -24,7 +24,7 @@ from referencing import Registry
 from referencing.jsonschema import DRAFT4
 
 try:
-    from holoscan_cli.project.metadata.utils import (
+    from holoscan_cli.metadata.utils import (
         BASE_SCHEMA_PATH,
         DEFAULT_INCLUDE_PATHS,
         METADATA_DIRECTORY_CONFIG,
@@ -33,7 +33,7 @@ try:
     )
 except ModuleNotFoundError:
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
-    from holoscan_cli.project.metadata.utils import (
+    from holoscan_cli.metadata.utils import (
         BASE_SCHEMA_PATH,
         DEFAULT_INCLUDE_PATHS,
         METADATA_DIRECTORY_CONFIG,

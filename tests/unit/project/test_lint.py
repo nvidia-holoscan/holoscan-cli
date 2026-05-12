@@ -19,8 +19,8 @@ from types import SimpleNamespace
 
 import pytest
 
-from holoscan_cli.project import cli as project_cli
-from holoscan_cli.project import util as project_util
+from holoscan_cli import cli as project_cli
+from holoscan_cli import util as project_util
 
 
 def _lint_cli(root, monkeypatch):

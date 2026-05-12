@@ -16,9 +16,9 @@
 import os
 from types import SimpleNamespace
 
-from holoscan_cli.project import cli as project_cli
-from holoscan_cli.project import container as project_container
-from holoscan_cli.project.cli import in_container_cli_command
+from holoscan_cli import cli as project_cli
+from holoscan_cli import container as project_container
+from holoscan_cli.cli import in_container_cli_command
 
 
 def test_in_container_cli_command_defaults_to_holoscan(monkeypatch):
@@ -149,6 +149,6 @@ def test_ctest_script_arg_container_defers_resolution_to_runtime():
     rendered = cli._ctest_script_arg(args, in_container=True)
 
     assert rendered.startswith("-S \"$(python3 -c "), rendered
-    assert "from holoscan_cli.project.cli import HoloHubCLI" in rendered
+    assert "from holoscan_cli.cli import HoloHubCLI" in rendered
     assert "HoloHubCLI.DEFAULT_CTEST_SCRIPT" in rendered
     assert "/host/" not in rendered, "must not bake host paths into the in-container command"

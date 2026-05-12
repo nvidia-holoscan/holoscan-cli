@@ -23,7 +23,7 @@ import os
 from pathlib import Path
 
 try:
-    from holoscan_cli.project.metadata.utils import (
+    from holoscan_cli.metadata.utils import (
         DEFAULT_INCLUDE_PATHS,
         iter_metadata_paths,
         list_normalized_languages,
@@ -32,7 +32,7 @@ except ModuleNotFoundError:  # Allow running via `python utilities/metadata/gath
     import sys
 
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
-    from holoscan_cli.project.metadata.utils import (
+    from holoscan_cli.metadata.utils import (
         DEFAULT_INCLUDE_PATHS,
         iter_metadata_paths,
         list_normalized_languages,

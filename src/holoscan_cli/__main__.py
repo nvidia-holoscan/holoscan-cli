@@ -176,7 +176,7 @@ def _dispatch_project_cli(argv: list[str]) -> bool:
     if log_level is not None:
         set_up_logging(log_level)
 
-    from .project.cli import main as project_main
+    from .cli import main as project_main
 
     project_main(project_argv)
     return True

@@ -16,7 +16,7 @@
 .. autosummary::
     :toctree: _autosummary
 
-    project
+    cli
     version
 """
 

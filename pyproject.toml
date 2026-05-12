@@ -65,9 +65,9 @@ Documentation = "https://docs.nvidia.com/holoscan/sdk-user-guide/index.html"
 requires-poetry = ">=2.0"
 packages = [{ include = "holoscan_cli", from = "src" }]
 include = [
-    { path = "src/holoscan_cli/project/metadata/*.schema.json", format = ["sdist", "wheel"] },
-    { path = "src/holoscan_cli/project/cmake/**/*", format = ["sdist", "wheel"] },
-    { path = "src/holoscan_cli/project/testing/**/*", format = ["sdist", "wheel"] },
+    { path = "src/holoscan_cli/metadata/*.schema.json", format = ["sdist", "wheel"] },
+    { path = "src/holoscan_cli/cmake/**/*", format = ["sdist", "wheel"] },
+    { path = "src/holoscan_cli/testing/**/*", format = ["sdist", "wheel"] },
 ]
 version = "0.0.0"
 

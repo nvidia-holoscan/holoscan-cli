@@ -28,7 +28,7 @@ import tempfile
 from pathlib import Path
 from typing import List, Optional, Union
 
-from holoscan_cli.project.metadata.utils import list_normalized_languages
+from holoscan_cli.metadata.utils import list_normalized_languages
 
 from .util import (
     DEFAULT_BASE_SDK_VERSION,

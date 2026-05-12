@@ -43,15 +43,15 @@ from collections import defaultdict
 from pathlib import Path
 from typing import List, Optional
 
-import holoscan_cli.project.metadata.gather_metadata as metadata_util
-import holoscan_cli.project.util as holohub_cli_util
-from holoscan_cli.project.container import HoloHubContainer
-from holoscan_cli.project.metadata.utils import (
+import holoscan_cli.metadata.gather_metadata as metadata_util
+import holoscan_cli.util as holohub_cli_util
+from holoscan_cli.container import HoloHubContainer
+from holoscan_cli.metadata.utils import (
     get_schema_path,
     list_normalized_languages,
     normalize_language,
 )
-from holoscan_cli.project.util import Color
+from holoscan_cli.util import Color
 
 
 def in_container_cli_command() -> str:
@@ -912,7 +912,7 @@ class HoloHubCLI:
         if not in_container:
             return f"-S {self.DEFAULT_CTEST_SCRIPT}"
         return (
-            "-S \"$(python3 -c 'from holoscan_cli.project.cli import HoloHubCLI; "
+            "-S \"$(python3 -c 'from holoscan_cli.cli import HoloHubCLI; "
             "print(HoloHubCLI.DEFAULT_CTEST_SCRIPT)')\""
         )
 
@@ -1957,7 +1957,7 @@ class HoloHubCLI:
 
     def handle_status(self, args: argparse.Namespace) -> None:
         """Handle status command — show environment overview"""
-        from holoscan_cli.project.status import (
+        from holoscan_cli.status import (
             collect_build_info,
             collect_docker_disk_usage,
             collect_folder_info,
@@ -1998,7 +1998,7 @@ class HoloHubCLI:
         """Handle env-check command to run system checks"""
         import time as _time
 
-        from holoscan_cli.project.system_check import (
+        from holoscan_cli.system_check import (
             format_results,
             format_results_json,
             run_all_checks,
@@ -2215,7 +2215,7 @@ class HoloHubCLI:
         import json
 
         try:
-            from holoscan_cli.project.metadata import metadata_validator
+            from holoscan_cli.metadata import metadata_validator
         except ImportError:
             template_setup_cmd = f"{self.script_name} setup --scripts template"
             holohub_cli_util.fatal(
