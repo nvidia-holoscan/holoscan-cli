@@ -46,6 +46,7 @@ class TestParseArgs:
                 config_path = config_file.name
 
             try:
+                build_cache = Path(temp_dir) / "cache"
                 argv = [
                     "holoscan",
                     "package",
@@ -56,6 +57,8 @@ class TestParseArgs:
                     "x86_64",
                     "--tag",
                     "test:latest",
+                    "--build-cache",
+                    str(build_cache),
                 ]
                 args = parse_args(argv)
                 assert args.command == "package"
@@ -63,9 +66,16 @@ class TestParseArgs:
             finally:
                 Path(config_path).unlink()  # Clean up config file
 
-    def test_parse_args_run_command(self):
-        """Test parsing run command"""
-        argv = ["holoscan", "run", "some-image:tag"]
+    def test_parse_args_hap_run_command(self):
+        """Test parsing packaged-image run command"""
+        argv = ["holoscan", "hap-run", "some-image:tag"]
+        args = parse_args(argv)
+        assert args.command == "hap-run"
+        assert args.argv == argv
+
+    def test_parse_args_monai_run_command(self):
+        """Test MONAI Deploy keeps historical run spelling"""
+        argv = ["monai-deploy", "run", "some-image:tag"]
         args = parse_args(argv)
         assert args.command == "run"
         assert args.argv == argv
@@ -149,7 +159,9 @@ class TestSetUpLogging:
         mock_path.read_bytes = mock_read_bytes
 
         with patch("holoscan_cli.__main__.Path") as mock_path_class:
-            mock_path_class.return_value.absolute.return_value.parent.__truediv__.return_value = mock_path
+            mock_path_class.return_value.absolute.return_value.parent.__truediv__.return_value = (
+                mock_path
+            )
             mock_path_class.return_value.exists.return_value = False
 
             with patch("logging.config.dictConfig") as mock_dict_config:
@@ -174,7 +186,9 @@ class TestSetUpLogging:
         mock_path.read_bytes = mock_read_bytes
 
         with patch("holoscan_cli.__main__.Path") as mock_path_class:
-            mock_path_class.return_value.absolute.return_value.parent.__truediv__.return_value = mock_path
+            mock_path_class.return_value.absolute.return_value.parent.__truediv__.return_value = (
+                mock_path
+            )
             mock_path_class.return_value.exists.return_value = False
 
             with patch("logging.config.dictConfig") as mock_dict_config:
@@ -216,7 +230,9 @@ class TestSetUpLogging:
         mock_path.read_bytes = mock_read_bytes
 
         with patch("holoscan_cli.__main__.Path") as mock_path_class:
-            mock_path_class.return_value.absolute.return_value.parent.__truediv__.return_value = mock_path
+            mock_path_class.return_value.absolute.return_value.parent.__truediv__.return_value = (
+                mock_path
+            )
             mock_path_class.return_value.exists.return_value = False
 
             with patch("logging.config.dictConfig") as mock_dict_config:
@@ -259,27 +275,123 @@ class TestMain:
         with patch("holoscan_cli.__main__.parse_args", return_value=mock_args):
             with patch("holoscan_cli.__main__.set_up_logging"):
                 with patch(
-                    "holoscan_cli.packager.packager.execute_package_command",
-                    mock_execute,
+                    "holoscan_cli.__main__._execute_package_command", mock_execute
                 ):
                     main(["holoscan", "package", "/some/path"])
                     mock_execute.assert_called_once_with(mock_args)
 
-    def test_main_run_command(self, monkeypatch):
-        """Test main function with run command"""
+    def test_main_hap_run_command(self, monkeypatch):
+        """Test main function with packaged-image run command"""
         mock_args = MagicMock()
-        mock_args.command = "run"
+        mock_args.command = "hap-run"
         mock_args.log_level = None
 
         mock_execute = MagicMock()
 
         with patch("holoscan_cli.__main__.parse_args", return_value=mock_args):
             with patch("holoscan_cli.__main__.set_up_logging"):
-                with patch(
-                    "holoscan_cli.runner.runner.execute_run_command", mock_execute
-                ):
-                    main(["holoscan", "run", "some-image:tag"])
+                with patch("holoscan_cli.__main__._execute_run_command", mock_execute):
+                    main(["holoscan", "hap-run", "some-image:tag"])
                     mock_execute.assert_called_once_with(mock_args)
+
+    def test_main_source_run_dispatches_to_project_cli(self, monkeypatch):
+        """Test holoscan run routes to source-project CLI"""
+        mock_project_main = MagicMock()
+        with patch("holoscan_cli.project.cli.main", mock_project_main):
+            main(["holoscan", "run", "endoscopy_tool_tracking", "--dryrun"])
+        mock_project_main.assert_called_once_with(
+            ["holoscan", "run", "endoscopy_tool_tracking", "--dryrun"]
+        )
+
+    def test_main_wrapper_source_command_dispatches_to_project_cli(self, monkeypatch):
+        """Test wrapper env routes source-project commands to project CLI"""
+        mock_project_main = MagicMock()
+        monkeypatch.setenv("HOLOHUB_CMD_NAME", "./holohub")
+        with patch("holoscan_cli.project.cli.main", mock_project_main):
+            main(["holoscan", "list"])
+        mock_project_main.assert_called_once_with(["holoscan", "list"])
+
+    def test_main_wrapper_native_command_uses_unified_cli(self, monkeypatch):
+        """Test wrapper env does not steal native unified CLI commands"""
+        mock_args = MagicMock()
+        mock_args.command = "hap-run"
+        mock_args.log_level = None
+        mock_execute = MagicMock()
+        monkeypatch.setenv("HOLOHUB_CMD_NAME", "./holohub")
+
+        with patch("holoscan_cli.project.cli.main") as mock_project_main:
+            with patch(
+                "holoscan_cli.__main__.parse_args", return_value=mock_args
+            ) as mock_parse:
+                with patch("holoscan_cli.__main__.set_up_logging"):
+                    with patch(
+                        "holoscan_cli.__main__._execute_run_command", mock_execute
+                    ):
+                        main(["holoscan", "hap-run", "some-image:tag"])
+        mock_project_main.assert_not_called()
+        mock_parse.assert_called_once_with(["holoscan", "hap-run", "some-image:tag"])
+        mock_execute.assert_called_once_with(mock_args)
+
+    def test_main_wrapper_program_native_command_uses_unified_cli(self):
+        """Test wrapper command names still expose native unified commands"""
+        mock_args = MagicMock()
+        mock_args.command = "version"
+        mock_args.log_level = None
+        mock_execute = MagicMock()
+
+        with patch("holoscan_cli.project.cli.main") as mock_project_main:
+            with patch(
+                "holoscan_cli.__main__.parse_args", return_value=mock_args
+            ) as mock_parse:
+                with patch("holoscan_cli.__main__.set_up_logging"):
+                    with patch(
+                        "holoscan_cli.__main__._execute_version_command", mock_execute
+                    ):
+                        main(["holohub", "version"])
+        mock_project_main.assert_not_called()
+        mock_parse.assert_called_once_with(["holohub", "version"])
+        mock_execute.assert_called_once_with(mock_args)
+
+    def test_main_wrapper_legacy_run_image_dispatches_to_hap_run(self, monkeypatch):
+        """Test wrapper env preserves legacy packaged-image redirect"""
+        mock_args = MagicMock()
+        mock_args.command = "hap-run"
+        mock_args.log_level = None
+        mock_execute = MagicMock()
+        monkeypatch.setenv("HOLOHUB_CMD_NAME", "./holohub")
+
+        with patch("holoscan_cli.project.cli.main") as mock_project_main:
+            with patch(
+                "holoscan_cli.__main__.parse_args", return_value=mock_args
+            ) as mock_parse:
+                with patch("holoscan_cli.__main__.set_up_logging"):
+                    with patch(
+                        "holoscan_cli.__main__._execute_run_command", mock_execute
+                    ):
+                        main(["holoscan", "run", "some-image:tag", "--driver"])
+        mock_project_main.assert_not_called()
+        mock_parse.assert_called_once_with(
+            ["holoscan", "hap-run", "some-image:tag", "--driver"]
+        )
+        mock_execute.assert_called_once_with(mock_args)
+
+    def test_main_legacy_run_image_dispatches_to_hap_run(self, monkeypatch):
+        """Test legacy holoscan run image syntax redirects to hap-run"""
+        mock_args = MagicMock()
+        mock_args.command = "hap-run"
+        mock_args.log_level = None
+        mock_execute = MagicMock()
+
+        with patch(
+            "holoscan_cli.__main__.parse_args", return_value=mock_args
+        ) as mock_parse:
+            with patch("holoscan_cli.__main__.set_up_logging"):
+                with patch("holoscan_cli.__main__._execute_run_command", mock_execute):
+                    main(["holoscan", "run", "some-image:tag", "--driver"])
+        mock_parse.assert_called_once_with(
+            ["holoscan", "hap-run", "some-image:tag", "--driver"]
+        )
+        mock_execute.assert_called_once_with(mock_args)
 
     def test_main_version_command(self, monkeypatch):
         """Test main function with version command"""
@@ -292,7 +404,7 @@ class TestMain:
         with patch("holoscan_cli.__main__.parse_args", return_value=mock_args):
             with patch("holoscan_cli.__main__.set_up_logging"):
                 with patch(
-                    "holoscan_cli.version.version.execute_version_command", mock_execute
+                    "holoscan_cli.__main__._execute_version_command", mock_execute
                 ):
                     main(["holoscan", "version"])
                     mock_execute.assert_called_once_with(mock_args)
@@ -307,7 +419,7 @@ class TestMain:
 
         with patch("holoscan_cli.__main__.parse_args", return_value=mock_args):
             with patch("holoscan_cli.__main__.set_up_logging"):
-                with patch("holoscan_cli.nics.nics.execute_nics_command", mock_execute):
+                with patch("holoscan_cli.__main__._execute_nics_command", mock_execute):
                     main(["holoscan", "nics"])
                     mock_execute.assert_called_once_with(mock_args)
 
@@ -322,7 +434,7 @@ class TestMain:
         with patch("holoscan_cli.__main__.parse_args", return_value=mock_args):
             with patch("holoscan_cli.__main__.set_up_logging") as mock_logging:
                 with patch(
-                    "holoscan_cli.version.version.execute_version_command", mock_execute
+                    "holoscan_cli.__main__._execute_version_command", mock_execute
                 ):
                     main(["holoscan", "--log-level", "DEBUG", "version"])
                     mock_logging.assert_called_once_with("DEBUG")
@@ -341,10 +453,10 @@ class TestMain:
         ) as mock_parse:
             with patch("holoscan_cli.__main__.set_up_logging"):
                 with patch(
-                    "holoscan_cli.version.version.execute_version_command", mock_execute
+                    "holoscan_cli.__main__._execute_version_command", mock_execute
                 ):
                     main(None)
-                    mock_parse.assert_called_once_with(None)
+                    assert mock_parse.call_count == 1
                     mock_execute.assert_called_once_with(mock_args)
 
     def test_main_calls_parse_args_and_logging_setup(self, monkeypatch):
@@ -371,7 +483,7 @@ class TestMain:
                 "holoscan_cli.__main__.set_up_logging", side_effect=mock_set_up_logging
             ):
                 with patch(
-                    "holoscan_cli.version.version.execute_version_command", mock_execute
+                    "holoscan_cli.__main__._execute_version_command", mock_execute
                 ):
                     main(["holoscan", "version"])
 

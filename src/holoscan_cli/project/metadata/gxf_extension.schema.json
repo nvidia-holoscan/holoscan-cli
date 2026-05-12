@@ -1,0 +1,59 @@
+{
+  "$schema": "http://json-schema.org/draft-04/schema#",
+  "$id": "holohub/gxf_extension/v1",
+  "type": "object",
+  "properties": {
+    "gxf_extension": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "$ref": "holohub/project/v1#/$defs/name"
+        },
+        "description": {
+          "$ref": "holohub/project/v1#/$defs/description"
+        },
+        "authors": {
+          "$ref": "holohub/project/v1#/$defs/authors"
+        },
+        "version": {
+          "$ref": "holohub/project/v1#/$defs/version"
+        },
+        "changelog": {
+          "$ref": "holohub/project/v1#/$defs/changelog"
+        },
+        "language": {
+          "$ref": "holohub/project/v1#/$defs/language"
+        },
+        "platforms": {
+          "$ref": "holohub/project/v1#/$defs/platforms"
+        },
+        "tags": {
+          "$ref": "holohub/project/v1#/$defs/tags"
+        },
+        "gxf_version": {
+          "$ref": "holohub/project/v1#/$defs/sdk_version"
+        },
+        "ranking": {
+          "$ref": "holohub/project/v1#/$defs/ranking"
+        },
+        "requirements": {
+          "$ref": "holohub/project/v1#/$defs/requirements"
+        }
+      },
+      "required": [
+        "name",
+        "authors",
+        "version",
+        "changelog",
+        "platforms",
+        "tags",
+        "gxf_version",
+        "ranking",
+        "requirements"
+      ]
+    }
+  },
+  "required": [
+    "gxf_extension"
+  ]
+}

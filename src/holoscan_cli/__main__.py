@@ -17,9 +17,9 @@ import json
 import logging
 import logging.config
 import os
+import sys
 from pathlib import Path
 from typing import Optional, Union
-
 
 logging.getLogger("docker.api.build").setLevel(logging.WARNING)
 logging.getLogger("docker.auth").setLevel(logging.WARNING)
@@ -29,14 +29,69 @@ logging.getLogger("urllib3").setLevel(logging.WARNING)
 
 LOG_CONFIG_FILENAME = "logging.json"
 
+# Dispatch contract for the consolidation prototype:
+# native packaged-app commands (`package`, `hap-run`, `version`, `nics`) stay
+# owned by this argparse entry point. Source-project commands listed in
+# PROJECT_COMMANDS are forwarded to the ported HoloHub project CLI before
+# argparse parses them; the placeholder subparsers below exist only so
+# top-level `--help` enumerates them. A legacy `holoscan run <image-like>`
+# invocation is rewritten to `hap-run` with a deprecation warning.
+PROJECT_COMMANDS = {
+    "autocompletion_list": "list source-project names for shell completion",
+    "build": "build a source project",
+    "build-container": "build a source-project development container",
+    "clear-cache": "clear source-project build, data, and install caches",
+    "create": "create a new source project from a template",
+    "env-check": "run source-project environment health checks",
+    "env-info": "display source-project environment information",
+    "install": "install a built source project",
+    "lint": "run source-project linting tools",
+    "list": "list discovered source projects",
+    "modes": "list modes for a source project",
+    "run": "build and run a source project",
+    "run-container": "launch a source-project development container",
+    "setup": "install source-project development dependencies",
+    "status": "show source-project environment and build status",
+    "test": "test a source project",
+    "vscode": "launch VS Code for a source project dev container",
+}
+HAP_RUN_FLAGS = {
+    "--address",
+    "--driver",
+    "--input",
+    "-i",
+    "--output",
+    "-o",
+    "--fragments",
+    "-f",
+    "--worker",
+    "--worker-address",
+    "--rm",
+    "--config",
+    "--name",
+    "--health-check",
+    "--network",
+    "-n",
+    "--nic",
+    "--use-all-nics",
+    "--render",
+    "-r",
+    "--quiet",
+    "-q",
+    "--shm-size",
+    "--terminal",
+    "--device",
+    "--gpus",
+    "--uid",
+    "--gid",
+}
+
 
 def parse_args(argv: Optional[list[str]] = None) -> argparse.Namespace:
     from .packager.package_command import create_package_parser
     from .runner.run_command import create_run_parser
 
     if argv is None:
-        import sys
-
         argv = sys.argv
     argv = list(argv)  # copy argv for manipulation to avoid side-effects
 
@@ -67,27 +122,37 @@ def parse_args(argv: Optional[list[str]] = None) -> argparse.Namespace:
 
     subparser = parser.add_subparsers(dest="command")
 
-    # Parser for `package` command
     create_package_parser(subparser, "package", parents=[parent_parser])
 
-    # Parser for `run` command
-    create_run_parser(subparser, "run", parents=[parent_parser])
+    if program_name == "monai-deploy":
+        # Keep MONAI Deploy's historical packaged-image run spelling.
+        create_run_parser(subparser, "run", parents=[parent_parser])
+    else:
+        # `holoscan run` is now reserved for source projects. Existing HAP/MAP
+        # image execution is available as `holoscan hap-run`.
+        create_run_parser(subparser, "hap-run", parents=[parent_parser])
 
-    # Parser for `version` command
     subparser.add_parser(
         "version",
         formatter_class=argparse.HelpFormatter,
         parents=[parent_parser],
         add_help=False,
     )
-
-    # Parser for `nics` command
     subparser.add_parser(
         "nics",
         formatter_class=argparse.HelpFormatter,
         parents=[parent_parser],
         add_help=False,
     )
+    if program_name != "monai-deploy":
+        for command, help_text in sorted(PROJECT_COMMANDS.items()):
+            subparser.add_parser(
+                command,
+                help=help_text,
+                formatter_class=argparse.HelpFormatter,
+                parents=[parent_parser],
+                add_help=False,
+            )
     args = parser.parse_args(argv[1:])
     args.argv = argv  # save argv for later use in runpy
 
@@ -125,30 +190,98 @@ def set_up_logging(
     logging.config.dictConfig(config_dict)
 
 
+def _program_name(argv: list[str]) -> str:
+    command_name = os.path.basename(argv[0])
+    return "holoscan" if command_name == "__main__.py" else command_name
+
+
+def _run_arg_looks_like_hap(argv: list[str]) -> bool:
+    if len(argv) < 3 or argv[1] != "run":
+        return False
+    for arg in argv[2:]:
+        flag = arg.split("=", 1)[0]
+        if flag in HAP_RUN_FLAGS:
+            return True
+    image = argv[2]
+    return "/" in image or ":" in image or image.startswith(("nvcr.io", "docker.io"))
+
+
+def _dispatch_project_cli(argv: list[str]) -> bool:
+    """Forward source-project commands to the ported project CLI.
+
+    Mutates ``argv`` in place when a legacy ``run <image>`` invocation needs to
+    be rewritten to ``hap-run`` so the caller can continue with the native
+    argparse flow without re-scanning argv.
+    """
+    if _program_name(argv) == "monai-deploy":
+        return False
+
+    command = argv[1] if len(argv) > 1 else None
+    if command not in PROJECT_COMMANDS:
+        return False
+
+    if _run_arg_looks_like_hap(argv):
+        print(
+            "WARNING: `holoscan run <image>` is deprecated for packaged "
+            "application images; use `holoscan hap-run <image>` instead.",
+            file=sys.stderr,
+        )
+        argv[1] = "hap-run"
+        return False
+
+    from .project.cli import main as project_main
+
+    project_main(argv)
+    return True
+
+
+def _execute_package_command(args: argparse.Namespace) -> None:
+    from .packager.packager import execute_package_command
+
+    execute_package_command(args)
+
+
+def _execute_run_command(args: argparse.Namespace) -> None:
+    from .runner.runner import execute_run_command
+
+    execute_run_command(args)
+
+
+def _execute_version_command(args: argparse.Namespace) -> None:
+    from .version.version import execute_version_command
+
+    execute_version_command(args)
+
+
+def _execute_nics_command(args: argparse.Namespace) -> None:
+    from .nics.nics import execute_nics_command
+
+    execute_nics_command(args)
+
+
 def main(argv: Optional[list[str]] = None):
+    if argv is None:
+        argv = sys.argv
+    argv = list(argv)
+
+    if _dispatch_project_cli(argv):
+        return
+
     args = parse_args(argv)
 
     set_up_logging(args.log_level)
 
     if args.command == "package":
-        from .packager.packager import execute_package_command
+        _execute_package_command(args)
 
-        execute_package_command(args)
-
-    elif args.command == "run":
-        from .runner.runner import execute_run_command
-
-        execute_run_command(args)
+    elif args.command in {"run", "hap-run"}:
+        _execute_run_command(args)
 
     elif args.command == "version":
-        from .version.version import execute_version_command
-
-        execute_version_command(args)
+        _execute_version_command(args)
 
     elif args.command == "nics":
-        from .nics.nics import execute_nics_command
-
-        execute_nics_command(args)
+        _execute_nics_command(args)
 
 
 if __name__ == "__main__":
