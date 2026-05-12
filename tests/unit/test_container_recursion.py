@@ -19,6 +19,7 @@ from types import SimpleNamespace
 from holoscan_cli import cli as project_cli
 from holoscan_cli import container as project_container
 from holoscan_cli.cli import in_container_cli_command
+from holoscan_cli.commands.project import _ctest_script_arg
 
 
 def test_in_container_cli_command_defaults_to_holoscan(monkeypatch):
@@ -120,11 +121,11 @@ def test_ctest_script_arg_uses_user_override():
     args = SimpleNamespace(ctest_script="cmake/isaac_os.container.ctest")
 
     assert (
-        cli._ctest_script_arg(args, in_container=True)
+        _ctest_script_arg(cli, args, in_container=True)
         == "-S cmake/isaac_os.container.ctest"
     )
     assert (
-        cli._ctest_script_arg(args, in_container=False)
+        _ctest_script_arg(cli, args, in_container=False)
         == "-S cmake/isaac_os.container.ctest"
     )
 
@@ -137,7 +138,7 @@ def test_ctest_script_arg_local_uses_host_resolved_path(monkeypatch):
     args = SimpleNamespace(ctest_script=None)
 
     assert (
-        cli._ctest_script_arg(args, in_container=False)
+        _ctest_script_arg(cli, args, in_container=False)
         == "-S /host/path/holohub.container.ctest"
     )
 
@@ -146,7 +147,7 @@ def test_ctest_script_arg_container_defers_resolution_to_runtime():
     cli = _bare_cli()
     args = SimpleNamespace(ctest_script=None)
 
-    rendered = cli._ctest_script_arg(args, in_container=True)
+    rendered = _ctest_script_arg(cli, args, in_container=True)
 
     assert rendered.startswith("-S \"$(python3 -c "), rendered
     assert "from holoscan_cli.cli import HoloHubCLI" in rendered
