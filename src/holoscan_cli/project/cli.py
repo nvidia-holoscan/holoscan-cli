@@ -893,6 +893,29 @@ class HoloHubCLI:
             extra_args=trailing_args,
         )
 
+    def _ctest_script_arg(self, args: argparse.Namespace, in_container: bool) -> str:
+        """Render the ``ctest -S <script>`` argument with the right resolution context.
+
+        When the ctest invocation will run inside a separate container (i.e. the
+        host is recursing in via ``docker run ... bash -c "<ctest_cmd>"``), the
+        host's ``HoloHubCLI.DEFAULT_CTEST_SCRIPT`` points at the host's
+        ``site-packages`` and will not exist inside the container if the install
+        prefix differs. Defer the resolution to runtime by emitting a Python
+        one-liner the in-container shell evaluates; this honors any
+        ``HOLOHUB_CTEST_SCRIPT`` value forwarded into the container and falls
+        back to the in-container package's bundled script. The host's local path
+        (``--local`` on the host, or the in-container ``--local`` recursion
+        branch) keeps the direct host-resolved path.
+        """
+        if args.ctest_script:
+            return f"-S {args.ctest_script}"
+        if not in_container:
+            return f"-S {self.DEFAULT_CTEST_SCRIPT}"
+        return (
+            "-S \"$(python3 -c 'from holoscan_cli.project.cli import HoloHubCLI; "
+            "print(HoloHubCLI.DEFAULT_CTEST_SCRIPT)')\""
+        )
+
     def handle_test(self, args: argparse.Namespace) -> None:
         """Handle test command"""
         skip_docker_build, _ = holohub_cli_util.check_skip_builds(args)
@@ -992,10 +1015,7 @@ class HoloHubCLI:
         if getattr(args, "coverage", False):
             ctest_cmd += "-DCOVERAGE=ON "
 
-        if args.ctest_script:
-            ctest_cmd += f"-S {args.ctest_script} "
-        else:
-            ctest_cmd += f"-S {self.DEFAULT_CTEST_SCRIPT} "
+        ctest_cmd += self._ctest_script_arg(args, in_container=not is_local_mode) + " "
 
         if args.verbose:
             ctest_cmd += "-VV "

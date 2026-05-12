@@ -14,7 +14,9 @@
 # limitations under the License.
 
 import os
+from types import SimpleNamespace
 
+from holoscan_cli.project import cli as project_cli
 from holoscan_cli.project import container as project_container
 from holoscan_cli.project.cli import in_container_cli_command
 
@@ -107,3 +109,46 @@ def test_local_source_build_context_args_emits_named_context(monkeypatch):
         "--build-context",
         "holoscan-cli-src=/home/wenqil/Documents/holoscan-cli",
     ]
+
+
+def _bare_cli() -> project_cli.HoloHubCLI:
+    return object.__new__(project_cli.HoloHubCLI)
+
+
+def test_ctest_script_arg_uses_user_override():
+    cli = _bare_cli()
+    args = SimpleNamespace(ctest_script="cmake/isaac_os.container.ctest")
+
+    assert (
+        cli._ctest_script_arg(args, in_container=True)
+        == "-S cmake/isaac_os.container.ctest"
+    )
+    assert (
+        cli._ctest_script_arg(args, in_container=False)
+        == "-S cmake/isaac_os.container.ctest"
+    )
+
+
+def test_ctest_script_arg_local_uses_host_resolved_path(monkeypatch):
+    cli = _bare_cli()
+    monkeypatch.setattr(
+        project_cli.HoloHubCLI, "DEFAULT_CTEST_SCRIPT", "/host/path/holohub.container.ctest"
+    )
+    args = SimpleNamespace(ctest_script=None)
+
+    assert (
+        cli._ctest_script_arg(args, in_container=False)
+        == "-S /host/path/holohub.container.ctest"
+    )
+
+
+def test_ctest_script_arg_container_defers_resolution_to_runtime():
+    cli = _bare_cli()
+    args = SimpleNamespace(ctest_script=None)
+
+    rendered = cli._ctest_script_arg(args, in_container=True)
+
+    assert rendered.startswith("-S \"$(python3 -c "), rendered
+    assert "from holoscan_cli.project.cli import HoloHubCLI" in rendered
+    assert "HoloHubCLI.DEFAULT_CTEST_SCRIPT" in rendered
+    assert "/host/" not in rendered, "must not bake host paths into the in-container command"
