@@ -45,6 +45,7 @@ from typing import List, Optional
 
 import holoscan_cli.metadata.gather_metadata as metadata_util
 import holoscan_cli.util as holohub_cli_util
+from holoscan_cli.commands import info as commands_info
 from holoscan_cli.container import HoloHubContainer
 from holoscan_cli.container.parsers import get_build_argparse, get_run_argparse
 from holoscan_cli.metadata.utils import (
@@ -303,7 +304,7 @@ class HoloHubCLI:
         # list command
         list_cmd = subparsers.add_parser("list", help="List all available targets")
         self.subparsers["list"] = list_cmd
-        list_cmd.set_defaults(func=self.handle_list)
+        list_cmd.set_defaults(func=lambda args: commands_info.handle_list(self, args))
 
         # modes command
         modes = subparsers.add_parser("modes", help="List available modes for an application")
@@ -312,14 +313,14 @@ class HoloHubCLI:
         modes.add_argument(
             "--language", choices=["cpp", "python"], help="Specify language implementation"
         )
-        modes.set_defaults(func=self.handle_modes)
+        modes.set_defaults(func=lambda args: commands_info.handle_modes(self, args))
 
         # autocompletion_list command (for bash completion)
         autocomp_cmd = subparsers.add_parser(
             "autocompletion_list", help="List targets for autocompletion"
         )
         self.subparsers["autocompletion_list"] = autocomp_cmd
-        autocomp_cmd.set_defaults(func=self.handle_autocompletion_list)
+        autocomp_cmd.set_defaults(func=lambda args: commands_info.handle_autocompletion_list(self, args))
 
         # lint command
         lint = subparsers.add_parser("lint", help="Run repository linting via pre-commit")
@@ -364,7 +365,7 @@ class HoloHubCLI:
             "env-info", help="Display environment debugging information"
         )
         self.subparsers["env-info"] = env_info
-        env_info.set_defaults(func=self.handle_env_info)
+        env_info.set_defaults(func=lambda args: commands_info.handle_env_info(self, args))
 
         # Add status command
         status = subparsers.add_parser(
@@ -372,7 +373,7 @@ class HoloHubCLI:
         )
         self.subparsers["status"] = status
         status.add_argument("--json", action="store_true", help="Output status as JSON")
-        status.set_defaults(func=self.handle_status)
+        status.set_defaults(func=lambda args: commands_info.handle_status(self, args))
 
         # Add env-check command
         env_check = subparsers.add_parser(
@@ -381,7 +382,7 @@ class HoloHubCLI:
         )
         self.subparsers["env-check"] = env_check
         env_check.add_argument("--json", action="store_true", help="Output check results as JSON")
-        env_check.set_defaults(func=self.handle_env_check)
+        env_check.set_defaults(func=lambda args: commands_info.handle_env_check(self, args))
 
         # Add install command
         install = subparsers.add_parser(
@@ -1599,79 +1600,6 @@ class HoloHubCLI:
                 extra_args=extra_args,
             )
 
-    def handle_list(self, args: argparse.Namespace) -> None:
-        """Handle list command"""
-        LIST_TYPES = [
-            "application",
-            "benchmark",
-            "gxf_extension",
-            "package",
-            "operator",
-            "tutorial",
-            "workflow",
-        ]
-        grouped_metadata = defaultdict(list)
-        for project in self.projects:
-            grouped_metadata[project.get("project_type", "")].append(project)
-
-        for project_type in LIST_TYPES:
-            if project_type not in grouped_metadata:
-                continue
-            print(f"\n{Color.white(f'== {project_type.upper()}S =================', bold=True)}\n")
-            for project in sorted(grouped_metadata[project_type], key=lambda x: x["project_name"]):
-                language = project.get("metadata", {}).get("language", "")
-                language = f"({language})" if language else ""
-                print(f'{project["project_name"]} {language}')
-
-        print(f"\n{Color.white('=================================', bold=True)}\n")
-
-    def handle_modes(self, args: argparse.Namespace) -> None:
-        """Handle modes command"""
-        project_data = self.find_project(args.project, language=args.language)
-        modes = project_data.get("metadata", {}).get("modes", {})
-
-        if not modes:
-            print(f"No modes defined for {args.project}")
-            return
-
-        print(f"\n{Color.white(f'Available modes for {args.project}:', bold=True)}\n")
-
-        for mode_name, mode_config in modes.items():
-            description = mode_config.get("description", "No description")
-            print(f"  {Color.green(mode_name, bold=True)} - {description}")
-            requirements = mode_config.get("requirements", [])
-            if requirements:
-                req_list = ", ".join(requirements)
-                print(f"    Requirements: {req_list}")
-
-            print()  # Empty line between modes
-
-    def handle_autocompletion_list(self, args: argparse.Namespace) -> None:
-        """Handle autocompletion_list command - output project names and commands for bash completion"""
-        project_names = set()
-        for project in self.projects:
-            project_names.add(project["project_name"])
-        for name in sorted(project_names):
-            print(name)
-        commands = [
-            "build-container",
-            "run-container",
-            "build",
-            "run",
-            "list",
-            "lint",
-            "setup",
-            "install",
-            "create",
-            "status",
-            "env-check",
-            "cpp",
-            "python",
-            "autocompletion_list",
-        ]
-        for cmd in commands:
-            print(cmd)
-
     def handle_lint(self, args: argparse.Namespace) -> None:
         """Handle lint command (thin wrapper around pre-commit).
 
@@ -1938,85 +1866,6 @@ class HoloHubCLI:
                 print("  source ~/.bashrc")
 
                 print(Color.green("Setup for HoloHub is ready. Happy Holocoding!"))
-
-    def handle_env_info(self, args: argparse.Namespace) -> None:
-        """Handle env-info command to collect debugging information"""
-        print(holohub_cli_util.format_cmd("Environment Information"))
-        holohub_cli_util.collect_holohub_info(
-            holohub_root=self.HOLOHUB_ROOT,
-            build_dir=self.DEFAULT_BUILD_PARENT_DIR,
-            data_dir=self.DEFAULT_DATA_DIR,
-            sdk_dir=self.DEFAULT_SDK_DIR,
-        )
-        holohub_cli_util.collect_git_info(holohub_root=self.HOLOHUB_ROOT)
-        holohub_cli_util.collect_env_info()
-        print(
-            holohub_cli_util.format_cmd(
-                "Complete (Before sharing, please review and remove sensitive information)"
-            )
-        )
-
-    def handle_status(self, args: argparse.Namespace) -> None:
-        """Handle status command — show environment overview"""
-        from holoscan_cli.status import (
-            collect_build_info,
-            collect_docker_disk_usage,
-            collect_folder_info,
-            collect_git_info,
-            collect_image_info,
-            collect_platform_info,
-            format_status,
-            format_status_json,
-        )
-
-        platform_info = collect_platform_info()
-        git_info = collect_git_info(self.HOLOHUB_ROOT)
-        containers = collect_image_info()
-        builds = collect_build_info(self.DEFAULT_BUILD_PARENT_DIR)
-        build_folders = collect_folder_info(
-            self._collect_cache_dirs(["build", "build-*"], self.DEFAULT_BUILD_PARENT_DIR)
-        )
-        data_folders = collect_folder_info(
-            self._collect_cache_dirs(["data", "data-*"], self.DEFAULT_DATA_DIR)
-        )
-        docker_disk = collect_docker_disk_usage()
-
-        fmt_args = (
-            platform_info,
-            git_info,
-            containers,
-            builds,
-            build_folders,
-            data_folders,
-            docker_disk,
-        )
-        if args.json:
-            print(format_status_json(*fmt_args))
-        else:
-            print(format_status(*fmt_args))
-
-    def handle_env_check(self, args: argparse.Namespace) -> None:
-        """Handle env-check command to run system checks"""
-        import time as _time
-
-        from holoscan_cli.system_check import (
-            format_results,
-            format_results_json,
-            run_all_checks,
-        )
-
-        t0 = _time.monotonic()
-        results = run_all_checks()
-        elapsed = _time.monotonic() - t0
-
-        if args.json:
-            print(format_results_json(results, elapsed))
-        else:
-            print(format_results(results, elapsed))
-
-        # Exit 1 only on FAIL; warnings are informational
-        if any(r.status == "FAIL" for r in results):
-            sys.exit(1)
 
     def handle_install(self, args: argparse.Namespace) -> None:
         """Handle install command"""
