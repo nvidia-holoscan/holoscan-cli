@@ -46,6 +46,7 @@ from typing import List, Optional
 import holoscan_cli.metadata.gather_metadata as metadata_util
 import holoscan_cli.util as holohub_cli_util
 from holoscan_cli.container import HoloHubContainer
+from holoscan_cli.container.parsers import get_build_argparse, get_run_argparse
 from holoscan_cli.metadata.utils import (
     get_schema_path,
     list_normalized_languages,
@@ -102,8 +103,8 @@ class HoloHubCLI:
         self.subparsers = {}
 
         # Common container arguments parent parsers
-        container_build_argparse = HoloHubContainer.get_build_argparse()
-        container_run_argparse = HoloHubContainer.get_run_argparse()
+        container_build_argparse = get_build_argparse()
+        container_run_argparse = get_run_argparse()
         # Add create command
         create = subparsers.add_parser("create", help="Create a new Holoscan application")
         self.subparsers["create"] = create

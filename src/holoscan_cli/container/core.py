@@ -14,7 +14,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import argparse
 import glob
 import os
 import re
@@ -30,7 +29,7 @@ from typing import List, Optional, Union
 
 from holoscan_cli.metadata.utils import list_normalized_languages
 
-from .util import (
+from ..util import (
     DEFAULT_BASE_SDK_VERSION,
     build_holohub_path_mapping,
     check_nvidia_ctk,
@@ -57,62 +56,13 @@ from .util import (
     run_command,
     warn,
 )
+from .signals import (
+    _ContainerTerminationHandler,
+    _ContainerTerminationSignal,
+    _read_container_id,
+)
 
 SCCACHE_CONTAINER_DIR = "/.cache/sccache"
-
-
-def _read_container_id(cidfile: Path) -> Optional[str]:
-    """Read a Docker container ID from a cidfile if Docker has written it."""
-    try:
-        container_id = cidfile.read_text().strip()
-    except OSError:
-        return None
-    return container_id or None
-
-
-class _ContainerTerminationSignal(Exception):
-    """Raised from the signal handler to return control to the parent CLI."""
-
-    def __init__(self, signum: int):
-        self.signum = signum
-        super().__init__(signum)
-
-
-class _ContainerTerminationHandler:
-    """Record termination signals so the parent CLI can clean up its container.
-
-    The handler intentionally only records the signal; it does not run subprocesses
-    from the signal context. The caller is expected to perform cleanup (e.g.
-    `docker stop`) on the main thread after the guarded block exits.
-    """
-
-    def __init__(self):
-        self._previous_handlers = {}
-
-    def __enter__(self):
-        for signal_name in ("SIGINT", "SIGTERM", "SIGHUP"):
-            signum = getattr(signal, signal_name, None)
-            if signum is None:
-                continue
-            try:
-                self._previous_handlers[signum] = signal.getsignal(signum)
-                signal.signal(signum, self._handle_signal)
-            except (OSError, RuntimeError, ValueError):
-                continue
-        return self
-
-    def __exit__(self, exc_type, exc, tb):
-        for signum, handler in self._previous_handlers.items():
-            # signal.getsignal returns None for natively-installed handlers,
-            # and signal.signal(None) raises TypeError — swallow it so we don't
-            # mask the original termination exception during cleanup.
-            try:
-                signal.signal(signum, handler)
-            except (OSError, RuntimeError, TypeError, ValueError):
-                continue
-
-    def _handle_signal(self, signum, frame) -> None:
-        raise _ContainerTerminationSignal(signum)
 
 
 class HoloHubContainer:
@@ -194,106 +144,6 @@ class HoloHubContainer:
     @classmethod
     def default_dockerfile(cls) -> Path:
         return cls.DEFAULT_DOCKERFILE
-
-    @staticmethod
-    def get_build_argparse() -> argparse.ArgumentParser:
-        """Get argument parser for container build options"""
-        parser = argparse.ArgumentParser(add_help=False)
-        parser.add_argument("--base-img", help="(Build container) Fully qualified base image name")
-        parser.add_argument("--docker-file", help="(Build container) Path to Dockerfile to use")
-        parser.add_argument(
-            "--img", help="(Build container) Specify fully qualified container name"
-        )
-        parser.add_argument(
-            "--no-cache",
-            action="store_true",
-            help="(Build container) Do not use cache when building the image",
-        )
-        parser.add_argument(
-            "--cuda",
-            type=str,
-            help="(Build container) CUDA version (e.g., 12, 13). Default: 12",
-        )
-        parser.add_argument(
-            "--build-args",
-            help="(Build container) Extra arguments to docker build command, "
-            "example: `--build-args '--network=host --build-arg \"CUSTOM=value with spaces\"'`",
-        )
-        parser.add_argument(
-            "--extra-scripts",
-            action="append",
-            help="(Build container) Named dependency installation scripts to run as Docker layers."
-            + "Searches in the directory path specified by the HOLOHUB_SETUP_SCRIPTS_DIR environment variable."
-            + "Use `./holohub setup --list-scripts` to list all available scripts.",
-        )
-        return parser
-
-    @staticmethod
-    def get_run_argparse() -> argparse.ArgumentParser:
-        """Get argument parser for container run options"""
-
-        class _DeprecatedDisplayFlagAction(argparse.Action):
-            def __call__(self, parser, namespace, values, option_string=None):
-                warn(
-                    f"{option_string} is deprecated and ignored; X11 and Wayland "
-                    "forwarding now happens automatically when DISPLAY or "
-                    "WAYLAND_DISPLAY is set."
-                )
-                setattr(namespace, self.dest, True)
-
-        parser = argparse.ArgumentParser(add_help=False)
-        parser.add_argument(
-            "--docker-opts",
-            default="",
-            help="Additional options to the Docker run command, "
-            "example: `--docker-opts='--entrypoint=bash'` or `--docker-opts '-e DISPLAY=:1'`",
-        )
-        parser.add_argument(
-            "--ssh-x11",
-            action=_DeprecatedDisplayFlagAction,
-            nargs=0,
-            default=False,
-            help="[DEPRECATED] X11 over SSH is now auto-detected from DISPLAY",
-        )
-        parser.add_argument(
-            "--nsys-profile",
-            action="store_true",
-            help="Support Nsight Systems profiling in container",
-        )
-        parser.add_argument(
-            "--local-sdk-root",
-            help="Path to Holoscan SDK used for building local Holoscan SDK container",
-        )
-        parser.add_argument("--init", action="store_true", help="Support tini entry point")
-        parser.add_argument(
-            "--persistent", action="store_true", help="Does not delete container after it is run"
-        )
-        parser.add_argument(
-            "--add-volume",
-            action="append",
-            help="Mount additional volume to `/workspace/volumes`, example: `--add-volume /tmp`",
-        )
-        parser.add_argument(
-            "--as-root", action="store_true", help="Run the container with root permissions"
-        )
-        parser.add_argument(
-            "--nsys-location",
-            help="Specify location of the Nsight Systems installation on the host "
-            "(e.g., /opt/nvidia/nsight-systems/2024.1.1/)",
-        )
-        parser.add_argument(
-            "--mps",
-            action="store_true",
-            help="If CUDA MPS is enabled on the host, mount MPS host directories into the container",
-        )
-        parser.add_argument(
-            "--enable-x11",
-            action=_DeprecatedDisplayFlagAction,
-            nargs=0,
-            default=True,
-            help="[DEPRECATED] X11/Wayland forwarding is now auto-detected",
-        )
-        return parser
 
     @staticmethod
     def ucx_args() -> List[str]:
