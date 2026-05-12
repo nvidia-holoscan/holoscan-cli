@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -14,16 +13,48 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Development-container subcommands: build-container and run-container.
+"""Development-container subcommands.
 
-Both delegate the actual docker work to :class:`HoloHubContainer`; this
-module is the thin layer that resolves project metadata + mode config
-into the kwargs that container.build / container.run expect.
+* ``build-container``  — build a source-project development container
+* ``run-container``    — build (if needed) and launch a dev container
+
+Both commands delegate the actual docker work to
+:class:`holoscan_cli.container.HoloHubContainer`; this module is the thin
+parser + handler layer that resolves project metadata / mode config into
+the kwargs that ``HoloHubContainer.build`` / ``HoloHubContainer.run``
+expect. The plural ``containers.py`` filename is intentional — it keeps
+the module distinct from the singular :mod:`holoscan_cli.container`
+package while describing what these commands act on.
 """
 
 import argparse
 
 import holoscan_cli.util as holohub_cli_util
+from holoscan_cli.commands.registry import help_for
+
+# ---- build-container ---------------------------------------------------------
+
+
+def register_build_container_parser(cli, subparsers, *, container_build) -> argparse.ArgumentParser:
+    """Register the ``build-container`` subcommand."""
+    parser = subparsers.add_parser(
+        "build-container",
+        help=help_for("build-container"),
+        parents=[container_build],
+    )
+    parser.add_argument("project", nargs="?", help="Project to build container for")
+    parser.add_argument("mode", nargs="?", help="Mode to build container for (optional)")
+    parser.add_argument(
+        "--verbose", action="store_true", help="Print variables passed to docker build command"
+    )
+    parser.add_argument(
+        "--dryrun", action="store_true", help="Print commands without executing them"
+    )
+    parser.add_argument(
+        "--language", choices=["cpp", "python"], help="Specify language implementation"
+    )
+    parser.set_defaults(func=lambda args: handle_build_container(cli, args))
+    return parser
 
 
 def handle_build_container(cli, args: argparse.Namespace) -> None:
@@ -56,6 +87,37 @@ def handle_build_container(cli, args: argparse.Namespace) -> None:
         cuda_version=getattr(args, "cuda", None),
         extra_scripts=getattr(args, "extra_scripts", []),
     )
+
+
+# ---- run-container -----------------------------------------------------------
+
+
+def register_run_container_parser(
+    cli, subparsers, *, container_build, container_run
+) -> argparse.ArgumentParser:
+    """Register the ``run-container`` subcommand."""
+    parser = subparsers.add_parser(
+        "run-container",
+        help=help_for("run-container"),
+        parents=[container_build, container_run],
+        epilog="Any arguments after ' -- ' are executed as a command inside the container",
+    )
+    parser.add_argument("project", nargs="?", help="Project to run container for")
+    parser.add_argument("mode", nargs="?", help="Mode to run container for (optional)")
+    parser.add_argument(
+        "--verbose", action="store_true", help="Print variables passed to docker run command"
+    )
+    parser.add_argument(
+        "--dryrun", action="store_true", help="Print commands without executing them"
+    )
+    parser.add_argument(
+        "--language", choices=["cpp", "python"], help="Specify language implementation"
+    )
+    parser.add_argument(
+        "--no-docker-build", action="store_true", help="Skip building the container"
+    )
+    parser.set_defaults(func=lambda args: handle_run_container(cli, args))
+    return parser
 
 
 def handle_run_container(cli, args: argparse.Namespace) -> None:

@@ -15,4 +15,9 @@
 
 from .core import HoloHubContainer
 
-__all__ = ["HoloHubContainer"]
+#: Forward-looking alias for :class:`HoloHubContainer`. See the comment on
+#: ``HoloscanCLI`` in ``holoscan_cli.cli`` for why the ``HoloHub`` prefix is
+#: still the canonical name in v1.
+HoloscanContainer = HoloHubContainer
+
+__all__ = ["HoloHubContainer", "HoloscanContainer"]

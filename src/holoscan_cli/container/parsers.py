@@ -34,9 +34,7 @@ def get_build_argparse() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(add_help=False)
     parser.add_argument("--base-img", help="(Build container) Fully qualified base image name")
     parser.add_argument("--docker-file", help="(Build container) Path to Dockerfile to use")
-    parser.add_argument(
-        "--img", help="(Build container) Specify fully qualified container name"
-    )
+    parser.add_argument("--img", help="(Build container) Specify fully qualified container name")
     parser.add_argument(
         "--no-cache",
         action="store_true",

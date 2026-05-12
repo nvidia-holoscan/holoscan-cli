@@ -38,10 +38,7 @@ from typing import List, Optional
 
 import holoscan_cli.metadata.gather_metadata as metadata_util
 import holoscan_cli.util as holohub_cli_util
-from holoscan_cli.commands import devcontainer as commands_devcontainer
-from holoscan_cli.commands import info as commands_info
-from holoscan_cli.commands import project as commands_project
-from holoscan_cli.commands import tooling as commands_tooling
+from holoscan_cli.commands import registry as commands_registry
 from holoscan_cli.container import HoloHubContainer
 from holoscan_cli.container.parsers import get_build_argparse, get_run_argparse
 from holoscan_cli.metadata.utils import (
@@ -88,427 +85,31 @@ class HoloHubCLI:
         self.prefix = holohub_cli_util.resolve_path_prefix(None)
 
     def _create_parser(self) -> argparse.ArgumentParser:
-        """Create the argument parser with all supported commands"""
+        """Create the argument parser with all supported commands.
+
+        Subparser construction is delegated to per-command modules under
+        :mod:`holoscan_cli.commands`; the wiring lives in
+        :func:`holoscan_cli.commands.registry.register_all`. Help strings
+        come from the registry so the top-level dispatch surface and the
+        per-subparser help cannot drift.
+        """
         parser = argparse.ArgumentParser(
             prog=self.script_name,
-            description=f"{self.script_name} CLI tool for managing Holoscan-based applications and containers",
+            description=(
+                f"{self.script_name} CLI tool for managing Holoscan-based "
+                "applications and containers"
+            ),
         )
         subparsers = parser.add_subparsers(dest="command", required=True)
 
-        # Store subparsers for error handling
-        self.subparsers = {}
-
-        # Common container arguments parent parsers
-        container_build_argparse = get_build_argparse()
-        container_run_argparse = get_run_argparse()
-        # Add create command
-        create = subparsers.add_parser("create", help="Create a new Holoscan application")
-        self.subparsers["create"] = create
-        create.add_argument("project", help="Name of the project to create")
-        create.add_argument(
-            "--template",
-            default=str(HoloHubCLI.HOLOHUB_ROOT / "applications" / "template"),
-            help="Path to the template directory to use",
+        # Cache subparsers so HoloHubCLI.run() can render targeted error
+        # messages and Levenshtein-based suggestions.
+        self.subparsers: dict[str, argparse.ArgumentParser] = commands_registry.register_all(
+            self,
+            subparsers,
+            container_build=get_build_argparse(),
+            container_run=get_run_argparse(),
         )
-        create.add_argument(
-            "--language",
-            choices=["cpp", "python"],
-            default="cpp",
-            help="Programming language for the project",
-        )
-        create.add_argument(
-            "--dryrun", action="store_true", help="Print commands without executing them"
-        )
-        create.add_argument(
-            "--directory",
-            type=Path,
-            default=self.HOLOHUB_ROOT / "applications",
-            help="Path to the directory to create the project in",
-        )
-        create.add_argument(
-            "--context",
-            action="append",
-            help='Additional context variables for cookiecutter in format key=value. \
-                Example: --context description=\'My project desc\' \
-                    --context tags=[\\"tag1\\", \\"tag2\\"]',
-        )
-        create.add_argument(
-            "-i",
-            "--interactive",
-            action="store",
-            nargs="?",
-            const=True,
-            default=True,
-            type=lambda x: x.lower() not in ("false", "no", "n", "0", "f"),
-            help="Interactive mode for setting cookiecutter properties (use -i False to disable)",
-        )
-        create.set_defaults(func=lambda args: commands_tooling.handle_create(self, args))
-
-        # build-container command
-        build_container = subparsers.add_parser(
-            "build-container",
-            help="Build the development container",
-            parents=[container_build_argparse],
-        )
-        self.subparsers["build-container"] = build_container
-        build_container.add_argument("project", nargs="?", help="Project to build container for")
-        build_container.add_argument(
-            "mode", nargs="?", help="Mode to build container for (optional)"
-        )
-        build_container.add_argument(
-            "--verbose", action="store_true", help="Print variables passed to docker build command"
-        )
-        build_container.add_argument(
-            "--dryrun", action="store_true", help="Print commands without executing them"
-        )
-        build_container.add_argument(
-            "--language", choices=["cpp", "python"], help="Specify language implementation"
-        )
-        build_container.set_defaults(
-            func=lambda args: commands_devcontainer.handle_build_container(self, args)
-        )
-
-        # run-container command
-        run_container = subparsers.add_parser(
-            "run-container",
-            help="Build and launch the development container",
-            parents=[container_build_argparse, container_run_argparse],
-            epilog="Any arguments after ' -- ' are executed as a command inside the container",
-        )
-        self.subparsers["run-container"] = run_container
-        run_container.add_argument("project", nargs="?", help="Project to run container for")
-        run_container.add_argument("mode", nargs="?", help="Mode to run container for (optional)")
-        run_container.add_argument(
-            "--verbose", action="store_true", help="Print variables passed to docker run command"
-        )
-        run_container.add_argument(
-            "--dryrun", action="store_true", help="Print commands without executing them"
-        )
-        run_container.add_argument(
-            "--language", choices=["cpp", "python"], help="Specify language implementation"
-        )
-        run_container.add_argument(
-            "--no-docker-build", action="store_true", help="Skip building the container"
-        )
-        run_container.set_defaults(
-            func=lambda args: commands_devcontainer.handle_run_container(self, args)
-        )
-
-        # build command
-        build = subparsers.add_parser(
-            "build",
-            help="Build a project",
-            parents=[container_build_argparse, container_run_argparse],
-        )
-        self.subparsers["build"] = build
-        build.add_argument("project", help="Project to build")
-        build.add_argument("mode", nargs="?", help="Mode to build (optional)")
-        build.add_argument(
-            "--local", action="store_true", help="Build locally instead of in container"
-        )
-        build.add_argument("--verbose", action="store_true", help="Print extra output")
-        build.add_argument(
-            "--build-type",
-            help="Build type (debug, release, rel-debug). "
-            "If not specified, uses CMAKE_BUILD_TYPE environment variable or defaults to 'release'",
-        )
-        build.add_argument(
-            "--build-with",
-            dest="with_operators",
-            help="Optional operators that should be built, separated by semicolons (;)",
-        )
-        build.add_argument(
-            "--dryrun", action="store_true", help="Print commands without executing them"
-        )
-        build.add_argument(
-            "--pkg-generator", default="DEB", help="Package generator for cpack (default: DEB)"
-        )
-        build.add_argument(
-            "--parallel", help="Number of parallel build jobs (e.g. --parallel $(($(nproc)-1)))"
-        )
-        build.add_argument(
-            "--language", choices=["cpp", "python"], help="Specify language implementation"
-        )
-        build.add_argument(
-            "--benchmark",
-            action="store_true",
-            help="Build for Holoscan Flow Benchmarking. Valid for applications/workflows only",
-        )
-        build.add_argument(
-            "--no-docker-build", action="store_true", help="Skip building the container"
-        )
-        build.add_argument(
-            "--configure-args",
-            action="append",
-            help="Additional configuration arguments for cmake "
-            "example: --configure-args='-DCUSTOM_OPTION=ON' --configure-args='-Dtest=ON'",
-        )
-        build.set_defaults(func=lambda args: commands_project.handle_build(self, args))
-
-        # run command
-        run = subparsers.add_parser(
-            "run",
-            help="Build and run a project",
-            parents=[container_build_argparse, container_run_argparse],
-        )
-        self.subparsers["run"] = run
-        run.add_argument("project", help="Project to run")
-        run.add_argument("mode", nargs="?", help="Mode to run (optional)")
-        run.add_argument("--local", action="store_true", help="Run locally instead of in container")
-        run.add_argument("--verbose", action="store_true", help="Print extra output")
-        run.add_argument(
-            "--dryrun", action="store_true", help="Print commands without executing them"
-        )
-        run.add_argument(
-            "--language", choices=["cpp", "python"], help="Specify language implementation"
-        )
-        run.add_argument(
-            "--build-type",
-            help="Build type (debug, release, rel-debug). "
-            "If not specified, uses CMAKE_BUILD_TYPE environment variable or defaults to 'release'",
-        )
-        run.add_argument(
-            "--run-args",
-            help="Additional arguments to pass to the application executable, "
-            "example: --run-args=--flag or --run-args '-c config/file'",
-        )
-
-        run.add_argument(
-            "--build-with",
-            dest="with_operators",
-            help="Optional operators that should be built, separated by semicolons (;)",
-        )
-        run.add_argument(
-            "--parallel", help="Number of parallel build jobs (e.g. --parallel $(($(nproc)-1)))"
-        )
-        run.add_argument(
-            "--pkg-generator", default="DEB", help="Package generator for cpack (default: DEB)"
-        )
-        run.add_argument(
-            "--no-local-build",
-            action="store_true",
-            help="Skip building and just run the application",
-        )
-        run.add_argument(
-            "--no-docker-build", action="store_true", help="Skip building the container"
-        )
-        run.add_argument(
-            "--configure-args",
-            action="append",
-            help="Additional configuration arguments for cmake "
-            "example: --configure-args='-DCUSTOM_OPTION=ON' --configure-args='-Dtest=ON'",
-        )
-        run.set_defaults(func=lambda args: commands_project.handle_run(self, args))
-
-        # list command
-        list_cmd = subparsers.add_parser("list", help="List all available targets")
-        self.subparsers["list"] = list_cmd
-        list_cmd.set_defaults(func=lambda args: commands_info.handle_list(self, args))
-
-        # modes command
-        modes = subparsers.add_parser("modes", help="List available modes for an application")
-        self.subparsers["modes"] = modes
-        modes.add_argument("project", help="Project to list modes for")
-        modes.add_argument(
-            "--language", choices=["cpp", "python"], help="Specify language implementation"
-        )
-        modes.set_defaults(func=lambda args: commands_info.handle_modes(self, args))
-
-        # autocompletion_list command (for bash completion)
-        autocomp_cmd = subparsers.add_parser(
-            "autocompletion_list", help="List targets for autocompletion"
-        )
-        self.subparsers["autocompletion_list"] = autocomp_cmd
-        autocomp_cmd.set_defaults(func=lambda args: commands_info.handle_autocompletion_list(self, args))
-
-        # lint command
-        lint = subparsers.add_parser("lint", help="Run repository linting via pre-commit")
-        self.subparsers["lint"] = lint
-        lint.add_argument("path", nargs="?", default=".", help="Path to lint")
-        lint.add_argument("--fix", action="store_true", help="Fix linting issues")
-        lint.add_argument(
-            "--install-dependencies",
-            action="store_true",
-            help="Install linting dependencies (may require `sudo` privileges)",
-        )
-        lint.add_argument(
-            "--dryrun", action="store_true", help="Print commands without executing them"
-        )
-        lint.set_defaults(func=lambda args: commands_tooling.handle_lint(self, args))
-
-        # setup command
-        setup = subparsers.add_parser(
-            "setup", help="Install HoloHub recommended packages for development."
-        )
-        self.subparsers["setup"] = setup
-        setup.add_argument(
-            "--dryrun", action="store_true", help="Print commands without executing them"
-        )
-        setup.add_argument(
-            "--list-scripts",
-            action="store_true",
-            help="List all setup scripts found in the HOLOHUB_SETUP_SCRIPTS_DIR directory. "
-            + "Run scripts directly or with `./holohub setup --scripts <script_name>`.",
-        )
-        setup.add_argument(
-            "--scripts",
-            action="append",
-            help="Named dependency installation scripts to run. Can be specified multiple times. "
-            + "Searches in the directory path specified by the HOLOHUB_SETUP_SCRIPTS_DIR environment variable. "
-            + "Omit to install default recommended packages for Holoscan SDK development.",
-        )
-        setup.set_defaults(func=lambda args: commands_tooling.handle_setup(self, args))
-
-        # Add env-info command
-        env_info = subparsers.add_parser(
-            "env-info", help="Display environment debugging information"
-        )
-        self.subparsers["env-info"] = env_info
-        env_info.set_defaults(func=lambda args: commands_info.handle_env_info(self, args))
-
-        # Add status command
-        status = subparsers.add_parser(
-            "status", help="Show environment, container, and build status"
-        )
-        self.subparsers["status"] = status
-        status.add_argument("--json", action="store_true", help="Output status as JSON")
-        status.set_defaults(func=lambda args: commands_info.handle_status(self, args))
-
-        # Add env-check command
-        env_check = subparsers.add_parser(
-            "env-check",
-            help="Run system checks (GPU, CUDA, Docker, Holoscan SDK, disk, display, devices)",
-        )
-        self.subparsers["env-check"] = env_check
-        env_check.add_argument("--json", action="store_true", help="Output check results as JSON")
-        env_check.set_defaults(func=lambda args: commands_info.handle_env_check(self, args))
-
-        # Add install command
-        install = subparsers.add_parser(
-            "install",
-            help="Install a project",
-            parents=[container_build_argparse, container_run_argparse],
-        )
-        self.subparsers["install"] = install
-        install.add_argument("project", help="Project to install")
-        install.add_argument("mode", nargs="?", help="Mode to install (optional)")
-        install.add_argument(
-            "--local", action="store_true", help="Install locally instead of in container"
-        )
-        install.add_argument(
-            "--build-type",
-            help="Build type (debug, release, rel-debug). "
-            "If not specified, uses CMAKE_BUILD_TYPE environment variable or defaults to 'release'",
-        )
-        install.add_argument(
-            "--language", choices=["cpp", "python"], help="Specify language implementation"
-        )
-        install.add_argument(
-            "--build-with",
-            dest="with_operators",
-            help="Optional operators that should be built, separated by semicolons (;)",
-        )
-        install.add_argument("--verbose", action="store_true", help="Print extra output")
-        install.add_argument(
-            "--dryrun", action="store_true", help="Print commands without executing them"
-        )
-        install.add_argument(
-            "--parallel", help="Number of parallel build jobs (e.g. --parallel $(($(nproc)-1)))"
-        )
-        install.add_argument(
-            "--no-docker-build", action="store_true", help="Skip building the container"
-        )
-        install.add_argument(
-            "--configure-args",
-            action="append",
-            help="Additional configuration arguments for cmake "
-            "example: --configure-args='-DCUSTOM_OPTION=ON' --configure-args='-Dtest=ON'",
-        )
-        install.set_defaults(func=lambda args: commands_project.handle_install(self, args))
-
-        # Add test command
-        test = subparsers.add_parser(
-            "test", help="Test a project", parents=[container_build_argparse]
-        )
-        self.subparsers["test"] = test
-        test.add_argument("project", nargs="?", help="Project to test")
-        test.add_argument(
-            "--local", action="store_true", help="Test locally instead of in container"
-        )
-        test.add_argument("--verbose", action="store_true", help="Print extra output")
-        test.add_argument(
-            "--dryrun", action="store_true", help="Print commands without executing them"
-        )
-        test.add_argument("--clear-cache", action="store_true", help="Clear cache folders")
-        test.add_argument(
-            "--language", choices=["cpp", "python"], help="Specify language implementation"
-        )
-        test.add_argument("--site-name", help="Site name")
-        test.add_argument("--cdash-url", help="CDash URL")
-        test.add_argument("--platform-name", help="Platform name")
-        test.add_argument(
-            "--cmake-options",
-            action="append",
-            help="CMake options, "
-            "example: --cmake-options='-DCUSTOM_OPTION=ON' --cmake-options='-DDEBUG_MODE=1'",
-        )
-        test.add_argument(
-            "--ctest-options",
-            action="append",
-            help="CTest options, "
-            "example: --ctest-options='-DGPU_TYPE=rtx4090' --ctest-options='-DDEBUG_MODE=ON'",
-        )
-        test.add_argument("--no-xvfb", action="store_true", help="Do not use xvfb")
-        test.add_argument("--ctest-script", help="CTest script")
-        test.add_argument(
-            "--coverage",
-            action="store_true",
-            help="Enable code coverage in CTest (adds coverage compile flags and runs ctest_coverage)",
-        )
-        test.add_argument(
-            "--no-docker-build", action="store_true", help="Skip building the container"
-        )
-        test.add_argument(
-            "--build-name-suffix",
-            help="Suffix to use for ctest build name (defaulting to the image tag)",
-        )
-        test.set_defaults(func=lambda args: commands_project.handle_test(self, args))
-
-        # Add clear-cache command
-        clear_cache = subparsers.add_parser("clear-cache", help="Clear cache folders")
-        self.subparsers["clear-cache"] = clear_cache
-        clear_cache.add_argument(
-            "--dryrun", action="store_true", help="Print commands without executing them"
-        )
-        clear_cache.add_argument("--build", action="store_true", help="Clear build folders only")
-        clear_cache.add_argument("--data", action="store_true", help="Clear data folders only")
-        clear_cache.add_argument(
-            "--install", action="store_true", help="Clear install folders only"
-        )
-        clear_cache.set_defaults(func=lambda args: commands_tooling.handle_clear_cache(self, args))
-
-        # Add vscode command
-        vscode = subparsers.add_parser(
-            "vscode",
-            help="Launch VS Code in Dev Container",
-            parents=[container_build_argparse],
-        )
-        self.subparsers["vscode"] = vscode
-        vscode.add_argument("project", nargs="?", help="Project to launch VS Code for")
-        vscode.add_argument(
-            "--language", choices=["cpp", "python"], help="Specify language implementation"
-        )
-        vscode.add_argument("--docker-opts", help="Additional options to pass to the Docker launch")
-        vscode.add_argument(
-            "--verbose", action="store_true", help="Print variables passed to docker run command"
-        )
-        vscode.add_argument(
-            "--dryrun", action="store_true", help="Print commands without executing them"
-        )
-        vscode.add_argument(
-            "--no-docker-build", action="store_true", help="Skip building the container"
-        )
-        vscode.set_defaults(func=lambda args: commands_tooling.handle_vscode(self, args))
 
         return parser
 
@@ -883,6 +484,17 @@ class HoloHubCLI:
         else:
             self.parser.print_help()
             sys.exit(1)
+
+
+#: Forward-looking alias for :class:`HoloHubCLI`.
+#:
+#: The ``HoloHub`` prefix on the CLI class is kept as the canonical name in
+#: the v1 wheel because shells, downstream wrappers, and the in-container
+#: recursion in ``commands.project._ctest_script_arg`` all reference the
+#: ``HoloHubCLI`` symbol explicitly. The ``HoloscanCLI`` alias gives new
+#: code a name that matches the published ``holoscan`` console script and
+#: gives us a clean target for a future renaming pass.
+HoloscanCLI = HoloHubCLI
 
 
 def main(argv: Optional[List[str]] = None):

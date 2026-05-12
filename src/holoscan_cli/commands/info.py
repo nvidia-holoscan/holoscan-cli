@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -14,15 +13,21 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Info-only subcommands.
+"""Read-only / informational subcommands.
 
-list, modes, autocompletion_list, env-info, status, env-check — six
-commands that discover or report state without modifying anything.
+Six small commands grouped by behavior — none of them mutate state, so
+they share a file rather than each owning ~50-line modules:
 
-Each handler takes the parent ``HoloHubCLI`` instance as its first
-argument so it can read class-level constants (HOLOHUB_ROOT,
-DEFAULT_*) and the populated ``cli.projects`` list, without having to
-copy that state into per-call parameters.
+* ``list``                 — list discovered source projects, grouped by type
+* ``modes``                — list build/run modes from a project's metadata
+* ``autocompletion_list``  — emit project + command names for shell completion
+* ``env-info``             — print debug info about the current environment
+* ``status``               — show environment, container, and build status
+* ``env-check``            — run host system checks (GPU, CUDA, Docker, ...)
+
+The ``status`` and ``env-check`` handlers delegate the heavy lifting to
+:mod:`holoscan_cli.status` and :mod:`holoscan_cli.system_check` via lazy
+imports so the CLI startup path stays cheap for other commands.
 """
 
 import argparse
@@ -30,7 +35,17 @@ import sys
 from collections import defaultdict
 
 import holoscan_cli.util as holohub_cli_util
+from holoscan_cli.commands.registry import help_for
 from holoscan_cli.utils.io import Color
+
+# ---- list --------------------------------------------------------------------
+
+
+def register_list_parser(cli, subparsers) -> argparse.ArgumentParser:
+    """Register the ``list`` subcommand."""
+    parser = subparsers.add_parser("list", help=help_for("list"))
+    parser.set_defaults(func=lambda args: handle_list(cli, args))
+    return parser
 
 
 def handle_list(cli, args: argparse.Namespace) -> None:
@@ -60,6 +75,20 @@ def handle_list(cli, args: argparse.Namespace) -> None:
     print(f"\n{Color.white('=================================', bold=True)}\n")
 
 
+# ---- modes -------------------------------------------------------------------
+
+
+def register_modes_parser(cli, subparsers) -> argparse.ArgumentParser:
+    """Register the ``modes`` subcommand."""
+    parser = subparsers.add_parser("modes", help=help_for("modes"))
+    parser.add_argument("project", help="Project to list modes for")
+    parser.add_argument(
+        "--language", choices=["cpp", "python"], help="Specify language implementation"
+    )
+    parser.set_defaults(func=lambda args: handle_modes(cli, args))
+    return parser
+
+
 def handle_modes(cli, args: argparse.Namespace) -> None:
     """Handle modes command"""
     project_data = cli.find_project(args.project, language=args.language)
@@ -80,6 +109,16 @@ def handle_modes(cli, args: argparse.Namespace) -> None:
             print(f"    Requirements: {req_list}")
 
         print()  # Empty line between modes
+
+
+# ---- autocompletion_list -----------------------------------------------------
+
+
+def register_autocompletion_list_parser(cli, subparsers) -> argparse.ArgumentParser:
+    """Register the ``autocompletion_list`` subcommand."""
+    parser = subparsers.add_parser("autocompletion_list", help=help_for("autocompletion_list"))
+    parser.set_defaults(func=lambda args: handle_autocompletion_list(cli, args))
+    return parser
 
 
 def handle_autocompletion_list(cli, args: argparse.Namespace) -> None:
@@ -109,6 +148,16 @@ def handle_autocompletion_list(cli, args: argparse.Namespace) -> None:
         print(cmd)
 
 
+# ---- env-info ----------------------------------------------------------------
+
+
+def register_env_info_parser(cli, subparsers) -> argparse.ArgumentParser:
+    """Register the ``env-info`` subcommand."""
+    parser = subparsers.add_parser("env-info", help=help_for("env-info"))
+    parser.set_defaults(func=lambda args: handle_env_info(cli, args))
+    return parser
+
+
 def handle_env_info(cli, args: argparse.Namespace) -> None:
     """Handle env-info command to collect debugging information"""
     print(holohub_cli_util.format_cmd("Environment Information"))
@@ -125,6 +174,17 @@ def handle_env_info(cli, args: argparse.Namespace) -> None:
             "Complete (Before sharing, please review and remove sensitive information)"
         )
     )
+
+
+# ---- status ------------------------------------------------------------------
+
+
+def register_status_parser(cli, subparsers) -> argparse.ArgumentParser:
+    """Register the ``status`` subcommand."""
+    parser = subparsers.add_parser("status", help=help_for("status"))
+    parser.add_argument("--json", action="store_true", help="Output status as JSON")
+    parser.set_defaults(func=lambda args: handle_status(cli, args))
+    return parser
 
 
 def handle_status(cli, args: argparse.Namespace) -> None:
@@ -165,6 +225,17 @@ def handle_status(cli, args: argparse.Namespace) -> None:
         print(format_status_json(*fmt_args))
     else:
         print(format_status(*fmt_args))
+
+
+# ---- env-check ---------------------------------------------------------------
+
+
+def register_env_check_parser(cli, subparsers) -> argparse.ArgumentParser:
+    """Register the ``env-check`` subcommand."""
+    parser = subparsers.add_parser("env-check", help=help_for("env-check"))
+    parser.add_argument("--json", action="store_true", help="Output check results as JSON")
+    parser.set_defaults(func=lambda args: handle_env_check(cli, args))
+    return parser
 
 
 def handle_env_check(cli, args: argparse.Namespace) -> None:

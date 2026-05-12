@@ -24,7 +24,6 @@ import traceback
 from datetime import datetime, timezone
 from typing import List, Optional, Tuple, Union
 
-
 # ---- terminal color formatting -----------------------------------------------
 
 

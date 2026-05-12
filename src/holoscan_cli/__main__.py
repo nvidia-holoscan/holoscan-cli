@@ -21,6 +21,8 @@ import sys
 from pathlib import Path
 from typing import Optional, Union
 
+from .commands.registry import project_command_help
+
 logging.getLogger("docker.api.build").setLevel(logging.WARNING)
 logging.getLogger("docker.auth").setLevel(logging.WARNING)
 logging.getLogger("docker.utils.config").setLevel(logging.WARNING)
@@ -34,25 +36,11 @@ LOG_CONFIG_FILENAME = "logging.json"
 # project CLI before argparse consumes their command-specific flags. The
 # placeholder subparsers below exist only so top-level `--help` enumerates
 # the public command surface. `version` is the only native top-level command.
-PROJECT_COMMANDS = {
-    "autocompletion_list": "list source-project names for shell completion",
-    "build": "build a source project",
-    "build-container": "build a source-project development container",
-    "clear-cache": "clear source-project build, data, and install caches",
-    "create": "create a new source project from a template",
-    "env-check": "run source-project environment health checks",
-    "env-info": "display source-project environment information",
-    "install": "install a built source project",
-    "lint": "run source-project linting tools",
-    "list": "list discovered source projects",
-    "modes": "list modes for a source project",
-    "run": "build and run a source project",
-    "run-container": "launch a source-project development container",
-    "setup": "install source-project development dependencies",
-    "status": "show source-project environment and build status",
-    "test": "test a source project",
-    "vscode": "launch VS Code for a source project dev container",
-}
+#
+# PROJECT_COMMANDS is derived from holoscan_cli.commands.registry so the
+# top-level help surface, the dispatch allow-list, and the per-command
+# argparse help in holoscan_cli.cli cannot drift apart.
+PROJECT_COMMANDS = project_command_help()
 
 LOG_LEVELS = ["DEBUG", "INFO", "WARN", "ERROR", "CRITICAL"]
 
