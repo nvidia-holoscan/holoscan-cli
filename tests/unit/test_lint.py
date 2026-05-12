@@ -21,6 +21,7 @@ import pytest
 
 from holoscan_cli import cli as project_cli
 from holoscan_cli import util as project_util
+from holoscan_cli.commands import tooling as commands_tooling
 
 
 def _lint_cli(root, monkeypatch):
@@ -50,11 +51,11 @@ def test_lint_dryrun_uses_pre_commit_all_files(tmp_path, monkeypatch):
         calls.append({"cmd": cmd, "check": check, "dry_run": dry_run, "env": env})
         return SimpleNamespace(returncode=0)
 
-    monkeypatch.setattr(project_cli.holohub_cli_util, "run_command", fake_run_command)
+    monkeypatch.setattr(commands_tooling.holohub_cli_util, "run_command", fake_run_command)
 
     args = argparse.Namespace(path=".", fix=False, install_dependencies=False, dryrun=True)
     with pytest.raises(SystemExit) as exc_info:
-        lint_cli.handle_lint(args)
+        commands_tooling.handle_lint(lint_cli, args)
 
     assert exc_info.value.code == 0
     assert calls == [
@@ -86,9 +87,9 @@ def test_lint_dryrun_limits_to_git_tracked_path(tmp_path, monkeypatch):
         calls.append(cmd)
         return SimpleNamespace(returncode=0)
 
-    monkeypatch.setattr(project_cli.holohub_cli_util, "run_command", fake_run_command)
+    monkeypatch.setattr(commands_tooling.holohub_cli_util, "run_command", fake_run_command)
     monkeypatch.setattr(
-        project_cli.subprocess,
+        commands_tooling.subprocess,
         "check_output",
         lambda *args, **kwargs: "src/holoscan_cli/__main__.py\n",
     )
@@ -100,7 +101,7 @@ def test_lint_dryrun_limits_to_git_tracked_path(tmp_path, monkeypatch):
         dryrun=True,
     )
     with pytest.raises(SystemExit) as exc_info:
-        lint_cli.handle_lint(args)
+        commands_tooling.handle_lint(lint_cli, args)
 
     assert exc_info.value.code == 0
     assert calls == [
@@ -127,10 +128,10 @@ def test_install_lint_deps_falls_back_to_pre_commit_package(tmp_path, monkeypatc
         calls.append({"cmd": cmd, "dry_run": dry_run, "env": env})
         return SimpleNamespace(returncode=0)
 
-    monkeypatch.setattr(project_cli.holohub_cli_util, "run_command", fake_run_command)
-    monkeypatch.setattr(lint_cli, "_running_in_virtual_env", lambda: True)
+    monkeypatch.setattr(commands_tooling.holohub_cli_util, "run_command", fake_run_command)
+    monkeypatch.setattr(commands_tooling, "_running_in_virtual_env", lambda: True)
 
-    lint_cli._install_lint_deps(dry_run=True, env={})
+    commands_tooling._install_lint_deps(lint_cli, dry_run=True, env={})
 
     assert calls[0]["cmd"] == [sys.executable, "-m", "pip", "install", "pre-commit"]
     assert calls[0]["dry_run"] is True
