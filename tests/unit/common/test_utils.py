@@ -17,6 +17,7 @@ import socket
 from collections import namedtuple
 
 import psutil
+
 from holoscan_cli.common.utils import (
     compare_versions,
     get_host_ip_addresses,
@@ -39,9 +40,7 @@ class TestCompareVersions:
 
 
 class TestGetHostIpAddress:
-    snicaddr = namedtuple(
-        "snicaddr", ["family", "address", "netmask", "broadcast", "ptp"]
-    )
+    snicaddr = namedtuple("snicaddr", ["family", "address", "netmask", "broadcast", "ptp"])
     sample_data = dict(
         [
             (
@@ -169,9 +168,7 @@ class TestGetHostIpAddress:
     )
 
     def test_ips_are_returns_all_matching_ips(self, monkeypatch):
-        monkeypatch.setattr(
-            psutil, "net_if_addrs", lambda: TestGetHostIpAddress.sample_data
-        )
+        monkeypatch.setattr(psutil, "net_if_addrs", lambda: TestGetHostIpAddress.sample_data)
 
         ipv4, ipv6 = get_host_ip_addresses()
 
@@ -197,9 +194,7 @@ class TestRunCmdOutput:
             def __init__(self):
                 self.stdout = "command output\n"
 
-        monkeypatch.setattr(
-            "subprocess.run", lambda *args, **kwargs: CompletedProcess()
-        )
+        monkeypatch.setattr("subprocess.run", lambda *args, **kwargs: CompletedProcess())
         output = run_cmd_output(["echo", "hello"])
         assert output == "command output\n"
 
@@ -208,9 +203,7 @@ class TestRunCmdOutput:
             def __init__(self):
                 self.stdout = "first line\nsecond line\nthird line\n"
 
-        monkeypatch.setattr(
-            "subprocess.run", lambda *args, **kwargs: CompletedProcess()
-        )
+        monkeypatch.setattr("subprocess.run", lambda *args, **kwargs: CompletedProcess())
         output = run_cmd_output(["ls", "-l"], grep="second")
         assert output == "second line"
 
@@ -221,9 +214,7 @@ class TestRunCmdOutput:
             def __init__(self):
                 self.stdout = stdout
 
-        monkeypatch.setattr(
-            "subprocess.run", lambda *args, **kwargs: CompletedProcess()
-        )
+        monkeypatch.setattr("subprocess.run", lambda *args, **kwargs: CompletedProcess())
         output = run_cmd_output(["ls", "-l"], grep="nonexistent")
         assert output == stdout
 
@@ -232,9 +223,7 @@ class TestRunCmdOutput:
             def __init__(self):
                 self.stdout = ""
 
-        monkeypatch.setattr(
-            "subprocess.run", lambda *args, **kwargs: CompletedProcess()
-        )
+        monkeypatch.setattr("subprocess.run", lambda *args, **kwargs: CompletedProcess())
         output = run_cmd_output(["some_command"])
         assert output == ""
 
@@ -243,9 +232,7 @@ class TestRunCmdOutput:
             def __init__(self):
                 self.stdout = "line with * special ? characters\n"
 
-        monkeypatch.setattr(
-            "subprocess.run", lambda *args, **kwargs: CompletedProcess()
-        )
+        monkeypatch.setattr("subprocess.run", lambda *args, **kwargs: CompletedProcess())
         output = run_cmd_output(["command"], grep="special")
         assert output == "line with * special ? characters"
 

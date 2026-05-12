@@ -164,9 +164,7 @@ def parse_args(argv: Optional[list[str]] = None) -> argparse.Namespace:
     return args
 
 
-def set_up_logging(
-    level: Optional[str], config_path: Union[str, Path] = LOG_CONFIG_FILENAME
-):
+def set_up_logging(level: Optional[str], config_path: Union[str, Path] = LOG_CONFIG_FILENAME):
     """Initializes the logger and sets up logging level.
 
     Args:

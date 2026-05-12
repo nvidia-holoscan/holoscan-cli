@@ -19,10 +19,10 @@ from argparse import ArgumentParser, _SubParsersAction
 from packaging.version import Version
 
 from ..common.argparse_types import (
-    valid_host_ip,
     valid_dir_path,
     valid_existing_dir_path,
     valid_existing_path,
+    valid_host_ip,
     valid_platforms,
     valid_sdk_type,
 )
@@ -86,12 +86,8 @@ def create_package_parser(
         help="target platform(s) for the build output separated by comma. "
         f"Valid values: {str.join(', ', SDK.PLATFORMS)}.",
     )
-    parser.add_argument(
-        "--timeout", type=int, help="override default application timeout"
-    )
-    parser.add_argument(
-        "--version", type=Version, help="set the version of the application"
-    )
+    parser.add_argument("--timeout", type=int, help="override default application timeout")
+    parser.add_argument("--version", type=Version, help="set the version of the application")
 
     advanced_group = parser.add_argument_group(title="advanced build options")
     advanced_group.add_argument(

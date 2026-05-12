@@ -15,14 +15,15 @@
 
 import json
 import os
-import tempfile
 import pathlib
+import tempfile
 from argparse import Namespace
 from unittest.mock import MagicMock, patch
 
 import pytest
 
 from holoscan_cli.common.enum_types import ApplicationType, Platform, SdkType
+from holoscan_cli.packager.manifest_files import ApplicationManifest, PackageManifest
 from holoscan_cli.packager.packager import (
     _build_image,
     _create_app_manifest,
@@ -30,7 +31,6 @@ from holoscan_cli.packager.packager import (
     _package_application,
     execute_package_command,
 )
-from holoscan_cli.packager.manifest_files import ApplicationManifest, PackageManifest
 from holoscan_cli.packager.parameters import PlatformParameters
 
 
@@ -90,9 +90,7 @@ class TestPackager:
 
     def test_build_image_python_file(self, mock_packaging_args):
         """Test _build_image with Python file application"""
-        with patch(
-            "holoscan_cli.packager.packager.PythonAppBuilder"
-        ) as mock_builder_class:
+        with patch("holoscan_cli.packager.packager.PythonAppBuilder") as mock_builder_class:
             mock_builder = MagicMock()
             mock_result = MagicMock()
             mock_result.succeeded = True
@@ -103,20 +101,14 @@ class TestPackager:
 
             assert len(results) == 1
             assert results[0].succeeded is True
-            mock_builder_class.assert_called_once_with(
-                mock_packaging_args.build_parameters, "/tmp"
-            )
+            mock_builder_class.assert_called_once_with(mock_packaging_args.build_parameters, "/tmp")
             mock_builder.build.assert_called_once_with(mock_packaging_args.platforms[0])
 
     def test_build_image_python_module(self, mock_packaging_args):
         """Test _build_image with Python module application"""
-        mock_packaging_args.build_parameters.application_type = (
-            ApplicationType.PythonModule
-        )
+        mock_packaging_args.build_parameters.application_type = ApplicationType.PythonModule
 
-        with patch(
-            "holoscan_cli.packager.packager.PythonAppBuilder"
-        ) as mock_builder_class:
+        with patch("holoscan_cli.packager.packager.PythonAppBuilder") as mock_builder_class:
             mock_builder = MagicMock()
             mock_result = MagicMock()
             mock_result.succeeded = True
@@ -132,9 +124,7 @@ class TestPackager:
         """Test _build_image with C++ CMake application"""
         mock_packaging_args.build_parameters.application_type = ApplicationType.CppCMake
 
-        with patch(
-            "holoscan_cli.packager.packager.CppAppBuilder"
-        ) as mock_builder_class:
+        with patch("holoscan_cli.packager.packager.CppAppBuilder") as mock_builder_class:
             mock_builder = MagicMock()
             mock_result = MagicMock()
             mock_result.succeeded = True
@@ -150,9 +140,7 @@ class TestPackager:
         """Test _build_image with binary application"""
         mock_packaging_args.build_parameters.application_type = ApplicationType.Binary
 
-        with patch(
-            "holoscan_cli.packager.packager.CppAppBuilder"
-        ) as mock_builder_class:
+        with patch("holoscan_cli.packager.packager.CppAppBuilder") as mock_builder_class:
             mock_builder = MagicMock()
             mock_result = MagicMock()
             mock_result.succeeded = True
@@ -170,9 +158,7 @@ class TestPackager:
         manifest.data = {"test": "app_manifest_data"}
 
         with tempfile.TemporaryDirectory() as temp_dir:
-            with patch(
-                "holoscan_cli.packager.packager.print_manifest_json"
-            ) as mock_print:
+            with patch("holoscan_cli.packager.packager.print_manifest_json") as mock_print:
                 _create_app_manifest(manifest, temp_dir)
 
                 # Check that map directory was created
@@ -189,9 +175,7 @@ class TestPackager:
                     assert content == {"test": "app_manifest_data"}
 
                 # Check that print_manifest_json was called
-                mock_print.assert_called_once_with(
-                    {"test": "app_manifest_data"}, "app.json"
-                )
+                mock_print.assert_called_once_with({"test": "app_manifest_data"}, "app.json")
 
     def test_create_package_manifest(self):
         """Test _create_package_manifest creates the correct file and structure"""
@@ -199,9 +183,7 @@ class TestPackager:
         manifest.data = {"test": "package_manifest_data"}
 
         with tempfile.TemporaryDirectory() as temp_dir:
-            with patch(
-                "holoscan_cli.packager.packager.print_manifest_json"
-            ) as mock_print:
+            with patch("holoscan_cli.packager.packager.print_manifest_json") as mock_print:
                 _create_package_manifest(manifest, temp_dir)
 
                 # Check that map directory was created
@@ -218,22 +200,14 @@ class TestPackager:
                     assert content == {"test": "package_manifest_data"}
 
                 # Check that print_manifest_json was called
-                mock_print.assert_called_once_with(
-                    {"test": "package_manifest_data"}, "pkg.json"
-                )
+                mock_print.assert_called_once_with({"test": "package_manifest_data"}, "pkg.json")
 
     def test_package_application_success(self, mock_args):
         """Test successful _package_application execution"""
         with (
-            patch(
-                "holoscan_cli.packager.packager.PackagingArguments"
-            ) as mock_packaging_args_class,
-            patch(
-                "holoscan_cli.packager.packager._create_app_manifest"
-            ) as mock_create_app,
-            patch(
-                "holoscan_cli.packager.packager._create_package_manifest"
-            ) as mock_create_pkg,
+            patch("holoscan_cli.packager.packager.PackagingArguments") as mock_packaging_args_class,
+            patch("holoscan_cli.packager.packager._create_app_manifest") as mock_create_app,
+            patch("holoscan_cli.packager.packager._create_package_manifest") as mock_create_pkg,
             patch("holoscan_cli.packager.packager._build_image") as mock_build_image,
             patch("holoscan_cli.packager.packager.logger") as mock_logger,
         ):
@@ -296,9 +270,7 @@ class TestPackager:
 
     def test_execute_package_command_success(self, mock_args):
         """Test successful execute_package_command"""
-        with patch(
-            "holoscan_cli.packager.packager._package_application"
-        ) as mock_package:
+        with patch("holoscan_cli.packager.packager._package_application") as mock_package:
             execute_package_command(mock_args)
             mock_package.assert_called_once_with(mock_args)
 
@@ -307,9 +279,7 @@ class TestPackager:
         test_error = Exception("Test error")
 
         with (
-            patch(
-                "holoscan_cli.packager.packager._package_application"
-            ) as mock_package,
+            patch("holoscan_cli.packager.packager._package_application") as mock_package,
             patch("holoscan_cli.packager.packager.logger") as mock_logger,
             patch("sys.exit") as mock_sys_exit,
         ):
@@ -318,7 +288,5 @@ class TestPackager:
             execute_package_command(mock_args)
 
             mock_logger.debug.assert_called_with(test_error, exc_info=True)
-            mock_logger.error.assert_called_with(
-                "Error packaging application:\n\nTest error"
-            )
+            mock_logger.error.assert_called_with("Error packaging application:\n\nTest error")
             mock_sys_exit.assert_called_with(1)

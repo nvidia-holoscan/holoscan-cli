@@ -15,6 +15,7 @@
 import argparse
 import os
 from pathlib import Path
+
 from .constants import SDK
 from .enum_types import Platform, PlatformConfiguration, SdkType
 
@@ -108,9 +109,7 @@ def valid_platforms(platforms_str: str) -> list[Platform]:
     for platform in platforms:
         platform = platform.strip()
         if platform not in SDK.PLATFORMS:
-            raise argparse.ArgumentTypeError(
-                f"{platform} is not a valid option for --platforms."
-            )
+            raise argparse.ArgumentTypeError(f"{platform} is not a valid option for --platforms.")
         platform_enums.append(Platform(platform))
 
     return platform_enums

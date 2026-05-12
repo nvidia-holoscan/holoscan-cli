@@ -17,6 +17,7 @@ import os
 import pathlib
 
 import pytest
+
 from holoscan_cli.common.constants import Constants, DefaultValues
 from holoscan_cli.common.enum_types import (
     ApplicationType,
@@ -69,15 +70,11 @@ class TestPlatformParameters:
     def test_cuda_version_specified(self):
         """Test that specified CUDA version is set correctly"""
         # Test CUDA 12
-        build_parameters = PlatformParameters(
-            Platform.x86_64, "my-container-app", "1.2.3", 12
-        )
+        build_parameters = PlatformParameters(Platform.x86_64, "my-container-app", "1.2.3", 12)
         assert build_parameters.cuda_version == 12
 
         # Test CUDA 13
-        build_parameters = PlatformParameters(
-            Platform.Jetson, "my-container-app", "1.2.3", 13
-        )
+        build_parameters = PlatformParameters(Platform.Jetson, "my-container-app", "1.2.3", 13)
         assert build_parameters.cuda_version == 13
 
 
@@ -100,10 +97,7 @@ class TestPackageBuildParameters:
 
         assert build_parameters.application == input_dir
         assert build_parameters.application_type == ApplicationType.PythonModule
-        assert (
-            build_parameters._data["application_type"]
-            == ApplicationType.PythonModule.name
-        )
+        assert build_parameters._data["application_type"] == ApplicationType.PythonModule.name
         assert build_parameters.application_directory == input_dir
         assert (
             build_parameters.command
@@ -133,13 +127,8 @@ class TestPackageBuildParameters:
 
         assert build_parameters.application == input_dir
         assert build_parameters.application_type == ApplicationType.PythonFile
-        assert (
-            build_parameters._data["application_type"]
-            == ApplicationType.PythonFile.name
-        )
-        assert build_parameters.application_directory == pathlib.Path(
-            os.path.dirname(input_dir)
-        )
+        assert build_parameters._data["application_type"] == ApplicationType.PythonFile.name
+        assert build_parameters.application_directory == pathlib.Path(os.path.dirname(input_dir))
         assert build_parameters.command == (
             f'["{Constants.PYTHON_EXECUTABLE}", '
             + f'"{os.path.join(DefaultValues.HOLOSCAN_APP_DIR, os.path.basename(input_dir))}"]'
@@ -164,9 +153,7 @@ class TestPackageBuildParameters:
 
         assert build_parameters.application == input_dir
         assert build_parameters.application_type == ApplicationType.CppCMake
-        assert (
-            build_parameters._data["application_type"] == ApplicationType.CppCMake.name
-        )
+        assert build_parameters._data["application_type"] == ApplicationType.CppCMake.name
         assert build_parameters.application_directory == input_dir
         assert (
             f'["{Constants.PYTHON_EXECUTABLE}", '
@@ -192,9 +179,7 @@ class TestPackageBuildParameters:
         assert build_parameters.application == input_dir
         assert build_parameters.application_type == ApplicationType.Binary
         assert build_parameters._data["application_type"] == ApplicationType.Binary.name
-        assert build_parameters.application_directory == pathlib.Path(
-            os.path.dirname(input_dir)
-        )
+        assert build_parameters.application_directory == pathlib.Path(os.path.dirname(input_dir))
         assert (
             f'["{Constants.PYTHON_EXECUTABLE}", '
             + f'"{os.path.join(DefaultValues.HOLOSCAN_APP_DIR, os.path.basename(input_dir))}"]'

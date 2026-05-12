@@ -40,19 +40,15 @@ class PlatformParameters:
     ) -> None:
         self._logger = logging.getLogger("platform.parameters")
         self._platform = SDK.INTERNAL_PLATFORM_MAPPINGS[platform][0]
-        self._platform_config: PlatformConfiguration = SDK.INTERNAL_PLATFORM_MAPPINGS[
-            platform
-        ][1]
+        self._platform_config: PlatformConfiguration = SDK.INTERNAL_PLATFORM_MAPPINGS[platform][1]
         self._arch: Arch = SDK.PLATFORM_ARCH_MAPPINGS[platform]
         self._tag_prefix: Optional[str]
         self._version: Optional[str]
 
-        (self._tag_prefix, self._version) = parse_docker_image_name_and_tag(tag)
+        self._tag_prefix, self._version = parse_docker_image_name_and_tag(tag)
 
         if self._tag_prefix is None:
-            raise InvalidTagValueError(
-                f"'{tag}' is not a valid Docker tag. Format: name[:tag]"
-            )
+            raise InvalidTagValueError(f"'{tag}' is not a valid Docker tag. Format: name[:tag]")
 
         if self._version is None:
             self._version = version
@@ -71,9 +67,7 @@ class PlatformParameters:
         self._data["cuda_version"] = cuda_version
         self._data["target_arch"] = "aarch64" if self._arch == Arch.arm64 else "x86_64"
         self._data["cuda_deb_arch"] = "sbsa" if self._arch == Arch.arm64 else "x86_64"
-        self._data["holoscan_deb_arch"] = (
-            "arm64" if self._arch == Arch.arm64 else "amd64"
-        )
+        self._data["holoscan_deb_arch"] = "arm64" if self._arch == Arch.arm64 else "amd64"
         self._data["gpu_type"] = self.platform_config.value
 
     @property
@@ -266,9 +260,7 @@ class PackageBuildParameters:
         self._data["docs_dir"] = DefaultValues.HOLOSCAN_DOCS_DIR
         self._data["logs_dir"] = DefaultValues.HOLOSCAN_LOGS_DIR
         self._data["full_input_path"] = DefaultValues.WORK_DIR / DefaultValues.INPUT_DIR
-        self._data["full_output_path"] = (
-            DefaultValues.WORK_DIR / DefaultValues.OUTPUT_DIR
-        )
+        self._data["full_output_path"] = DefaultValues.WORK_DIR / DefaultValues.OUTPUT_DIR
         self._data["input_dir"] = DefaultValues.INPUT_DIR
         self._data["models_dir"] = DefaultValues.MODELS_DIR
         self._data["output_dir"] = DefaultValues.OUTPUT_DIR

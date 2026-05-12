@@ -14,6 +14,8 @@
 # limitations under the License.
 
 import pytest
+from packaging.version import Version
+
 from holoscan_cli.common.artifact_sources import ArtifactSources
 from holoscan_cli.common.enum_types import SdkType
 from holoscan_cli.common.exceptions import (
@@ -21,14 +23,13 @@ from holoscan_cli.common.exceptions import (
     InvalidSdkError,
 )
 from holoscan_cli.common.sdk_utils import (
-    detect_holoscan_version,
     detect_holoscan_cli_version,
+    detect_holoscan_version,
     detect_monaideploy_version,
     detect_sdk,
     detect_sdk_version,
     validate_holoscan_sdk_version,
 )
-from packaging.version import Version
 
 
 class TestDetectSdk:
@@ -82,9 +83,7 @@ class TestDetectHoloscanVersion:
             ("holoscan"),
         ],
     )
-    def test_detect_sdk_version_with_supported_package_names(
-        self, monkeypatch, package_name
-    ):
+    def test_detect_sdk_version_with_supported_package_names(self, monkeypatch, package_name):
         version = "1.0.0"
 
         # Mock distribution object
@@ -93,9 +92,7 @@ class TestDetectHoloscanVersion:
                 self.metadata = {"Name": name}
 
         mock_distributions = [MockDistribution(package_name)]
-        monkeypatch.setattr(
-            "importlib.metadata.distributions", lambda: mock_distributions
-        )
+        monkeypatch.setattr("importlib.metadata.distributions", lambda: mock_distributions)
         monkeypatch.setattr("importlib.metadata.version", lambda x: version)
 
         result = detect_holoscan_version()
@@ -110,9 +107,7 @@ class TestDetectHoloscanVersion:
                 self.metadata = {"Name": name}
 
         mock_distributions = [MockDistribution("holoscan-cu12")]
-        monkeypatch.setattr(
-            "importlib.metadata.distributions", lambda: mock_distributions
-        )
+        monkeypatch.setattr("importlib.metadata.distributions", lambda: mock_distributions)
         monkeypatch.setattr("importlib.metadata.version", lambda x: version)
 
         result = detect_holoscan_version()
@@ -127,18 +122,14 @@ class TestDetectHoloscanVersion:
             ("1.0.0.1", "1.0.0"),
         ],
     )
-    def test_detect_sdk_version_with_non_semver_string(
-        self, monkeypatch, version, expected
-    ):
+    def test_detect_sdk_version_with_non_semver_string(self, monkeypatch, version, expected):
         # Mock distribution object
         class MockDistribution:
             def __init__(self, name):
                 self.metadata = {"Name": name}
 
         mock_distributions = [MockDistribution("holoscan-cu13")]
-        monkeypatch.setattr(
-            "importlib.metadata.distributions", lambda: mock_distributions
-        )
+        monkeypatch.setattr("importlib.metadata.distributions", lambda: mock_distributions)
         monkeypatch.setattr("importlib.metadata.version", lambda x: version)
 
         result = detect_holoscan_version()
@@ -158,9 +149,7 @@ class TestDetectHoloscanVersion:
             MockDistribution("holoscan-cu13"),
             MockDistribution("other-package"),
         ]
-        monkeypatch.setattr(
-            "importlib.metadata.distributions", lambda: mock_distributions
-        )
+        monkeypatch.setattr("importlib.metadata.distributions", lambda: mock_distributions)
         monkeypatch.setattr("importlib.metadata.version", lambda x: version)
 
         result = detect_holoscan_version()
@@ -170,9 +159,7 @@ class TestDetectHoloscanVersion:
         """Test when no valid holoscan packages are installed."""
         # Mock empty distributions
         mock_distributions = []
-        monkeypatch.setattr(
-            "importlib.metadata.distributions", lambda: mock_distributions
-        )
+        monkeypatch.setattr("importlib.metadata.distributions", lambda: mock_distributions)
 
         with pytest.raises(
             FailedToDetectSDKVersionError,
@@ -193,9 +180,7 @@ class TestDetectHoloscanVersion:
             MockDistribution("holoscan-extras"),
             MockDistribution("other-package"),
         ]
-        monkeypatch.setattr(
-            "importlib.metadata.distributions", lambda: mock_distributions
-        )
+        monkeypatch.setattr("importlib.metadata.distributions", lambda: mock_distributions)
 
         with pytest.raises(
             FailedToDetectSDKVersionError,
@@ -218,9 +203,7 @@ class TestDetectHoloscanVersion:
             MockDistribution("holoscan-cu12"),  # This should be found
             MockDistribution("other-package"),
         ]
-        monkeypatch.setattr(
-            "importlib.metadata.distributions", lambda: mock_distributions
-        )
+        monkeypatch.setattr("importlib.metadata.distributions", lambda: mock_distributions)
         monkeypatch.setattr("importlib.metadata.version", lambda x: version)
 
         result = detect_holoscan_version()
@@ -236,9 +219,7 @@ class TestDetectHoloscanVersion:
                 self.metadata = {"Name": name}
 
         mock_distributions = [MockDistribution("HoloScan-CU12")]
-        monkeypatch.setattr(
-            "importlib.metadata.distributions", lambda: mock_distributions
-        )
+        monkeypatch.setattr("importlib.metadata.distributions", lambda: mock_distributions)
         monkeypatch.setattr("importlib.metadata.version", lambda x: version)
 
         result = detect_holoscan_version()
@@ -253,9 +234,7 @@ class TestDetectHoloscanVersion:
                 self.metadata = {"Name": name}
 
         mock_distributions = [MockDistribution("holoscan-cu12")]
-        monkeypatch.setattr(
-            "importlib.metadata.distributions", lambda: mock_distributions
-        )
+        monkeypatch.setattr("importlib.metadata.distributions", lambda: mock_distributions)
 
         def raise_error(x):
             raise Exception("version error")

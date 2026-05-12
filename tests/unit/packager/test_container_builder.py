@@ -18,13 +18,14 @@ import pathlib
 import shutil
 import tempfile
 
-import holoscan_cli.common.dockerutils
 import pytest
+
+import holoscan_cli.common.dockerutils
 from holoscan_cli.common.enum_types import ApplicationType, Platform, SdkType
 from holoscan_cli.packager.container_builder import (
     BuilderBase,
-    PythonAppBuilder,
     CppAppBuilder,
+    PythonAppBuilder,
 )
 from holoscan_cli.packager.parameters import PackageBuildParameters
 from holoscan_cli.packager.platforms import PlatformParameters
@@ -77,15 +78,11 @@ class TestContainerBuilder:
             monkeypatch.setattr(os.path, "isfile", lambda x: True)
             monkeypatch.setattr(os.path, "isdir", lambda x: True)
             monkeypatch.setattr(os, "makedirs", lambda path, exist_ok=True: None)
-            monkeypatch.setattr(
-                shutil, "copytree", lambda src, dest, dirs_exist_ok=True: None
-            )
+            monkeypatch.setattr(shutil, "copytree", lambda src, dest, dirs_exist_ok=True: None)
             monkeypatch.setattr(shutil, "copyfile", lambda src, dest: None)
 
             # Mock rmtree with proper signature for Python 3.13
-            def mock_rmtree(
-                path, ignore_errors=False, onerror=None, *, onexc=None, dir_fd=None
-            ):
+            def mock_rmtree(path, ignore_errors=False, onerror=None, *, onexc=None, dir_fd=None):
                 pass
 
             monkeypatch.setattr(shutil, "rmtree", mock_rmtree)
@@ -116,9 +113,7 @@ class TestContainerBuilder:
             build_parameters.sdk = SdkType.Holoscan
 
             # Create platform parameters with CUDA 12
-            platform_parameters = PlatformParameters(
-                Platform.x86_64, "image:tag", "1.0", 12
-            )
+            platform_parameters = PlatformParameters(Platform.x86_64, "image:tag", "1.0", 12)
 
             # Create builder
             with tempfile.TemporaryDirectory() as temp_dir:
@@ -137,9 +132,7 @@ class TestContainerBuilder:
             build_parameters.sdk = SdkType.Holoscan
 
             # Create platform parameters with CUDA 13
-            platform_parameters = PlatformParameters(
-                Platform.x86_64, "image:tag", "1.0", 13
-            )
+            platform_parameters = PlatformParameters(Platform.x86_64, "image:tag", "1.0", 13)
 
             # Create builder
             with tempfile.TemporaryDirectory() as temp_dir:
@@ -181,16 +174,9 @@ class TestContainerBuilder:
         monkeypatch.setattr(
             shutil,
             "rmtree",
-            lambda path,
-            ignore_errors=False,
-            onerror=None,
-            *,
-            onexc=None,
-            dir_fd=None: None,
+            lambda path, ignore_errors=False, onerror=None, *, onexc=None, dir_fd=None: None,
         )
-        monkeypatch.setattr(
-            shutil, "copytree", lambda src, dest, dirs_exist_ok=True: None
-        )
+        monkeypatch.setattr(shutil, "copytree", lambda src, dest, dirs_exist_ok=True: None)
         monkeypatch.setattr(shutil, "copyfile", lambda src, dest: None)
         monkeypatch.setattr(shutil, "copy2", lambda src, dest: None)
         monkeypatch.setattr(os, "remove", lambda src: None)
@@ -236,9 +222,7 @@ class TestContainerBuilder:
             parameters.add_hosts = ["domain:ip", "domain2:ip2"]
             return parameters
 
-        def test_basic_module(
-            self, mock_fs_operations, mock_docker_operations, monkeypatch
-        ):
+        def test_basic_module(self, mock_fs_operations, mock_docker_operations, monkeypatch):
             """Test building a basic Python module application"""
 
             def mock_file_exists(path):
@@ -263,9 +247,7 @@ class TestContainerBuilder:
                 assert build_args["platforms"] == ["linux/amd64"]
                 assert build_args["progress"] == "auto"
                 assert build_args["pull"] is True
-                assert build_args["tags"] == [
-                    "image-x64-workstation-dgpu-linux-amd64:tag"
-                ]
+                assert build_args["tags"] == ["image-x64-workstation-dgpu-linux-amd64:tag"]
                 assert build_args["load"] is True
                 assert build_args["build_args"] == {
                     "UID": os.getuid(),
@@ -285,9 +267,7 @@ class TestContainerBuilder:
             )
 
             build_parameters = self._get_build_parameters()
-            platform_parameters = PlatformParameters(
-                Platform.x86_64, "image:tag", "1.0", 13
-            )
+            platform_parameters = PlatformParameters(Platform.x86_64, "image:tag", "1.0", 13)
             platform_parameters.holoscan_sdk_file = pathlib.Path("/sdk/holoscan.whl")
 
             with tempfile.TemporaryDirectory() as temp_dir:
@@ -308,9 +288,7 @@ class TestContainerBuilder:
 
             build_parameters = self._get_build_parameters()
             build_parameters.application = pathlib.Path("/app/mymodule")
-            platform_parameters = PlatformParameters(
-                Platform.x86_64, "image:tag", "1.0", 13
-            )
+            platform_parameters = PlatformParameters(Platform.x86_64, "image:tag", "1.0", 13)
             platform_parameters.holoscan_sdk_file = pathlib.Path("/sdk/holoscan.whl")
 
             with tempfile.TemporaryDirectory() as temp_dir:
@@ -339,9 +317,7 @@ class TestContainerBuilder:
 
             build_parameters = self._get_build_parameters()
             build_parameters.input_data = pathlib.Path("/input/data")
-            platform_parameters = PlatformParameters(
-                Platform.x86_64, "image:tag", "1.0", 13
-            )
+            platform_parameters = PlatformParameters(Platform.x86_64, "image:tag", "1.0", 13)
             platform_parameters.holoscan_sdk_file = pathlib.Path("/sdk/holoscan.whl")
 
             with tempfile.TemporaryDirectory() as temp_dir:
@@ -389,9 +365,7 @@ class TestContainerBuilder:
                 assert build_args["platforms"] == ["linux/amd64"]
                 assert build_args["progress"] == "auto"
                 assert build_args["pull"] is True
-                assert build_args["tags"] == [
-                    "image-x64-workstation-dgpu-linux-amd64:tag"
-                ]
+                assert build_args["tags"] == ["image-x64-workstation-dgpu-linux-amd64:tag"]
                 assert build_args["load"] is True
                 assert build_args["build_args"] == {
                     "UID": os.getuid(),
@@ -416,9 +390,7 @@ class TestContainerBuilder:
 
             build_parameters = self._get_build_parameters()
             build_parameters.application = pathlib.Path("/app/script.py")
-            platform_parameters = PlatformParameters(
-                Platform.x86_64, "image:tag", "1.0", 13
-            )
+            platform_parameters = PlatformParameters(Platform.x86_64, "image:tag", "1.0", 13)
             platform_parameters.holoscan_sdk_file = pathlib.Path("/sdk/holoscan.whl")
 
             with tempfile.TemporaryDirectory() as temp_dir:
@@ -439,9 +411,7 @@ class TestContainerBuilder:
 
             build_parameters = self._get_build_parameters()
             build_parameters.application = pathlib.Path("/app/script.py")
-            platform_parameters = PlatformParameters(
-                Platform.x86_64, "image:tag", "1.0", 13
-            )
+            platform_parameters = PlatformParameters(Platform.x86_64, "image:tag", "1.0", 13)
             platform_parameters.holoscan_sdk_file = pathlib.Path("/sdk/holoscan.whl")
 
             with tempfile.TemporaryDirectory() as temp_dir:
@@ -500,9 +470,7 @@ class TestContainerBuilder:
                 assert build_args["platforms"] == ["linux/amd64"]
                 assert build_args["progress"] == "auto"
                 assert build_args["pull"] is True
-                assert build_args["tags"] == [
-                    "image-x64-workstation-dgpu-linux-amd64:tag"
-                ]
+                assert build_args["tags"] == ["image-x64-workstation-dgpu-linux-amd64:tag"]
                 assert build_args["load"] is True
                 assert build_args["build_args"] == {
                     "UID": os.getuid(),
@@ -518,9 +486,7 @@ class TestContainerBuilder:
             )
 
             build_parameters = self._get_build_parameters()
-            platform_parameters = PlatformParameters(
-                Platform.x86_64, "image:tag", "1.0", 13
-            )
+            platform_parameters = PlatformParameters(Platform.x86_64, "image:tag", "1.0", 13)
             platform_parameters.holoscan_sdk_file = pathlib.Path("/sdk/holoscan.deb")
 
             with tempfile.TemporaryDirectory() as temp_dir:
@@ -534,18 +500,14 @@ class TestContainerBuilder:
             """Test C++ project with additional libraries"""
             monkeypatch.setattr(os.path, "isfile", lambda x: False)
             monkeypatch.setattr(os.path, "isdir", lambda x: True)
-            monkeypatch.setattr(
-                os, "walk", lambda path: [("/lib", ["dir1", "dir2"], [])]
-            )
+            monkeypatch.setattr(os, "walk", lambda path: [("/lib", ["dir1", "dir2"], [])])
 
             build_parameters = self._get_build_parameters()
             build_parameters.additional_libs = [
                 pathlib.Path("/lib1"),
                 pathlib.Path("/lib2"),
             ]
-            platform_parameters = PlatformParameters(
-                Platform.x86_64, "image:tag", "1.0", 13
-            )
+            platform_parameters = PlatformParameters(Platform.x86_64, "image:tag", "1.0", 13)
             platform_parameters.holoscan_sdk_file = pathlib.Path("/sdk/holoscan.deb")
 
             with tempfile.TemporaryDirectory() as temp_dir:
@@ -573,9 +535,7 @@ class TestContainerBuilder:
             assert parameters.application_type == ApplicationType.Binary
             return parameters
 
-        def test_basic_binary(
-            self, mock_fs_operations, mock_docker_operations, monkeypatch
-        ):
+        def test_basic_binary(self, mock_fs_operations, mock_docker_operations, monkeypatch):
             """Test building a basic binary application"""
 
             def build_docker_image(**build_args):
@@ -595,9 +555,7 @@ class TestContainerBuilder:
                 assert build_args["platforms"] == ["linux/amd64"]
                 assert build_args["progress"] == "auto"
                 assert build_args["pull"] is True
-                assert build_args["tags"] == [
-                    "image-x64-workstation-dgpu-linux-amd64:tag"
-                ]
+                assert build_args["tags"] == ["image-x64-workstation-dgpu-linux-amd64:tag"]
                 assert build_args["load"] is True
                 assert build_args["build_args"] == {
                     "UID": os.getuid(),
@@ -616,9 +574,7 @@ class TestContainerBuilder:
             )
 
             build_parameters = self._get_build_parameters()
-            platform_parameters = PlatformParameters(
-                Platform.x86_64, "image:tag", "1.0", 13
-            )
+            platform_parameters = PlatformParameters(Platform.x86_64, "image:tag", "1.0", 13)
             platform_parameters.holoscan_sdk_file = pathlib.Path("/sdk/holoscan.deb")
 
             with tempfile.TemporaryDirectory() as temp_dir:
@@ -626,9 +582,7 @@ class TestContainerBuilder:
                 result = builder.build(platform_parameters)
                 assert result.succeeded is True
 
-        def test_binary_with_libs(
-            self, mock_fs_operations, mock_docker_operations, monkeypatch
-        ):
+        def test_binary_with_libs(self, mock_fs_operations, mock_docker_operations, monkeypatch):
             """Test binary application with additional libraries"""
             monkeypatch.setattr(os.path, "isfile", lambda x: True)
             monkeypatch.setattr(os.path, "isdir", lambda x: False)
@@ -644,9 +598,7 @@ class TestContainerBuilder:
                 pathlib.Path("/my-libs/lib1"),
                 pathlib.Path("/my-other/libs/lib2"),
             ]
-            platform_parameters = PlatformParameters(
-                Platform.x86_64, "image:tag", "1.0", 13
-            )
+            platform_parameters = PlatformParameters(Platform.x86_64, "image:tag", "1.0", 13)
             platform_parameters.holoscan_sdk_file = pathlib.Path("/sdk/holoscan.deb")
 
             with tempfile.TemporaryDirectory() as temp_dir:

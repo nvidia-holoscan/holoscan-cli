@@ -24,9 +24,7 @@ class TestExecuteNicsCommand:
     def test_execute_nics_command_with_ipv4(self, monkeypatch, capsys):
         # Mock get_host_ip_addresses to return sample IPv4 data
         ipv4_data = [("eth0", "192.168.1.100"), ("wlan0", "10.0.0.50")]
-        monkeypatch.setattr(
-            "holoscan_cli.nics.nics.get_host_ip_addresses", lambda: (ipv4_data, [])
-        )
+        monkeypatch.setattr("holoscan_cli.nics.nics.get_host_ip_addresses", lambda: (ipv4_data, []))
 
         # Execute command
         execute_nics_command(Namespace())
@@ -36,14 +34,10 @@ class TestExecuteNicsCommand:
         assert "eth0            : 192.168.1.100" in captured.out
         assert "wlan0           : 10.0.0.50" in captured.out
 
-    def test_execute_nics_command_ipv4_empty_fallback_to_ipv6(
-        self, monkeypatch, capsys
-    ):
+    def test_execute_nics_command_ipv4_empty_fallback_to_ipv6(self, monkeypatch, capsys):
         # Mock get_host_ip_addresses to return only IPv6 data
         ipv6_data = [("eth0", "fe80::1234"), ("wlan0", "fe80::5678")]
-        monkeypatch.setattr(
-            "holoscan_cli.nics.nics.get_host_ip_addresses", lambda: ([], ipv6_data)
-        )
+        monkeypatch.setattr("holoscan_cli.nics.nics.get_host_ip_addresses", lambda: ([], ipv6_data))
 
         # Execute command
         execute_nics_command(Namespace())
@@ -87,9 +81,7 @@ class TestExecuteNicsCommand:
 
     def test_execute_nics_command_empty_addresses(self, monkeypatch, capsys):
         # Mock get_host_ip_addresses to return empty data
-        monkeypatch.setattr(
-            "holoscan_cli.nics.nics.get_host_ip_addresses", lambda: ([], [])
-        )
+        monkeypatch.setattr("holoscan_cli.nics.nics.get_host_ip_addresses", lambda: ([], []))
 
         # Execute command
         execute_nics_command(Namespace())

@@ -26,13 +26,11 @@ logger = logging.getLogger("common")
 
 
 def print_manifest_json(manifest, filename):
-    logger.debug(
-        f"""
+    logger.debug(f"""
 =============== Begin {filename} ===============
 {json.dumps(manifest, indent=4)}
 ================ End {filename} ================
-                 """
-    )
+                 """)
 
 
 def get_requested_gpus(pkg_info: dict) -> int:

@@ -100,13 +100,9 @@ class BuilderBase:
         cache_to = {"type": "local", "dest": self._build_parameters.build_cache}
         cache_from = [{"type": "local", "src": self._build_parameters.build_cache}]
         if platform_parameters.base_image is not None:
-            cache_from.append(
-                {"type": "registry", "ref": platform_parameters.base_image}
-            )
+            cache_from.append({"type": "registry", "ref": platform_parameters.base_image})
         if platform_parameters.build_image is not None:
-            cache_from.append(
-                {"type": "registry", "ref": platform_parameters.build_image}
-            )
+            cache_from.append({"type": "registry", "ref": platform_parameters.build_image})
 
         builds = {
             "builder": builder,
@@ -161,9 +157,7 @@ class BuilderBase:
             "GPU_TYPE": platform_parameters.platform_config.value,
         }
 
-        self._logger.debug(
-            f"Building Holoscan Application Package: tag={platform_parameters.tag}"
-        )
+        self._logger.debug(f"Building Holoscan Application Package: tag={platform_parameters.tag}")
 
         self.print_build_info(platform_parameters)
 
@@ -175,18 +169,14 @@ class BuilderBase:
                     self._logger.info(
                         f"Saving {platform_parameters.tag} to {build_result.tarball_filename}..."
                     )
-                    docker_export_tarball(
-                        build_result.tarball_filename, platform_parameters.tag
-                    )
+                    docker_export_tarball(build_result.tarball_filename, platform_parameters.tag)
                 except Exception as ex:
                     build_result.error = f"Error saving tarball: {ex}"
                     build_result.succeeded = False
         except Exception as e:
             print(e)
             build_result.succeeded = False
-            build_result.error = (
-                "Error building image: see Docker output for additional details."
-            )
+            build_result.error = "Error building image: see Docker output for additional details."
 
         return build_result
 
@@ -199,8 +189,7 @@ class BuilderBase:
 
     def print_build_info(self, platform_parameters):
         """Print build information for the platform."""
-        self._logger.info(
-            f"""
+        self._logger.info(f"""
 ===============================================================================
 Building image for:                 {platform_parameters.platform.value}
     Architecture:                   {platform_parameters.platform_arch.value}
@@ -216,15 +205,12 @@ Building image for:                 {platform_parameters.platform.value}
     SDK:                            {self._build_parameters.sdk.value}
     Tag:                            {platform_parameters.tag}
     Included features/dependencies: {", ".join(self._build_parameters.includes) if self._build_parameters.includes else "N/A"}
-    """  # noqa: E501
-        )
+    """)  # noqa: E501
 
     def _write_dockerignore(self):
         """Copy .dockerignore file to temporary location."""
         # Write out .dockerignore file
-        dockerignore_source_file_path = (
-            Path(__file__).parent / "templates" / "dockerignore"
-        )
+        dockerignore_source_file_path = Path(__file__).parent / "templates" / "dockerignore"
         dockerignore_dest_file_path = os.path.join(self._temp_dir, ".dockerignore")
         shutil.copyfile(dockerignore_source_file_path, dockerignore_dest_file_path)
         return dockerignore_dest_file_path
@@ -240,13 +226,11 @@ Building image for:                 {platform_parameters.platform.value}
     def _write_dockerfile(self, platform_parameters: PlatformParameters):
         """Write Dockerfile temporary location"""
         docker_template_string = self._get_template(platform_parameters)
-        self._logger.debug(
-            f"""
+        self._logger.debug(f"""
 ========== Begin Dockerfile ==========
 {docker_template_string}
 =========== End Dockerfile ===========
-"""
-        )
+""")
 
         docker_file_path = os.path.join(self._temp_dir, DefaultValues.DOCKER_FILE_NAME)
         with open(docker_file_path, "w") as docker_file:
@@ -267,16 +251,12 @@ Building image for:                 {platform_parameters.platform.value}
             )
 
         if os.path.isfile(self._build_parameters.application):
-            shutil.copytree(
-                self._build_parameters.application.parent, target_application_path
-            )
+            shutil.copytree(self._build_parameters.application.parent, target_application_path)
         else:
             shutil.copytree(self._build_parameters.application, target_application_path)
 
         target_config_file_path = Path(os.path.join(self._temp_dir, "app.config"))
-        shutil.copyfile(
-            self._build_parameters.app_config_file_path, target_config_file_path
-        )
+        shutil.copyfile(self._build_parameters.app_config_file_path, target_config_file_path)
 
     def _copy_libs(self):
         """
@@ -300,9 +280,7 @@ Building image for:                 {platform_parameters.platform.value}
         subdirectories = [
             os.path.join(
                 DefaultValues.HOLOSCAN_LIB_DIR,
-                os.path.join(root, subdir)
-                .replace(str(target_libs_path), "")
-                .lstrip("/"),
+                os.path.join(root, subdir).replace(str(target_libs_path), "").lstrip("/"),
             )
             for root, dirs, _ in os.walk(target_libs_path)
             for subdir in dirs
@@ -318,9 +296,7 @@ Building image for:                 {platform_parameters.platform.value}
             for model in self._build_parameters.models:
                 target_model_path = os.path.join(target_models_root_path, model)
                 if self._build_parameters.models[model].is_dir():
-                    shutil.copytree(
-                        self._build_parameters.models[model], target_model_path
-                    )
+                    shutil.copytree(self._build_parameters.models[model], target_model_path)
                 elif self._build_parameters.models[model].is_file():
                     os.makedirs(target_model_path, exist_ok=True)
                     target_model_path = os.path.join(
@@ -343,20 +319,16 @@ Building image for:                 {platform_parameters.platform.value}
             lstrip_blocks=True,
             autoescape=True,
         )
-        self._logger.debug(
-            f"""
+        self._logger.debug(f"""
 ========== Begin Build Parameters ==========
 {pprint.pformat(self._build_parameters.to_jinja)}
 =========== End Build Parameters ===========
-"""
-        )
-        self._logger.debug(
-            f"""
+""")
+        self._logger.debug(f"""
 ========== Begin Platform Parameters ==========
 {pprint.pformat(platform_parameters.to_jinja)}
 =========== End Platform Parameters ===========
-"""
-        )
+""")
 
         if platform_parameters.cuda_version == 12:
             jinja_template = jinja_env.get_template("Dockerfile-cu12.jinja2")
@@ -380,9 +352,7 @@ Building image for:                 {platform_parameters.platform.value}
 
     def __init_subclass__(cls):
         if cls._copy_supporting_files is BuilderBase._copy_supporting_files:
-            raise NotImplementedError(
-                "{cls} has not overwritten method {_copy_supporting_files}!"
-            )
+            raise NotImplementedError("{cls} has not overwritten method {_copy_supporting_files}!")
 
 
 class PythonAppBuilder(BuilderBase):
@@ -420,14 +390,10 @@ class PythonAppBuilder(BuilderBase):
         # Write all content at once
         with open(pip_requirements_path, "w") as requirements_file:
             requirements_file.writelines(requirements_content)
-            self._logger.debug(
-                "================ Begin requirements.txt ================"
-            )
+            self._logger.debug("================ Begin requirements.txt ================")
             for req in requirements_content:
                 self._logger.debug(f"  {req.strip()}")
-            self._logger.debug(
-                "================ End requirements.txt =================="
-            )
+            self._logger.debug("================ End requirements.txt ==================")
 
     def _copy_sdk_file(self, sdk_file: Optional[Path]):
         if sdk_file is not None and os.path.isfile(sdk_file):
@@ -454,9 +420,7 @@ class CppAppBuilder(BuilderBase):
         if platform_parameters.holoscan_sdk_file is not None and os.path.isfile(
             platform_parameters.holoscan_sdk_file
         ):
-            dest = os.path.join(
-                self._temp_dir, platform_parameters.holoscan_sdk_file.name
-            )
+            dest = os.path.join(self._temp_dir, platform_parameters.holoscan_sdk_file.name)
             if os.path.exists(dest):
                 os.remove(dest)
             shutil.copyfile(

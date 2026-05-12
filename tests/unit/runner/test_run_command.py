@@ -205,18 +205,14 @@ class TestRunCommand:
             parser: The argument parser to test
         """
         # Test with comma-separated fragments
-        args = parser.parse_args(
-            ["myapp:1.0", "--fragments", "fragment1,fragment2,fragment3"]
-        )
+        args = parser.parse_args(["myapp:1.0", "--fragments", "fragment1,fragment2,fragment3"])
         assert args.fragments == "fragment1,fragment2,fragment3"
 
         # Test with 'all' value
         args = parser.parse_args(["myapp:1.0", "--fragments", "all"])
         assert args.fragments == "all"
 
-    def test_path_arguments(
-        self, parser: argparse.ArgumentParser, temp_dir: Path
-    ) -> None:
+    def test_path_arguments(self, parser: argparse.ArgumentParser, temp_dir: Path) -> None:
         """
         Test path-related arguments.
 

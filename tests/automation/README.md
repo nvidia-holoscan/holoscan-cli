@@ -120,7 +120,7 @@ In this case, the test automation script will clone the [Holohub](https://github
 
 ### Configuration Schema
 
-```
+```json
 {
  "name": "<name of the application>", # Required
  "source": {

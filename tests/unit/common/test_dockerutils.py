@@ -18,20 +18,21 @@ import subprocess
 from pathlib import Path
 
 import pytest
-from holoscan_cli.common.dockerutils import (
-    create_or_use_network,
-    image_exists,
-    create_and_get_builder,
-    docker_export_tarball,
-    build_docker_image,
-    _host_is_native_igpu,
-    _additional_devices_to_mount,
-    parse_docker_image_name_and_tag,
-    docker_run,
-)
-from holoscan_cli.common.exceptions import RunContainerError, GpuResourceError
+
 from holoscan_cli.common.constants import EnvironmentVariables
+from holoscan_cli.common.dockerutils import (
+    _additional_devices_to_mount,
+    _host_is_native_igpu,
+    build_docker_image,
+    create_and_get_builder,
+    create_or_use_network,
+    docker_export_tarball,
+    docker_run,
+    image_exists,
+    parse_docker_image_name_and_tag,
+)
 from holoscan_cli.common.enum_types import PlatformConfiguration, SdkType
+from holoscan_cli.common.exceptions import GpuResourceError, RunContainerError
 
 
 @pytest.fixture
@@ -243,9 +244,7 @@ class TestAdditionalDevicesToMount:
             return "video:x:44" if "video" in args[1] else "render:x:109"
 
         monkeypatch.setattr(os.path, "exists", mock_exists)
-        monkeypatch.setattr(
-            "holoscan_cli.common.dockerutils.run_cmd_output", mock_run_cmd
-        )
+        monkeypatch.setattr("holoscan_cli.common.dockerutils.run_cmd_output", mock_run_cmd)
 
         devices, group_adds = _additional_devices_to_mount(is_root=False)
         assert devices == []
@@ -343,9 +342,7 @@ class TestDockerRun:
             "holoscan_cli.common.dockerutils.run_cmd_output",
             lambda *args, **kwargs: "video:x:44",
         )
-        monkeypatch.setattr(
-            "holoscan_cli.common.dockerutils._host_is_native_igpu", lambda: False
-        )
+        monkeypatch.setattr("holoscan_cli.common.dockerutils._host_is_native_igpu", lambda: False)
         monkeypatch.setattr("holoscan_cli.common.dockerutils.get_gpu_count", lambda: 1)
 
     def test_basic_container_run(
@@ -879,9 +876,9 @@ class TestDockerRun:
         # Add Holoscan SDK type and config path
         app_info_with_sdk = basic_app_info.copy()
         app_info_with_sdk["sdk"] = SdkType.Holoscan.value
-        app_info_with_sdk["environment"][EnvironmentVariables.HOLOSCAN_CONFIG_PATH] = (
-            "/app/config.yaml"
-        )
+        app_info_with_sdk["environment"][
+            EnvironmentVariables.HOLOSCAN_CONFIG_PATH
+        ] = "/app/config.yaml"
 
         docker_run(
             name="test-container",

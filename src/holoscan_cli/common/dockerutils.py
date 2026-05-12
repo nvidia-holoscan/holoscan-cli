@@ -136,9 +136,7 @@ def create_and_get_builder(builder_name: str):
             logger.info(f"Using existing Docker BuildKit builder `{builder_name}`")
             return builder_name
 
-    logger.info(
-        f"Creating Docker BuildKit builder `{builder_name}` using `docker-container`"
-    )
+    logger.info(f"Creating Docker BuildKit builder `{builder_name}` using `docker-container`")
     builder = docker.buildx.create(
         name=builder_name, driver="docker-container", driver_options={"network": "host"}
     )
@@ -240,10 +238,7 @@ def docker_run(
         environment_variables["NVIDIA_VISIBLE_DEVICES"] = gpu_enum
     # If the image was built for iGPU but the system is configured for dGPU, attempt
     # targeting the system's iGPU using the CDI spec
-    elif (
-        platform_config == PlatformConfiguration.iGPU.value
-        and not _host_is_native_igpu()
-    ):
+    elif platform_config == PlatformConfiguration.iGPU.value and not _host_is_native_igpu():
         environment_variables["NVIDIA_VISIBLE_DEVICES"] = "nvidia.com/igpu=0"
         logger.info(
             "Attempting to run an image for iGPU (integrated GPU) on a system configured "
@@ -414,8 +409,7 @@ def _start_container(
     container_id = container.id[:12]
 
     ulimit_str = ", ".join(
-        f"{ulimit.name}={ulimit.soft}:{ulimit.hard}"
-        for ulimit in container.host_config.ulimits
+        f"{ulimit.name}={ulimit.soft}:{ulimit.hard}" for ulimit in container.host_config.ulimits
     )
     logger.info(
         f"Launching container ({container_id}) using image '{image_name}'..."
@@ -446,9 +440,7 @@ def _start_container(
                 print(str(log[1]))
 
     exit_code = container.state.exit_code
-    logger.info(
-        f"Container '{container_name}'({container_id}) exited with code {exit_code}."
-    )
+    logger.info(f"Container '{container_name}'({container_id}) exited with code {exit_code}.")
 
     if remove:
         container.remove()

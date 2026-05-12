@@ -28,9 +28,7 @@ from .exceptions import FailedToDetectSDKVersionError, InvalidSdkError
 logger = logging.getLogger("common")
 
 
-def validate_holoscan_sdk_version(
-    artifact_sources: ArtifactSources, version: str
-) -> None:
+def validate_holoscan_sdk_version(artifact_sources: ArtifactSources, version: str) -> None:
     """
     Validates specified Holoscan version with supported versions.
 
@@ -133,20 +131,14 @@ def detect_holoscan_version(sdk_version: Optional[Version] = None) -> str:
             if dist.metadata["Name"].lower() in Constants.PYPI_PACKAGE_NAMES
         ]
         if not holoscan_pkgs:
-            raise FailedToDetectSDKVersionError(
-                "No installed Holoscan PyPI package found."
-            )
+            raise FailedToDetectSDKVersionError("No installed Holoscan PyPI package found.")
         ver_str = importlib.metadata.version(holoscan_pkgs[0]).title()
         ver = Version(ver_str)
         ver_str = ".".join(str(i) for i in ver.release)
 
         if len(ver.release) == 1 and ver.major == ver.release[0]:
             ver_str = ver_str + ".0.0"
-        elif (
-            len(ver.release) == 2
-            and ver.major == ver.release[0]
-            and ver.minor == ver.release[1]
-        ):
+        elif len(ver.release) == 2 and ver.major == ver.release[0] and ver.minor == ver.release[1]:
             ver_str = ver_str + ".0"
         elif (
             len(ver.release) == 4

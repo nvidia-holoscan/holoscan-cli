@@ -101,12 +101,42 @@ holoscan = 'holoscan_cli.__main__:main'
 monai-deploy = 'holoscan_cli.__main__:main'
 
 [tool.codespell]
-skip = '.ruff_cache'
+skip = '.ruff_cache,.cache,build,dist,htmlcov,tests/reports'
 count = true
 quiet-level = 3
 
-[tool.flake8]
-max-line-length = 160
+[tool.isort]
+profile = "black"
+line_length = 100
+known_first_party = "holoscan_cli"
+skip_glob = ["build*/*", "dist/*", ".cache/*", ".ruff_cache/*"]
+
+[tool.black]
+line-length = 100
+target-version = ["py310", "py311", "py312"]
+extend-exclude = '''
+(
+  ^\.cache/
+  | ^build[^/]*/
+  | ^dist/
+  | tests/reports/
+)
+'''
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+cache-dir = ".cache/ruff"
+exclude = [
+  ".cache",
+  ".ruff_cache",
+  "build*",
+  "dist",
+  "tests/reports",
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["holoscan_cli"]
 
 [tool.pytest.ini_options]
 pythonpath = "src"

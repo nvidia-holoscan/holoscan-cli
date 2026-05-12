@@ -22,8 +22,8 @@ from typing import Any, Dict
 import pytest
 from packaging.version import Version
 
-from holoscan_cli.packager.package_command import create_package_parser
 from holoscan_cli.common.constants import SDK
+from holoscan_cli.packager.package_command import create_package_parser
 
 
 class TestPackageCommand:

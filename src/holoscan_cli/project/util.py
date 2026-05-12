@@ -217,6 +217,10 @@ def _get_holohub_root() -> Path:
         "workflows",
     )
     for candidate in (cwd, *cwd.parents):
+        if (candidate / "src" / "holoscan_cli").is_dir() and (
+            candidate / "pyproject.toml"
+        ).exists():
+            return candidate
         if any((candidate / name).exists() for name in sentinel_files):
             if any((candidate / name).is_dir() for name in metadata_dirs):
                 return candidate

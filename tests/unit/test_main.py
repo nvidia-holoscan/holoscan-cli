@@ -16,11 +16,11 @@
 import json
 import tempfile
 from pathlib import Path
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
-from holoscan_cli.__main__ import parse_args, set_up_logging, main
+from holoscan_cli.__main__ import main, parse_args, set_up_logging
 
 
 class TestParseArgs:
@@ -39,9 +39,7 @@ class TestParseArgs:
             main_file.write_text("# dummy main file")
 
             # Create a dummy config file
-            with tempfile.NamedTemporaryFile(
-                mode="w", suffix=".yaml", delete=False
-            ) as config_file:
+            with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as config_file:
                 config_file.write("# dummy config")
                 config_path = config_file.name
 
@@ -206,9 +204,7 @@ class TestSetUpLogging:
         def mock_read_bytes():
             return json.dumps(mock_config).encode()
 
-        with tempfile.NamedTemporaryFile(
-            mode="w", suffix=".json", delete=False
-        ) as temp_file:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as temp_file:
             temp_path = Path(temp_file.name)
             json.dump(mock_config, temp_file)
 
@@ -274,9 +270,7 @@ class TestMain:
 
         with patch("holoscan_cli.__main__.parse_args", return_value=mock_args):
             with patch("holoscan_cli.__main__.set_up_logging"):
-                with patch(
-                    "holoscan_cli.__main__._execute_package_command", mock_execute
-                ):
+                with patch("holoscan_cli.__main__._execute_package_command", mock_execute):
                     main(["holoscan", "package", "/some/path"])
                     mock_execute.assert_called_once_with(mock_args)
 
@@ -320,13 +314,9 @@ class TestMain:
         monkeypatch.setenv("HOLOHUB_CMD_NAME", "./holohub")
 
         with patch("holoscan_cli.project.cli.main") as mock_project_main:
-            with patch(
-                "holoscan_cli.__main__.parse_args", return_value=mock_args
-            ) as mock_parse:
+            with patch("holoscan_cli.__main__.parse_args", return_value=mock_args) as mock_parse:
                 with patch("holoscan_cli.__main__.set_up_logging"):
-                    with patch(
-                        "holoscan_cli.__main__._execute_run_command", mock_execute
-                    ):
+                    with patch("holoscan_cli.__main__._execute_run_command", mock_execute):
                         main(["holoscan", "hap-run", "some-image:tag"])
         mock_project_main.assert_not_called()
         mock_parse.assert_called_once_with(["holoscan", "hap-run", "some-image:tag"])
@@ -340,13 +330,9 @@ class TestMain:
         mock_execute = MagicMock()
 
         with patch("holoscan_cli.project.cli.main") as mock_project_main:
-            with patch(
-                "holoscan_cli.__main__.parse_args", return_value=mock_args
-            ) as mock_parse:
+            with patch("holoscan_cli.__main__.parse_args", return_value=mock_args) as mock_parse:
                 with patch("holoscan_cli.__main__.set_up_logging"):
-                    with patch(
-                        "holoscan_cli.__main__._execute_version_command", mock_execute
-                    ):
+                    with patch("holoscan_cli.__main__._execute_version_command", mock_execute):
                         main(["holohub", "version"])
         mock_project_main.assert_not_called()
         mock_parse.assert_called_once_with(["holohub", "version"])
@@ -361,18 +347,12 @@ class TestMain:
         monkeypatch.setenv("HOLOHUB_CMD_NAME", "./holohub")
 
         with patch("holoscan_cli.project.cli.main") as mock_project_main:
-            with patch(
-                "holoscan_cli.__main__.parse_args", return_value=mock_args
-            ) as mock_parse:
+            with patch("holoscan_cli.__main__.parse_args", return_value=mock_args) as mock_parse:
                 with patch("holoscan_cli.__main__.set_up_logging"):
-                    with patch(
-                        "holoscan_cli.__main__._execute_run_command", mock_execute
-                    ):
+                    with patch("holoscan_cli.__main__._execute_run_command", mock_execute):
                         main(["holoscan", "run", "some-image:tag", "--driver"])
         mock_project_main.assert_not_called()
-        mock_parse.assert_called_once_with(
-            ["holoscan", "hap-run", "some-image:tag", "--driver"]
-        )
+        mock_parse.assert_called_once_with(["holoscan", "hap-run", "some-image:tag", "--driver"])
         mock_execute.assert_called_once_with(mock_args)
 
     def test_main_legacy_run_image_dispatches_to_hap_run(self, monkeypatch):
@@ -382,15 +362,11 @@ class TestMain:
         mock_args.log_level = None
         mock_execute = MagicMock()
 
-        with patch(
-            "holoscan_cli.__main__.parse_args", return_value=mock_args
-        ) as mock_parse:
+        with patch("holoscan_cli.__main__.parse_args", return_value=mock_args) as mock_parse:
             with patch("holoscan_cli.__main__.set_up_logging"):
                 with patch("holoscan_cli.__main__._execute_run_command", mock_execute):
                     main(["holoscan", "run", "some-image:tag", "--driver"])
-        mock_parse.assert_called_once_with(
-            ["holoscan", "hap-run", "some-image:tag", "--driver"]
-        )
+        mock_parse.assert_called_once_with(["holoscan", "hap-run", "some-image:tag", "--driver"])
         mock_execute.assert_called_once_with(mock_args)
 
     def test_main_version_command(self, monkeypatch):
@@ -403,9 +379,7 @@ class TestMain:
 
         with patch("holoscan_cli.__main__.parse_args", return_value=mock_args):
             with patch("holoscan_cli.__main__.set_up_logging"):
-                with patch(
-                    "holoscan_cli.__main__._execute_version_command", mock_execute
-                ):
+                with patch("holoscan_cli.__main__._execute_version_command", mock_execute):
                     main(["holoscan", "version"])
                     mock_execute.assert_called_once_with(mock_args)
 
@@ -433,9 +407,7 @@ class TestMain:
 
         with patch("holoscan_cli.__main__.parse_args", return_value=mock_args):
             with patch("holoscan_cli.__main__.set_up_logging") as mock_logging:
-                with patch(
-                    "holoscan_cli.__main__._execute_version_command", mock_execute
-                ):
+                with patch("holoscan_cli.__main__._execute_version_command", mock_execute):
                     main(["holoscan", "--log-level", "DEBUG", "version"])
                     mock_logging.assert_called_once_with("DEBUG")
                     mock_execute.assert_called_once_with(mock_args)
@@ -448,13 +420,9 @@ class TestMain:
 
         mock_execute = MagicMock()
 
-        with patch(
-            "holoscan_cli.__main__.parse_args", return_value=mock_args
-        ) as mock_parse:
+        with patch("holoscan_cli.__main__.parse_args", return_value=mock_args) as mock_parse:
             with patch("holoscan_cli.__main__.set_up_logging"):
-                with patch(
-                    "holoscan_cli.__main__._execute_version_command", mock_execute
-                ):
+                with patch("holoscan_cli.__main__._execute_version_command", mock_execute):
                     main(None)
                     assert mock_parse.call_count == 1
                     mock_execute.assert_called_once_with(mock_args)
@@ -479,12 +447,8 @@ class TestMain:
             call_order.append("execute_command")
 
         with patch("holoscan_cli.__main__.parse_args", side_effect=mock_parse_args):
-            with patch(
-                "holoscan_cli.__main__.set_up_logging", side_effect=mock_set_up_logging
-            ):
-                with patch(
-                    "holoscan_cli.__main__._execute_version_command", mock_execute
-                ):
+            with patch("holoscan_cli.__main__.set_up_logging", side_effect=mock_set_up_logging):
+                with patch("holoscan_cli.__main__._execute_version_command", mock_execute):
                     main(["holoscan", "version"])
 
         assert call_order == ["parse_args", "set_up_logging", "execute_command"]

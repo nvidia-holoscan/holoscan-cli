@@ -43,11 +43,15 @@ from collections import defaultdict
 from pathlib import Path
 from typing import List, Optional
 
-import holoscan_cli.project.util as holohub_cli_util
 import holoscan_cli.project.metadata.gather_metadata as metadata_util
+import holoscan_cli.project.util as holohub_cli_util
 from holoscan_cli.project.container import HoloHubContainer
+from holoscan_cli.project.metadata.utils import (
+    get_schema_path,
+    list_normalized_languages,
+    normalize_language,
+)
 from holoscan_cli.project.util import Color
-from holoscan_cli.project.metadata.utils import get_schema_path, list_normalized_languages, normalize_language
 
 
 class HoloHubCLI:
@@ -304,7 +308,7 @@ class HoloHubCLI:
         autocomp_cmd.set_defaults(func=self.handle_autocompletion_list)
 
         # lint command
-        lint = subparsers.add_parser("lint", help="Run linting tools")
+        lint = subparsers.add_parser("lint", help="Run repository linting via pre-commit")
         self.subparsers["lint"] = lint
         lint.add_argument("path", nargs="?", default=".", help="Path to lint")
         lint.add_argument("--fix", action="store_true", help="Fix linting issues")
@@ -1672,13 +1676,13 @@ class HoloHubCLI:
 
         if not args.dryrun:
             self._check_pre_commit_cache_writable(env)
-            if shutil.which("pre-commit", path=env["PATH"]) is None:
+            if not self._pre_commit_available():
                 holohub_cli_util.info("pre-commit is not installed; installing lint dependencies.")
                 self._install_lint_deps(False, env=env)
-                if shutil.which("pre-commit", path=env["PATH"]) is None:
+                if not self._pre_commit_available():
                     holohub_cli_util.fatal(
                         "pre-commit was installed but is still not available on PATH. "
-                        "Please check your Python user install location."
+                        "Please check your Python environment."
                     )
 
         if args.fix:
@@ -1687,7 +1691,13 @@ class HoloHubCLI:
                 "where possible."
             )
 
-        cmd: List[str] = ["pre-commit", "run", "--show-diff-on-failure"]
+        cmd: List[str] = [
+            sys.executable,
+            "-m",
+            "pre_commit",
+            "run",
+            "--show-diff-on-failure",
+        ]
         target = self._resolve_lint_target(args.path)
         if target == HoloHubCLI.HOLOHUB_ROOT.resolve():
             cmd.append("--all-files")
@@ -1772,6 +1782,17 @@ class HoloHubCLI:
         """Return True when Python is running inside a virtual environment."""
         return sys.prefix != getattr(sys, "base_prefix", sys.prefix) or hasattr(sys, "real_prefix")
 
+    @staticmethod
+    def _pre_commit_available() -> bool:
+        """Return True when pre-commit is importable by the active Python."""
+        result = subprocess.run(
+            [sys.executable, "-m", "pre_commit", "--version"],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            check=False,
+        )
+        return result.returncode == 0
+
     def _install_lint_deps(self, dry_run: bool, env: dict) -> None:
         """Install pre-commit and prefetch hook environments."""
         print(holohub_cli_util.format_cmd("cd " + str(HoloHubCLI.HOLOHUB_ROOT), is_dryrun=dry_run))
@@ -1781,12 +1802,11 @@ class HoloHubCLI:
         pip_install_cmd = [sys.executable, "-m", "pip", "install"]
         if not self._running_in_virtual_env():
             pip_install_cmd.append("--user")
-        pip_install_cmd.extend(
-            [
-                "-r",
-                str(HoloHubCLI.HOLOHUB_ROOT / "utilities/requirements.lint.txt"),
-            ]
-        )
+        lint_requirements = HoloHubCLI.HOLOHUB_ROOT / "utilities" / "requirements.lint.txt"
+        if lint_requirements.exists():
+            pip_install_cmd.extend(["-r", str(lint_requirements)])
+        else:
+            pip_install_cmd.append("pre-commit")
         holohub_cli_util.run_command(
             pip_install_cmd,
             dry_run=dry_run,

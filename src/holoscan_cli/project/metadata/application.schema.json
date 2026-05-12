@@ -132,8 +132,12 @@
         }
       ]
     },
-    "$ref": "holohub/operator/v1#/properties/operator",
-    "$ref": "holohub/gxf_extension/v1#/properties/gxf_extension"
+    "operator": {
+      "$ref": "holohub/operator/v1#/properties/operator"
+    },
+    "gxf_extension": {
+      "$ref": "holohub/gxf_extension/v1#/properties/gxf_extension"
+    }
   },
   "oneOf": [
     {

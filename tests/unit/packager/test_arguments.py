@@ -17,6 +17,7 @@ import pathlib
 from argparse import Namespace
 
 import pytest
+
 from holoscan_cli.common.enum_types import (
     ApplicationType,
     Platform,
@@ -118,9 +119,7 @@ class TestPackagingArguments:
         args = PackagingArguments(self.input_args, pathlib.Path("/temp"))
 
         assert args.build_parameters.app_dir == DefaultValues.HOLOSCAN_APP_DIR
-        assert (
-            args.build_parameters.config_file_path == DefaultValues.HOLOSCAN_CONFIG_PATH
-        )
+        assert args.build_parameters.config_file_path == DefaultValues.HOLOSCAN_CONFIG_PATH
         assert args.build_parameters.docs == self.input_args.docs
         assert args.build_parameters.docs_dir == DefaultValues.HOLOSCAN_DOCS_DIR
         assert args.build_parameters.logs_dir == DefaultValues.HOLOSCAN_LOGS_DIR
@@ -138,21 +137,13 @@ class TestPackagingArguments:
         assert args.build_parameters.output_dir == DefaultValues.OUTPUT_DIR
         assert args.build_parameters.timeout == self.input_args.timeout
         assert args.build_parameters.working_dir == DefaultValues.WORK_DIR
-        assert (
-            args.build_parameters.app_manifest_path == DefaultValues.APP_MANIFEST_PATH
-        )
-        assert (
-            args.build_parameters.package_manifest_path
-            == DefaultValues.PKG_MANIFEST_PATH
-        )
+        assert args.build_parameters.app_manifest_path == DefaultValues.APP_MANIFEST_PATH
+        assert args.build_parameters.package_manifest_path == DefaultValues.PKG_MANIFEST_PATH
         assert args.build_parameters.username == self.input_args.username
         assert args.build_parameters.uid == self.input_args.uid
         assert args.build_parameters.gid == self.input_args.gid
         assert args.build_parameters.tarball_output == self.input_args.output
-        assert (
-            args.build_parameters.application_directory
-            == self.input_args.application.parent
-        )
+        assert args.build_parameters.application_directory == self.input_args.application.parent
         assert args.build_parameters.application_type == ApplicationType.PythonFile
         assert args.build_parameters.application == self.input_args.application
         assert args.build_parameters.command is None

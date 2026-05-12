@@ -24,9 +24,7 @@ from holoscan_cli.common.exceptions import ManifestDownloadError
 
 class TestArtifactSource:
     def _init(self) -> None:
-        self._artifact_source = ArtifactSources(
-            13
-        )  # Default CUDA 13 for existing tests
+        self._artifact_source = ArtifactSources(13)  # Default CUDA 13 for existing tests
         current_file_path = Path(__file__).parent.parent.resolve()
         source_file_sample = current_file_path / "./artifacts.json"
         self._artifact_source.load(str(source_file_sample))

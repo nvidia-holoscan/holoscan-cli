@@ -18,9 +18,9 @@ import os
 from typing import Any, Optional
 
 import requests
+from packaging.version import InvalidVersion, Version
 
 from holoscan_cli import __version__
-from packaging.version import InvalidVersion, Version
 
 from .enum_types import PlatformConfiguration, SdkType
 from .exceptions import InvalidSourceFileError, ManifestDownloadError
@@ -61,14 +61,10 @@ class ArtifactSources:
         return self._data.keys()
 
     def base_image(self, version) -> str:
-        return self._data[version][SdkType.Holoscan.value][
-            ArtifactSources.SectionBaseImages
-        ]
+        return self._data[version][SdkType.Holoscan.value][ArtifactSources.SectionBaseImages]
 
     def build_images(self, version) -> dict[Any, str]:
-        return self._data[version][SdkType.Holoscan.value][
-            ArtifactSources.SectionBuildImages
-        ]
+        return self._data[version][SdkType.Holoscan.value][ArtifactSources.SectionBuildImages]
 
     def health_probe(self, version) -> dict[Any, str]:
         return self._data[version][ArtifactSources.SectionHealthProbe]
@@ -101,9 +97,7 @@ class ArtifactSources:
                 self.validate(temp)
                 self._data = temp
             except Exception as ex:
-                raise InvalidSourceFileError(
-                    f"{uri} is missing required data: {ex}"
-                ) from ex
+                raise InvalidSourceFileError(f"{uri} is missing required data: {ex}") from ex
 
     def validate(self, data: Any):
         self._logger.debug("Validating CLI manifest file...")
@@ -150,9 +144,7 @@ class ArtifactSources:
             Optional[str]: Debian package version
         """
         return (
-            self._data[version][SdkType.Holoscan.value][
-                ArtifactSources.SectionDebianVersion
-            ]
+            self._data[version][SdkType.Holoscan.value][ArtifactSources.SectionDebianVersion]
             if version in self._data
             else None
         )
@@ -166,6 +158,4 @@ class ArtifactSources:
         Returns:
             Optional[str]: PyPI package version
         """
-        return self._data[version][SdkType.Holoscan.value][
-            ArtifactSources.SectionWheelVersion
-        ]
+        return self._data[version][SdkType.Holoscan.value][ArtifactSources.SectionWheelVersion]

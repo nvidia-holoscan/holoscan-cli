@@ -15,11 +15,12 @@
 
 import os
 import sys
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
+
 import pytest
 
-from holoscan_cli.version.version import execute_version_command
 from holoscan_cli.common.enum_types import SdkType
+from holoscan_cli.version.version import execute_version_command
 
 
 @pytest.fixture
@@ -40,9 +41,7 @@ def test_execute_version_command_holoscan_sdk(mock_stdout):
 
     with (
         patch("holoscan_cli.version.version.detect_sdk") as mock_detect_sdk,
-        patch(
-            "holoscan_cli.version.version.detect_holoscan_version"
-        ) as mock_holoscan_version,
+        patch("holoscan_cli.version.version.detect_holoscan_version") as mock_holoscan_version,
         patch(
             "holoscan_cli.version.version.detect_holoscan_cli_version"
         ) as mock_holoscan_cli_version,
@@ -67,15 +66,11 @@ def test_execute_version_command_monai_sdk(mock_stdout):
 
     with (
         patch("holoscan_cli.version.version.detect_sdk") as mock_detect_sdk,
-        patch(
-            "holoscan_cli.version.version.detect_holoscan_version"
-        ) as mock_holoscan_version,
+        patch("holoscan_cli.version.version.detect_holoscan_version") as mock_holoscan_version,
         patch(
             "holoscan_cli.version.version.detect_holoscan_cli_version"
         ) as mock_holoscan_cli_version,
-        patch(
-            "holoscan_cli.version.version.detect_monaideploy_version"
-        ) as mock_monai_version,
+        patch("holoscan_cli.version.version.detect_monaideploy_version") as mock_monai_version,
     ):
         mock_detect_sdk.return_value = SdkType.MonaiDeploy
         mock_holoscan_version.return_value = "1.0.0"
@@ -95,9 +90,7 @@ def test_execute_version_command_holoscan_version_error(mock_stdout):
 
     with (
         patch("holoscan_cli.version.version.detect_sdk") as mock_detect_sdk,
-        patch(
-            "holoscan_cli.version.version.detect_holoscan_version"
-        ) as mock_holoscan_version,
+        patch("holoscan_cli.version.version.detect_holoscan_version") as mock_holoscan_version,
         patch(
             "holoscan_cli.version.version.detect_holoscan_cli_version"
         ) as mock_holoscan_cli_version,

@@ -17,15 +17,16 @@ import os
 import sys
 from argparse import Namespace
 from pathlib import Path
+
 import pytest
 
 from holoscan_cli.common.exceptions import ManifestReadError, UnmatchedDeviceError
 from holoscan_cli.runner.runner import (
-    _fetch_map_manifest,
-    _run_app,
-    _lookup_devices,
     _dependency_verification,
+    _fetch_map_manifest,
+    _lookup_devices,
     _pkg_specific_dependency_verification,
+    _run_app,
     execute_run_command,
 )
 
@@ -52,13 +53,9 @@ class TestFetchMapManifest:
                 assert os.path.exists(f"{tmp_path}/pkg.json")
             return 0
 
-        monkeypatch.setattr(
-            "holoscan_cli.runner.runner.run_cmd_output", mock_run_cmd_output
-        )
+        monkeypatch.setattr("holoscan_cli.runner.runner.run_cmd_output", mock_run_cmd_output)
         monkeypatch.setattr("holoscan_cli.runner.runner.run_cmd", mock_run_cmd)
-        monkeypatch.setattr(
-            "tempfile.TemporaryDirectory.__enter__", lambda x: str(tmp_path)
-        )
+        monkeypatch.setattr("tempfile.TemporaryDirectory.__enter__", lambda x: str(tmp_path))
 
         app_info, pkg_info = _fetch_map_manifest("test-map:latest")
         assert app_info == {"app": "test"}
@@ -214,9 +211,7 @@ class TestDependencyVerification:
             return True
 
         monkeypatch.setattr("holoscan_cli.runner.runner.shutil.which", mock_which)
-        monkeypatch.setattr(
-            "holoscan_cli.runner.runner.image_exists", mock_image_exists
-        )
+        monkeypatch.setattr("holoscan_cli.runner.runner.image_exists", mock_image_exists)
 
         assert _dependency_verification("test-map:latest") is True
 
@@ -251,9 +246,7 @@ class TestPkgSpecificDependencyVerification:
             return "version 1.14.1"
 
         monkeypatch.setattr("holoscan_cli.runner.runner.shutil.which", mock_which)
-        monkeypatch.setattr(
-            "holoscan_cli.runner.runner.run_cmd_output", mock_run_cmd_output
-        )
+        monkeypatch.setattr("holoscan_cli.runner.runner.run_cmd_output", mock_run_cmd_output)
 
         pkg_info = {"resources": {"gpu": 1}}
         assert _pkg_specific_dependency_verification(pkg_info) is True
@@ -266,9 +259,7 @@ class TestPkgSpecificDependencyVerification:
             return "version 1.11.0"
 
         monkeypatch.setattr("holoscan_cli.runner.runner.shutil.which", mock_which)
-        monkeypatch.setattr(
-            "holoscan_cli.runner.runner.run_cmd_output", mock_run_cmd_output
-        )
+        monkeypatch.setattr("holoscan_cli.runner.runner.run_cmd_output", mock_run_cmd_output)
 
         pkg_info = {"resources": {"gpu": 1}}
         assert _pkg_specific_dependency_verification(pkg_info) is False
