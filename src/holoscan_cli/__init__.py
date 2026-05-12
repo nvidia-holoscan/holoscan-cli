@@ -16,9 +16,7 @@
 .. autosummary::
     :toctree: _autosummary
 
-    common
-    packager
-    runner
+    project
     version
 """
 

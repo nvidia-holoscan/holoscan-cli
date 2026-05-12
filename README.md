@@ -3,11 +3,17 @@
 
 # Holoscan CLI
 
-Command line interface for packaging and running Holoscan applications.
+Command line interface for HoloHub-style Holoscan source-project development workflows.
 
 ## Overview
 
-This repository is the home for Holoscan CLI. It includes tools for packaging and running Holoscan applications.
+This repository is the home for Holoscan CLI. It includes tools for discovering,
+building, running, testing, and linting HoloHub-style Holoscan source projects.
+
+HAP/MAP application packaging and packaged-image runtime commands are no longer
+provided by this CLI. Commands such as `holoscan package`, `holoscan hap-run`,
+`holoscan nics`, and the `monai-deploy` console script are intentionally not
+supported.
 
 ## Prerequisites
 
@@ -20,10 +26,9 @@ You will need a platform supported by [NVIDIA Holoscan SDK](https://docs.nvidia.
 
 Holoscan CLI is delivered as a Python package and can be installed from PyPI.org using one of the following commands:
 
-| Holoscan SDK Version | Installation Command       | CUDA Version |
-| -------------------- | -------------------------- | ------------ |
-| 2.8 or earlier       | `pip install holoscan`     | 12.6         |
-| 2.9 or later         | `pip install holoscan-cli` | 12.6         |
+```bash
+pip install holoscan-cli
+```
 
 ## Build From Source
 

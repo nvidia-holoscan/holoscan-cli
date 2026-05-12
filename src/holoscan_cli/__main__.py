@@ -29,13 +29,11 @@ logging.getLogger("urllib3").setLevel(logging.WARNING)
 
 LOG_CONFIG_FILENAME = "logging.json"
 
-# Dispatch contract for the consolidation prototype:
-# native packaged-app commands (`package`, `hap-run`, `version`, `nics`) stay
-# owned by this argparse entry point. Source-project commands listed in
-# PROJECT_COMMANDS are forwarded to the ported HoloHub project CLI before
-# argparse parses them; the placeholder subparsers below exist only so
-# top-level `--help` enumerates them. A legacy `holoscan run <image-like>`
-# invocation is rewritten to `hap-run` with a deprecation warning.
+# Dispatch contract for the HoloHub-only CLI:
+# source-project commands listed in PROJECT_COMMANDS are forwarded to the
+# project CLI before argparse consumes their command-specific flags. The
+# placeholder subparsers below exist only so top-level `--help` enumerates
+# the public command surface. `version` is the only native top-level command.
 PROJECT_COMMANDS = {
     "autocompletion_list": "list source-project names for shell completion",
     "build": "build a source project",
@@ -55,42 +53,11 @@ PROJECT_COMMANDS = {
     "test": "test a source project",
     "vscode": "launch VS Code for a source project dev container",
 }
-HAP_RUN_FLAGS = {
-    "--address",
-    "--driver",
-    "--input",
-    "-i",
-    "--output",
-    "-o",
-    "--fragments",
-    "-f",
-    "--worker",
-    "--worker-address",
-    "--rm",
-    "--config",
-    "--name",
-    "--health-check",
-    "--network",
-    "-n",
-    "--nic",
-    "--use-all-nics",
-    "--render",
-    "-r",
-    "--quiet",
-    "-q",
-    "--shm-size",
-    "--terminal",
-    "--device",
-    "--gpus",
-    "--uid",
-    "--gid",
-}
+
+LOG_LEVELS = ["DEBUG", "INFO", "WARN", "ERROR", "CRITICAL"]
 
 
 def parse_args(argv: Optional[list[str]] = None) -> argparse.Namespace:
-    from .packager.package_command import create_package_parser
-    from .runner.run_command import create_run_parser
-
     if argv is None:
         argv = sys.argv
     argv = list(argv)  # copy argv for manipulation to avoid side-effects
@@ -100,8 +67,7 @@ def parse_args(argv: Optional[list[str]] = None) -> argparse.Namespace:
     # to do so. If the user doesn't use this flag to set log level, this argument is set to "None"
     # and the logging level specified in `LOG_CONFIG_FILENAME` is used.
 
-    command_name = os.path.basename(argv[0])
-    program_name = "holoscan" if command_name == "__main__.py" else command_name
+    program_name = _program_name(argv)
     parent_parser = argparse.ArgumentParser()
 
     parent_parser.add_argument(
@@ -109,7 +75,7 @@ def parse_args(argv: Optional[list[str]] = None) -> argparse.Namespace:
         "--log-level",
         dest="log_level",
         type=str.upper,
-        choices=["DEBUG", "INFO", "WARN", "ERROR", "CRITICAL"],
+        choices=LOG_LEVELS,
         help="set the logging level (default: INFO)",
     )
 
@@ -122,37 +88,21 @@ def parse_args(argv: Optional[list[str]] = None) -> argparse.Namespace:
 
     subparser = parser.add_subparsers(dest="command")
 
-    create_package_parser(subparser, "package", parents=[parent_parser])
-
-    if program_name == "monai-deploy":
-        # Keep MONAI Deploy's historical packaged-image run spelling.
-        create_run_parser(subparser, "run", parents=[parent_parser])
-    else:
-        # `holoscan run` is now reserved for source projects. Existing HAP/MAP
-        # image execution is available as `holoscan hap-run`.
-        create_run_parser(subparser, "hap-run", parents=[parent_parser])
-
     subparser.add_parser(
         "version",
+        help="display the holoscan-cli package version",
         formatter_class=argparse.HelpFormatter,
         parents=[parent_parser],
         add_help=False,
     )
-    subparser.add_parser(
-        "nics",
-        formatter_class=argparse.HelpFormatter,
-        parents=[parent_parser],
-        add_help=False,
-    )
-    if program_name != "monai-deploy":
-        for command, help_text in sorted(PROJECT_COMMANDS.items()):
-            subparser.add_parser(
-                command,
-                help=help_text,
-                formatter_class=argparse.HelpFormatter,
-                parents=[parent_parser],
-                add_help=False,
-            )
+    for command, help_text in sorted(PROJECT_COMMANDS.items()):
+        subparser.add_parser(
+            command,
+            help=help_text,
+            formatter_class=argparse.HelpFormatter,
+            parents=[parent_parser],
+            add_help=False,
+        )
     args = parser.parse_args(argv[1:])
     args.argv = argv  # save argv for later use in runpy
 
@@ -193,68 +143,49 @@ def _program_name(argv: list[str]) -> str:
     return "holoscan" if command_name == "__main__.py" else command_name
 
 
-def _run_arg_looks_like_hap(argv: list[str]) -> bool:
-    if len(argv) < 3 or argv[1] != "run":
-        return False
-    for arg in argv[2:]:
-        flag = arg.split("=", 1)[0]
-        if flag in HAP_RUN_FLAGS:
-            return True
-    image = argv[2]
-    return "/" in image or ":" in image or image.startswith(("nvcr.io", "docker.io"))
+def _project_dispatch_argv(argv: list[str]) -> tuple[Optional[str], list[str], Optional[str]]:
+    """Return command, argv with top-level options removed, and requested log level."""
+    project_argv = [argv[0]]
+    log_level = None
+    index = 1
+
+    while index < len(argv):
+        arg = argv[index]
+        if arg in {"-l", "--log-level"} and index + 1 < len(argv):
+            log_level = argv[index + 1].upper()
+            index += 2
+            continue
+        if arg.startswith("--log-level="):
+            log_level = arg.split("=", 1)[1].upper()
+            index += 1
+            continue
+
+        project_argv.extend(argv[index:])
+        break
+
+    command = project_argv[1] if len(project_argv) > 1 else None
+    return command, project_argv, log_level
 
 
 def _dispatch_project_cli(argv: list[str]) -> bool:
-    """Forward source-project commands to the ported project CLI.
-
-    Mutates ``argv`` in place when a legacy ``run <image>`` invocation needs to
-    be rewritten to ``hap-run`` so the caller can continue with the native
-    argparse flow without re-scanning argv.
-    """
-    if _program_name(argv) == "monai-deploy":
-        return False
-
-    command = argv[1] if len(argv) > 1 else None
+    """Forward source-project commands to the ported project CLI."""
+    command, project_argv, log_level = _project_dispatch_argv(argv)
     if command not in PROJECT_COMMANDS:
         return False
 
-    if _run_arg_looks_like_hap(argv):
-        print(
-            "WARNING: `holoscan run <image>` is deprecated for packaged "
-            "application images; use `holoscan hap-run <image>` instead.",
-            file=sys.stderr,
-        )
-        argv[1] = "hap-run"
-        return False
+    if log_level is not None:
+        set_up_logging(log_level)
 
     from .project.cli import main as project_main
 
-    project_main(argv)
+    project_main(project_argv)
     return True
-
-
-def _execute_package_command(args: argparse.Namespace) -> None:
-    from .packager.packager import execute_package_command
-
-    execute_package_command(args)
-
-
-def _execute_run_command(args: argparse.Namespace) -> None:
-    from .runner.runner import execute_run_command
-
-    execute_run_command(args)
 
 
 def _execute_version_command(args: argparse.Namespace) -> None:
     from .version.version import execute_version_command
 
     execute_version_command(args)
-
-
-def _execute_nics_command(args: argparse.Namespace) -> None:
-    from .nics.nics import execute_nics_command
-
-    execute_nics_command(args)
 
 
 def main(argv: Optional[list[str]] = None):
@@ -269,17 +200,8 @@ def main(argv: Optional[list[str]] = None):
 
     set_up_logging(args.log_level)
 
-    if args.command == "package":
-        _execute_package_command(args)
-
-    elif args.command in {"run", "hap-run"}:
-        _execute_run_command(args)
-
-    elif args.command == "version":
+    if args.command == "version":
         _execute_version_command(args)
-
-    elif args.command == "nics":
-        _execute_nics_command(args)
 
 
 if __name__ == "__main__":

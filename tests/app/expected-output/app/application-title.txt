@@ -1,9 +1,0 @@
-======================================================
-
-Reading application configuration file from /var/holoscan/app.yaml...
-
-Title = Holoscan - CLI Demo/Test
-
-ReadConfigOp completed.
-
-======================================================

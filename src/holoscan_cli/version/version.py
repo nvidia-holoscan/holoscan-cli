@@ -12,47 +12,25 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import logging
-import os
+import importlib.metadata
 import sys
 from argparse import Namespace
+from pathlib import Path
 
-from ..common.enum_types import SdkType
-from ..common.sdk_utils import (
-    detect_holoscan_cli_version,
-    detect_holoscan_version,
-    detect_monaideploy_version,
-    detect_sdk,
-)
+from holoscan_cli import __version__
 
-logger = logging.getLogger("version")
+PACKAGE_NAME = "holoscan-cli"
+
+
+def get_package_version() -> str:
+    try:
+        return importlib.metadata.version(PACKAGE_NAME)
+    except importlib.metadata.PackageNotFoundError:
+        return __version__
 
 
 def execute_version_command(args: Namespace):
-    print(f"You are executing Holoscan CLI from: {os.path.dirname(os.path.abspath(sys.argv[0]))}\n")
-
-    try:
-        sdk = detect_sdk()
-        try:
-            sdk_version = detect_holoscan_version()
-            print(f"Holoscan SDK:           {sdk_version}")
-        except Exception:
-            print("Holoscan SDK:           N/A")
-
-        try:
-            cli_version = detect_holoscan_cli_version()
-            print(f"Holoscan CLI:           {cli_version}")
-        except Exception:
-            print("Holoscan CLI:           N/A")
-
-        if sdk == SdkType.MonaiDeploy:
-            try:
-                sdk_version = detect_monaideploy_version()
-                print(f"MONAI Deploy App SDK:   {sdk_version}")
-            except Exception:
-                print("MONAI Deploy App SDK:   N/A")
-
-    except Exception as ex:
-        logging.error("Error executing version command.")
-        logger.debug(ex)
-        sys.exit(3)
+    print(f"Package:     {PACKAGE_NAME}")
+    print(f"Version:     {get_package_version()}")
+    print(f"Executable:  {Path(sys.argv[0]).resolve()}")
+    print(f"Module:      {Path(__file__).resolve()}")
