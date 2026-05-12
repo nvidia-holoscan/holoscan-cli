@@ -13,30 +13,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 [project]
-dynamic = ["version"]
 name = "holoscan-cli"
-requires-python = ">=3.10,<3.14"
-dependencies = [
-    "jsonschema (>=4.0,<5.0)",
-    "referencing (>=0.30)",
-]
-
-[tool.poetry]
-requires-poetry = ">=2.0"
+dynamic = ["version"]
 description = "Command line interface for HoloHub-style Holoscan source-project workflows."
-authors = ["NVIDIA"]
-maintainers = ["mocsharp"]
-license = "Apache-2.0"
 readme = "README.md"
-packages = [{ include = "holoscan_cli", from = "src"  }]
-include = [
-    { path = "src/holoscan_cli/project/metadata/*.schema.json", format = ["sdist", "wheel"] },
-    { path = "src/holoscan_cli/project/cmake/**/*", format = ["sdist", "wheel"] },
-    { path = "src/holoscan_cli/project/testing/**/*", format = ["sdist", "wheel"] },
-]
-homepage = "https://github.com/nvidia-holoscan/holoscan-cli"
-repository = "https://github.com/nvidia-holoscan/holoscan-cli"
-documentation = "https://docs.nvidia.com/holoscan/sdk-user-guide/index.html"
+license = "Apache-2.0"
+license-files = ["LICENSE"]
+requires-python = ">=3.10,<3.14"
+authors = [{ name = "NVIDIA" }]
+maintainers = [{ name = "mocsharp" }]
 keywords = [
     "AI",
     "holoscan",
@@ -56,7 +41,6 @@ classifiers = [
     "Intended Audience :: Education",
     "Intended Audience :: Science/Research",
     "Intended Audience :: Healthcare Industry",
-    "License :: OSI Approved :: Apache Software License",
     "Operating System :: POSIX :: Linux",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.10",
@@ -66,6 +50,24 @@ classifiers = [
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
     "Topic :: Software Development :: Libraries :: Python Modules",
     "Typing :: Typed",
+]
+dependencies = [
+    "jsonschema (>=4.0,<5.0)",
+    "referencing (>=0.30)",
+]
+
+[project.urls]
+Homepage = "https://github.com/nvidia-holoscan/holoscan-cli"
+Repository = "https://github.com/nvidia-holoscan/holoscan-cli"
+Documentation = "https://docs.nvidia.com/holoscan/sdk-user-guide/index.html"
+
+[tool.poetry]
+requires-poetry = ">=2.0"
+packages = [{ include = "holoscan_cli", from = "src" }]
+include = [
+    { path = "src/holoscan_cli/project/metadata/*.schema.json", format = ["sdist", "wheel"] },
+    { path = "src/holoscan_cli/project/cmake/**/*", format = ["sdist", "wheel"] },
+    { path = "src/holoscan_cli/project/testing/**/*", format = ["sdist", "wheel"] },
 ]
 version = "0.0.0"
 
