@@ -41,7 +41,7 @@ import holoscan_cli.util as holohub_cli_util
 from holoscan_cli.commands import devcontainer as commands_devcontainer
 from holoscan_cli.commands import info as commands_info
 from holoscan_cli.commands import project as commands_project
-from holoscan_cli.commands import workspace as commands_workspace
+from holoscan_cli.commands import tooling as commands_tooling
 from holoscan_cli.container import HoloHubContainer
 from holoscan_cli.container.parsers import get_build_argparse, get_run_argparse
 from holoscan_cli.metadata.utils import (
@@ -142,7 +142,7 @@ class HoloHubCLI:
             type=lambda x: x.lower() not in ("false", "no", "n", "0", "f"),
             help="Interactive mode for setting cookiecutter properties (use -i False to disable)",
         )
-        create.set_defaults(func=lambda args: commands_workspace.handle_create(self, args))
+        create.set_defaults(func=lambda args: commands_tooling.handle_create(self, args))
 
         # build-container command
         build_container = subparsers.add_parser(
@@ -334,7 +334,7 @@ class HoloHubCLI:
         lint.add_argument(
             "--dryrun", action="store_true", help="Print commands without executing them"
         )
-        lint.set_defaults(func=lambda args: commands_workspace.handle_lint(self, args))
+        lint.set_defaults(func=lambda args: commands_tooling.handle_lint(self, args))
 
         # setup command
         setup = subparsers.add_parser(
@@ -357,7 +357,7 @@ class HoloHubCLI:
             + "Searches in the directory path specified by the HOLOHUB_SETUP_SCRIPTS_DIR environment variable. "
             + "Omit to install default recommended packages for Holoscan SDK development.",
         )
-        setup.set_defaults(func=lambda args: commands_workspace.handle_setup(self, args))
+        setup.set_defaults(func=lambda args: commands_tooling.handle_setup(self, args))
 
         # Add env-info command
         env_info = subparsers.add_parser(
@@ -485,7 +485,7 @@ class HoloHubCLI:
         clear_cache.add_argument(
             "--install", action="store_true", help="Clear install folders only"
         )
-        clear_cache.set_defaults(func=lambda args: commands_workspace.handle_clear_cache(self, args))
+        clear_cache.set_defaults(func=lambda args: commands_tooling.handle_clear_cache(self, args))
 
         # Add vscode command
         vscode = subparsers.add_parser(
@@ -508,7 +508,7 @@ class HoloHubCLI:
         vscode.add_argument(
             "--no-docker-build", action="store_true", help="Skip building the container"
         )
-        vscode.set_defaults(func=lambda args: commands_workspace.handle_vscode(self, args))
+        vscode.set_defaults(func=lambda args: commands_tooling.handle_vscode(self, args))
 
         return parser
 
