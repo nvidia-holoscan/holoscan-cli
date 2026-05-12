@@ -158,24 +158,3 @@ def format_size(mb: float) -> str:
     return f"{mb:.0f} MB"
 
 
-def list_metadata_json_dir(*paths: Path) -> List[Tuple[str, str]]:
-    """List all metadata.json files in given paths"""
-    results = []
-    for path in paths:
-        for json_path in path.rglob("metadata.json"):
-            json_dir = json_path.parent
-            dir_name = json_dir.name
-
-            if "{{" in dir_name and "}}" in dir_name:
-                continue  # Skip templates
-
-            if dir_name in ["cpp", "python"]:
-                language = f"({dir_name})"
-                name = json_dir.parent.name
-            else:
-                language = ""
-                name = dir_name
-
-            results.append((name, language))
-
-    return sorted(results)

@@ -31,7 +31,7 @@ import grp
 import os
 import re
 from pathlib import Path
-from typing import List, Optional, Tuple
+from typing import Optional, Tuple
 
 from holoscan_cli.utils.io import format_cmd, info, run_info_command, warn
 from holoscan_cli.utils.text import _slugify, get_env_bool
@@ -172,22 +172,6 @@ def get_buildtype_str(build_type: Optional[str]) -> str:
         return os.environ.get("CMAKE_BUILD_TYPE", BUILD_TYPES["default"])
     build_type_str = build_type.lower().strip()
     return BUILD_TYPES.get(build_type_str, BUILD_TYPES["default"])
-
-
-def list_cmake_dir_options(script_dir: Path, cmake_function: str) -> List[str]:
-    """Get list of directories from CMakeLists.txt files"""
-    results = []
-    for cmakelists in script_dir.rglob("CMakeLists.txt"):
-        with open(cmakelists) as f:
-            content = f.read()
-            for line in content.splitlines():
-                if cmake_function in line:
-                    try:
-                        name = line.split("(")[1].split(")")[0].strip()
-                        results.append(name)
-                    except IndexError:
-                        continue
-    return sorted(results)
 
 
 @functools.lru_cache(maxsize=32)
