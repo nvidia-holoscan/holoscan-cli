@@ -54,6 +54,19 @@ from holoscan_cli.project.metadata.utils import (
 from holoscan_cli.project.util import Color
 
 
+def in_container_cli_command() -> str:
+    """Command used when the host CLI recurses into a container build/run/install.
+
+    Returns the installed ``holoscan`` console script by default. Decoupled from
+    ``HoloHubCLI.script_name`` so the in-container recursion is independent of how
+    the user invoked the CLI on the host (e.g. via ``./holohub``, ``./i4h``, or
+    ``python -m holoscan_cli``). Override via ``HOLOSCAN_CLI_IN_CONTAINER_CMD``
+    when the container ships a different entry point (e.g. ``python3 -m
+    holoscan_cli``).
+    """
+    return os.environ.get("HOLOSCAN_CLI_IN_CONTAINER_CMD", "holoscan")
+
+
 class HoloHubCLI:
     """Command-line interface for HoloHub"""
 
@@ -1267,8 +1280,11 @@ class HoloHubCLI:
                 if hasattr(args, "cuda") and args.cuda is not None:
                     container.cuda_version = args.cuda
 
-            # Build command with all necessary arguments
-            build_cmd = f"{self.script_name} build {args.project}"
+            # Build command with all necessary arguments. Use the installed CLI entry
+            # point inside the container regardless of how the host invoked us, so the
+            # recursion does not depend on a wrapper-script being on the in-container
+            # PATH. See in_container_cli_command for the override hook.
+            build_cmd = f"{in_container_cli_command()} build {args.project}"
             # Only add mode name if it was explicitly requested by user (not implicitly resolved)
             if mode_name and getattr(args, "mode", None) is not None:
                 build_cmd += f" {mode_name}"
@@ -1512,7 +1528,7 @@ class HoloHubCLI:
                 if hasattr(args, "cuda") and args.cuda is not None:
                     container.cuda_version = args.cuda
 
-            run_cmd = f"{self.script_name} run {args.project}"
+            run_cmd = f"{in_container_cli_command()} run {args.project}"
             # Only add mode name if it was explicitly requested by user (not implicitly resolved)
             if mode_name and getattr(args, "mode", None) is not None:
                 run_cmd += f" {mode_name}"
@@ -2069,8 +2085,7 @@ class HoloHubCLI:
                 if hasattr(args, "cuda") and args.cuda is not None:
                     container.cuda_version = args.cuda
 
-            # Install command with all necessary arguments
-            install_cmd = f"{self.script_name} install {args.project} --local"
+            install_cmd = f"{in_container_cli_command()} install {args.project} --local"
             if args.build_type:
                 install_cmd += f" --build-type {args.build_type}"
             if getattr(args, "language", None):

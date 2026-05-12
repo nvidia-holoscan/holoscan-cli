@@ -159,6 +159,22 @@ class HoloHubContainer:
         "No DISPLAY or WAYLAND_DISPLAY set; skipping display forwarding."
     )
 
+    @staticmethod
+    def local_source_build_context_args() -> List[str]:
+        """Docker build --build-context args for a local holoscan-cli checkout.
+
+        Returns an empty list when ``HOLOSCAN_CLI_SOURCE`` is unset. When set,
+        exposes the checkout as a named ``holoscan-cli-src`` build context so
+        downstream Dockerfiles can mount it (``RUN --mount=from=holoscan-cli-src
+        ...``) and pip-install the working tree instead of pulling from PyPI or
+        git. Used during prototype validation to exercise an in-progress branch
+        end-to-end without publishing it first.
+        """
+        source = os.environ.get("HOLOSCAN_CLI_SOURCE")
+        if not source:
+            return []
+        return ["--build-context", f"holoscan-cli-src={source}"]
+
     @classmethod
     def default_base_image(cls, cuda_version: Optional[Union[str, int]] = None) -> str:
         return cls.BASE_IMAGE_FORMAT.format(
@@ -595,6 +611,8 @@ class HoloHubContainer:
         if no_cache:
             cmd.append("--no-cache")
 
+        cmd.extend(self.local_source_build_context_args())
+
         full_build_args = " ".join(
             filter(None, [HoloHubContainer.DEFAULT_DOCKER_BUILD_ARGS, build_args])
         )
@@ -882,10 +900,14 @@ class HoloHubContainer:
         cmake_parallel_level = os.environ.get("CMAKE_BUILD_PARALLEL_LEVEL")
         if cmake_parallel_level:
             args.extend(["-e", f"CMAKE_BUILD_PARALLEL_LEVEL={cmake_parallel_level}"])
-        # Pass HOLOHUB_PATH_PREFIX to container if set on host
-        holohub_path_prefix = os.environ.get("HOLOHUB_PATH_PREFIX")
-        if holohub_path_prefix:
-            args.extend(["-e", f"HOLOHUB_PATH_PREFIX={holohub_path_prefix}"])
+        # Forward host-side wrapper customizations that the in-container CLI needs
+        # to reproduce project discovery and command routing decisions. These names
+        # match the historical HoloHub wrapper contract; see Isaac OS / I4H wrapper
+        # scripts for the typical values.
+        for var in ("HOLOHUB_PATH_PREFIX", "HOLOHUB_SEARCH_PATH", "HOLOHUB_CTEST_SCRIPT"):
+            value = os.environ.get(var)
+            if value:
+                args.extend(["-e", f"{var}={value}"])
 
         # Pass adequate variables for SCCACHE
         _, enable_sccache = get_env_bool("HOLOHUB_ENABLE_SCCACHE", default=False)
