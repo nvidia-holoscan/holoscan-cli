@@ -17,13 +17,8 @@ dynamic = ["version"]
 name = "holoscan-cli"
 requires-python = ">=3.10,<3.14"
 dependencies = [
-    "pip (>25.1.0)",
-    "python-on-whales (>=0.77.0)",
-    "Jinja2 (>=3.1.6,<4.0.0)",
-    "packaging (>=25.0,<26.0)",
-    "pyyaml (>=6.0,<7.0)",
-    "requests (>=2.32,<3.0)",
-    "psutil (>=7.0.0,<8.0)",
+    "jsonschema (>=4.0,<5.0)",
+    "referencing (>=0.30)",
 ]
 
 [tool.poetry]
