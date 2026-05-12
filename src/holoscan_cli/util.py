@@ -30,6 +30,16 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import List, Optional, Tuple, Union
 
+# Re-exports during the gradual util.py -> utils/ migration. New code should
+# import from holoscan_cli.utils.<module> directly; util.py keeps these names
+# until external callers have migrated. See docs/cli-migration-consolidation-plan.md
+# ("Decompose cli.py, container.py, and util.py").
+from holoscan_cli.utils.formatting import (  # noqa: E402,F401
+    format_long_command,
+    levenshtein_distance,
+)
+from holoscan_cli.utils.versions import parse_semantic_version  # noqa: E402,F401
+
 DEFAULT_BASE_SDK_VERSION = "4.2.0"
 
 DEFAULT_GIT_REF = "latest"
@@ -423,20 +433,6 @@ def format_size(mb: float) -> str:
     if mb >= 1024:
         return f"{mb / 1024:.1f} GB"
     return f"{mb:.0f} MB"
-
-
-def parse_semantic_version(version: str) -> Tuple[int, int, int]:
-    """
-    Parse semantic version string MAJOR.MINOR.PATCH into tuple of integers for comparison
-
-    Note: Implementing our own version parsing to avoid dependency on PyPI 'packaging' module.
-
-    ref: https://semver.org/
-    """
-    match = re.match(r"^(\d+\.\d+\.\d+).*", version.strip())
-    if not match:
-        raise ValueError(f"Failed to parse semantic version string: {version}")
-    return tuple(map(int, match.group(1).split(".")))
 
 
 def check_nvidia_ctk(min_version: str = "1.12.0", recommended_version: str = "1.14.1") -> None:
@@ -887,89 +883,6 @@ def install_cuda_dependencies_package(
     )
 
     return target_version
-
-
-def format_long_command(cmd: List[str], max_line_length: int = 80) -> str:
-    """Format a long command into multiple lines for better readability
-
-    Args:
-        cmd: Command to format as a list of strings
-        max_line_length: Maximum line length before wrapping
-
-    Returns:
-        Formatted command string with line continuations
-    """
-    if not cmd:
-        return ""
-
-    # Check if total command length exceeds max length
-    total_length = sum(len(arg) + 1 for arg in cmd) - 1
-    if total_length <= max_line_length:
-        return " ".join(cmd)
-
-    # Start with the first command
-    formatted = cmd[0]
-    current_line = cmd[0]
-
-    # Common patterns that suggest good break points
-    break_patterns = {
-        "--",  # Long options
-        "-",  # Short options
-        "&&",  # Command chaining
-        "||",  # Command chaining
-        "|",  # Pipes
-        ";",  # Command separator
-        ">",  # Output redirection
-        "<",  # Input redirection
-        ">>",  # Append redirection
-        "2>",  # Error redirection
-    }
-
-    for i, arg in enumerate(cmd[1:]):
-        # Check if this is a good place to break
-        should_break = (
-            # Break if we exceed max length
-            len(current_line) + len(arg) + 1 > max_line_length
-            or
-            # Break before common command separators
-            any(arg.startswith(pattern) for pattern in break_patterns)
-            or
-            # Break after common command separators
-            any(cmd[i].endswith(pattern) for pattern in break_patterns)
-        )
-
-        if should_break:
-            formatted += " \\\n    " + arg
-            current_line = arg
-        else:
-            formatted += " " + arg
-            current_line += " " + arg
-
-    return formatted
-
-
-def levenshtein_distance(s1: str, s2: str) -> int:
-    """Calculate the Levenshtein distance between two strings."""
-    s1 = s1.lower()
-    s2 = s2.lower()
-
-    if len(s1) < len(s2):
-        return levenshtein_distance(s2, s1)
-
-    if len(s2) == 0:
-        return len(s1)
-
-    previous_row = range(len(s2) + 1)
-    for i, c1 in enumerate(s1):
-        current_row = [i + 1]
-        for j, c2 in enumerate(s2):
-            insertions = previous_row[j + 1] + 1
-            deletions = current_row[j] + 1
-            substitutions = previous_row[j] + (c1 != c2)
-            current_row.append(min(insertions, deletions, substitutions))
-        previous_row = current_row
-
-    return previous_row[-1]
 
 
 def list_cmake_dir_options(script_dir: Path, cmake_function: str) -> List[str]:
