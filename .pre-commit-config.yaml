@@ -63,14 +63,14 @@ repos:
     hooks:
       - id: codespell
         args:
-          - --ignore-words=codespell_ignore_words.txt
-          - --exclude-file=codespell.txt
+          - --ignore-words=.lint/codespell_ignore_words.txt
+          - --exclude-file=.lint/codespell.txt
 
   - repo: https://github.com/igorshubovych/markdownlint-cli
     rev: v0.48.0
     hooks:
       - id: markdownlint
-        args: [--config, .markdownlint.yaml, --ignore-path, .markdownlintignore]
+        args: [--config, .lint/markdownlint.yaml, --ignore-path, .lint/markdownlintignore]
 
   - repo: local
     hooks:
