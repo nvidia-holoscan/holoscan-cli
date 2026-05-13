@@ -144,10 +144,27 @@ def get_component_search_paths(base_dir: Optional[Path] = None) -> tuple[Path, .
 
 
 def get_holohub_setup_scripts_dir() -> Path:
-    """Return the directory containing named setup scripts (`./holohub setup --scripts`)."""
-    return Path(
-        os.environ.get("HOLOSCAN_CLI_SETUP_SCRIPTS_DIR", HOLOHUB_ROOT / "utilities" / "setup")
-    ).expanduser()
+    """Return the directory containing named setup scripts.
+
+    Resolution order:
+
+    1. ``HOLOSCAN_CLI_SETUP_SCRIPTS_DIR`` — explicit override always wins.
+    2. ``HOLOSCAN_CLI_ROOT/utilities/setup`` — the active project's own
+       setup dir if it has one (HoloHub provides this; downstream forks
+       may vendor a copy here).
+    3. The bundled scripts shipped inside the holoscan-cli wheel under
+       ``holoscan_cli/setup_scripts/`` — used by Isaac OS, I4H Workflows,
+       and any other consumer that doesn't carry its own.
+    """
+    explicit = os.environ.get("HOLOSCAN_CLI_SETUP_SCRIPTS_DIR")
+    if explicit:
+        return Path(explicit).expanduser()
+
+    repo_dir = HOLOHUB_ROOT / "utilities" / "setup"
+    if repo_dir.is_dir():
+        return repo_dir
+
+    return Path(__file__).resolve().parent.parent / "setup_scripts"
 
 
 def get_group_id(group: str) -> Optional[int]:

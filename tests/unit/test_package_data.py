@@ -56,6 +56,16 @@ REQUIRED_TESTING_FILES = {
     "holohub_test_all_applications.ctest",
 }
 
+REQUIRED_SETUP_SCRIPTS = {
+    "Dockerfile.util",
+    "benchmarking.sh",
+    "coverage.sh",
+    "debug.sh",
+    "sccache.sh",
+    "template.sh",
+    "xvfb.sh",
+}
+
 
 PYPROJECT = Path(__file__).resolve().parents[2] / "pyproject.toml"
 
@@ -89,6 +99,16 @@ def test_testing_assets_are_packaged():
     files = {path.name for path in importlib.resources.files("holoscan_cli.testing").iterdir()}
     missing = REQUIRED_TESTING_FILES - files
     assert not missing, f"missing testing assets: {missing}"
+
+
+def test_setup_scripts_are_packaged():
+    """The bundled setup scripts back the ``holoscan setup --scripts <name>``
+    and ``build-container --extra-scripts <name>`` paths for downstream
+    consumers that don't vendor their own ``utilities/setup/`` directory.
+    """
+    files = {path.name for path in importlib.resources.files("holoscan_cli.setup_scripts").iterdir()}
+    missing = REQUIRED_SETUP_SCRIPTS - files
+    assert not missing, f"missing bundled setup scripts: {missing}"
 
 
 # ---- pyproject.toml entry-point declarations --------------------------------
