@@ -218,7 +218,7 @@ def commands_in_group(group: str) -> Iterable[CommandSpec]:
 # function receives ``(cli, subparsers, **kwargs)``; ``kwargs`` is the
 # subset of shared parents (``container_build``, ``container_run``) that
 # command needs for argparse ``parents=[...]``. Keeping the table here
-# means :class:`holoscan_cli.cli.HoloHubCLI` only needs to call
+# means :class:`holoscan_cli.cli.HoloscanCLI` only needs to call
 # :func:`register_all` and never has to know which command lives in which
 # module.
 
@@ -233,7 +233,7 @@ def register_all(
     """Register every source-project subcommand on ``subparsers``.
 
     Returns a ``{command_name: subparser}`` mapping that the caller stores
-    on ``HoloHubCLI.subparsers`` for error reporting (Levenshtein-based
+    on ``HoloscanCLI.subparsers`` for error reporting (Levenshtein-based
     suggestions on typos and per-command help hints).
     """
     # Imported lazily so simple ``from holoscan_cli.commands import registry``

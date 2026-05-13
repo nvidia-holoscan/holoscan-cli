@@ -39,7 +39,7 @@ from typing import List, Optional
 import holoscan_cli.metadata.gather_metadata as metadata_util
 import holoscan_cli.util as holohub_cli_util
 from holoscan_cli.commands import registry as commands_registry
-from holoscan_cli.container import HoloHubContainer
+from holoscan_cli.container import HoloscanContainer
 from holoscan_cli.container.parsers import get_build_argparse, get_run_argparse
 from holoscan_cli.metadata.utils import (
     list_normalized_languages,
@@ -52,7 +52,7 @@ def in_container_cli_command() -> str:
     """Command used when the host CLI recurses into a container build/run/install.
 
     Returns the installed ``holoscan`` console script by default. Decoupled from
-    ``HoloHubCLI.script_name`` so the in-container recursion is independent of how
+    ``HoloscanCLI.script_name`` so the in-container recursion is independent of how
     the user invoked the CLI on the host (e.g. via ``./holohub``, ``./i4h``, or
     ``python -m holoscan_cli``). Override via ``HOLOSCAN_CLI_IN_CONTAINER_CMD``
     when the container ships a different entry point (e.g. ``python3 -m
@@ -61,7 +61,7 @@ def in_container_cli_command() -> str:
     return os.environ.get("HOLOSCAN_CLI_IN_CONTAINER_CMD", "holoscan")
 
 
-class HoloHubCLI:
+class HoloscanCLI:
     """Command-line interface for HoloHub"""
 
     HOLOHUB_ROOT = holohub_cli_util.get_holohub_root()
@@ -102,7 +102,7 @@ class HoloHubCLI:
         )
         subparsers = parser.add_subparsers(dest="command", required=True)
 
-        # Cache subparsers so HoloHubCLI.run() can render targeted error
+        # Cache subparsers so HoloscanCLI.run() can render targeted error
         # messages and Levenshtein-based suggestions.
         self.subparsers: dict[str, argparse.ArgumentParser] = commands_registry.register_all(
             self,
@@ -393,12 +393,12 @@ class HoloHubCLI:
 
     def _make_project_container(
         self, project_name: Optional[str] = None, language: Optional[str] = None
-    ) -> HoloHubContainer:
+    ) -> HoloscanContainer:
         """Define a project container"""
         if not project_name:
-            return HoloHubContainer(project_metadata=None)
+            return HoloscanContainer(project_metadata=None)
         project_data = self.find_project(project_name=project_name, language=language)
-        return HoloHubContainer(project_metadata=project_data, language=language)
+        return HoloscanContainer(project_metadata=project_data, language=language)
 
     def _collect_cache_dirs(self, patterns: list[str], default_dir=None) -> list:
         """Helper to collect cache directories matching patterns."""
@@ -406,7 +406,7 @@ class HoloHubCLI:
         if default_dir is not None:
             dirs.append(default_dir)
         for pattern in patterns:
-            for path in HoloHubCLI.HOLOHUB_ROOT.glob(pattern):
+            for path in HoloscanCLI.HOLOHUB_ROOT.glob(pattern):
                 if path.is_dir() and path not in dirs:
                     dirs.append(path)
         return dirs
@@ -486,15 +486,16 @@ class HoloHubCLI:
             sys.exit(1)
 
 
-#: Forward-looking alias for :class:`HoloHubCLI`.
+#: Deprecated alias for :class:`HoloscanCLI`.
 #:
-#: The ``HoloHub`` prefix on the CLI class is kept as the canonical name in
-#: the v1 wheel because shells, downstream wrappers, and the in-container
-#: recursion in ``commands.project._ctest_script_arg`` all reference the
-#: ``HoloHubCLI`` symbol explicitly. The ``HoloscanCLI`` alias gives new
-#: code a name that matches the published ``holoscan`` console script and
-#: gives us a clean target for a future renaming pass.
-HoloscanCLI = HoloHubCLI
+#: ``HoloHubCLI`` was the canonical name through v1; new code should import
+#: :class:`HoloscanCLI` directly. The alias is kept so downstream wrappers
+#: and the in-container recursion in ``commands.test_cmd._ctest_script_arg``
+#: (which spawns a fresh Python that ``from holoscan_cli.cli import
+#: HoloHubCLI``) keep working across the deprecation window. Drop alongside
+#: the rest of the HoloHub-name compatibility surface in the next minor
+#: release.
+HoloHubCLI = HoloscanCLI
 
 
 def main(argv: Optional[List[str]] = None):
@@ -502,7 +503,7 @@ def main(argv: Optional[List[str]] = None):
     if argv and not os.environ.get("HOLOSCAN_CLI_CMD_NAME"):
         executable = Path(argv[0]).name
         script_name = "holoscan" if executable == "__main__.py" else executable
-    cli = HoloHubCLI(script_name=script_name)
+    cli = HoloscanCLI(script_name=script_name)
     cli.run(argv)
 
 

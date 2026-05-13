@@ -21,7 +21,7 @@ This module groups the container/dev-container integration helpers:
   ``get_image_pythonpath``, ``is_running_in_docker``,
   ``get_entrypoint_command_args``, ``docker_args_to_devcontainer_format``.
   Used by the project lifecycle commands (``build``, ``run``, ``install``,
-  ``test``) and by ``HoloHubContainer`` to figure out how to invoke
+  ``test``) and by ``HoloscanContainer`` to figure out how to invoke
   ``docker run`` correctly for a given image.
 * VS Code Dev Container launchers — ``launch_vscode``, ``open_url``,
   ``launch_vscode_devcontainer``, ``get_devcontainer_config``.

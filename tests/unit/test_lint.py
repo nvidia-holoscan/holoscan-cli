@@ -25,8 +25,8 @@ from holoscan_cli.commands import lint as commands_lint
 
 
 def _lint_cli(root, monkeypatch):
-    monkeypatch.setattr(project_cli.HoloHubCLI, "HOLOHUB_ROOT", root)
-    return object.__new__(project_cli.HoloHubCLI)
+    monkeypatch.setattr(project_cli.HoloscanCLI, "HOLOHUB_ROOT", root)
+    return object.__new__(project_cli.HoloscanCLI)
 
 
 def test_holoscan_cli_root_discovery_from_subdirectory(tmp_path, monkeypatch):

@@ -13,11 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from .core import HoloHubContainer
-
-#: Forward-looking alias for :class:`HoloHubContainer`. See the comment on
-#: ``HoloscanCLI`` in ``holoscan_cli.cli`` for why the ``HoloHub`` prefix is
-#: still the canonical name in v1.
-HoloscanContainer = HoloHubContainer
+from .core import HoloHubContainer, HoloscanContainer
 
 __all__ = ["HoloHubContainer", "HoloscanContainer"]

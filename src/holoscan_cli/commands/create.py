@@ -23,7 +23,7 @@ from typing import Optional
 
 import holoscan_cli.util as holohub_cli_util
 from holoscan_cli.commands.registry import help_for
-from holoscan_cli.container import HoloHubContainer
+from holoscan_cli.container import HoloscanContainer
 from holoscan_cli.metadata.utils import get_schema_path
 from holoscan_cli.utils.io import Color
 
@@ -152,7 +152,7 @@ def handle_create(cli, args: argparse.Namespace) -> None:
         "project_name": args.project,
         "project_slug": args.project.lower().replace(" ", "_"),
         "language": args.language.lower() if args.language else None,  # Only set if provided
-        "holoscan_version": HoloHubContainer.BASE_SDK_VERSION,
+        "holoscan_version": HoloscanContainer.BASE_SDK_VERSION,
         "year": datetime.datetime.now().year,
     }
 

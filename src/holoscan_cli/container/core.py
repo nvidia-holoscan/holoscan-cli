@@ -65,7 +65,7 @@ from .signals import (
 SCCACHE_CONTAINER_DIR = "/.cache/sccache"
 
 
-class HoloHubContainer:
+class HoloscanContainer:
     """
     Describes the container environment for a HoloHub project.
 
@@ -280,12 +280,12 @@ class HoloHubContainer:
 
     @property
     def image_name(self) -> str:
-        if self.dockerfile_path != HoloHubContainer.default_dockerfile():
+        if self.dockerfile_path != HoloscanContainer.default_dockerfile():
             project_tag = self.get_project_name()
             if project_tag:
                 return f"{self.CONTAINER_PREFIX}:{project_tag}"
             return self.CONTAINER_PREFIX
-        return HoloHubContainer.default_image(self.cuda_version)
+        return HoloscanContainer.default_image(self.cuda_version)
 
     @property
     def image_names(self) -> List[str]:
@@ -316,14 +316,14 @@ class HoloHubContainer:
         6. `<HOLOHUB_ROOT>/Dockerfile`
         """
         if not self.project_metadata:
-            return HoloHubContainer.default_dockerfile()
+            return HoloscanContainer.default_dockerfile()
 
         # Strategy 1: Check metadata for explicit dockerfile path
         dockerfile_from_metadata = self.project_metadata.get("metadata", {}).get("dockerfile")
         if dockerfile_from_metadata:
             # Build path mapping for this project
             path_mapping = build_holohub_path_mapping(
-                holohub_root=HoloHubContainer.HOLOHUB_ROOT,
+                holohub_root=HoloscanContainer.HOLOHUB_ROOT,
                 project_data=self.project_metadata,
             )
 
@@ -332,7 +332,7 @@ class HoloHubContainer:
 
             # If the path is not absolute, make it relative to HOLOHUB_ROOT
             if not dockerfile.is_absolute():
-                dockerfile = HoloHubContainer.HOLOHUB_ROOT / dockerfile
+                dockerfile = HoloscanContainer.HOLOHUB_ROOT / dockerfile
 
             # Validate that the Dockerfile exists
             if dockerfile.exists():
@@ -361,14 +361,14 @@ class HoloHubContainer:
             # Strategy 4: Traverse up parent directories to HOLOHUB_ROOT
             for parent in source_folder.parents:
                 # Stop at the root directory
-                if parent == HoloHubContainer.HOLOHUB_ROOT:
+                if parent == HoloscanContainer.HOLOHUB_ROOT:
                     break
                 dockerfile_path = parent / "Dockerfile"
                 if dockerfile_path.exists():
                     return dockerfile_path
 
         # Strategy 5-6: Fall back to default Dockerfile
-        return HoloHubContainer.default_dockerfile()
+        return HoloscanContainer.default_dockerfile()
 
     def get_project_name(self) -> str:
         """Return docker-safe project name."""
@@ -470,7 +470,7 @@ class HoloHubContainer:
         cmd.extend(self.local_source_build_context_args())
 
         full_build_args = " ".join(
-            filter(None, [HoloHubContainer.DEFAULT_DOCKER_BUILD_ARGS, build_args])
+            filter(None, [HoloscanContainer.DEFAULT_DOCKER_BUILD_ARGS, build_args])
         )
         if full_build_args:
             cmd.extend(shlex.split(full_build_args))
@@ -482,7 +482,7 @@ class HoloHubContainer:
             # Tag the base (pre-scripts) image for all tags for consistency
             for tag_name in tags:
                 cmd.extend(["-t", f"{tag_name}-base"])
-        cmd.append(str(HoloHubContainer.HOLOHUB_ROOT))
+        cmd.append(str(HoloscanContainer.HOLOHUB_ROOT))
 
         run_command(cmd, dry_run=self.dryrun)
 
@@ -492,10 +492,10 @@ class HoloHubContainer:
                 if not script_path.exists():
                     fatal(f"Script {script}.sh not found in {get_holohub_setup_scripts_dir()}")
                 try:
-                    relative_script_path = script_path.relative_to(HoloHubContainer.HOLOHUB_ROOT)
+                    relative_script_path = script_path.relative_to(HoloscanContainer.HOLOHUB_ROOT)
                 except ValueError:
                     fatal(
-                        f"Script {script}.sh at {script_path} is not within {HoloHubContainer.HOLOHUB_ROOT}. "
+                        f"Script {script}.sh at {script_path} is not within {HoloscanContainer.HOLOHUB_ROOT}. "
                         f"The HOLOHUB_SETUP_SCRIPTS_DIR environment variable must resolve to a subdirectory within the project scope."
                     )
                 cmd = [
@@ -510,7 +510,7 @@ class HoloHubContainer:
                     f"SCRIPT={relative_script_path}",
                     "-f",
                     str(get_holohub_setup_scripts_dir() / "Dockerfile.util"),
-                    str(HoloHubContainer.HOLOHUB_ROOT),
+                    str(HoloscanContainer.HOLOHUB_ROOT),
                 ]
                 for tag_name in tags:
                     # We override the default tag so we can add the next scripts on top of this.
@@ -548,7 +548,7 @@ class HoloHubContainer:
         # If the caller already supplies --cidfile (via DEFAULT_DOCKER_RUN_ARGS or
         # docker_opts), use that path for cleanup and skip injecting our own —
         # Docker rejects duplicate --cidfile flags.
-        default_run_args = shlex.split(HoloHubContainer.DEFAULT_DOCKER_RUN_ARGS or "")
+        default_run_args = shlex.split(HoloscanContainer.DEFAULT_DOCKER_RUN_ARGS or "")
         extra_run_args = shlex.split(docker_opts or "")
         explicit_cidfile = get_cli_arg_value(default_run_args + extra_run_args, "--cidfile")
         internal_cidfile: Optional[Path] = None
@@ -668,7 +668,7 @@ class HoloHubContainer:
         args.extend(
             [
                 "-v",
-                f"{HoloHubContainer.HOLOHUB_ROOT}:/workspace/{self.WORKSPACE_NAME}",
+                f"{HoloscanContainer.HOLOHUB_ROOT}:/workspace/{self.WORKSPACE_NAME}",
                 "-w",
                 f"/workspace/{self.WORKSPACE_NAME}",
             ]
@@ -1011,8 +1011,8 @@ class HoloHubContainer:
         docker_args.extend(self.ucx_args())
         docker_args.extend(self.get_device_cgroup_args())
         docker_args.extend(self.get_nvidia_runtime_args())
-        if HoloHubContainer.DEFAULT_DOCKER_RUN_ARGS:
-            docker_args.extend(shlex.split(HoloHubContainer.DEFAULT_DOCKER_RUN_ARGS))
+        if HoloscanContainer.DEFAULT_DOCKER_RUN_ARGS:
+            docker_args.extend(shlex.split(HoloscanContainer.DEFAULT_DOCKER_RUN_ARGS))
         if docker_opts:
             docker_args.extend(shlex.split(docker_opts))
         project_name = self.get_project_name()
@@ -1023,3 +1023,14 @@ class HoloHubContainer:
 
         devcontainer_options = docker_args_to_devcontainer_format(docker_args)
         return ",\n        ".join(f'"{opt}"' for opt in devcontainer_options)
+
+
+#: Deprecated alias for :class:`HoloscanContainer`.
+#:
+#: ``HoloHubContainer`` was the canonical name through v1; new code should
+#: import :class:`HoloscanContainer` directly. The alias is kept for one
+#: release so downstream wrappers and any out-of-tree code reaching for
+#: ``from holoscan_cli.container import HoloHubContainer`` keep working.
+#: Drop alongside the rest of the HoloHub-name compatibility surface in
+#: the next minor release.
+HoloHubContainer = HoloscanContainer

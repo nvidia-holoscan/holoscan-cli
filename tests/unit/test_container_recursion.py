@@ -38,8 +38,8 @@ def test_in_container_cli_command_honors_override(monkeypatch):
     assert in_container_cli_command() == "python3 -m holoscan_cli"
 
 
-def _make_container() -> project_container.HoloHubContainer:
-    return project_container.HoloHubContainer({"metadata": {"language": "python"}})
+def _make_container() -> project_container.HoloscanContainer:
+    return project_container.HoloscanContainer({"metadata": {"language": "python"}})
 
 
 def _delenv_wrapper_vars(monkeypatch) -> None:
@@ -109,13 +109,13 @@ def test_environment_args_omits_unset_wrapper_vars(monkeypatch):
 
 def test_local_source_build_context_args_empty_when_unset(monkeypatch):
     monkeypatch.delenv("HOLOSCAN_CLI_SOURCE", raising=False)
-    assert project_container.HoloHubContainer.local_source_build_context_args() == []
+    assert project_container.HoloscanContainer.local_source_build_context_args() == []
 
 
 def test_local_source_build_context_args_emits_named_context(monkeypatch):
     monkeypatch.setenv("HOLOSCAN_CLI_SOURCE", "/home/wenqil/Documents/holoscan-cli")
 
-    args = project_container.HoloHubContainer.local_source_build_context_args()
+    args = project_container.HoloscanContainer.local_source_build_context_args()
 
     assert args == [
         "--build-context",
@@ -123,8 +123,8 @@ def test_local_source_build_context_args_emits_named_context(monkeypatch):
     ]
 
 
-def _bare_cli() -> project_cli.HoloHubCLI:
-    return object.__new__(project_cli.HoloHubCLI)
+def _bare_cli() -> project_cli.HoloscanCLI:
+    return object.__new__(project_cli.HoloscanCLI)
 
 
 def test_ctest_script_arg_uses_user_override():
@@ -138,7 +138,7 @@ def test_ctest_script_arg_uses_user_override():
 def test_ctest_script_arg_local_uses_host_resolved_path(monkeypatch):
     cli = _bare_cli()
     monkeypatch.setattr(
-        project_cli.HoloHubCLI, "DEFAULT_CTEST_SCRIPT", "/host/path/holohub.container.ctest"
+        project_cli.HoloscanCLI, "DEFAULT_CTEST_SCRIPT", "/host/path/holohub.container.ctest"
     )
     args = SimpleNamespace(ctest_script=None)
 

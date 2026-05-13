@@ -19,9 +19,9 @@
 * ``run-container``    — build (if needed) and launch a dev container
 
 Both commands delegate the actual docker work to
-:class:`holoscan_cli.container.HoloHubContainer`; this module is the thin
+:class:`holoscan_cli.container.HoloscanContainer`; this module is the thin
 parser + handler layer that resolves project metadata / mode config into
-the kwargs that ``HoloHubContainer.build`` / ``HoloHubContainer.run``
+the kwargs that ``HoloscanContainer.build`` / ``HoloscanContainer.run``
 expect. The plural ``containers.py`` filename is intentional — it keeps
 the module distinct from the singular :mod:`holoscan_cli.container`
 package while describing what these commands act on.

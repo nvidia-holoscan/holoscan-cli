@@ -61,10 +61,10 @@ def test_registry_groups_are_known():
 
 @pytest.fixture()
 def cli(monkeypatch, tmp_path):
-    """Construct ``HoloHubCLI`` without scanning the host filesystem."""
-    monkeypatch.setattr(project_cli.HoloHubCLI, "HOLOHUB_ROOT", tmp_path)
+    """Construct ``HoloscanCLI`` without scanning the host filesystem."""
+    monkeypatch.setattr(project_cli.HoloscanCLI, "HOLOHUB_ROOT", tmp_path)
     with patch.object(project_cli.metadata_util, "gather_metadata", return_value=[]):
-        yield project_cli.HoloHubCLI(script_name="holoscan")
+        yield project_cli.HoloscanCLI(script_name="holoscan")
 
 
 def test_full_parser_registers_every_command_in_the_registry(cli):
@@ -130,15 +130,15 @@ def test_version_is_not_a_project_command():
 # ---- naming compatibility aliases -------------------------------------------
 
 
-def test_holoscan_cli_alias_is_holohub_cli():
-    """The forward-looking ``HoloscanCLI`` alias must point at ``HoloHubCLI``."""
+def test_holohub_cli_alias_is_holoscan_cli():
+    """The deprecated ``HoloHubCLI`` alias must point at ``HoloscanCLI``."""
     from holoscan_cli.cli import HoloHubCLI, HoloscanCLI
 
-    assert HoloscanCLI is HoloHubCLI
+    assert HoloHubCLI is HoloscanCLI
 
 
-def test_holoscan_container_alias_is_holohub_container():
-    """``HoloscanContainer`` is a forward-looking alias for ``HoloHubContainer``."""
+def test_holohub_container_alias_is_holoscan_container():
+    """The deprecated ``HoloHubContainer`` alias must point at ``HoloscanContainer``."""
     from holoscan_cli.container import HoloHubContainer, HoloscanContainer
 
-    assert HoloscanContainer is HoloHubContainer
+    assert HoloHubContainer is HoloscanContainer
