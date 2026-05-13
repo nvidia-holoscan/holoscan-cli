@@ -3,71 +3,77 @@
 
 # Holoscan CLI
 
-Command line interface for HoloHub-style Holoscan source-project development workflows.
+Command-line tool for discovering, building, running, testing, and linting HoloHub-style Holoscan source projects. Published as the [`holoscan-cli`](https://pypi.org/project/holoscan-cli/) PyPI package and installs the `holoscan` console script.
 
 ## Overview
 
-This repository is the home for Holoscan CLI. It includes tools for discovering,
-building, running, testing, and linting HoloHub-style Holoscan source projects.
+The CLI presents a single command surface for the source-project development lifecycle:
 
-HAP/MAP application packaging and packaged-image runtime commands are no longer
-provided by this CLI. Commands such as `holoscan package`, `holoscan hap-run`,
-`holoscan nics`, and the `monai-deploy` console script are intentionally not
-supported.
+- **Project lifecycle:** `build`, `run`, `test`, `install`
+- **Container:** `build-container`, `run-container`
+- **Discovery / diagnostics:** `list`, `modes`, `status`, `env-info`, `env-check`, `autocompletion_list`, `version`
+- **Workspace:** `lint`, `setup`, `clear-cache`, `vscode`, `create`
+
+Run `holoscan <command> --help` for per-command flags.
+
+Per-repo wrappers install this package and delegate to `holoscan`, layering on their own configuration via `HOLOSCAN_CLI_*` environment variables:
+
+| Repo | Wrapper | Adds |
+| --- | --- | --- |
+| HoloHub | `./holohub` | source-project metadata search paths, container/workspace names |
+| Isaac OS | `./isaac_os` | HSB hardware auto-detection, `--privileged` docker run args, sccache memcached endpoint |
+| I4H Workflows | `./i4h` | RTI DDS license auto-download + mount, TTY serial device passthrough |
+
+Common env vars: `HOLOSCAN_CLI_ROOT` (repo root), `HOLOSCAN_CLI_SEARCH_PATH` (subdirs to scan for `metadata.json`), `HOLOSCAN_CLI_PATH_PREFIX` (placeholder prefix in metadata templates), `HOLOSCAN_CLI_REPO_PREFIX` (container image name prefix). The legacy `HOLOHUB_*` spelling is still honored with a one-line deprecation warning and will be removed in the next minor release. `holoscan env-info` lists every env var the CLI reads in the current shell.
+
+Application packaging (HAP/MAP) is no longer part of this CLI; `holoscan package`, `hap-run`, `nics`, and the `monai-deploy` console script are intentionally not provided.
+
+## Source layout
+
+```text
+src/holoscan_cli/
+  cli.py              top-level argparse + dispatch (HoloscanCLI)
+  commands/           one file per subcommand + a central registry
+  container/          HoloscanContainer + docker arg helpers + parser builders
+  utils/              io.py, text.py, sdk.py, docker.py, host_setup.py,
+                      env_info.py, holohub.py
+  setup_scripts/      bundled bash scripts backing `setup --scripts` and
+                      `build-container --extra-scripts`
+  metadata/           project metadata JSON schemas
+  testing/            CTest helpers shipped in the wheel
+```
 
 ## Prerequisites
 
-You will need a platform supported by [NVIDIA Holoscan SDK](https://docs.nvidia.com/holoscan/sdk-user-guide/sdk_installation.html#prerequisites). Refer to the Holoscan SDK User Guide for the latest requirements. In general, Holoscan-supported platforms include:
-
-- An x64 PC with an Ubuntu operating system and an NVIDIA GPU or
-- A supported NVIDIA ARM development kit.
+A platform supported by the [NVIDIA Holoscan SDK](https://docs.nvidia.com/holoscan/sdk-user-guide/sdk_installation.html#prerequisites): an x64 PC with Ubuntu and an NVIDIA GPU, or a supported NVIDIA ARM development kit.
 
 ## Installation
 
-Holoscan CLI is delivered as a Python package and can be installed from PyPI.org using one of the following commands:
-
 ```bash
 pip install holoscan-cli
+holoscan --help
 ```
 
-## Build From Source
+## Build from source
 
-### Prerequisites
-
-To build the Holoscan CLI from source, you will need to clone this repository and install the following dependencies:
-
-- Python 3.10+.
-- [poetry 2.0+](https://python-poetry.org/docs/#installation)
-
-### Development Environment
-
-Holoscan CLI uses [Poetry](https://python-poetry.org/) for package and dependency management. After installing Poetry, run the following commands to get started:
+Python 3.10+ and [Poetry 2.0+](https://python-poetry.org/docs/#installation) required.
 
 ```bash
-# Create virtual environment
+# Create + activate a virtual environment
 poetry env use python3.12
-
-# Activate virtual environment
 eval $(poetry env activate)
 
-# Install dependencies
+# Install dependencies + dev tooling
 poetry install
-
-# Configure pre-commit hooks
 pre-commit install
 
-# Run pre-commit against all files
-pre-commit run --all-files
-
-# Build sdist package
-poetry build
-
-# Run tests
+# Run the test suite
 poetry run pytest
+
+# Build sdist + wheel
+poetry build
 ```
 
-For more information on Poetry and its usages, see the [Poetry documentation](https://python-poetry.org/docs/).
-
-## Contributing to the Holoscan CLI
+## Contributing
 
 See [CONTRIBUTING.md](./CONTRIBUTING.md) for details.
