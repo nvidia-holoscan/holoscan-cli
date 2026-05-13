@@ -96,8 +96,13 @@ def handle_vscode(cli, args: argparse.Namespace) -> None:
         "${localWorkspaceFolder}", str(cli.HOLOHUB_ROOT)
     )
     devcontainer_content = devcontainer_content.replace('//"<env>"', devcontainer_env_options)
+    os.environ["HOLOSCAN_CLI_BASE_IMAGE"] = dev_container_tag
+    # Legacy aliases for HoloHub devcontainer.json templates still
+    # referencing the HOLOHUB_* spelling. Drop alongside the rest of the
+    # HOLOHUB_* env-var surface in the next minor release.
     os.environ["HOLOHUB_BASE_IMAGE"] = dev_container_tag
     if args.project:
+        os.environ["HOLOSCAN_CLI_APP_NAME"] = args.project
         os.environ["HOLOHUB_APP_NAME"] = args.project
 
     if not args.dryrun:

@@ -110,7 +110,7 @@ def handle_test(cli, args: argparse.Namespace) -> None:
     container.dryrun = args.dryrun
     container.verbose = args.verbose
 
-    is_local_mode = bool(args.local or os.environ.get("HOLOHUB_BUILD_LOCAL"))
+    is_local_mode = bool(args.local or os.environ.get("HOLOSCAN_CLI_BUILD_LOCAL"))
 
     if not is_local_mode and not skip_docker_build:
         build_args = args.build_args or ""
@@ -211,6 +211,10 @@ def handle_test(cli, args: argparse.Namespace) -> None:
         env["PYTHONPATH"] = (
             f"{env.get('PYTHONPATH', '')}:{cli.DEFAULT_SDK_DIR}/python/lib:{cli.HOLOHUB_ROOT}"
         )
+        env["HOLOSCAN_CLI_DATA_PATH"] = str(cli.DEFAULT_DATA_DIR)
+        # Legacy alias for downstream code still reading HOLOHUB_DATA_PATH.
+        # Drop alongside the rest of the HOLOHUB_* env-var surface in the
+        # next minor release.
         env["HOLOHUB_DATA_PATH"] = str(cli.DEFAULT_DATA_DIR)
         env.setdefault("HOLOSCAN_INPUT_PATH", str(cli.DEFAULT_DATA_DIR))
 

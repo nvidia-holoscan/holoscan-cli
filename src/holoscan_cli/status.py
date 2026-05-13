@@ -78,7 +78,7 @@ def collect_platform_info() -> PlatformInfo:
     gpu_type = get_host_gpu()
     gpu_name = get_gpu_name()
     cuda_version = get_default_cuda_version()
-    sdk_path = Path(os.environ.get("HOLOHUB_DEFAULT_HSDK_DIR", "/opt/nvidia/holoscan"))
+    sdk_path = Path(os.environ.get("HOLOSCAN_CLI_DEFAULT_HSDK_DIR", "/opt/nvidia/holoscan"))
     holoscan_version = get_sdk_version(sdk_path)
 
     return PlatformInfo(
@@ -118,9 +118,9 @@ def collect_folder_info(paths: List[Path]) -> List[FolderInfo]:
 
 def collect_image_info() -> List[ImageInfo]:
     images = []
-    image_prefix = os.environ.get("HOLOHUB_REPO_PREFIX", "holohub")
+    image_prefix = os.environ.get("HOLOSCAN_CLI_REPO_PREFIX", "holohub")
     prefixes = [image_prefix]
-    docker_exe = os.environ.get("HOLOHUB_DOCKER_EXE", "docker")
+    docker_exe = os.environ.get("HOLOSCAN_CLI_DOCKER_EXE", "docker")
 
     # Use image IDs from running containers for reliable comparison
     running_image_ids: set = set()
@@ -154,7 +154,7 @@ def collect_image_info() -> List[ImageInfo]:
 
 def collect_docker_disk_usage() -> Optional[str]:
     """Get total Docker disk usage summary in one call."""
-    docker_exe = os.environ.get("HOLOHUB_DOCKER_EXE", "docker")
+    docker_exe = os.environ.get("HOLOSCAN_CLI_DOCKER_EXE", "docker")
     output = run_info_command([docker_exe, "system", "df", "--format", "{{.Type}}\t{{.Size}}"])
     if not output:
         return None

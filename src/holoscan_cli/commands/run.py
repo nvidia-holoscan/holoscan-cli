@@ -122,9 +122,9 @@ def handle_run(cli, args: argparse.Namespace) -> None:
     # Check if local mode is requested
     is_local_mode = (
         args.local
-        or os.environ.get("HOLOHUB_BUILD_LOCAL")
-        or build_mode_env.get("HOLOHUB_BUILD_LOCAL")
-        or run_mode_env.get("HOLOHUB_BUILD_LOCAL")
+        or os.environ.get("HOLOSCAN_CLI_BUILD_LOCAL")
+        or build_mode_env.get("HOLOSCAN_CLI_BUILD_LOCAL")
+        or run_mode_env.get("HOLOSCAN_CLI_BUILD_LOCAL")
     )
 
     # Apply mode-specific build configuration for build process
@@ -176,6 +176,10 @@ def handle_run(cli, args: argparse.Namespace) -> None:
         run_env["PYTHONPATH"] = (
             f"{run_env.get('PYTHONPATH', '')}:{cli.DEFAULT_SDK_DIR}/python/lib:{build_dir}/python/lib:{cli.HOLOHUB_ROOT}"
         )
+        run_env["HOLOSCAN_CLI_DATA_PATH"] = str(cli.DEFAULT_DATA_DIR)
+        # Legacy alias for downstream code still reading HOLOHUB_DATA_PATH.
+        # Drop alongside the rest of the HOLOHUB_* env-var surface in the
+        # next minor release.
         run_env["HOLOHUB_DATA_PATH"] = str(cli.DEFAULT_DATA_DIR)
         run_env["HOLOSCAN_INPUT_PATH"] = run_env.get(
             "HOLOSCAN_INPUT_PATH", str(cli.DEFAULT_DATA_DIR)
@@ -223,7 +227,7 @@ def handle_run(cli, args: argparse.Namespace) -> None:
             )
             print(
                 holohub_cli_util.format_cmd(
-                    "export HOLOHUB_DATA_PATH=" + run_env["HOLOHUB_DATA_PATH"],
+                    "export HOLOSCAN_CLI_DATA_PATH=" + run_env["HOLOSCAN_CLI_DATA_PATH"],
                     is_dryrun=args.dryrun,
                 )
             )

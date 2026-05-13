@@ -60,7 +60,7 @@ BUILD_TYPES = {
 
 def check_skip_builds(args) -> Tuple[bool, bool]:
     """Checking skip build flags and printing info messages"""
-    holohub_always_build, always_build = get_env_bool("HOLOHUB_ALWAYS_BUILD", default=True)
+    holohub_always_build, always_build = get_env_bool("HOLOSCAN_CLI_ALWAYS_BUILD", default=True)
     skip_builds = not always_build
     skip_docker_build = skip_builds or getattr(args, "no_docker_build", False)
     skip_local_build = skip_builds or getattr(args, "no_local_build", False)
@@ -82,7 +82,7 @@ def _get_holohub_root() -> Path:
     site-packages, root discovery must come from the wrapper environment or
     from the current working directory.
     """
-    env_root = os.environ.get("HOLOHUB_ROOT")
+    env_root = os.environ.get("HOLOSCAN_CLI_ROOT")
     if env_root:
         env_path = Path(env_root).expanduser()
         if env_path.exists() and env_path.is_dir():
@@ -127,7 +127,7 @@ def get_holohub_root() -> Path:
 def get_component_search_paths(base_dir: Optional[Path] = None) -> tuple[Path, ...]:
     """Return metadata search paths honoring HOLOHUB_SEARCH_PATH overrides."""
     base_path = base_dir or HOLOHUB_ROOT
-    tokens = os.environ.get("HOLOHUB_SEARCH_PATH", "").split(",")
+    tokens = os.environ.get("HOLOSCAN_CLI_SEARCH_PATH", "").split(",")
     default_paths = (
         "applications",
         "benchmarks",
@@ -146,7 +146,7 @@ def get_component_search_paths(base_dir: Optional[Path] = None) -> tuple[Path, .
 def get_holohub_setup_scripts_dir() -> Path:
     """Return the directory containing named setup scripts (`./holohub setup --scripts`)."""
     return Path(
-        os.environ.get("HOLOHUB_SETUP_SCRIPTS_DIR", HOLOHUB_ROOT / "utilities" / "setup")
+        os.environ.get("HOLOSCAN_CLI_SETUP_SCRIPTS_DIR", HOLOHUB_ROOT / "utilities" / "setup")
     ).expanduser()
 
 
@@ -178,7 +178,7 @@ def get_buildtype_str(build_type: Optional[str]) -> str:
 def resolve_path_prefix(prefix: Optional[str] = None) -> str:
     """Resolve the path prefix for HoloHub placeholders"""
     if prefix is None:
-        prefix = os.environ.get("HOLOHUB_PATH_PREFIX", "holohub_")
+        prefix = os.environ.get("HOLOSCAN_CLI_PATH_PREFIX", "holohub_")
     if not prefix.endswith("_"):
         prefix = prefix + "_"
     return prefix

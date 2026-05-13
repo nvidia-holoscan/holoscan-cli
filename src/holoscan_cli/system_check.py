@@ -168,7 +168,7 @@ def check_cuda() -> CheckResult:
 
 def check_docker() -> CheckResult:
     """Check Docker installation and runtime"""
-    docker_exe = os.environ.get("HOLOHUB_DOCKER_EXE", "docker")
+    docker_exe = os.environ.get("HOLOSCAN_CLI_DOCKER_EXE", "docker")
     docker = shutil.which(docker_exe)
     if not docker:
         if is_running_in_docker():
@@ -248,7 +248,7 @@ def check_docker() -> CheckResult:
 
 def check_holoscan() -> CheckResult:
     """Check Holoscan SDK availability"""
-    sdk_dir = os.environ.get("HOLOHUB_DEFAULT_HSDK_DIR", "/opt/nvidia/holoscan")
+    sdk_dir = os.environ.get("HOLOSCAN_CLI_DEFAULT_HSDK_DIR", "/opt/nvidia/holoscan")
     sdk_path = Path(sdk_dir)
     if sdk_path.exists() and is_valid_sdk_installation(sdk_path):
         version = get_sdk_version(sdk_path)
@@ -328,7 +328,7 @@ def check_holoscan_python() -> CheckResult:
 def check_disk() -> CheckResult:
     """Check free disk space on the filesystem containing the build directory"""
     holohub_root = get_holohub_root()
-    build_dir = Path(os.environ.get("HOLOHUB_BUILD_PARENT_DIR", holohub_root / "build"))
+    build_dir = Path(os.environ.get("HOLOSCAN_CLI_BUILD_PARENT_DIR", holohub_root / "build"))
     check_path = build_dir if build_dir.exists() else holohub_root
 
     try:

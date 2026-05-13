@@ -77,34 +77,40 @@ class HoloHubContainer:
 
     HOLOHUB_ROOT = get_holohub_root()  # Repository root directory
     # Primary repository prefix - sets defaults for container, workspace, and hostname
-    REPO_PREFIX = os.environ.get("HOLOHUB_REPO_PREFIX", "holohub")
-    CONTAINER_PREFIX = os.environ.get("HOLOHUB_CONTAINER_PREFIX", REPO_PREFIX)
-    WORKSPACE_NAME = os.environ.get("HOLOHUB_WORKSPACE_NAME", REPO_PREFIX)
-    HOSTNAME_PREFIX = os.environ.get("HOLOHUB_HOSTNAME_PREFIX", REPO_PREFIX.replace("_", "-"))
+    REPO_PREFIX = os.environ.get("HOLOSCAN_CLI_REPO_PREFIX", "holohub")
+    CONTAINER_PREFIX = os.environ.get("HOLOSCAN_CLI_CONTAINER_PREFIX", REPO_PREFIX)
+    WORKSPACE_NAME = os.environ.get("HOLOSCAN_CLI_WORKSPACE_NAME", REPO_PREFIX)
+    HOSTNAME_PREFIX = os.environ.get(
+        "HOLOSCAN_CLI_HOSTNAME_PREFIX", REPO_PREFIX.replace("_", "-")
+    )
 
     # Docker and runtime configuration
-    DOCKER_EXE = os.environ.get("HOLOHUB_DOCKER_EXE", "docker")  # Docker executable
+    DOCKER_EXE = os.environ.get("HOLOSCAN_CLI_DOCKER_EXE", "docker")  # Docker executable
 
     # SDK and path configuration
-    SDK_PATH = os.environ.get("HOLOHUB_DEFAULT_HSDK_DIR", "/opt/nvidia/holoscan")
-    BASE_SDK_VERSION = os.environ.get("HOLOHUB_BASE_SDK_VERSION", DEFAULT_BASE_SDK_VERSION)
+    SDK_PATH = os.environ.get("HOLOSCAN_CLI_DEFAULT_HSDK_DIR", "/opt/nvidia/holoscan")
+    BASE_SDK_VERSION = os.environ.get("HOLOSCAN_CLI_BASE_SDK_VERSION", DEFAULT_BASE_SDK_VERSION)
     BENCHMARKING_SUBDIR = os.environ.get(
-        "HOLOHUB_BENCHMARKING_SUBDIR", "benchmarks/holoscan_flow_benchmarking"
+        "HOLOSCAN_CLI_BENCHMARKING_SUBDIR", "benchmarks/holoscan_flow_benchmarking"
     )
-    DEFAULT_DOCKERFILE = os.environ.get("HOLOHUB_DEFAULT_DOCKERFILE", HOLOHUB_ROOT / "Dockerfile")
+    DEFAULT_DOCKERFILE = os.environ.get(
+        "HOLOSCAN_CLI_DEFAULT_DOCKERFILE", HOLOHUB_ROOT / "Dockerfile"
+    )
 
     # Image naming format templates
-    BASE_IMAGE_NAME = os.environ.get("HOLOHUB_BASE_IMAGE", "nvcr.io/nvidia/clara-holoscan/holoscan")
+    BASE_IMAGE_NAME = os.environ.get(
+        "HOLOSCAN_CLI_BASE_IMAGE", "nvcr.io/nvidia/clara-holoscan/holoscan"
+    )
     BASE_IMAGE_FORMAT = os.environ.get(
-        "HOLOHUB_BASE_IMAGE_FORMAT", "{base_image}:v{sdk_version}-{cuda_tag}"
+        "HOLOSCAN_CLI_BASE_IMAGE_FORMAT", "{base_image}:v{sdk_version}-{cuda_tag}"
     )
     DEFAULT_IMAGE_FORMAT = os.environ.get(
-        "HOLOHUB_DEFAULT_IMAGE_FORMAT", "{container_prefix}:ngc-v{sdk_version}-{cuda_tag}"
+        "HOLOSCAN_CLI_DEFAULT_IMAGE_FORMAT", "{container_prefix}:ngc-v{sdk_version}-{cuda_tag}"
     )
     # Additional Default build arguments for docker build command (e.g., --build-context flags)
-    DEFAULT_DOCKER_BUILD_ARGS = os.environ.get("HOLOHUB_DEFAULT_DOCKER_BUILD_ARGS", "")
+    DEFAULT_DOCKER_BUILD_ARGS = os.environ.get("HOLOSCAN_CLI_DEFAULT_DOCKER_BUILD_ARGS", "")
     # Additional Default run arguments for docker run command
-    DEFAULT_DOCKER_RUN_ARGS = os.environ.get("HOLOHUB_DEFAULT_DOCKER_RUN_ARGS", "")
+    DEFAULT_DOCKER_RUN_ARGS = os.environ.get("HOLOSCAN_CLI_DEFAULT_DOCKER_RUN_ARGS", "")
     DISPLAY_FORWARDING_DISABLED_MESSAGE = (
         "No DISPLAY or WAYLAND_DISPLAY set; skipping display forwarding."
     )
@@ -687,7 +693,7 @@ class HoloHubContainer:
                 print("Warning: MPS directories not found. MPS may not be enabled on the host.")
 
         # sccache mounting
-        _, enable_sccache = get_env_bool("HOLOHUB_ENABLE_SCCACHE", default=False)
+        _, enable_sccache = get_env_bool("HOLOSCAN_CLI_ENABLE_SCCACHE", default=False)
         has_host_sccache_env = any(k.startswith("SCCACHE_") for k in os.environ)
         if enable_sccache:
             sccache_host_dir = get_sccache_dir()
@@ -697,8 +703,8 @@ class HoloHubContainer:
             args.extend(["-v", f"{sccache_host_dir}:{SCCACHE_CONTAINER_DIR}"])
         elif has_host_sccache_env:
             warn(
-                "SCCACHE_* environment variables detected but HOLOHUB_ENABLE_SCCACHE is disabled; "
-                "not mounting sccache cache into the container."
+                "SCCACHE_* environment variables detected but HOLOSCAN_CLI_ENABLE_SCCACHE is "
+                "disabled; not mounting sccache cache into the container."
             )
         return args
 
@@ -744,6 +750,11 @@ class HoloHubContainer:
             "-e",
             f"CUPY_CACHE_DIR=/workspace/{self.WORKSPACE_NAME}/.cupy/kernel_cache",
             "-e",
+            "HOLOSCAN_CLI_BUILD_LOCAL=1",
+            # Legacy alias for the in-container CLI version still reading
+            # HOLOHUB_BUILD_LOCAL. Drop alongside the rest of the HOLOHUB_*
+            # surface in the next minor release.
+            "-e",
             "HOLOHUB_BUILD_LOCAL=1",
         ]
         # Pass CMAKE_BUILD_PARALLEL_LEVEL to container if set on host
@@ -751,20 +762,27 @@ class HoloHubContainer:
         if cmake_parallel_level:
             args.extend(["-e", f"CMAKE_BUILD_PARALLEL_LEVEL={cmake_parallel_level}"])
         # Forward host-side wrapper customizations that the in-container CLI needs
-        # to reproduce project discovery and command routing decisions. These names
-        # match the historical HoloHub wrapper contract; see Isaac OS / I4H wrapper
-        # scripts for the typical values.
-        for var in ("HOLOHUB_PATH_PREFIX", "HOLOHUB_SEARCH_PATH", "HOLOHUB_CTEST_SCRIPT"):
-            value = os.environ.get(var)
+        # to reproduce project discovery and command routing decisions. We forward
+        # both the new HOLOSCAN_CLI_* spelling and the deprecated HOLOHUB_* alias
+        # for the deprecation window so older in-container CLI versions keep
+        # working.
+        for new_name in (
+            "HOLOSCAN_CLI_PATH_PREFIX",
+            "HOLOSCAN_CLI_SEARCH_PATH",
+            "HOLOSCAN_CLI_CTEST_SCRIPT",
+        ):
+            value = os.environ.get(new_name)
             if value:
-                args.extend(["-e", f"{var}={value}"])
+                old_name = "HOLOHUB_" + new_name[len("HOLOSCAN_CLI_") :]
+                args.extend(["-e", f"{new_name}={value}", "-e", f"{old_name}={value}"])
 
         # Pass adequate variables for SCCACHE
-        _, enable_sccache = get_env_bool("HOLOHUB_ENABLE_SCCACHE", default=False)
+        _, enable_sccache = get_env_bool("HOLOSCAN_CLI_ENABLE_SCCACHE", default=False)
         sccache_keys = [k for k in os.environ if k.startswith("SCCACHE_")]
         if enable_sccache:
-            # Forward HOLOHUB_ENABLE_SCCACHE to enable launcher before cmake build
-            args.extend(["-e", "HOLOHUB_ENABLE_SCCACHE"])
+            # Forward HOLOSCAN_CLI_ENABLE_SCCACHE (and the legacy alias) so the
+            # in-container launcher enables sccache before cmake build.
+            args.extend(["-e", "HOLOSCAN_CLI_ENABLE_SCCACHE", "-e", "HOLOHUB_ENABLE_SCCACHE=1"])
             # Always set SCCACHE_DIR inside container to mounted path
             args.extend(["-e", f"SCCACHE_DIR={SCCACHE_CONTAINER_DIR}"])
             # Forward other SCCACHE_* environment variables present on host
@@ -773,8 +791,8 @@ class HoloHubContainer:
                     args.extend(["-e", k])
         elif len(sccache_keys) > 0:
             warn(
-                "SCCACHE_* environment variables detected but HOLOHUB_ENABLE_SCCACHE is disabled; "
-                "not forwarding sccache environment variables into the container: "
+                "SCCACHE_* environment variables detected but HOLOSCAN_CLI_ENABLE_SCCACHE is "
+                "disabled; not forwarding sccache environment variables into the container: "
                 f"{', '.join(sccache_keys)}"
             )
         return args

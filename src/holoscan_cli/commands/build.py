@@ -115,8 +115,8 @@ def handle_build(cli, args: argparse.Namespace) -> None:
     # Check if local mode is requested
     is_local_mode = (
         args.local
-        or os.environ.get("HOLOHUB_BUILD_LOCAL")
-        or build_mode_env.get("HOLOHUB_BUILD_LOCAL")
+        or os.environ.get("HOLOSCAN_CLI_BUILD_LOCAL")
+        or build_mode_env.get("HOLOSCAN_CLI_BUILD_LOCAL")
     )
 
     if is_local_mode:
@@ -297,13 +297,13 @@ def build_project_locally(
     # Configure sccache
     sccache_bin = shutil.which("sccache")
     enable_sccache_val, enable_sccache = holohub_cli_util.get_env_bool(
-        "HOLOHUB_ENABLE_SCCACHE", default=False
+        "HOLOSCAN_CLI_ENABLE_SCCACHE", default=False
     )
-    holohub_cli_util.info(f"HOLOHUB_ENABLE_SCCACHE={enable_sccache_val}")
+    holohub_cli_util.info(f"HOLOSCAN_CLI_ENABLE_SCCACHE={enable_sccache_val}")
     if enable_sccache:
         if not sccache_bin:
             (holohub_cli_util.warn if dryrun else holohub_cli_util.fatal)(
-                "HOLOHUB_ENABLE_SCCACHE is enabled but 'sccache' was not found in PATH. "
+                "HOLOSCAN_CLI_ENABLE_SCCACHE is enabled but 'sccache' was not found in PATH. "
                 "Install it (e.g., `./holohub setup`) or disable sccache."
             )
         # Set CMake compiler launchers with -D

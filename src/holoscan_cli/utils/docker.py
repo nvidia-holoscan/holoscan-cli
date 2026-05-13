@@ -102,7 +102,7 @@ def get_container_entrypoint(img: str, dry_run: bool = False) -> Optional[List[s
         return None
 
     try:
-        docker_exe = os.environ.get("HOLOHUB_DOCKER_EXE", "docker")
+        docker_exe = os.environ.get("HOLOSCAN_CLI_DOCKER_EXE", "docker")
         result = run_command(
             [docker_exe, "inspect", "--format={{json .Config.Entrypoint}}", img],
             capture_output=True,
@@ -134,7 +134,7 @@ def get_image_pythonpath(img: str, dry_run: bool = False) -> str:
         )
         return ""
     try:
-        docker_exe = os.environ.get("HOLOHUB_DOCKER_EXE", "docker")
+        docker_exe = os.environ.get("HOLOSCAN_CLI_DOCKER_EXE", "docker")
         result = run_command(
             [docker_exe, "inspect", "--format", "{{range .Config.Env}}{{println .}}{{end}}", img],
             check=False,

@@ -51,10 +51,10 @@ def collect_holohub_info(
 ) -> None:
     """Collect and display HoloHub information"""
     print(f"\n{Color.blue('HoloHub Information:')}")
-    print(f"  HOLOHUB_ROOT: {holohub_root}")
-    print(f"  HOLOHUB_BUILD_PARENT_DIR: {build_dir}")
-    print(f"  HOLOHUB_DATA_DIR: {data_dir}")
-    print(f"  HOLOHUB_SDK_DIR: {sdk_dir}")
+    print(f"  HOLOSCAN_CLI_ROOT: {holohub_root}")
+    print(f"  HOLOSCAN_CLI_BUILD_PARENT_DIR: {build_dir}")
+    print(f"  HOLOSCAN_CLI_DATA_DIR: {data_dir}")
+    print(f"  HOLOSCAN_CLI_SDK_DIR: {sdk_dir}")
 
 
 def collect_git_info(holohub_root: Path) -> None:
@@ -89,7 +89,7 @@ def collect_git_info(holohub_root: Path) -> None:
 def collect_docker_info() -> None:
     """Collect and display Docker information"""
     print(f"\n{Color.blue('Docker Information:')}")
-    docker_exe = os.environ.get("HOLOHUB_DOCKER_EXE", "docker")
+    docker_exe = os.environ.get("HOLOSCAN_CLI_DOCKER_EXE", "docker")
     docker_version = run_info_command([docker_exe, "--version"])
     docker_info = run_info_command([docker_exe, "info", "--format", "{{.ServerVersion}}"])
     if docker_version is None or docker_info is None:
@@ -134,41 +134,48 @@ def collect_cuda_gpu_info() -> None:
 
 def collect_environment_variables() -> None:
     """Collect and display environment variables"""
-    print(f"\n{Color.blue('HoloHub Environment Variables:')}")
-    holohub_env_vars = [
-        "HOLOHUB_CMD_NAME",
-        "HOLOHUB_BUILD_LOCAL",
-        "HOLOHUB_ALWAYS_BUILD",
-        "HOLOHUB_ENABLE_SCCACHE",
-        "HOLOHUB_BUILD_PARENT_DIR",
-        "HOLOHUB_DATA_DIR",
-        "HOLOHUB_DEFAULT_HSDK_DIR",
-        "HOLOHUB_CTEST_SCRIPT",
-        "HOLOHUB_REPO_PREFIX",
-        "HOLOHUB_CONTAINER_PREFIX",
-        "HOLOHUB_WORKSPACE_NAME",
-        "HOLOHUB_HOSTNAME_PREFIX",
-        "HOLOHUB_BASE_IMAGE",
-        "HOLOHUB_DOCKER_EXE",
-        "HOLOHUB_BASE_SDK_VERSION",
-        "HOLOHUB_BENCHMARKING_SUBDIR",
-        "HOLOHUB_DEFAULT_DOCKERFILE",
-        "HOLOHUB_BASE_IMAGE_FORMAT",
-        "HOLOHUB_DEFAULT_IMAGE_FORMAT",
-        "HOLOHUB_DEFAULT_DOCKER_BUILD_ARGS",
-        "HOLOHUB_DEFAULT_DOCKER_RUN_ARGS",
-        "HOLOHUB_DOCS_URL",
-        "HOLOHUB_CLI_DOCS_URL",
-        "HOLOHUB_DATA_PATH",
-        "HOLOHUB_SETUP_SCRIPTS_DIR",
-        "HOLOHUB_SEARCH_PATH",
-        # Legacy variables
-        "HOLOHUB_APP_NAME",
-        "HOLOHUB_CONTAINER_BASE_NAME",
-        "HOLOHUB_PATH_PREFIX",
+    print(f"\n{Color.blue('Holoscan CLI Environment Variables:')}")
+    holoscan_cli_env_vars = [
+        "HOLOSCAN_CLI_CMD_NAME",
+        "HOLOSCAN_CLI_BUILD_LOCAL",
+        "HOLOSCAN_CLI_ALWAYS_BUILD",
+        "HOLOSCAN_CLI_ENABLE_SCCACHE",
+        "HOLOSCAN_CLI_BUILD_PARENT_DIR",
+        "HOLOSCAN_CLI_DATA_DIR",
+        "HOLOSCAN_CLI_DEFAULT_HSDK_DIR",
+        "HOLOSCAN_CLI_CTEST_SCRIPT",
+        "HOLOSCAN_CLI_REPO_PREFIX",
+        "HOLOSCAN_CLI_CONTAINER_PREFIX",
+        "HOLOSCAN_CLI_WORKSPACE_NAME",
+        "HOLOSCAN_CLI_HOSTNAME_PREFIX",
+        "HOLOSCAN_CLI_BASE_IMAGE",
+        "HOLOSCAN_CLI_DOCKER_EXE",
+        "HOLOSCAN_CLI_BASE_SDK_VERSION",
+        "HOLOSCAN_CLI_BENCHMARKING_SUBDIR",
+        "HOLOSCAN_CLI_DEFAULT_DOCKERFILE",
+        "HOLOSCAN_CLI_BASE_IMAGE_FORMAT",
+        "HOLOSCAN_CLI_DEFAULT_IMAGE_FORMAT",
+        "HOLOSCAN_CLI_DEFAULT_DOCKER_BUILD_ARGS",
+        "HOLOSCAN_CLI_DEFAULT_DOCKER_RUN_ARGS",
+        "HOLOSCAN_CLI_DATA_PATH",
+        "HOLOSCAN_CLI_SETUP_SCRIPTS_DIR",
+        "HOLOSCAN_CLI_SEARCH_PATH",
+        "HOLOSCAN_CLI_APP_NAME",
+        "HOLOSCAN_CLI_PATH_PREFIX",
     ]
-    for var in sorted(holohub_env_vars):
+    for var in sorted(holoscan_cli_env_vars):
         print(f"  {var}: {os.environ.get(var) or '(not set)'}")
+
+    # Surface any deprecated HOLOHUB_* names still set in the environment so
+    # users can see what's coming from the wrapper compatibility shim.
+    legacy_env_vars = [
+        f"HOLOHUB_{name[len('HOLOSCAN_CLI_'):]}" for name in holoscan_cli_env_vars
+    ]
+    legacy_set = [v for v in legacy_env_vars if v in os.environ]
+    if legacy_set:
+        print(f"\n{Color.blue('Deprecated HOLOHUB_* aliases still set on host:')}")
+        for var in sorted(legacy_set):
+            print(f"  {var}: {os.environ.get(var)}  (use {var.replace('HOLOHUB_', 'HOLOSCAN_CLI_', 1)})")
 
     print(f"\n{Color.blue('Holoscan Environment Variables:')}")
     holoscan_env_vars = ["HOLOSCAN_SDK_VERSION", "HOLOSCAN_INPUT_PATH"]
@@ -203,8 +210,10 @@ def collect_sccache_info() -> None:
     """Collect and display sccache-related information"""
     print(f"\n{Color.blue('sccache Information:')}")
 
-    enable_val, enabled = get_env_bool("HOLOHUB_ENABLE_SCCACHE", default=False)
-    print(f"  HOLOHUB_ENABLE_SCCACHE: {enable_val} ({'enabled' if enabled else 'disabled'})")
+    enable_val, enabled = get_env_bool("HOLOSCAN_CLI_ENABLE_SCCACHE", default=False)
+    print(
+        f"  HOLOSCAN_CLI_ENABLE_SCCACHE: {enable_val} ({'enabled' if enabled else 'disabled'})"
+    )
 
     sccache_bin = shutil.which("sccache")
     version = run_info_command(["sccache", "--version"]) if sccache_bin else None

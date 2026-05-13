@@ -98,8 +98,8 @@ def handle_install(cli, args: argparse.Namespace) -> None:
     # Check if local mode is requested
     is_local_mode = (
         args.local
-        or os.environ.get("HOLOHUB_BUILD_LOCAL")
-        or build_mode_env.get("HOLOHUB_BUILD_LOCAL")
+        or os.environ.get("HOLOSCAN_CLI_BUILD_LOCAL")
+        or build_mode_env.get("HOLOSCAN_CLI_BUILD_LOCAL")
     )
 
     if is_local_mode:

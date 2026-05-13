@@ -66,18 +66,18 @@ class HoloHubCLI:
 
     HOLOHUB_ROOT = holohub_cli_util.get_holohub_root()
     DEFAULT_BUILD_PARENT_DIR = Path(
-        os.environ.get("HOLOHUB_BUILD_PARENT_DIR", HOLOHUB_ROOT / "build")
+        os.environ.get("HOLOSCAN_CLI_BUILD_PARENT_DIR", HOLOHUB_ROOT / "build")
     )
-    DEFAULT_DATA_DIR = Path(os.environ.get("HOLOHUB_DATA_DIR", HOLOHUB_ROOT / "data"))
-    DEFAULT_SDK_DIR = os.environ.get("HOLOHUB_DEFAULT_HSDK_DIR", "/opt/nvidia/holoscan")
+    DEFAULT_DATA_DIR = Path(os.environ.get("HOLOSCAN_CLI_DATA_DIR", HOLOHUB_ROOT / "data"))
+    DEFAULT_SDK_DIR = os.environ.get("HOLOSCAN_CLI_DEFAULT_HSDK_DIR", "/opt/nvidia/holoscan")
     # Allow overriding the default CTest script path via environment variable
     DEFAULT_CTEST_SCRIPT = os.environ.get(
-        "HOLOHUB_CTEST_SCRIPT",
+        "HOLOSCAN_CLI_CTEST_SCRIPT",
         str(Path(__file__).resolve().parent / "testing" / "holohub.container.ctest"),
     )
 
     def __init__(self, script_name: Optional[str] = None):
-        self.script_name = script_name or os.environ.get("HOLOHUB_CMD_NAME", "./holohub")
+        self.script_name = script_name or os.environ.get("HOLOSCAN_CLI_CMD_NAME", "./holohub")
         self.parser = self._create_parser()
         # Cache for resolved projects to avoid duplicate lookups
         self._project_data: dict[tuple[str, str], dict] = {}
@@ -499,7 +499,7 @@ HoloscanCLI = HoloHubCLI
 
 def main(argv: Optional[List[str]] = None):
     script_name = None
-    if argv and not os.environ.get("HOLOHUB_CMD_NAME"):
+    if argv and not os.environ.get("HOLOSCAN_CLI_CMD_NAME"):
         executable = Path(argv[0]).name
         script_name = "holoscan" if executable == "__main__.py" else executable
     cli = HoloHubCLI(script_name=script_name)
