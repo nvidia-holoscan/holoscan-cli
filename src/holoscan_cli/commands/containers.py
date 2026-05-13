@@ -65,15 +65,13 @@ def handle_build_container(cli, args: argparse.Namespace) -> None:
         project_data = cli.find_project(args.project, language=getattr(args, "language", None))
         mode_name, mode_config = cli.resolve_mode(project_data, getattr(args, "mode", None))
         if mode_config:
-            cli.validate_mode(
-                args, mode_name, mode_config, project_data, getattr(args, "mode", None)
-            )
+            cli.validate_mode(mode_name, mode_config)
             effective = cli.get_effective_build_config(args, mode_config)
             build_args = effective.get("build_args") or build_args
             if mode_name:
                 print(f"Building container for {args.project} in '{mode_name}' mode")
 
-    container = cli._make_project_container(
+    container = cli.make_project_container(
         project_name=args.project,
         language=args.language if hasattr(args, "language") else None,
     )
@@ -129,9 +127,7 @@ def handle_run_container(cli, args: argparse.Namespace) -> None:
         project_data = cli.find_project(args.project, language=getattr(args, "language", None))
         mode_name, mode_config = cli.resolve_mode(project_data, getattr(args, "mode", None))
         if mode_config:
-            cli.validate_mode(
-                args, mode_name, mode_config, project_data, getattr(args, "mode", None)
-            )
+            cli.validate_mode(mode_name, mode_config)
             effective_build = cli.get_effective_build_config(args, mode_config)
             build_args = effective_build.get("build_args") or build_args
             docker_opts = effective_build.get("docker_opts") or docker_opts
@@ -139,7 +135,7 @@ def handle_run_container(cli, args: argparse.Namespace) -> None:
                 print(f"Running container for {args.project} in '{mode_name}' mode")
 
     skip_docker_build, _ = holohub_cli_util.check_skip_builds(args)
-    container = cli._make_project_container(
+    container = cli.make_project_container(
         project_name=args.project, language=args.language if hasattr(args, "language") else None
     )
     container.dryrun = args.dryrun

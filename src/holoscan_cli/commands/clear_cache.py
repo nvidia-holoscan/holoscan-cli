@@ -55,16 +55,16 @@ def handle_clear_cache(cli, args: argparse.Namespace) -> None:
     # Collect build folders if needed
     if clear_all or clear_build:
         cache_dirs.extend(
-            cli._collect_cache_dirs(["build", "build-*"], cli.DEFAULT_BUILD_PARENT_DIR)
+            cli.collect_cache_dirs(["build", "build-*"], cli.DEFAULT_BUILD_PARENT_DIR)
         )
 
     # Collect data folders if needed
     if clear_all or clear_data:
-        cache_dirs.extend(cli._collect_cache_dirs(["data", "data-*"], cli.DEFAULT_DATA_DIR))
+        cache_dirs.extend(cli.collect_cache_dirs(["data", "data-*"], cli.DEFAULT_DATA_DIR))
 
     # Collect install folders if needed
     if clear_all or clear_install:
-        cache_dirs.extend(cli._collect_cache_dirs(["install", "install-*"]))
+        cache_dirs.extend(cli.collect_cache_dirs(["install", "install-*"]))
 
     for path in set(cache_dirs):
         if path.exists() and path.is_dir():

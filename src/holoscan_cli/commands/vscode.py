@@ -60,7 +60,7 @@ def handle_vscode(cli, args: argparse.Namespace) -> None:
         )
 
     skip_docker_build, _ = holohub_cli_util.check_skip_builds(args)
-    container = cli._make_project_container(
+    container = cli.make_project_container(
         project_name=args.project, language=getattr(args, "language", None)
     )
     container.dryrun = args.dryrun

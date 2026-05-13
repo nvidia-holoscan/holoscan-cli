@@ -32,6 +32,7 @@ if sys.version_info < PYTHON_MIN_VERSION:
 
 # ruff: noqa: E402  # Imports after python version check
 import argparse
+import functools
 import os
 from pathlib import Path
 from typing import List, Optional
@@ -81,7 +82,6 @@ class HoloscanCLI:
         self.parser = self._create_parser()
         # Cache for resolved projects to avoid duplicate lookups
         self._project_data: dict[tuple[str, str], dict] = {}
-        self._collect_metadata()
         self.prefix = holohub_cli_util.resolve_path_prefix(None)
 
     def _create_parser(self) -> argparse.ArgumentParser:
@@ -113,14 +113,21 @@ class HoloscanCLI:
 
         return parser
 
-    def _collect_metadata(self) -> None:
-        """Create an unstructured database of metadata for all projects"""
+    @functools.cached_property
+    def projects(self) -> list[dict]:
+        """All discovered source-project metadata, computed on first access.
 
+        Walking the project search paths and parsing every ``metadata.json``
+        costs tens-to-hundreds of small file reads on a populated HoloHub
+        clone, so it's deferred off the ``__init__`` path. Commands that
+        never touch project metadata (``status``, ``env-info``, ``env-check``,
+        ``clear-cache``, ``setup``, ``vscode``, ``create``, ``lint``) don't
+        pay the cost.
+        """
+        # Known exceptions: templates that don't represent a standalone project.
         EXCLUDE_PATHS = ["applications/holoviz/template", "applications/template"]
-        # Known exceptions, such as template files that do not represent a standalone project
-
         app_paths = holohub_cli_util.get_component_search_paths(self.HOLOHUB_ROOT)
-        self.projects = metadata_util.gather_metadata(app_paths, exclude_paths=EXCLUDE_PATHS)
+        return metadata_util.gather_metadata(app_paths, exclude_paths=EXCLUDE_PATHS)
 
     def find_project(self, project_name: str, language: Optional[str] = None) -> dict:
         """Find a project by name"""
@@ -238,11 +245,8 @@ class HoloscanCLI:
 
     def validate_mode(
         self,
-        args: argparse.Namespace,
         mode_name: Optional[str],
         mode_config: dict,
-        project_data: dict,
-        requested_mode: Optional[str],
     ) -> None:
         """Validate mode configuration"""
         if not mode_config:
@@ -391,7 +395,7 @@ class HoloscanCLI:
                     )
         return config
 
-    def _make_project_container(
+    def make_project_container(
         self, project_name: Optional[str] = None, language: Optional[str] = None
     ) -> HoloscanContainer:
         """Define a project container"""
@@ -400,7 +404,7 @@ class HoloscanCLI:
         project_data = self.find_project(project_name=project_name, language=language)
         return HoloscanContainer(project_metadata=project_data, language=language)
 
-    def _collect_cache_dirs(self, patterns: list[str], default_dir=None) -> list:
+    def collect_cache_dirs(self, patterns: list[str], default_dir=None) -> list:
         """Helper to collect cache directories matching patterns."""
         dirs = []
         if default_dir is not None:

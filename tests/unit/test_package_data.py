@@ -136,11 +136,38 @@ def test_pyproject_targets_supported_python_versions():
     assert sys.version_info >= (3, 10)
 
 
-def test_pyproject_runtime_dependencies_are_minimal():
-    """The runtime dep set must remain narrow for fast pip installs."""
-    deps = set(_pyproject()["project"]["dependencies"])
-    # Dependency strings include version specifiers; just check the names.
-    names = {
-        dep.split(" ")[0].split("[")[0].split(">")[0].split("<")[0].split("=")[0] for dep in deps
+def _dep_names(specs: list[str]) -> set[str]:
+    """Strip PEP 508 version markers from a dependency list, leaving names."""
+    return {
+        spec.split(" ")[0].split("[")[0].split(">")[0].split("<")[0].split("=")[0]
+        for spec in specs
     }
-    assert names == {"jsonschema", "referencing"}, names
+
+
+def test_pyproject_has_no_runtime_dependencies():
+    """``pip install holoscan-cli`` must install with zero runtime deps.
+
+    Schema validation moved to the ``create`` extra; see
+    ``test_pyproject_create_extra_bundles_validator_deps``.
+    """
+    assert _pyproject()["project"]["dependencies"] == []
+
+
+def test_pyproject_create_extra_bundles_validator_deps():
+    """``pip install 'holoscan-cli[create]'`` must pull in the schema validator.
+
+    The fatal in ``commands/create.py::validate_generated_metadata`` instructs
+    users to install this extra when ``jsonschema`` / ``referencing`` are
+    missing, so the contract here is part of the user-facing install story.
+    """
+    extras = _pyproject()["project"].get("optional-dependencies", {})
+    assert "create" in extras, sorted(extras)
+
+    create_specs = extras["create"]
+    assert _dep_names(create_specs) == {"jsonschema", "referencing"}, create_specs
+
+    jsonschema_spec = next(spec for spec in create_specs if spec.startswith("jsonschema"))
+    assert ">=4.18" in jsonschema_spec, (
+        "metadata_validator uses Draft4Validator(registry=...), which requires "
+        f"jsonschema>=4.18; got {jsonschema_spec!r}"
+    )

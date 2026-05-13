@@ -205,10 +205,10 @@ def handle_status(cli, args: argparse.Namespace) -> None:
     containers = collect_image_info()
     builds = collect_build_info(cli.DEFAULT_BUILD_PARENT_DIR)
     build_folders = collect_folder_info(
-        cli._collect_cache_dirs(["build", "build-*"], cli.DEFAULT_BUILD_PARENT_DIR)
+        cli.collect_cache_dirs(["build", "build-*"], cli.DEFAULT_BUILD_PARENT_DIR)
     )
     data_folders = collect_folder_info(
-        cli._collect_cache_dirs(["data", "data-*"], cli.DEFAULT_DATA_DIR)
+        cli.collect_cache_dirs(["data", "data-*"], cli.DEFAULT_DATA_DIR)
     )
     docker_disk = collect_docker_disk_usage()
 

@@ -106,8 +106,10 @@ def validate_generated_metadata(cli, metadata_path: Path, schema_root: Optional[
     except ImportError:
         template_setup_cmd = f"{cli.script_name} setup --scripts template"
         holohub_cli_util.fatal(
-            "Template dependencies required for metadata validation are missing. "
-            f"Please run `{template_setup_cmd}` and retry."
+            "Metadata validation requires the optional 'create' dependencies "
+            "(jsonschema, referencing). Install them with "
+            "`pip install 'holoscan-cli[create]'` "
+            f"(or, inside a HoloHub checkout, `{template_setup_cmd}`) and retry."
         )
     if not schema_root:
         # No schema installed – skip validation.

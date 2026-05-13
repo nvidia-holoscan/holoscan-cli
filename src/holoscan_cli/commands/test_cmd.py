@@ -101,11 +101,13 @@ def _ctest_script_arg(cli, args: argparse.Namespace, in_container: bool) -> str:
 def handle_test(cli, args: argparse.Namespace) -> None:
     """Handle test command"""
     skip_docker_build, _ = holohub_cli_util.check_skip_builds(args)
-    container = cli._make_project_container(
+    container = cli.make_project_container(
         project_name=args.project, language=args.language if hasattr(args, "language") else None
     )
     if args.clear_cache:
-        cli.handle_clear_cache(args)
+        from holoscan_cli.commands.clear_cache import handle_clear_cache
+
+        handle_clear_cache(cli, args)
 
     container.dryrun = args.dryrun
     container.verbose = args.verbose

@@ -21,6 +21,7 @@ container-tag selection in :mod:`holoscan_cli.container.core` and the
 SDK-discovery branches in the project ``run`` / ``test`` commands.
 """
 
+import functools
 import os
 import platform
 import re
@@ -65,6 +66,7 @@ def check_nvidia_ctk(min_version: str = "1.12.0", recommended_version: str = "1.
         fatal(f"Could not determine nvidia-ctk version. Version {min_version}+ required.")
 
 
+@functools.cache
 def get_gpu_name() -> Optional[str]:
     """
     Helper function to get GPU name from nvidia-smi.  Returns None if nvidia-smi is not available.
@@ -82,6 +84,7 @@ def get_gpu_name() -> Optional[str]:
         return None
 
 
+@functools.cache
 def get_host_gpu() -> str:
     """Determine if running on dGPU or iGPU"""
     gpu_name = get_gpu_name()
@@ -109,6 +112,7 @@ def cuda_major_from_driver(driver_version_str: str) -> Optional[str]:
         return None
 
 
+@functools.cache
 def get_default_cuda_version() -> str:
     """
     Get default CUDA version based on NVIDIA driver version.
@@ -173,6 +177,7 @@ def get_cuda_tag(cuda_version: Optional[Union[str, int]] = None, sdk_version: st
     return f"cuda{cuda_str}-{get_host_gpu()}"
 
 
+@functools.cache
 def get_host_arch() -> str:
     """Get host architecture"""
     machine = platform.machine().lower()

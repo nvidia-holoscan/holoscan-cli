@@ -90,7 +90,7 @@ def handle_run(cli, args: argparse.Namespace) -> None:
     # Handle mode-specific configuration
     project_data = cli.find_project(args.project, language=args.language)
     mode_name, mode_config = cli.resolve_mode(project_data, getattr(args, "mode", None))
-    cli.validate_mode(args, mode_name, mode_config, project_data, getattr(args, "mode", None))
+    cli.validate_mode(mode_name, mode_config)
     language = normalize_language(
         args.language if args.language else project_data.get("metadata", {}).get("language", None)
     )
@@ -266,7 +266,7 @@ def handle_run(cli, args: argparse.Namespace) -> None:
         cmd_to_run = cmd if isinstance(cmd, list) else shlex.split(cmd)
         holohub_cli_util.run_command(cmd_to_run, env=run_env, dry_run=args.dryrun)
     else:
-        container = cli._make_project_container(
+        container = cli.make_project_container(
             project_name=args.project,
             language=args.language if hasattr(args, "language") else None,
         )
