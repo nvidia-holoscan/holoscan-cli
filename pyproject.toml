@@ -37,6 +37,7 @@ classifiers = [
     "Development Status :: 5 - Production/Stable",
     "Environment :: Console",
     "Environment :: GPU :: NVIDIA CUDA :: 12",
+    "Environment :: GPU :: NVIDIA CUDA :: 13",
     "Intended Audience :: Developers",
     "Intended Audience :: Education",
     "Intended Audience :: Science/Research",
@@ -91,12 +92,6 @@ pytest-mock= "^3.15.1"
 pytest = "^9.0.2"
 coveralls = { version = "^4.1.0", markers = "python_version < '3.13'" }
 
-[tool.poetry.group.docs]
-optional = true
-
-[tool.poetry.group.docs.dependencies]
-mkdocs = "*"
-
 [tool.poetry.requires-plugins]
 poetry-dynamic-versioning = { version = ">=1.5.0,<2.0.0", extras = ["plugin"] }
 
@@ -116,7 +111,7 @@ skip_glob = ["build*/*", "dist/*", ".cache/*", ".ruff_cache/*"]
 
 [tool.black]
 line-length = 100
-target-version = ["py310", "py311", "py312"]
+target-version = ["py310", "py311", "py312", "py313"]
 extend-exclude = '''
 (
   ^\.cache/
@@ -148,8 +143,7 @@ addopts = """
 --cov=holoscan_cli ./tests/unit \
 --cov-append \
 --cov-report=term-missing \
---cov-report lcov:tests/reports/.coverage.lcov \
---ignore=docs/
+--cov-report lcov:tests/reports/.coverage.lcov
 """
 
 [tool.poetry-dynamic-versioning]
