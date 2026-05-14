@@ -141,31 +141,7 @@ jobs:
         python -m twine check dist/*
 
     - name: Assert wheel package contents
-      run: |
-        wheel=$(find dist -name 'holoscan_cli-*.whl' | head -n1)
-        echo "Inspecting $wheel"
-        listing=$(unzip -l "$wheel")
-        required=(
-          'holoscan_cli/logging\.json$'
-          'holoscan_cli/py\.typed$'
-          'holoscan_cli/metadata/.+\.schema\.json$'
-          'holoscan_cli/testing/'
-        )
-        for pattern in "${required[@]}"; do
-          if ! echo "$listing" | grep -qE "$pattern"; then
-            echo "Missing from wheel: $pattern" >&2
-            exit 1
-          fi
-        done
-        forbidden=(
-          'holoscan_cli/cmake/'
-        )
-        for pattern in "${forbidden[@]}"; do
-          if echo "$listing" | grep -qE "$pattern"; then
-            echo "Unexpectedly shipped in wheel: $pattern" >&2
-            exit 1
-          fi
-        done
+      run: .github/scripts/assert_wheel_contents.sh dist
 
     - uses: actions/upload-artifact@v6
       name: Upload build
@@ -203,15 +179,4 @@ jobs:
           /tmp/holoscan-cli-smoke/bin/pip install "$wheel"
 
       - name: Smoke test
-        run: |
-          /tmp/holoscan-cli-smoke/bin/holoscan --help
-          /tmp/holoscan-cli-smoke/bin/holoscan version
-          /tmp/holoscan-cli-smoke/bin/holoscan lint --dryrun
-
-      - name: Negative command surface
-        run: |
-          if /tmp/holoscan-cli-smoke/bin/holoscan package --help; then exit 1; fi
-          if /tmp/holoscan-cli-smoke/bin/holoscan hap-run --help; then exit 1; fi
-          if /tmp/holoscan-cli-smoke/bin/holoscan nics; then exit 1; fi
-          if [ -x /tmp/holoscan-cli-smoke/bin/holohub ]; then exit 1; fi
-          if [ -x /tmp/holoscan-cli-smoke/bin/monai-deploy ]; then exit 1; fi
+        run: .github/scripts/smoke_test.sh /tmp/holoscan-cli-smoke/bin

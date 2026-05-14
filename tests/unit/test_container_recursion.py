@@ -142,9 +142,7 @@ def test_ctest_script_arg_local_uses_host_resolved_path(monkeypatch):
     )
     args = SimpleNamespace(ctest_script=None)
 
-    assert (
-        _ctest_script_arg(cli, args, in_container=False) == "-S /host/path/container.ctest"
-    )
+    assert _ctest_script_arg(cli, args, in_container=False) == "-S /host/path/container.ctest"
 
 
 def test_ctest_script_arg_container_defers_resolution_to_runtime():

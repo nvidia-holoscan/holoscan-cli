@@ -103,7 +103,7 @@ def _migrate_deprecated_env_aliases() -> None:
     for old, new in pending:
         print(
             f"WARNING: {old} is deprecated; use {new} instead. "
-            f"Both names work in this release; only {new} will be honored next.",
+            f"Both names work in this release; in an upcoming release only {new} will be honored.",
             file=sys.stderr,
         )
 

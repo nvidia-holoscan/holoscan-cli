@@ -156,5 +156,3 @@ def format_size(mb: float) -> str:
     if mb >= 1024:
         return f"{mb / 1024:.1f} GB"
     return f"{mb:.0f} MB"
-
-

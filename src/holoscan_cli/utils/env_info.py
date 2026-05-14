@@ -168,14 +168,14 @@ def collect_environment_variables() -> None:
 
     # Surface any deprecated HOLOHUB_* names still set in the environment so
     # users can see what's coming from the wrapper compatibility shim.
-    legacy_env_vars = [
-        f"HOLOHUB_{name[len('HOLOSCAN_CLI_'):]}" for name in holoscan_cli_env_vars
-    ]
+    legacy_env_vars = [f"HOLOHUB_{name[len('HOLOSCAN_CLI_'):]}" for name in holoscan_cli_env_vars]
     legacy_set = [v for v in legacy_env_vars if v in os.environ]
     if legacy_set:
         print(f"\n{Color.blue('Deprecated HOLOHUB_* aliases still set on host:')}")
         for var in sorted(legacy_set):
-            print(f"  {var}: {os.environ.get(var)}  (use {var.replace('HOLOHUB_', 'HOLOSCAN_CLI_', 1)})")
+            print(
+                f"  {var}: {os.environ.get(var)}  (use {var.replace('HOLOHUB_', 'HOLOSCAN_CLI_', 1)})"
+            )
 
     print(f"\n{Color.blue('Holoscan Environment Variables:')}")
     holoscan_env_vars = ["HOLOSCAN_SDK_VERSION", "HOLOSCAN_INPUT_PATH"]
@@ -211,9 +211,7 @@ def collect_sccache_info() -> None:
     print(f"\n{Color.blue('sccache Information:')}")
 
     enable_val, enabled = get_env_bool("HOLOSCAN_CLI_ENABLE_SCCACHE", default=False)
-    print(
-        f"  HOLOSCAN_CLI_ENABLE_SCCACHE: {enable_val} ({'enabled' if enabled else 'disabled'})"
-    )
+    print(f"  HOLOSCAN_CLI_ENABLE_SCCACHE: {enable_val} ({'enabled' if enabled else 'disabled'})")
 
     sccache_bin = shutil.which("sccache")
     version = run_info_command(["sccache", "--version"]) if sccache_bin else None

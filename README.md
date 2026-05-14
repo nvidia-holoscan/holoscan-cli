@@ -20,13 +20,11 @@ Per-repo wrappers install this package and delegate to `holoscan`, layering on t
 
 | Repo | Wrapper | Adds |
 | --- | --- | --- |
-| HoloHub | `./holohub` | source-project metadata search paths, container/workspace names |
-| Isaac OS | `./isaac_os` | HSB hardware auto-detection, `--privileged` docker run args, sccache memcached endpoint |
-| I4H Workflows | `./i4h` | RTI DDS license auto-download + mount, TTY serial device passthrough |
+| [HoloHub](https://github.com/nvidia-holoscan/holohub) | `./holohub` | source-project metadata search paths, container/workspace names |
+| [Isaac OS](https://github.com/isaac-for-healthcare/isaac-os) | `./isaac_os` | HSB hardware auto-detection, `--privileged` docker run args, sccache memcached endpoint |
+| [I4H Workflows](https://github.com/isaac-for-healthcare/i4h-workflows) | `./i4h` | RTI DDS license auto-download + mount, TTY serial device passthrough |
 
 Common env vars: `HOLOSCAN_CLI_ROOT` (repo root), `HOLOSCAN_CLI_SEARCH_PATH` (subdirs to scan for `metadata.json`), `HOLOSCAN_CLI_PATH_PREFIX` (placeholder prefix in metadata templates), `HOLOSCAN_CLI_REPO_PREFIX` (container image name prefix). The legacy `HOLOHUB_*` spelling is still honored with a one-line deprecation warning and will be removed in the next minor release. `holoscan env-info` lists every env var the CLI reads in the current shell.
-
-Application packaging (HAP/MAP) is no longer part of this CLI; `holoscan package`, `hap-run`, `nics`, and the `monai-deploy` console script are intentionally not provided.
 
 ## Source layout
 
@@ -77,3 +75,9 @@ poetry build
 ## Contributing
 
 See [CONTRIBUTING.md](./CONTRIBUTING.md) for details.
+
+## Deprecations
+
+### HAP/MAP application packaging
+
+Application packaging (HAP/MAP) is no longer part of this CLI: `holoscan package`, `hap-run`, `nics`, and the `monai-deploy` console script are intentionally not provided. Developers that still rely on HAP/MAP packaging should pin `holoscan-cli<=4.2.0`, the last release that shipped that interface, or migrate to the Holoscan SDK packaging workflows directly. See the deprecation tracking issue for the timeline.

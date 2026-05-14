@@ -33,10 +33,14 @@ from __future__ import annotations
 import importlib.metadata
 import importlib.resources
 import sys
-import tomllib
 from pathlib import Path
 
 import pytest
+
+if sys.version_info >= (3, 11):
+    import tomllib
+else:  # pragma: no cover - exercised only on Python 3.10
+    import tomli as tomllib
 
 REQUIRED_SCHEMAS = {
     "application.schema.json",
@@ -104,7 +108,9 @@ def test_setup_scripts_are_packaged():
     and ``build-container --extra-scripts <name>`` paths for downstream
     consumers that don't vendor their own ``utilities/setup/`` directory.
     """
-    files = {path.name for path in importlib.resources.files("holoscan_cli.setup_scripts").iterdir()}
+    files = {
+        path.name for path in importlib.resources.files("holoscan_cli.setup_scripts").iterdir()
+    }
     missing = REQUIRED_SETUP_SCRIPTS - files
     assert not missing, f"missing bundled setup scripts: {missing}"
 
@@ -157,8 +163,7 @@ def test_pyproject_targets_supported_python_versions():
 def _dep_names(specs: list[str]) -> set[str]:
     """Strip PEP 508 version markers from a dependency list, leaving names."""
     return {
-        spec.split(" ")[0].split("[")[0].split(">")[0].split("<")[0].split("=")[0]
-        for spec in specs
+        spec.split(" ")[0].split("[")[0].split(">")[0].split("<")[0].split("=")[0] for spec in specs
     }
 
 

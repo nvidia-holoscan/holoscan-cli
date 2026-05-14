@@ -80,9 +80,7 @@ class HoloscanContainer:
     REPO_PREFIX = os.environ.get("HOLOSCAN_CLI_REPO_PREFIX", "holohub")
     CONTAINER_PREFIX = os.environ.get("HOLOSCAN_CLI_CONTAINER_PREFIX", REPO_PREFIX)
     WORKSPACE_NAME = os.environ.get("HOLOSCAN_CLI_WORKSPACE_NAME", REPO_PREFIX)
-    HOSTNAME_PREFIX = os.environ.get(
-        "HOLOSCAN_CLI_HOSTNAME_PREFIX", REPO_PREFIX.replace("_", "-")
-    )
+    HOSTNAME_PREFIX = os.environ.get("HOLOSCAN_CLI_HOSTNAME_PREFIX", REPO_PREFIX.replace("_", "-"))
 
     # Docker and runtime configuration
     DOCKER_EXE = os.environ.get("HOLOSCAN_CLI_DOCKER_EXE", "docker")  # Docker executable

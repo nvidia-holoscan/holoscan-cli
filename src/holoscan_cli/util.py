@@ -35,53 +35,6 @@ deprecation cycle. Add new helpers to the appropriate sub-module above
 and re-export them here only when an existing caller needs the alias.
 """
 
-# ---- terminal I/O + subprocess (utils/io.py) --------------------------------
-from holoscan_cli.utils.io import (  # noqa: F401
-    Color,
-    _classify_sudo_requirement,
-    _get_maybe_sudo,
-    _process_command_with_sudo,
-    fatal,
-    format_cmd,
-    format_long_command,
-    get_timestamp,
-    info,
-    run_command,
-    run_info_command,
-    warn,
-)
-
-# ---- string / version / env parsing (utils/text.py) -------------------------
-from holoscan_cli.utils.text import (  # noqa: F401
-    _slugify,
-    dir_size_mb,
-    format_size,
-    get_cli_arg_value,
-    get_env_bool,
-    levenshtein_distance,
-    normalize_args_str,
-    parse_semantic_version,
-    relative_time,
-)
-
-# ---- SDK / GPU / CUDA detection (utils/sdk.py) ------------------------------
-from holoscan_cli.utils.sdk import (  # noqa: F401
-    DEFAULT_BASE_SDK_VERSION,
-    check_nvidia_ctk,
-    cuda_major_from_driver,
-    find_hsdk_build_rel_dir,
-    get_arch_gpu_str,
-    get_compute_capacity,
-    get_cuda_runtime_version,
-    get_cuda_tag,
-    get_default_cuda_version,
-    get_gpu_name,
-    get_host_arch,
-    get_host_gpu,
-    get_sdk_version,
-    is_valid_sdk_installation,
-)
-
 # ---- docker host inspection + VS Code launcher (utils/docker.py) ------------
 from holoscan_cli.utils.docker import (  # noqa: F401
     docker_args_to_devcontainer_format,
@@ -93,23 +46,6 @@ from holoscan_cli.utils.docker import (  # noqa: F401
     launch_vscode,
     launch_vscode_devcontainer,
     open_url,
-)
-
-# ---- apt-based package management + setup helpers (utils/host_setup.py) -----
-from holoscan_cli.utils.host_setup import (  # noqa: F401
-    PackageInstallationError,
-    ensure_apt_updated,
-    get_available_package_versions,
-    get_installed_package_version,
-    get_ubuntu_codename,
-    install_cuda_dependencies_package,
-    install_packages_if_missing,
-    setup_cmake,
-    setup_cuda_dependencies,
-    setup_cuda_packages,
-    setup_ngc_cli,
-    setup_python_dev,
-    setup_sccache,
 )
 
 # ---- env-info collectors (utils/env_info.py) --------------------------------
@@ -146,4 +82,68 @@ from holoscan_cli.utils.holohub import (  # noqa: F401
     replace_placeholders,
     resolve_path_prefix,
     update_env,
+)
+
+# ---- apt-based package management + setup helpers (utils/host_setup.py) -----
+from holoscan_cli.utils.host_setup import (  # noqa: F401
+    PackageInstallationError,
+    ensure_apt_updated,
+    get_available_package_versions,
+    get_installed_package_version,
+    get_ubuntu_codename,
+    install_cuda_dependencies_package,
+    install_packages_if_missing,
+    setup_cmake,
+    setup_cuda_dependencies,
+    setup_cuda_packages,
+    setup_ngc_cli,
+    setup_python_dev,
+    setup_sccache,
+)
+
+# ---- terminal I/O + subprocess (utils/io.py) --------------------------------
+from holoscan_cli.utils.io import (  # noqa: F401
+    Color,
+    _classify_sudo_requirement,
+    _get_maybe_sudo,
+    _process_command_with_sudo,
+    fatal,
+    format_cmd,
+    format_long_command,
+    get_timestamp,
+    info,
+    run_command,
+    run_info_command,
+    warn,
+)
+
+# ---- SDK / GPU / CUDA detection (utils/sdk.py) ------------------------------
+from holoscan_cli.utils.sdk import (  # noqa: F401
+    DEFAULT_BASE_SDK_VERSION,
+    check_nvidia_ctk,
+    cuda_major_from_driver,
+    find_hsdk_build_rel_dir,
+    get_arch_gpu_str,
+    get_compute_capacity,
+    get_cuda_runtime_version,
+    get_cuda_tag,
+    get_default_cuda_version,
+    get_gpu_name,
+    get_host_arch,
+    get_host_gpu,
+    get_sdk_version,
+    is_valid_sdk_installation,
+)
+
+# ---- string / version / env parsing (utils/text.py) -------------------------
+from holoscan_cli.utils.text import (  # noqa: F401
+    _slugify,
+    dir_size_mb,
+    format_size,
+    get_cli_arg_value,
+    get_env_bool,
+    levenshtein_distance,
+    normalize_args_str,
+    parse_semantic_version,
+    relative_time,
 )
