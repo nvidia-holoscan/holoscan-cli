@@ -44,6 +44,25 @@ PROJECT_COMMANDS = project_command_help()
 
 LOG_LEVELS = ["DEBUG", "INFO", "WARN", "ERROR", "CRITICAL"]
 
+# Subcommands removed in the HoloHub-only v1 cut. Mapped to a one-line note
+# explaining what each one did, so users typing the old command get a
+# specific message instead of argparse's generic "invalid choice". HAP/MAP
+# packaging is intentionally out of scope for this package (see
+# cli-migration-consolidation-plan.md → Locked Decisions). The check fires
+# before argparse runs so the message lands even when extra args are passed
+# (e.g. `holoscan hap-run some-image:tag`).
+REMOVED_COMMANDS: dict[str, str] = {
+    "package": "the HAP/MAP application packager",
+    "hap-run": "the packaged-image runner that wrapped HAP/MAP images",
+    "nics": "the HAP NIC diagnostic command",
+}
+
+REMOVED_COMMAND_FOOTER = (
+    "HAP/MAP packaging is out of scope for holoscan-cli v1. Pin "
+    "holoscan-cli<4 or use the Holoscan SDK packaging workflows directly "
+    "if you still need it."
+)
+
 
 def parse_args(argv: Optional[list[str]] = None) -> argparse.Namespace:
     if argv is None:
@@ -155,6 +174,24 @@ def _project_dispatch_argv(argv: list[str]) -> tuple[Optional[str], list[str], O
     return command, project_argv, log_level
 
 
+def _exit_if_removed_command(argv: list[str]) -> None:
+    """Print a removal note and exit 2 if argv's first non-flag token names a
+    removed subcommand. Runs before any parser so users typing the old name
+    see why it's gone instead of argparse's bare "invalid choice".
+    """
+    command, _, _ = _project_dispatch_argv(argv)
+    if command is None or command not in REMOVED_COMMANDS:
+        return
+    program = _program_name(argv)
+    print(
+        f"Error: '{program} {command}' was removed in holoscan-cli v1 — "
+        f"{REMOVED_COMMANDS[command]} is no longer shipped.\n"
+        f"{REMOVED_COMMAND_FOOTER}",
+        file=sys.stderr,
+    )
+    sys.exit(2)
+
+
 def _dispatch_project_cli(argv: list[str]) -> bool:
     """Forward source-project commands to the ported project CLI."""
     command, project_argv, log_level = _project_dispatch_argv(argv)
@@ -180,6 +217,8 @@ def main(argv: Optional[list[str]] = None):
     if argv is None:
         argv = sys.argv
     argv = list(argv)
+
+    _exit_if_removed_command(argv)
 
     if _dispatch_project_cli(argv):
         return

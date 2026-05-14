@@ -244,18 +244,24 @@ class TestMain:
                     mock_execute.assert_called_once_with(mock_args)
 
     @pytest.mark.parametrize(
-        "argv",
+        "argv,command",
         [
-            ["holoscan", "package"],
-            ["holoscan", "hap-run", "some-image:tag"],
-            ["holoscan", "nics"],
+            (["holoscan", "package"], "package"),
+            (["holoscan", "hap-run", "some-image:tag"], "hap-run"),
+            (["holoscan", "nics"], "nics"),
+            (["holoscan", "--log-level", "DEBUG", "package"], "package"),
         ],
     )
-    def test_main_rejects_removed_commands(self, argv):
+    def test_main_rejects_removed_commands(self, argv, command, capsys):
         with patch("holoscan_cli.cli.main") as mock_project_main:
-            with pytest.raises(SystemExit):
+            with pytest.raises(SystemExit) as excinfo:
                 main(argv)
         mock_project_main.assert_not_called()
+        # Exit 2 matches argparse's convention for unknown subcommands.
+        assert excinfo.value.code == 2
+        err = capsys.readouterr().err
+        assert f"'holoscan {command}' was removed" in err
+        assert "HAP/MAP packaging is out of scope" in err
 
     def test_main_with_log_level(self):
         mock_args = MagicMock()
