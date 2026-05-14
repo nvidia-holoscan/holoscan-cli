@@ -80,4 +80,4 @@ See [CONTRIBUTING.md](./CONTRIBUTING.md) for details.
 
 ### HAP/MAP application packaging
 
-Application packaging (HAP/MAP) is no longer part of this CLI: `holoscan package`, `hap-run`, `nics`, and the `monai-deploy` console script are intentionally not provided. Developers that still rely on HAP/MAP packaging should pin `holoscan-cli<=4.2.0`, the last release that shipped that interface, or migrate to the Holoscan SDK packaging workflows directly. See the deprecation tracking issue for the timeline.
+Application packaging (HAP/MAP) is no longer part of this CLI: `holoscan package`, `hap-run`, `nics`, and the `monai-deploy` console script are intentionally not provided. Developers that still rely on HAP/MAP packaging should pin `holoscan-cli<=4.2.0`, the last release that shipped that interface, or migrate to the Holoscan SDK packaging workflows directly. See [issue #164](https://github.com/nvidia-holoscan/holoscan-cli/issues/164) for the deprecation timeline.
