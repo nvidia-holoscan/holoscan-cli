@@ -49,5 +49,12 @@ jobs:
         with:
           comment-summary-in-pr: always
           fail-on-severity: moderate
-          deny-licenses: GPL-1.0-or-later, LGPL-2.0-or-later
+          # License gating moved to an allowlist — the action's `deny-licenses`
+          # option is deprecated for removal in the next major release
+          # (actions/dependency-review-action#997). Apache-2.0 (this project's
+          # license) is compatible with the SPDX identifiers below; copyleft
+          # licenses like GPL/LGPL are excluded by omission.
+          allow-licenses: >-
+            Apache-2.0, BSD-2-Clause, BSD-3-Clause, ISC, MIT,
+            MPL-2.0, Python-2.0, Unlicense, 0BSD
           retry-on-snapshot-warnings: true
