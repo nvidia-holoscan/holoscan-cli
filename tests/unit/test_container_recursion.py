@@ -138,12 +138,12 @@ def test_ctest_script_arg_uses_user_override():
 def test_ctest_script_arg_local_uses_host_resolved_path(monkeypatch):
     cli = _bare_cli()
     monkeypatch.setattr(
-        project_cli.HoloscanCLI, "DEFAULT_CTEST_SCRIPT", "/host/path/holohub.container.ctest"
+        project_cli.HoloscanCLI, "DEFAULT_CTEST_SCRIPT", "/host/path/container.ctest"
     )
     args = SimpleNamespace(ctest_script=None)
 
     assert (
-        _ctest_script_arg(cli, args, in_container=False) == "-S /host/path/holohub.container.ctest"
+        _ctest_script_arg(cli, args, in_container=False) == "-S /host/path/container.ctest"
     )
 
 

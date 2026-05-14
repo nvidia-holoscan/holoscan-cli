@@ -13,14 +13,19 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-# Usage (run from the holohub repo root or invoke ctest directly):
-#   ctest -DAPP=my_app -DTAG=<tag> -S utilities/testing/holohub.container.ctest -VV
+# Default CTest driver invoked by `holoscan test`. The CLI maps its flags
+# onto the CTest -D variables below; the file can also be invoked directly
+# via `ctest -DAPP=my_app -DTAG=<tag> -S <path-to-container.ctest> -VV`.
 #
 # CTest -D variables:
 #   APP                   Project name (required unless OP/PKG/EXT is set)
 #   TAG                   Image tag / branch identifier (default: "latest")
 #   CTEST_SITE            CDash site name (default: "SITE_NA")
 #   PLATFORM_NAME         Platform portion of the build name (default: "linux")
+#   BUILD_NAME_PREFIX     Leading token in the CTest build name
+#                         (default: "holoscan"). Wrappers like `./holohub`
+#                         or `./i4h` can override this so CDash submissions
+#                         from each repo stay distinguishable.
 #   CONFIGURE_OPTIONS     Semicolon-separated list of extra cmake -D flags
 #   CTEST_SUBMIT_URL      CDash submit URL; omit to skip submission
 #   CTEST_TEST_INCLUDE    Regex filter passed to ctest_test(INCLUDE ...)
@@ -31,11 +36,7 @@
 #                         distinguish test failures (exit 0, file present)
 #                         from infra failures (exit != 0).
 #
-#   ./holohub test [project] [options]
-#     Examples: ./holohub test app_name
-#               ./holohub test operator_name
-#               ./holohub test video_streaming --ctest-options "-R unit_tests -VV"
-# `./holohub test` options supported by this ctest config:
+# `holoscan test` flags that feed into the variables above:
 #   --verbose               Print extra CLI output; also adds -VV to ctest
 #   --dryrun                Echo the commands without executing them
 #   --clear-cache           Remove cached build/data directories before testing
@@ -82,7 +83,11 @@ if(NOT PLATFORM_NAME)
   set(PLATFORM_NAME linux)
 endif()
 
-set(CTEST_BUILD_NAME "holohub-${PLATFORM_NAME}-${PROJ_NAME}-${TAG}")
+if(NOT BUILD_NAME_PREFIX)
+  set(BUILD_NAME_PREFIX "holoscan")
+endif()
+
+set(CTEST_BUILD_NAME "${BUILD_NAME_PREFIX}-${PLATFORM_NAME}-${PROJ_NAME}-${TAG}")
 
 set(CTEST_UPDATE_COMMAND "git")
 set(CTEST_CMAKE_GENERATOR "Ninja")

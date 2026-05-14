@@ -51,9 +51,7 @@ REQUIRED_SCHEMAS = {
 
 REQUIRED_TESTING_FILES = {
     "CTestCustom.cmake",
-    "cdash_submit_configure_log.py",
-    "holohub.container.ctest",
-    "holohub_test_all_applications.ctest",
+    "container.ctest",
 }
 
 REQUIRED_SETUP_SCRIPTS = {

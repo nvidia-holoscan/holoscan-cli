@@ -74,7 +74,7 @@ class HoloscanCLI:
     # Allow overriding the default CTest script path via environment variable
     DEFAULT_CTEST_SCRIPT = os.environ.get(
         "HOLOSCAN_CLI_CTEST_SCRIPT",
-        str(Path(__file__).resolve().parent / "testing" / "holohub.container.ctest"),
+        str(Path(__file__).resolve().parent / "testing" / "container.ctest"),
     )
 
     def __init__(self, script_name: Optional[str] = None):
