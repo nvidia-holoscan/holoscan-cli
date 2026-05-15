@@ -55,13 +55,16 @@ classifiers = [
 dependencies = []
 
 [project.optional-dependencies]
-# ``pip install 'holoscan-cli[create]'`` enables ``holoscan create`` metadata
-# validation. ``jsonschema>=4.18`` is required for the ``Draft4Validator(...,
-# registry=...)`` API used by ``metadata_validator.py``; older versions
-# silently lack the kwarg and fail at runtime.
+# ``pip install 'holoscan-cli[create]'`` enables the entire ``holoscan create``
+# happy path: schema validation (``jsonschema`` + ``referencing``) plus the
+# cookiecutter scaffold used to materialize the new project. ``jsonschema>=4.18``
+# is required for the ``Draft4Validator(..., registry=...)`` API used by
+# ``metadata_validator.py``; older versions silently lack the kwarg and fail at
+# runtime.
 create = [
     "jsonschema (>=4.18,<5.0)",
     "referencing (>=0.30)",
+    "cookiecutter (>=2.5)",
 ]
 
 [project.urls]

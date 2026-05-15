@@ -177,17 +177,23 @@ def test_pyproject_has_no_runtime_dependencies():
 
 
 def test_pyproject_create_extra_bundles_validator_deps():
-    """``pip install 'holoscan-cli[create]'`` must pull in the schema validator.
+    """``pip install 'holoscan-cli[create]'`` must cover the entire ``create`` path.
 
     The fatal in ``commands/create.py::validate_generated_metadata`` instructs
     users to install this extra when ``jsonschema`` / ``referencing`` are
-    missing, so the contract here is part of the user-facing install story.
+    missing, and ``commands/create.py::run_create`` does the same for
+    ``cookiecutter``, so the contract here is part of the user-facing install
+    story.
     """
     extras = _pyproject()["project"].get("optional-dependencies", {})
     assert "create" in extras, sorted(extras)
 
     create_specs = extras["create"]
-    assert _dep_names(create_specs) == {"jsonschema", "referencing"}, create_specs
+    assert _dep_names(create_specs) == {
+        "jsonschema",
+        "referencing",
+        "cookiecutter",
+    }, create_specs
 
     jsonschema_spec = next(spec for spec in create_specs if spec.startswith("jsonschema"))
     assert ">=4.18" in jsonschema_spec, (

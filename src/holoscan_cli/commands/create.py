@@ -186,7 +186,8 @@ def handle_create(cli, args: argparse.Namespace) -> None:
         template_setup_cmd = f"{cli.script_name} setup --scripts template"
         holohub_cli_util.fatal(
             "cookiecutter is required to create new projects. "
-            f"Please run `{template_setup_cmd}` to install template dependencies."
+            f"Install it with `pip install 'holoscan-cli[create]'`, "
+            f"or run `{template_setup_cmd}` for the HoloHub bash setup flow."
         )
 
     intended_dir = args.directory / context["project_slug"]
