@@ -44,7 +44,6 @@ class TestParseArgs:
         "argv",
         [
             ["holoscan", "package"],
-            ["holoscan", "hap-run"],
             ["holoscan", "nics"],
         ],
     )
@@ -247,7 +246,6 @@ class TestMain:
         "argv,command",
         [
             (["holoscan", "package"], "package"),
-            (["holoscan", "hap-run", "some-image:tag"], "hap-run"),
             (["holoscan", "nics"], "nics"),
             (["holoscan", "--log-level", "DEBUG", "package"], "package"),
         ],

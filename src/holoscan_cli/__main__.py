@@ -50,10 +50,11 @@ LOG_LEVELS = ["DEBUG", "INFO", "WARN", "ERROR", "CRITICAL"]
 # packaging is intentionally out of scope for this package (see
 # cli-migration-consolidation-plan.md → Locked Decisions). The check fires
 # before argparse runs so the message lands even when extra args are passed
-# (e.g. `holoscan hap-run some-image:tag`).
+# (e.g. `holoscan package some-image:tag`). Note: the pre-v1 `holoscan run`
+# was the HAP/MAP packaged-image runner; in v1 the same name is reused for
+# the HoloHub-style source-project runner, so it is not listed here.
 REMOVED_COMMANDS: dict[str, str] = {
     "package": "the HAP/MAP application packager",
-    "hap-run": "the packaged-image runner that wrapped HAP/MAP images",
     "nics": "the HAP NIC diagnostic command",
 }
 

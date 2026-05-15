@@ -110,9 +110,9 @@ Given the bin/ directory of a venv that has `holoscan-cli` installed:
 * Loops `holoscan <cmd> --help` for every name in
   `holoscan_cli.commands.registry.project_command_names()`, so a regression
   in any subcommand's parser surfaces immediately.
-* Negative surface: asserts that the removed commands (`package`, `hap-run`,
-  `nics`) exit non-zero, and that the legacy `holohub` / `monai-deploy`
-  console scripts are **not** installed alongside `holoscan`.
+* Negative surface: asserts that the removed commands (`package`, `nics`)
+  exit non-zero, and that the legacy `holohub` / `monai-deploy` console
+  scripts are **not** installed alongside `holoscan`.
 
 ## Other workflows
 
