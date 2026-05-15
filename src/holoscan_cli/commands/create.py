@@ -53,8 +53,12 @@ def register_create_parser(cli, subparsers) -> argparse.ArgumentParser:
     parser.add_argument(
         "--directory",
         type=Path,
-        default=cli.HOLOHUB_ROOT / "applications",
-        help="Path to the directory to create the project in",
+        default=None,
+        help=(
+            "Output directory for the generated project "
+            "(default: applications/ for application templates; "
+            "required for module templates — prompted interactively if omitted)"
+        ),
     )
     parser.add_argument(
         "--context",
@@ -139,17 +143,43 @@ def handle_create(cli, args: argparse.Namespace) -> None:
     if not template_dir.exists() and not args.dryrun:
         fatal(f"Template directory {template_dir} does not exist")
 
+    # Detect template type: module vs application.
+    # Check path parts so a path like /home/user/my_modules/template doesn't
+    # falsely match — only paths whose first component is literally "modules" qualify.
+    is_module_template = "modules" in Path(args.template).parts
+
+    # Resolve output directory.
+    # Application templates default to applications/. Module templates require the
+    # user to specify a path — there is no sensible default (the module lives outside
+    # the source-project tree), so we prompt interactively when --directory is not
+    # supplied.
+    if args.directory is None:
+        if is_module_template:
+            raw = input("Output directory for the new module: ").strip()
+            if not raw:
+                fatal("Output directory is required for module templates.")
+            args.directory = Path(raw).expanduser().resolve()
+        else:
+            args.directory = cli.HOLOHUB_ROOT / "applications"
+
     if not args.directory.exists() and not args.dryrun:
         fatal(f"Project output directory {args.directory} does not exist")
 
     # Define minimal context with required fields
+    project_slug = args.project.lower().replace(" ", "_")
     context = {
         "project_name": args.project,
-        "project_slug": args.project.lower().replace(" ", "_"),
+        "project_slug": project_slug,
         "language": args.language.lower() if args.language else None,  # Only set if provided
         "holoscan_version": HoloscanContainer.BASE_SDK_VERSION,
         "year": datetime.datetime.now().year,
     }
+
+    # For module templates the generated folder is the kebab module_repo_name
+    # (holoscan-<slug>) rather than the snake_case slug.
+    output_folder = (
+        f"holoscan-{project_slug.replace('_', '-')}" if is_module_template else project_slug
+    )
 
     # Add any additional context variables from command line
     if args.context:
@@ -163,12 +193,12 @@ def handle_create(cli, args: argparse.Namespace) -> None:
     # Print summary if dryrun
     if args.dryrun:
         print(Color.green("Would create project folder with these parameters (dryrun):"))
-        print(f"Directory: {args.directory / context['project_slug']}")
+        print(f"Directory: {args.directory / output_folder}")
         for key, value in context.items():
             print(f"  {key}: {value}")
         if args.directory == cli.HOLOHUB_ROOT / "applications":
             print(Color.green("Would modify `applications/CMakeLists.txt`: "))
-            print(f"    add_holohub_application({context['project_slug']})")
+            print(f"    add_holohub_application({project_slug})")
         return
 
     try:
@@ -181,7 +211,7 @@ def handle_create(cli, args: argparse.Namespace) -> None:
             f"or run `{template_setup_cmd}` for the HoloHub bash setup flow."
         )
 
-    intended_dir = args.directory / context["project_slug"]
+    intended_dir = args.directory / output_folder
     if intended_dir.exists():
         fatal(f"Project directory {intended_dir} already exists")
 
@@ -205,14 +235,27 @@ def handle_create(cli, args: argparse.Namespace) -> None:
 
     # Get the actual project directory after cookiecutter runs
     metadata_path = project_dir / "metadata.json"
-    src_dir = project_dir / "src"
-    main_file = next(src_dir.glob(f"{actual_slug}.*"), None)
-    schema_path = get_schema_path("applications")
-    schema_root = "applications" if schema_path.exists() else None
+
+    if is_module_template:
+        main_file = None
+        schema_root = None
+    else:
+        src_dir = project_dir / "src"
+        main_file = next(src_dir.glob(f"{actual_slug}.*"), None)
+        schema_path = get_schema_path("applications")
+        schema_root = "applications" if schema_path.exists() else None
     validate_generated_metadata(cli, metadata_path, schema_root)
 
     msg_next = ""
-    if "applications" in args.template:
+    if is_module_template:
+        msg_next = (
+            f"Possible next steps:\n"
+            f"- Implement your operator in {project_dir}/operators/\n"
+            f"- Update metadata.json: {metadata_path}\n"
+            f"- Update project README\n"
+            f"- Build and test with the Holoscan CLI\n"
+        )
+    elif "applications" in args.template:
         msg_next = (
             f"Possible next steps:\n"
             f"- Add operators to {main_file}\n"

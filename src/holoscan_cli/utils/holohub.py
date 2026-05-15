@@ -125,7 +125,7 @@ def get_holohub_root() -> Path:
 
 
 def get_component_search_paths(base_dir: Optional[Path] = None) -> tuple[Path, ...]:
-    """Return metadata search paths honoring HOLOHUB_SEARCH_PATH overrides."""
+    """Return metadata search paths honoring HOLOSCAN_CLI_SEARCH_PATH overrides."""
     base_path = base_dir or HOLOHUB_ROOT
     tokens = os.environ.get("HOLOSCAN_CLI_SEARCH_PATH", "").split(",")
     default_paths = (
