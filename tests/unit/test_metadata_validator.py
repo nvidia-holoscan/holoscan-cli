@@ -75,7 +75,7 @@ def test_extract_readme_title_ignores_blank_lines(tmp_path):
 
 
 def test_check_name_matches_readme_match(tmp_path):
-    readme = _write(tmp_path, "README.md", "# Endoscopy Tool Tracking\n")
+    _write(tmp_path, "README.md", "# Endoscopy Tool Tracking\n")
     metadata = tmp_path / "metadata.json"
     metadata.write_text(
         json.dumps({"application": {"name": "Endoscopy Tool Tracking"}}),

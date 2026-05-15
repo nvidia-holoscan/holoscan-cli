@@ -26,7 +26,6 @@ These unit tests keep the fixture honest: any schema/format drift that
 breaks ``find_project`` will be caught here before release.
 """
 
-import os
 from pathlib import Path
 
 import pytest
@@ -64,9 +63,7 @@ def test_smoke_fixture_metadata_validates_against_schema():
 
     from holoscan_cli.metadata import metadata_validator
 
-    raw = json.loads(
-        (FIXTURE_ROOT / "applications" / "smoke_app" / "metadata.json").read_text()
-    )
+    raw = json.loads((FIXTURE_ROOT / "applications" / "smoke_app" / "metadata.json").read_text())
     ok, msg = metadata_validator.validate_json(raw, "applications")
     assert ok, f"smoke fixture metadata fails application schema: {msg}"
 
