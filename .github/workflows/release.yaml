@@ -65,7 +65,10 @@ jobs:
           python-version: ${{ matrix.python-version }}
 
       - name: Install Poetry
-        uses: snok/install-poetry@76e04a911780d5b312d89783f7b1cd627778900a # v1
+        # Stuck on Gr1N/setup-poetry@v9 — only ref allowed by the repo's
+        # Actions allowlist. Node 20 deprecation warning is benign until
+        # GitHub's 2026-06-02 cutover.
+        uses: Gr1N/setup-poetry@v9
 
       - name: Install library and dependencies
         run: |
@@ -100,7 +103,10 @@ jobs:
           python-version: ${{ matrix.python.version }}
 
       - name: Install Poetry
-        uses: snok/install-poetry@76e04a911780d5b312d89783f7b1cd627778900a # v1
+        # Stuck on Gr1N/setup-poetry@v9 — only ref allowed by the repo's
+        # Actions allowlist. Node 20 deprecation warning is benign until
+        # GitHub's 2026-06-02 cutover.
+        uses: Gr1N/setup-poetry@v9
 
       - name: Install library and dependencies
         run: |
@@ -122,7 +128,9 @@ jobs:
           path: tests/reports/.coverage.lcov
 
       - name: Upload Coveralls Report
-        uses: coverallsapp/github-action@5cbfd81b66ca5d10c19b062c04de0199c215fb6e # v2.3.7
+        # Pinned to the SHA the repo's Actions allowlist permits (v2.3.4);
+        # bumping requires extending the allowlist.
+        uses: coverallsapp/github-action@cfd0633edbd2411b532b808ba7a8b5e04f76d2c8 # v2.3.4
         if: ${{ matrix.python.coveralls }}
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
@@ -156,7 +164,8 @@ jobs:
         fetch-depth: 0
 
     - name: Install Poetry
-      uses: snok/install-poetry@76e04a911780d5b312d89783f7b1cd627778900a # v1
+      # See note in the pre-commit job above.
+      uses: Gr1N/setup-poetry@v9
 
     - name: Build wheel and sdist
       env:
