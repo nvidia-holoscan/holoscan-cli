@@ -15,9 +15,11 @@
 
 # Manual release workflow: lint, unit tests, wheel + sdist build,
 # package metadata + content validation, installed-wheel smoke tests,
-# and (for non-GA dispatches only) TestPyPI publish. GA publication
-# is handed off to the K2 Kitmaker wheel-release flow using the
-# wheel artifact produced here.
+# and TestPyPI publish (for both GA and non-GA dispatches). The K2
+# Kitmaker wheel-release flow promotes the staged wheel from TestPyPI
+# (preferred — via the new `release_kitmaker_wheel.py upload
+# --wheel-url https://test.pypi.org/project/holoscan-cli/<v>/` shape)
+# or, as a fallback, from the `wheel-artifact` uploaded here.
 #
 # For more information see:
 # https://help.github.com/actions/language-and-framework-guides/using-python-with-github-actions
@@ -239,7 +241,6 @@ jobs:
         run: .github/scripts/smoke_test.sh /tmp/holoscan-cli-smoke/bin
 
   testpypi-deploy:
-    if: ${{ inputs.ga == false }}
     name: publish-test-pypi
     permissions:
       id-token: write

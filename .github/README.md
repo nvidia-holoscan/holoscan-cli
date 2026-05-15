@@ -19,7 +19,7 @@ shipped with the `holoscan-cli` wheel.
     ├── codeql.yaml           ← CodeQL Advanced (Python)
     ├── dependency-review.yml ← Dependency review on PRs
     ├── main.yaml             ← Code Check — push CI
-    └── release.yaml          ← Manual release flow (TestPyPI / GA handoff)
+    └── release.yaml          ← Manual release flow (TestPyPI publish → K2 Kitmaker)
 ```
 
 ## How CI runs on every push
@@ -50,7 +50,7 @@ on 3.11+ but missing on 3.10).
 | --------- | ---------------------------------------------------------------------------------- |
 | `version` | Tag name to use, e.g. `v4.3.0`. The workflow creates this tag at the dispatch SHA. |
 | `rc`      | Optional RC build number (used by the dynamic-versioning Jinja format).            |
-| `ga`      | `true` to skip the TestPyPI publish (GA path); `false` for an RC dispatch.         |
+| `ga`      | `true` for an official GA dispatch; `false` for an RC/alpha/beta dispatch. Both publish to TestPyPI; `false` additionally auto-removes the tag at the end so RC dispatches do not leave stray refs. |
 
 Pipeline:
 
@@ -59,15 +59,20 @@ Pipeline:
    validates package metadata with `twine check`, asserts the wheel contents
    with `scripts/assert_wheel_contents.sh`, uploads `dist/*` (both wheel and
    sdist) as the `build-artifact`, and uploads the `.whl` separately as
-   `wheel-artifact` for the K2 Kitmaker GA wheel-release flow to consume.
-   The tag is auto-removed at the end when `ga == false` so RC dispatches do
-   not leave stray refs.
+   `wheel-artifact`. The `wheel-artifact` upload is kept as a fallback path
+   for the K2 Kitmaker wheel-release flow (via its GitHub Actions artifact
+   URL shape); the preferred path is to consume the staged wheel from
+   TestPyPI (see step 4). The tag is auto-removed at the end when
+   `ga == false` so RC dispatches do not leave stray refs.
 3. **`smoke-test`** — runs `scripts/smoke_test.sh` against the installed
    wheel.
-4. **`publish-test-pypi`** — only when `ga == false`. Publishes via PyPA's
-   trusted-publisher action (`pypa/gh-action-pypi-publish@release/v1`), no
-   API token. Trust is configured on TestPyPI's side; the workflow filename
-   (`release.yaml`) must match what TestPyPI has registered.
+4. **`publish-test-pypi`** — runs for both GA and non-GA dispatches.
+   Publishes via PyPA's trusted-publisher action
+   (`pypa/gh-action-pypi-publish@release/v1`), no API token. Trust is
+   configured on TestPyPI's side; the workflow filename (`release.yaml`)
+   must match what TestPyPI has registered. K2 Kitmaker then promotes the
+   staged wheel to Artifactory via
+   `release_kitmaker_wheel.py upload --wheel-url https://test.pypi.org/project/holoscan-cli/<v>/ --artifactory-repo-url …`.
 
 Branch naming feeds into the version string via
 `tool.poetry-dynamic-versioning.format-jinja` in `pyproject.toml`:
