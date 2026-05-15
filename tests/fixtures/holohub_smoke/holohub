@@ -1,0 +1,3 @@
+# Sentinel marker so `_get_holohub_root` recognises this directory as a
+# HoloHub-style source-project repo root. The file's name (not contents)
+# is what counts.

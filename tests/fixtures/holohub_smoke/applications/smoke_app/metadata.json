@@ -1,0 +1,21 @@
+{
+  "application": {
+    "name": "Smoke Test App",
+    "authors": [
+      { "name": "Holoscan CLI Maintainers", "affiliation": "NVIDIA" }
+    ],
+    "language": "python",
+    "version": "0.0.1",
+    "changelog": {
+      "0.0.1": "Initial fixture for release-validation smoke tests."
+    },
+    "holoscan_sdk": {
+      "minimum_required_version": "2.5.0",
+      "tested_versions": ["2.5.0"]
+    },
+    "platforms": ["x86_64"],
+    "tags": ["smoke", "test"],
+    "ranking": 4,
+    "requirements": {}
+  }
+}

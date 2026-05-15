@@ -36,3 +36,16 @@ if "$holoscan" package --help; then exit 1; fi
 if "$holoscan" nics; then exit 1; fi
 if [ -x "$bin_dir/holohub" ]; then exit 1; fi
 if [ -x "$bin_dir/monai-deploy" ]; then exit 1; fi
+
+# Positive surface against the in-tree HoloHub-style fixture: point
+# HOLOSCAN_CLI_ROOT at tests/fixtures/holohub_smoke/ and confirm that
+# project-discovery commands locate the bundled smoke_app. Catches a
+# wheel that ships but fails the moment it tries to enumerate projects
+# (e.g. missing metadata schema files, broken iter_metadata_paths).
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+fixture_root="$script_dir/../../tests/fixtures/holohub_smoke"
+if [ -d "$fixture_root" ]; then
+  echo "--- exercising source-project surface against $fixture_root"
+  HOLOSCAN_CLI_ROOT="$fixture_root" "$holoscan" list | grep -q smoke_app
+  HOLOSCAN_CLI_ROOT="$fixture_root" "$holoscan" modes smoke_app > /dev/null
+fi

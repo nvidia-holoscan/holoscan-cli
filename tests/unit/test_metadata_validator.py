@@ -29,7 +29,6 @@ import pytest
 
 from holoscan_cli.metadata import metadata_validator
 
-
 # ---- extract_readme_title ----------------------------------------------------
 
 
@@ -125,9 +124,7 @@ def test_check_name_matches_readme_falls_back_to_parent_readme(tmp_path):
     impl = project / "python"
     impl.mkdir()
     metadata_path = impl / "metadata.json"
-    metadata_path.write_text(
-        json.dumps({"application": {"name": "My Real App"}}), encoding="utf-8"
-    )
+    metadata_path.write_text(json.dumps({"application": {"name": "My Real App"}}), encoding="utf-8")
 
     ok, msg = metadata_validator.check_name_matches_readme(
         str(metadata_path),
@@ -184,9 +181,7 @@ def _schema_dir(schema_kind):
 def test_validate_json_accepts_minimal_package_metadata(tmp_path):
     # The package schema has no required fields on the `package` object;
     # any well-formed dict passes.
-    ok, msg = metadata_validator.validate_json(
-        {"package": {"dockerfile": "Dockerfile"}}, "pkg"
-    )
+    ok, msg = metadata_validator.validate_json({"package": {"dockerfile": "Dockerfile"}}, "pkg")
     assert ok is True, msg
     assert msg == "valid"
 
@@ -206,9 +201,7 @@ def test_validate_json_rejects_invalid_schema_file(tmp_path, monkeypatch):
     bogus_schema = tmp_path / "broken.schema.json"
     bogus_schema.write_text("{not valid json", encoding="utf-8")
 
-    monkeypatch.setattr(
-        metadata_validator, "get_schema_path", lambda directory: bogus_schema
-    )
+    monkeypatch.setattr(metadata_validator, "get_schema_path", lambda directory: bogus_schema)
 
     ok, msg = metadata_validator.validate_json({"anything": {}}, "anything")
     assert ok is False
@@ -233,9 +226,7 @@ def test_validate_json_directory_zero_when_all_valid(tmp_path, monkeypatch):
     assert code == 0
 
 
-def test_validate_json_directory_nonzero_when_subdir_missing_metadata(
-    tmp_path, monkeypatch
-):
+def test_validate_json_directory_nonzero_when_subdir_missing_metadata(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     base = tmp_path / "operators"
     base.mkdir()
@@ -247,9 +238,7 @@ def test_validate_json_directory_nonzero_when_subdir_missing_metadata(
     assert code == 1
 
 
-def test_validate_json_directory_nonzero_when_metadata_json_unparseable(
-    tmp_path, monkeypatch
-):
+def test_validate_json_directory_nonzero_when_metadata_json_unparseable(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     base = tmp_path / "operators"
     base.mkdir()

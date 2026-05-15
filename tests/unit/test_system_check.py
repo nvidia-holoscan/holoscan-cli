@@ -269,7 +269,9 @@ def test_check_holoscan_python_import_failure(monkeypatch):
     monkeypatch.setattr(
         system_check.subprocess,
         "run",
-        lambda *a, **kw: _proc(returncode=1, stderr="ModuleNotFoundError: No module named 'holoscan'"),
+        lambda *a, **kw: _proc(
+            returncode=1, stderr="ModuleNotFoundError: No module named 'holoscan'"
+        ),
     )
     result = system_check.check_holoscan_python()
     assert result.status == "WARN"
@@ -440,14 +442,24 @@ def test_run_all_checks_recovers_from_check_exception(monkeypatch):
         raise RuntimeError("intentional")
 
     monkeypatch.setattr(system_check, "check_gpu", boom)
-    monkeypatch.setattr(system_check, "check_cuda", lambda: system_check.CheckResult("OK", "CUDA", "ok"))
-    monkeypatch.setattr(system_check, "check_docker", lambda: system_check.CheckResult("OK", "Docker", "ok"))
-    monkeypatch.setattr(system_check, "check_holoscan", lambda: system_check.CheckResult("OK", "Holoscan", "ok"))
+    monkeypatch.setattr(
+        system_check, "check_cuda", lambda: system_check.CheckResult("OK", "CUDA", "ok")
+    )
+    monkeypatch.setattr(
+        system_check, "check_docker", lambda: system_check.CheckResult("OK", "Docker", "ok")
+    )
+    monkeypatch.setattr(
+        system_check, "check_holoscan", lambda: system_check.CheckResult("OK", "Holoscan", "ok")
+    )
     monkeypatch.setattr(
         system_check, "check_holoscan_python", lambda: system_check.CheckResult("OK", "py", "ok")
     )
-    monkeypatch.setattr(system_check, "check_disk", lambda: system_check.CheckResult("OK", "Disk", "ok"))
-    monkeypatch.setattr(system_check, "check_cli", lambda: system_check.CheckResult("OK", "CLI", "ok"))
+    monkeypatch.setattr(
+        system_check, "check_disk", lambda: system_check.CheckResult("OK", "Disk", "ok")
+    )
+    monkeypatch.setattr(
+        system_check, "check_cli", lambda: system_check.CheckResult("OK", "CLI", "ok")
+    )
     monkeypatch.setattr(
         system_check, "check_container", lambda: system_check.CheckResult("OK", "Container", "ok")
     )
@@ -468,7 +480,9 @@ def test_format_results_renders_all_statuses():
     results = [
         system_check.CheckResult("OK", "GPU", "ok-msg"),
         system_check.CheckResult("WARN", "Docker", "warn-msg", fix_suggestion="hint x"),
-        system_check.CheckResult("FAIL", "Disk", "fail-msg", fix_suggestion="run y", details="d1\nd2"),
+        system_check.CheckResult(
+            "FAIL", "Disk", "fail-msg", fix_suggestion="run y", details="d1\nd2"
+        ),
         system_check.CheckResult("SKIP", "Display", "skip-msg"),
     ]
     out = system_check.format_results(results, elapsed=1.23)

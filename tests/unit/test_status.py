@@ -29,7 +29,6 @@ import pytest
 
 from holoscan_cli import status as project_status
 
-
 # ---- collect_platform_info --------------------------------------------------
 
 
@@ -71,9 +70,7 @@ def test_collect_git_info_clean_repo(monkeypatch, tmp_path):
         ("git", "-C", str(tmp_path), "rev-parse", "--short", "HEAD"): "abc1234",
         ("git", "-C", str(tmp_path), "status", "--porcelain"): "",
     }
-    monkeypatch.setattr(
-        project_status, "run_info_command", lambda cmd: outputs.get(tuple(cmd))
-    )
+    monkeypatch.setattr(project_status, "run_info_command", lambda cmd: outputs.get(tuple(cmd)))
 
     git = project_status.collect_git_info(tmp_path)
     assert git is not None
@@ -89,9 +86,7 @@ def test_collect_git_info_dirty_with_modifications(monkeypatch, tmp_path):
         ("git", "-C", str(tmp_path), "rev-parse", "--short", "HEAD"): "deadbee",
         ("git", "-C", str(tmp_path), "status", "--porcelain"): " M file_a\n?? file_b\n",
     }
-    monkeypatch.setattr(
-        project_status, "run_info_command", lambda cmd: outputs.get(tuple(cmd))
-    )
+    monkeypatch.setattr(project_status, "run_info_command", lambda cmd: outputs.get(tuple(cmd)))
 
     git = project_status.collect_git_info(tmp_path)
     assert git.dirty is True
@@ -110,9 +105,7 @@ def test_collect_git_info_handles_detached_head(monkeypatch, tmp_path):
         ("git", "-C", str(tmp_path), "rev-parse", "--short", "HEAD"): "abc1234",
         ("git", "-C", str(tmp_path), "status", "--porcelain"): "",
     }
-    monkeypatch.setattr(
-        project_status, "run_info_command", lambda cmd: outputs.get(tuple(cmd))
-    )
+    monkeypatch.setattr(project_status, "run_info_command", lambda cmd: outputs.get(tuple(cmd)))
     git = project_status.collect_git_info(tmp_path)
     assert git.branch == "(detached)"
 
@@ -263,9 +256,7 @@ def _sample_inputs():
         cuda_version="12.6",
         holoscan_version="3.4.0",
     )
-    git = project_status.GitInfo(
-        branch="main", commit="abc1234", dirty=True, modified_count=3
-    )
+    git = project_status.GitInfo(branch="main", commit="abc1234", dirty=True, modified_count=3)
     images = [
         project_status.ImageInfo(image="holohub-app:latest", created="2d ago", status="Running"),
         project_status.ImageInfo(image="holohub-tool:dev", created="1w ago", status="Stopped"),
@@ -304,9 +295,7 @@ def test_format_status_handles_empty_images_and_builds():
 
 def test_format_status_skips_git_when_none():
     platform, _git, images, builds, build_folders, data_folders = _sample_inputs()
-    out = project_status.format_status(
-        platform, None, images, builds, build_folders, data_folders
-    )
+    out = project_status.format_status(platform, None, images, builds, build_folders, data_folders)
     assert "Git:" not in out
 
 
