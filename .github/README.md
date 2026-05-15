@@ -50,7 +50,7 @@ on 3.11+ but missing on 3.10).
 | --------- | ---------------------------------------------------------------------------------- |
 | `version` | Tag name to use, e.g. `v4.3.0`. The workflow creates this tag at the dispatch SHA. |
 | `rc`      | Optional RC build number (used by the dynamic-versioning Jinja format).            |
-| `ga`      | `true` for an official GA dispatch; `false` for an RC/alpha/beta dispatch. Both publish to TestPyPI; `false` additionally auto-removes the tag at the end so RC dispatches do not leave stray refs. |
+| `ga`      | `true` for an official GA dispatch; `false` otherwise. Both publish to TestPyPI.   |
 
 Pipeline:
 
