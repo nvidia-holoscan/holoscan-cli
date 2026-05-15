@@ -107,9 +107,9 @@ first.
 
 ## Contributing
 
-See [CONTRIBUTING.md](./CONTRIBUTING.md) for details. The
-[`.github/README.md`](./.github/README.md) covers the CI/release pipelines
-that back the workflow badges at the top of this page.
+See [CONTRIBUTING.md](./CONTRIBUTING.md) for details.
+[`.github/CI.md`](./.github/CI.md) covers the CI/release pipelines that back
+the workflow badges at the top of this page.
 
 ## Deprecations
 

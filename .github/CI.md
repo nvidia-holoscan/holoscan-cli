@@ -1,14 +1,16 @@
-# GitHub configuration
+# CI / release pipeline reference
 
-This directory holds CI workflow definitions, the shared scripts they invoke,
-Dependabot/CodeQL config, and the NVIDIA `copy-pr-bot` config. It is **not**
-shipped with the `holoscan-cli` wheel.
+This file is the documentation for everything under `.github/`: CI workflow
+definitions, the shared scripts they invoke, Dependabot config, and the NVIDIA
+`copy-pr-bot` config. It is **not** shipped with the `holoscan-cli` wheel, and
+is intentionally named `CI.md` (not `README.md`) so it doesn't compete with the
+[repo's root `README.md`](../README.md) for the GitHub front-page render.
 
 ## Layout
 
 ```text
 .github/
-├── README.md                 ← you are here
+├── CI.md                     ← you are here
 ├── copy-pr-bot.yaml          ← NVIDIA copy-pr-bot config
 ├── dependabot.yml            ← daily updates for pip + github-actions
 ├── scripts/                  ← shell helpers shared by workflows

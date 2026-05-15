@@ -141,7 +141,7 @@ without publishing a wheel first.
   The dispatch creates `refs/tags/vX.Y.Z` at the dispatch SHA, builds, smokes,
   publishes to TestPyPI, re-installs from `test.pypi.org/simple/` and re-smokes,
   and deletes the tag when `ga=false` (so RC dispatches leave no stray refs).
-  See [`.github/README.md`](./.github/README.md) for the full pipeline.
+  See [`.github/CI.md`](./.github/CI.md) for the full pipeline.
 
 ### Heads-up: GitHub Actions allowlist
 
