@@ -34,9 +34,9 @@ import argparse
 import sys
 from collections import defaultdict
 
-import holoscan_cli.util as holohub_cli_util
 from holoscan_cli.commands.registry import help_for
-from holoscan_cli.utils.io import Color
+from holoscan_cli.utils.env_info import collect_env_info, collect_git_info, collect_holohub_info
+from holoscan_cli.utils.io import Color, format_cmd
 
 # ---- list --------------------------------------------------------------------
 
@@ -160,20 +160,16 @@ def register_env_info_parser(cli, subparsers) -> argparse.ArgumentParser:
 
 def handle_env_info(cli, args: argparse.Namespace) -> None:
     """Handle env-info command to collect debugging information"""
-    print(holohub_cli_util.format_cmd("Environment Information"))
-    holohub_cli_util.collect_holohub_info(
+    print(format_cmd("Environment Information"))
+    collect_holohub_info(
         holohub_root=cli.HOLOHUB_ROOT,
         build_dir=cli.DEFAULT_BUILD_PARENT_DIR,
         data_dir=cli.DEFAULT_DATA_DIR,
         sdk_dir=cli.DEFAULT_SDK_DIR,
     )
-    holohub_cli_util.collect_git_info(holohub_root=cli.HOLOHUB_ROOT)
-    holohub_cli_util.collect_env_info()
-    print(
-        holohub_cli_util.format_cmd(
-            "Complete (Before sharing, please review and remove sensitive information)"
-        )
-    )
+    collect_git_info(holohub_root=cli.HOLOHUB_ROOT)
+    collect_env_info()
+    print(format_cmd("Complete (Before sharing, please review and remove sensitive information)"))
 
 
 # ---- status ------------------------------------------------------------------

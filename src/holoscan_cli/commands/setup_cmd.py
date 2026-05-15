@@ -25,9 +25,17 @@ import filecmp
 import os
 import sys
 
-import holoscan_cli.util as holohub_cli_util
 from holoscan_cli.commands.registry import help_for
-from holoscan_cli.utils.io import Color
+from holoscan_cli.utils.holohub import get_holohub_setup_scripts_dir
+from holoscan_cli.utils.host_setup import (
+    install_packages_if_missing,
+    setup_cmake,
+    setup_cuda_dependencies,
+    setup_ngc_cli,
+    setup_python_dev,
+    setup_sccache,
+)
+from holoscan_cli.utils.io import Color, fatal, format_cmd, run_command
 
 
 def register_setup_parser(cli, subparsers) -> argparse.ArgumentParser:
@@ -39,14 +47,14 @@ def register_setup_parser(cli, subparsers) -> argparse.ArgumentParser:
     parser.add_argument(
         "--list-scripts",
         action="store_true",
-        help="List all setup scripts found in the HOLOHUB_SETUP_SCRIPTS_DIR directory. "
+        help="List all setup scripts found in the HOLOSCAN_CLI_SETUP_SCRIPTS_DIR directory. "
         + "Run scripts directly or with `./holohub setup --scripts <script_name>`.",
     )
     parser.add_argument(
         "--scripts",
         action="append",
         help="Named dependency installation scripts to run. Can be specified multiple times. "
-        + "Searches in the directory path specified by the HOLOHUB_SETUP_SCRIPTS_DIR environment variable. "
+        + "Searches in the directory path specified by the HOLOSCAN_CLI_SETUP_SCRIPTS_DIR environment variable. "
         + "Omit to install default recommended packages for Holoscan SDK development.",
     )
     parser.set_defaults(func=lambda args: handle_setup(cli, args))
@@ -57,10 +65,8 @@ def handle_setup(cli, args: argparse.Namespace) -> None:
     """Handle setup command"""
 
     if args.list_scripts:
-        setup_scripts_dir = holohub_cli_util.get_holohub_setup_scripts_dir()
-        print(
-            holohub_cli_util.format_cmd(f"Listing setup scripts available in {setup_scripts_dir}")
-        )
+        setup_scripts_dir = get_holohub_setup_scripts_dir()
+        print(format_cmd(f"Listing setup scripts available in {setup_scripts_dir}"))
         print(Color.green("Use with `./holohub setup --scripts <script_name>`"))
         for script in setup_scripts_dir.glob("*.sh"):
             print(f"  {script.stem}")
@@ -69,30 +75,24 @@ def handle_setup(cli, args: argparse.Namespace) -> None:
     if args.scripts:
         for script in args.scripts:
             if any(sep in script for sep in ("/", "\\")):
-                holohub_cli_util.fatal(
-                    f"Invalid script name '{script}': path separators are not allowed"
-                )
-            script_path = (
-                holohub_cli_util.get_holohub_setup_scripts_dir().resolve() / f"{script}.sh"
-            )
+                fatal(f"Invalid script name '{script}': path separators are not allowed")
+            script_path = get_holohub_setup_scripts_dir().resolve() / f"{script}.sh"
             if not script_path.exists():
-                holohub_cli_util.fatal(
-                    f"Script {script}.sh not found in {holohub_cli_util.get_holohub_setup_scripts_dir()}"
-                )
-            holohub_cli_util.run_command(["bash", str(script_path)], dry_run=args.dryrun)
+                fatal(f"Script {script}.sh not found in {get_holohub_setup_scripts_dir()}")
+            run_command(["bash", str(script_path)], dry_run=args.dryrun)
         sys.exit(0)
 
     if not args.scripts:
-        holohub_cli_util.install_packages_if_missing(
+        install_packages_if_missing(
             ["wget", "xvfb", "git", "unzip", "ffmpeg", "ninja-build", "libv4l-dev"],
             dry_run=args.dryrun,
         )
 
-        holohub_cli_util.setup_cuda_dependencies(dry_run=args.dryrun)
-        holohub_cli_util.setup_cmake(dry_run=args.dryrun)
-        holohub_cli_util.setup_python_dev(dry_run=args.dryrun)
-        holohub_cli_util.setup_ngc_cli(dry_run=args.dryrun)
-        holohub_cli_util.setup_sccache(dry_run=args.dryrun)
+        setup_cuda_dependencies(dry_run=args.dryrun)
+        setup_cmake(dry_run=args.dryrun)
+        setup_python_dev(dry_run=args.dryrun)
+        setup_ngc_cli(dry_run=args.dryrun)
+        setup_sccache(dry_run=args.dryrun)
 
         source = f"{cli.HOLOHUB_ROOT}/utilities/holohub_autocomplete"
         dest_folder = "/etc/bash_completion.d"
@@ -100,7 +100,7 @@ def handle_setup(cli, args: argparse.Namespace) -> None:
         if (
             not os.path.exists(dest) or not filecmp.cmp(source, dest, shallow=False)
         ) and os.path.exists(dest_folder):
-            holohub_cli_util.run_command(["cp", source, dest_folder], dry_run=args.dryrun)
+            run_command(["cp", source, dest_folder], dry_run=args.dryrun)
 
         if not args.dryrun:
             print(Color.blue("\nTo enable ./holohub autocomplete in your current shell session:"))

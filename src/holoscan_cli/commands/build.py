@@ -29,9 +29,19 @@ import sys
 from pathlib import Path
 from typing import Optional
 
-import holoscan_cli.util as holohub_cli_util
 from holoscan_cli.commands.registry import help_for
 from holoscan_cli.metadata.utils import normalize_language
+from holoscan_cli.utils.docker import get_entrypoint_command_args
+from holoscan_cli.utils.holohub import (
+    build_holohub_path_mapping,
+    check_skip_builds,
+    determine_project_prefix,
+    get_buildtype_str,
+    get_sccache_dir,
+    update_env,
+)
+from holoscan_cli.utils.io import fatal, info, run_command, warn
+from holoscan_cli.utils.text import get_env_bool
 
 
 def register_build_parser(
@@ -100,7 +110,7 @@ def handle_build(cli, args: argparse.Namespace) -> None:
     mode_config = mode_config if mode_config is not None else {}
 
     # Check if build should be skipped
-    skip_docker_build, _ = holohub_cli_util.check_skip_builds(args)
+    skip_docker_build, _ = check_skip_builds(args)
 
     if mode_config:
         print(f"Building {args.project} in '{mode_name}' mode")
@@ -110,7 +120,7 @@ def handle_build(cli, args: argparse.Namespace) -> None:
 
     # Get mode-specific build environment variables
     build_mode_env = mode_config.get("env", {}).copy()
-    holohub_cli_util.update_env(build_mode_env, mode_config.get("build", {}).get("env", {}))
+    update_env(build_mode_env, mode_config.get("build", {}).get("env", {}))
 
     # Check if local mode is requested
     is_local_mode = (
@@ -184,7 +194,7 @@ def handle_build(cli, args: argparse.Namespace) -> None:
 
         img = getattr(args, "img", None) or container.image_name
         docker_opts = build_args.get("docker_opts", "")
-        docker_opts_extra, extra_args = holohub_cli_util.get_entrypoint_command_args(
+        docker_opts_extra, extra_args = get_entrypoint_command_args(
             img, build_cmd, docker_opts, dry_run=args.dryrun
         )
         if docker_opts_extra:
@@ -231,14 +241,12 @@ def build_project_locally(
             patch_script = (
                 cli.HOLOHUB_ROOT / "benchmarks/holoscan_flow_benchmarking/patch_application.sh"
             )
-            holohub_cli_util.run_command([str(patch_script), str(app_source_path)], dry_run=dryrun)
+            run_command([str(patch_script), str(app_source_path)], dry_run=dryrun)
             print("Building for Holoscan Flow Benchmarking")
         else:
-            holohub_cli_util.fatal(
-                "--benchmark option is only available for applications/workflows"
-            )
+            fatal("--benchmark option is only available for applications/workflows")
 
-    build_type = holohub_cli_util.get_buildtype_str(build_type)
+    build_type = get_buildtype_str(build_type)
     build_dir = cli.DEFAULT_BUILD_PARENT_DIR / project_name
     build_dir.mkdir(parents=True, exist_ok=True)
 
@@ -246,7 +254,7 @@ def build_project_locally(
     build_env = os.environ.copy()
     if extra_env:
         # Build path mapping
-        path_mapping = holohub_cli_util.build_holohub_path_mapping(
+        path_mapping = build_holohub_path_mapping(
             holohub_root=cli.HOLOHUB_ROOT,
             project_data=project_data,
             build_dir=build_dir,
@@ -254,9 +262,9 @@ def build_project_locally(
             prefix=cli.prefix,
             verbose=dryrun,
         )
-        holohub_cli_util.update_env(build_env, extra_env, path_mapping, verbose=dryrun)
+        update_env(build_env, extra_env, path_mapping, verbose=dryrun)
 
-    proj_prefix = holohub_cli_util.determine_project_prefix(project_type)
+    proj_prefix = determine_project_prefix(project_type)
     cmake_args = [
         "cmake",
         "-B",
@@ -296,13 +304,11 @@ def build_project_locally(
 
     # Configure sccache
     sccache_bin = shutil.which("sccache")
-    enable_sccache_val, enable_sccache = holohub_cli_util.get_env_bool(
-        "HOLOSCAN_CLI_ENABLE_SCCACHE", default=False
-    )
-    holohub_cli_util.info(f"HOLOSCAN_CLI_ENABLE_SCCACHE={enable_sccache_val}")
+    enable_sccache_val, enable_sccache = get_env_bool("HOLOSCAN_CLI_ENABLE_SCCACHE", default=False)
+    info(f"HOLOSCAN_CLI_ENABLE_SCCACHE={enable_sccache_val}")
     if enable_sccache:
         if not sccache_bin:
-            (holohub_cli_util.warn if dryrun else holohub_cli_util.fatal)(
+            (warn if dryrun else fatal)(
                 "HOLOSCAN_CLI_ENABLE_SCCACHE is enabled but 'sccache' was not found in PATH. "
                 "Install it (e.g., `./holohub setup`) or disable sccache."
             )
@@ -316,23 +322,23 @@ def build_project_locally(
                 ]
             )
         # Set default SCCACHE properties if not set
-        build_env.setdefault("SCCACHE_DIR", holohub_cli_util.get_sccache_dir(build_env))
+        build_env.setdefault("SCCACHE_DIR", get_sccache_dir(build_env))
         build_env.setdefault("SCCACHE_CACHE_SIZE", "20G")
         # Print SCCACHE environment variables
-        holohub_cli_util.info(f"Using sccache: {sccache_bin}")
+        info(f"Using sccache: {sccache_bin}")
         for key, value in build_env.items():
             if key.startswith("SCCACHE_"):
-                holohub_cli_util.info(f"{key}={value}")
+                info(f"{key}={value}")
     elif sccache_bin:
-        holohub_cli_util.warn(
-            "Detected 'sccache' in PATH but HOLOHUB_ENABLE_SCCACHE is disabled. "
+        warn(
+            "Detected 'sccache' in PATH but HOLOSCAN_CLI_ENABLE_SCCACHE is disabled. "
             "Skipping sccache."
         )
 
     if configure_args:
         cmake_args.extend(configure_args)
 
-    holohub_cli_util.run_command(cmake_args, dry_run=dryrun, env=build_env)
+    run_command(cmake_args, dry_run=dryrun, env=build_env)
 
     # Build the project with optional parallel jobs
     build_cmd = ["cmake", "--build", str(build_dir), "--config", build_type]
@@ -343,13 +349,13 @@ def build_project_locally(
         build_njobs = os.environ.get("CMAKE_BUILD_PARALLEL_LEVEL", str(os.cpu_count()))
     build_cmd.extend(["-j", build_njobs])
 
-    holohub_cli_util.run_command(build_cmd, dry_run=dryrun, env=build_env)
+    run_command(build_cmd, dry_run=dryrun, env=build_env)
 
     # Print sccache stats
     if enable_sccache:
         stats_file = build_dir / "sccache-stats.txt"
         with open(stats_file, "w", encoding="utf-8") as f:
-            holohub_cli_util.run_command(
+            run_command(
                 ["sccache", "--show-stats"],
                 dry_run=dryrun,
                 env=build_env,
@@ -360,16 +366,16 @@ def build_project_locally(
         except ValueError:
             stats_file_rel = stats_file
         if dryrun:
-            holohub_cli_util.info(f"Sccache stats (dry-run) would be written to {stats_file_rel}")
+            info(f"Sccache stats (dry-run) would be written to {stats_file_rel}")
         else:
-            holohub_cli_util.info(f"Sccache stats written to {stats_file_rel}")
+            info(f"Sccache stats written to {stats_file_rel}")
 
     # If this is a package, run cpack
     if project_type == "package":
         pkg_build_dir = build_dir / "pkg"
         if pkg_build_dir.exists():
             for cpack_config in pkg_build_dir.glob("CPackConfig-*.cmake"):
-                holohub_cli_util.run_command(
+                run_command(
                     ["cpack", "--config", str(cpack_config), "-G", pkg_generator],
                     dry_run=dryrun,
                     env=build_env,
@@ -380,6 +386,6 @@ def build_project_locally(
         restore_script = (
             cli.HOLOHUB_ROOT / "benchmarks/holoscan_flow_benchmarking/restore_application.sh"
         )
-        holohub_cli_util.run_command([str(restore_script), str(app_source_path)], dry_run=dryrun)
+        run_command([str(restore_script), str(app_source_path)], dry_run=dryrun)
 
     return build_dir, project_data

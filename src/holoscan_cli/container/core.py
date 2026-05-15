@@ -29,33 +29,33 @@ from typing import List, Optional, Union
 
 from holoscan_cli.metadata.utils import list_normalized_languages
 
-from ..util import (
-    DEFAULT_BASE_SDK_VERSION,
-    build_holohub_path_mapping,
-    check_nvidia_ctk,
+from ..utils.docker import (
     docker_args_to_devcontainer_format,
-    fatal,
-    find_hsdk_build_rel_dir,
-    get_arch_gpu_str,
-    get_cli_arg_value,
-    get_compute_capacity,
-    get_cuda_tag,
+    get_image_pythonpath,
+)
+from ..utils.holohub import (
+    build_holohub_path_mapping,
     get_current_branch_slug,
-    get_default_cuda_version,
-    get_env_bool,
     get_git_short_sha,
     get_group_id,
     get_holohub_root,
     get_holohub_setup_scripts_dir,
-    get_host_gpu,
-    get_image_pythonpath,
     get_sccache_dir,
-    info,
-    is_valid_sdk_installation,
     replace_placeholders,
-    run_command,
-    warn,
 )
+from ..utils.io import fatal, info, run_command, warn
+from ..utils.sdk import (
+    DEFAULT_BASE_SDK_VERSION,
+    check_nvidia_ctk,
+    find_hsdk_build_rel_dir,
+    get_arch_gpu_str,
+    get_compute_capacity,
+    get_cuda_tag,
+    get_default_cuda_version,
+    get_host_gpu,
+    is_valid_sdk_installation,
+)
+from ..utils.text import get_cli_arg_value, get_env_bool
 from .signals import (
     _ContainerTerminationHandler,
     _ContainerTerminationSignal,
@@ -310,7 +310,7 @@ class HoloscanContainer:
         2. <app_source>/<language>/Dockerfile
         3. <app_source>/Dockerfile
         4. <app_source>/../Dockerfile (traverse up to HOLOHUB_ROOT)
-        5. `HOLOHUB_DEFAULT_DOCKERFILE` env variable
+        5. `HOLOSCAN_CLI_DEFAULT_DOCKERFILE` env variable
         6. `<HOLOHUB_ROOT>/Dockerfile`
         """
         if not self.project_metadata:
@@ -749,21 +749,13 @@ class HoloscanContainer:
             f"CUPY_CACHE_DIR=/workspace/{self.WORKSPACE_NAME}/.cupy/kernel_cache",
             "-e",
             "HOLOSCAN_CLI_BUILD_LOCAL=1",
-            # Legacy alias for the in-container CLI version still reading
-            # HOLOHUB_BUILD_LOCAL. Drop alongside the rest of the HOLOHUB_*
-            # surface in the next minor release.
-            "-e",
-            "HOLOHUB_BUILD_LOCAL=1",
         ]
         # Pass CMAKE_BUILD_PARALLEL_LEVEL to container if set on host
         cmake_parallel_level = os.environ.get("CMAKE_BUILD_PARALLEL_LEVEL")
         if cmake_parallel_level:
             args.extend(["-e", f"CMAKE_BUILD_PARALLEL_LEVEL={cmake_parallel_level}"])
         # Forward host-side wrapper customizations that the in-container CLI needs
-        # to reproduce project discovery and command routing decisions. We forward
-        # both the new HOLOSCAN_CLI_* spelling and the deprecated HOLOHUB_* alias
-        # for the deprecation window so older in-container CLI versions keep
-        # working.
+        # to reproduce project discovery and command routing decisions.
         for new_name in (
             "HOLOSCAN_CLI_PATH_PREFIX",
             "HOLOSCAN_CLI_SEARCH_PATH",
@@ -771,8 +763,7 @@ class HoloscanContainer:
         ):
             value = os.environ.get(new_name)
             if value:
-                old_name = "HOLOHUB_" + new_name[len("HOLOSCAN_CLI_") :]
-                args.extend(["-e", f"{new_name}={value}", "-e", f"{old_name}={value}"])
+                args.extend(["-e", f"{new_name}={value}"])
 
         # Pass adequate variables for SCCACHE
         _, enable_sccache = get_env_bool("HOLOSCAN_CLI_ENABLE_SCCACHE", default=False)
@@ -1021,14 +1012,3 @@ class HoloscanContainer:
 
         devcontainer_options = docker_args_to_devcontainer_format(docker_args)
         return ",\n        ".join(f'"{opt}"' for opt in devcontainer_options)
-
-
-#: Deprecated alias for :class:`HoloscanContainer`.
-#:
-#: ``HoloHubContainer`` was the canonical name through v1; new code should
-#: import :class:`HoloscanContainer` directly. The alias is kept for one
-#: release so downstream wrappers and any out-of-tree code reaching for
-#: ``from holoscan_cli.container import HoloHubContainer`` keep working.
-#: Drop alongside the rest of the HoloHub-name compatibility surface in
-#: the next minor release.
-HoloHubContainer = HoloscanContainer

@@ -19,10 +19,11 @@ import argparse
 import os
 import shlex
 
-import holoscan_cli.util as holohub_cli_util
 from holoscan_cli.commands.build import build_project_locally
 from holoscan_cli.commands.registry import help_for
-from holoscan_cli.utils.io import Color
+from holoscan_cli.utils.docker import get_entrypoint_command_args
+from holoscan_cli.utils.holohub import build_holohub_path_mapping, check_skip_builds, update_env
+from holoscan_cli.utils.io import Color, run_command
 
 
 def register_install_parser(
@@ -83,7 +84,7 @@ def handle_install(cli, args: argparse.Namespace) -> None:
     mode_config = mode_config if mode_config is not None else {}
 
     # Check if build should be skipped
-    skip_docker_build, _ = holohub_cli_util.check_skip_builds(args)
+    skip_docker_build, _ = check_skip_builds(args)
 
     if mode_config:
         print(f"Installing {args.project} in '{mode_name}' mode")
@@ -93,7 +94,7 @@ def handle_install(cli, args: argparse.Namespace) -> None:
 
     # Get mode-specific build environment variables
     build_mode_env = mode_config.get("env", {}).copy()
-    holohub_cli_util.update_env(build_mode_env, mode_config.get("build", {}).get("env", {}))
+    update_env(build_mode_env, mode_config.get("build", {}).get("env", {}))
 
     # Check if local mode is requested
     is_local_mode = (
@@ -117,7 +118,7 @@ def handle_install(cli, args: argparse.Namespace) -> None:
         )
 
         # Build path mapping
-        path_mapping = holohub_cli_util.build_holohub_path_mapping(
+        path_mapping = build_holohub_path_mapping(
             holohub_root=cli.HOLOHUB_ROOT,
             project_data=project_data,
             build_dir=build_dir,
@@ -129,14 +130,12 @@ def handle_install(cli, args: argparse.Namespace) -> None:
         # Apply build mode environment variables
         install_env = os.environ.copy()
         if build_mode_env:
-            holohub_cli_util.update_env(
+            update_env(
                 install_env, build_mode_env, path_mapping, verbose=(args.verbose or args.dryrun)
             )
 
         # Install the project
-        holohub_cli_util.run_command(
-            ["cmake", "--install", str(build_dir)], dry_run=args.dryrun, env=install_env
-        )
+        run_command(["cmake", "--install", str(build_dir)], dry_run=args.dryrun, env=install_env)
         if not args.dryrun:
             print(f"{Color.green('Successfully installed')} {args.project}")
     else:
@@ -178,7 +177,7 @@ def handle_install(cli, args: argparse.Namespace) -> None:
 
         img = getattr(args, "img", None) or container.image_name
         docker_opts = build_args.get("docker_opts", "")
-        docker_opts_extra, extra_args = holohub_cli_util.get_entrypoint_command_args(
+        docker_opts_extra, extra_args = get_entrypoint_command_args(
             img, install_cmd, docker_opts, dry_run=args.dryrun
         )
         if docker_opts_extra:

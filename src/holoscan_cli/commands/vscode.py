@@ -21,8 +21,10 @@ import shutil
 import tempfile
 from pathlib import Path
 
-import holoscan_cli.util as holohub_cli_util
 from holoscan_cli.commands.registry import help_for
+from holoscan_cli.utils.docker import get_devcontainer_config, launch_vscode_devcontainer
+from holoscan_cli.utils.holohub import check_skip_builds
+from holoscan_cli.utils.io import fatal
 
 
 def register_vscode_parser(cli, subparsers, *, container_build) -> argparse.ArgumentParser:
@@ -54,12 +56,12 @@ def register_vscode_parser(cli, subparsers, *, container_build) -> argparse.Argu
 def handle_vscode(cli, args: argparse.Namespace) -> None:
     """Builds a dev container and launches VS Code with proper devcontainer configuration."""
     if not shutil.which("code") and not args.dryrun:
-        holohub_cli_util.fatal(
+        fatal(
             "Please install VS Code to use VS Code Dev Container. "
             "Follow the instructions at https://code.visualstudio.com/Download"
         )
 
-    skip_docker_build, _ = holohub_cli_util.check_skip_builds(args)
+    skip_docker_build, _ = check_skip_builds(args)
     container = cli.make_project_container(
         project_name=args.project, language=getattr(args, "language", None)
     )
@@ -89,7 +91,7 @@ def handle_vscode(cli, args: argparse.Namespace) -> None:
         docker_opts=getattr(args, "docker_opts", None) or ""
     )
 
-    devcontainer_content = holohub_cli_util.get_devcontainer_config(
+    devcontainer_content = get_devcontainer_config(
         holohub_root=cli.HOLOHUB_ROOT, project_name=args.project, dry_run=args.dryrun
     )
     devcontainer_content = devcontainer_content.replace(
@@ -97,13 +99,8 @@ def handle_vscode(cli, args: argparse.Namespace) -> None:
     )
     devcontainer_content = devcontainer_content.replace('//"<env>"', devcontainer_env_options)
     os.environ["HOLOSCAN_CLI_BASE_IMAGE"] = dev_container_tag
-    # Legacy aliases for HoloHub devcontainer.json templates still
-    # referencing the HOLOHUB_* spelling. Drop alongside the rest of the
-    # HOLOHUB_* env-var surface in the next minor release.
-    os.environ["HOLOHUB_BASE_IMAGE"] = dev_container_tag
     if args.project:
         os.environ["HOLOSCAN_CLI_APP_NAME"] = args.project
-        os.environ["HOLOHUB_APP_NAME"] = args.project
 
     if not args.dryrun:
         tmpdir = tempfile.mkdtemp()
@@ -118,4 +115,4 @@ def handle_vscode(cli, args: argparse.Namespace) -> None:
         print(f"Created temporary workspace: {tmp_devcontainer}")
     else:
         tmp_workspace = "<tmp_workspace>"
-    holohub_cli_util.launch_vscode_devcontainer(str(tmp_workspace), dry_run=args.dryrun)
+    launch_vscode_devcontainer(str(tmp_workspace), dry_run=args.dryrun)

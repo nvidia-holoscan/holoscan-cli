@@ -25,18 +25,16 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import List, Optional
 
-from .util import (
-    Color,
+from .utils.docker import is_running_in_docker
+from .utils.holohub import get_git_short_sha, get_holohub_root
+from .utils.io import Color, run_info_command
+from .utils.sdk import (
     cuda_major_from_driver,
     find_hsdk_build_rel_dir,
     get_cuda_runtime_version,
-    get_git_short_sha,
     get_gpu_name,
-    get_holohub_root,
     get_sdk_version,
-    is_running_in_docker,
     is_valid_sdk_installation,
-    run_info_command,
 )
 
 

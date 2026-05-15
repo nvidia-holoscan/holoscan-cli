@@ -28,6 +28,7 @@ def test_in_container_cli_command_defaults_to_holoscan(monkeypatch):
 
 
 def test_in_container_cli_command_ignores_holohub_cmd_name(monkeypatch):
+    """The HOLOHUB_CMD_NAME deprecation alias is gone — the env var is ignored."""
     monkeypatch.delenv("HOLOSCAN_CLI_IN_CONTAINER_CMD", raising=False)
     monkeypatch.setenv("HOLOHUB_CMD_NAME", "./holohub")
     assert in_container_cli_command() == "holoscan"
@@ -43,10 +44,9 @@ def _make_container() -> project_container.HoloscanContainer:
 
 
 def _delenv_wrapper_vars(monkeypatch) -> None:
-    """Clear both the new HOLOSCAN_CLI_* and deprecated HOLOHUB_* spellings."""
-    for prefix in ("HOLOSCAN_CLI_", "HOLOHUB_"):
-        for suffix in ("PATH_PREFIX", "SEARCH_PATH", "CTEST_SCRIPT"):
-            monkeypatch.delenv(f"{prefix}{suffix}", raising=False)
+    """Clear the canonical HOLOSCAN_CLI_* wrapper vars."""
+    for suffix in ("PATH_PREFIX", "SEARCH_PATH", "CTEST_SCRIPT"):
+        monkeypatch.delenv(f"HOLOSCAN_CLI_{suffix}", raising=False)
 
 
 def test_environment_args_forward_path_prefix(monkeypatch):
@@ -55,10 +55,9 @@ def test_environment_args_forward_path_prefix(monkeypatch):
 
     args = _make_container().get_environment_args()
 
-    # The container forwards both the new and the legacy alias during the
-    # HOLOSCAN_CLI_* deprecation window.
     assert "HOLOSCAN_CLI_PATH_PREFIX=isaac" in args
-    assert "HOLOHUB_PATH_PREFIX=isaac" in args
+    # Legacy HOLOHUB_* spelling is no longer forwarded.
+    assert "HOLOHUB_PATH_PREFIX=isaac" not in args
     assert all(
         not a.startswith("HOLOSCAN_CLI_SEARCH_PATH=") for a in args
     ), "search path must not be forwarded when unset"
@@ -75,7 +74,7 @@ def test_environment_args_forward_search_path(monkeypatch):
 
     expected_value = "tutorials,applications,benchmarks,subgraphs,operators"
     assert f"HOLOSCAN_CLI_SEARCH_PATH={expected_value}" in args
-    assert f"HOLOHUB_SEARCH_PATH={expected_value}" in args
+    assert f"HOLOHUB_SEARCH_PATH={expected_value}" not in args
 
 
 def test_environment_args_forward_ctest_script(monkeypatch):
@@ -85,26 +84,24 @@ def test_environment_args_forward_ctest_script(monkeypatch):
     args = _make_container().get_environment_args()
 
     assert "HOLOSCAN_CLI_CTEST_SCRIPT=cmake/isaac_os.container.ctest" in args
-    assert "HOLOHUB_CTEST_SCRIPT=cmake/isaac_os.container.ctest" in args
+    assert "HOLOHUB_CTEST_SCRIPT=cmake/isaac_os.container.ctest" not in args
 
 
 def test_environment_args_omits_unset_wrapper_vars(monkeypatch):
     _delenv_wrapper_vars(monkeypatch)
     monkeypatch.delenv("HOLOSCAN_CLI_ENABLE_SCCACHE", raising=False)
-    monkeypatch.delenv("HOLOHUB_ENABLE_SCCACHE", raising=False)
     for var in list(os.environ):
         if var.startswith("SCCACHE_"):
             monkeypatch.delenv(var, raising=False)
 
     args = _make_container().get_environment_args()
 
-    # Both the canonical spelling and the deprecated alias are forwarded for
-    # HOLOSCAN_CLI_BUILD_LOCAL=1; nothing else from the wrapper-var set should
-    # appear.
+    # The always-on HOLOSCAN_CLI_BUILD_LOCAL=1 is the only wrapper-var that
+    # should appear; nothing else.
     forwarded = [a for a in args if a.startswith(("HOLOSCAN_CLI_", "HOLOHUB_"))]
-    assert sorted(forwarded) == sorted(
-        ["HOLOSCAN_CLI_BUILD_LOCAL=1", "HOLOHUB_BUILD_LOCAL=1"]
-    ), f"Only the always-on BUILD_LOCAL pair should be present; got: {forwarded}"
+    assert forwarded == [
+        "HOLOSCAN_CLI_BUILD_LOCAL=1"
+    ], f"Only the always-on BUILD_LOCAL var should be present; got: {forwarded}"
 
 
 def test_local_source_build_context_args_empty_when_unset(monkeypatch):
@@ -152,6 +149,6 @@ def test_ctest_script_arg_container_defers_resolution_to_runtime():
     rendered = _ctest_script_arg(cli, args, in_container=True)
 
     assert rendered.startswith('-S "$(python3 -c '), rendered
-    assert "from holoscan_cli.cli import HoloHubCLI" in rendered
-    assert "HoloHubCLI.DEFAULT_CTEST_SCRIPT" in rendered
+    assert "from holoscan_cli.cli import HoloscanCLI" in rendered
+    assert "HoloscanCLI.DEFAULT_CTEST_SCRIPT" in rendered
     assert "/host/" not in rendered, "must not bake host paths into the in-container command"

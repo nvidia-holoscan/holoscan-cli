@@ -38,7 +38,6 @@ from pathlib import Path
 from typing import List, Optional
 
 import holoscan_cli.metadata.gather_metadata as metadata_util
-import holoscan_cli.util as holohub_cli_util
 from holoscan_cli.commands import registry as commands_registry
 from holoscan_cli.container import HoloscanContainer
 from holoscan_cli.container.parsers import get_build_argparse, get_run_argparse
@@ -46,7 +45,13 @@ from holoscan_cli.metadata.utils import (
     list_normalized_languages,
     normalize_language,
 )
-from holoscan_cli.util import Color
+from holoscan_cli.utils.holohub import (
+    get_component_search_paths,
+    get_holohub_root,
+    resolve_path_prefix,
+)
+from holoscan_cli.utils.io import Color, fatal, warn
+from holoscan_cli.utils.text import levenshtein_distance, normalize_args_str
 
 
 def in_container_cli_command() -> str:
@@ -65,7 +70,7 @@ def in_container_cli_command() -> str:
 class HoloscanCLI:
     """Command-line interface for HoloHub"""
 
-    HOLOHUB_ROOT = holohub_cli_util.get_holohub_root()
+    HOLOHUB_ROOT = get_holohub_root()
     DEFAULT_BUILD_PARENT_DIR = Path(
         os.environ.get("HOLOSCAN_CLI_BUILD_PARENT_DIR", HOLOHUB_ROOT / "build")
     )
@@ -82,7 +87,7 @@ class HoloscanCLI:
         self.parser = self._create_parser()
         # Cache for resolved projects to avoid duplicate lookups
         self._project_data: dict[tuple[str, str], dict] = {}
-        self.prefix = holohub_cli_util.resolve_path_prefix(None)
+        self.prefix = resolve_path_prefix(None)
 
     def _create_parser(self) -> argparse.ArgumentParser:
         """Create the argument parser with all supported commands.
@@ -126,7 +131,7 @@ class HoloscanCLI:
         """
         # Known exceptions: templates that don't represent a standalone project.
         EXCLUDE_PATHS = ["applications/holoviz/template", "applications/template"]
-        app_paths = holohub_cli_util.get_component_search_paths(self.HOLOHUB_ROOT)
+        app_paths = get_component_search_paths(self.HOLOHUB_ROOT)
         return metadata_util.gather_metadata(app_paths, exclude_paths=EXCLUDE_PATHS)
 
     def find_project(self, project_name: str, language: Optional[str] = None) -> dict:
@@ -167,7 +172,7 @@ class HoloscanCLI:
                     self._project_data[cache_key] = p  # Return candidate matching target_lang
                     return p
             if normalized_language:  # If target_lang specified but not found
-                holohub_cli_util.fatal(
+                fatal(
                     f"Project '{project_name}' (language: {normalized_language}) not found. "
                     f"Available: {', '.join(available_lang) if available_lang else 'unknown'}"
                 )
@@ -177,14 +182,14 @@ class HoloscanCLI:
             if not fallback_lang:
                 msg = f"Returning '{project_name}' with missing or unknown language metadata.\n"
                 msg += "Consider specifying --language for more consistent results.\n"
-                holohub_cli_util.warn(msg)
+                warn(msg)
             self._project_data[cache_key] = fallback_candidate
             return self._project_data[cache_key]
         # If project not found, suggest similar names
         distances = [
             (
                 p["project_name"],
-                holohub_cli_util.levenshtein_distance(project_name, p["project_name"]),
+                levenshtein_distance(project_name, p["project_name"]),
                 p.get("source_folder", ""),
                 p.get("metadata", {}).get("language", ""),
             )
@@ -204,7 +209,7 @@ class HoloscanCLI:
                 if folder:
                     details.append(f"source: {folder}")
                 msg += f"\n  '{name}'" + (f" ({', '.join(details)})" if details else "")
-        holohub_cli_util.fatal(msg)
+        fatal(msg)
         return None
 
     def resolve_mode(self, project_data: dict, requested_mode: Optional[str] = None) -> tuple:
@@ -221,7 +226,7 @@ class HoloscanCLI:
             application_metadata = project_data.get("metadata", {})
             if len(modes) > 1 and "default_mode" not in application_metadata:
                 available = ", ".join(modes.keys())
-                holohub_cli_util.fatal(
+                fatal(
                     f"Multiple modes found ({available}) but no 'default_mode' specified. "
                     f"Please add a 'default_mode' field to specify which mode to use by default."
                 )
@@ -231,16 +236,12 @@ class HoloscanCLI:
                 # Validate that default_mode references an existing mode
                 if requested_mode not in modes:
                     available = ", ".join(modes.keys())
-                    holohub_cli_util.fatal(
-                        f"Invalid default_mode '{requested_mode}' in metadata among {available}"
-                    )
+                    fatal(f"Invalid default_mode '{requested_mode}' in metadata among {available}")
             else:
                 requested_mode = list(modes.keys())[0]
         if requested_mode not in modes:
             available = ", ".join(modes.keys())
-            holohub_cli_util.fatal(
-                f"Mode '{requested_mode}' not found. Available modes: {available}"
-            )
+            fatal(f"Mode '{requested_mode}' not found. Available modes: {available}")
         return requested_mode, modes[requested_mode]
 
     def validate_mode(
@@ -264,7 +265,7 @@ class HoloscanCLI:
                 msg = f"Unknown key '{key}' in mode '{mode_name}'"
                 if suggestions:
                     msg += f". Did you mean '{suggestions[0]}'?"
-                holohub_cli_util.warn(msg)
+                warn(msg)
 
         # Check section keys (build and run)
         sections_to_validate = {"build": valid_build_keys, "run": valid_run_keys}
@@ -276,7 +277,7 @@ class HoloscanCLI:
                         msg = f"Unknown key '{section_name}.{key}' in mode '{mode_name}'"
                         if suggestions:
                             msg += f". Did you mean '{suggestions[0]}'?"
-                        holohub_cli_util.warn(msg)
+                        warn(msg)
 
     def get_effective_build_config(
         self,
@@ -304,23 +305,19 @@ class HoloscanCLI:
                     mode_deps = [dep.strip() for dep in build_config["depends"] if dep.strip()]
                     msg = f"CLI args --build-with='{config['with_operators']}' "
                     msg += f"overrides mode depends: {', '.join(mode_deps)}"
-                    holohub_cli_util.warn(msg)
+                    warn(msg)
                 else:
                     mode_deps = [dep.strip() for dep in build_config["depends"] if dep.strip()]
                     config["with_operators"] = ";".join(mode_deps) if mode_deps else ""
 
             if "docker_build_args" in build_config:
                 if config["build_args"]:
-                    mode_args = holohub_cli_util.normalize_args_str(
-                        build_config["docker_build_args"]
-                    )
+                    mode_args = normalize_args_str(build_config["docker_build_args"])
                     msg = f"CLI args --build-args='{config['build_args']}' "
                     msg += f"overrides mode --build-args: {mode_args}"
-                    holohub_cli_util.warn(msg)
+                    warn(msg)
                 else:
-                    config["build_args"] = holohub_cli_util.normalize_args_str(
-                        build_config["docker_build_args"]
-                    )
+                    config["build_args"] = normalize_args_str(build_config["docker_build_args"])
 
             if "cmake_options" in build_config:
                 if config["configure_args"]:
@@ -336,22 +333,18 @@ class HoloscanCLI:
                     )
                     msg = f"CLI args --configure-args='{cli_opts}' "
                     msg += f"overrides mode --configure-args: {mode_opts}"
-                    holohub_cli_util.warn(msg)
+                    warn(msg)
                 else:
                     config["configure_args"] = build_config["cmake_options"]
 
         if "run" in mode_config and "docker_run_args" in mode_config["run"]:
             if getattr(args, "docker_opts", ""):
-                mode_opts = holohub_cli_util.normalize_args_str(
-                    mode_config["run"]["docker_run_args"]
-                )
+                mode_opts = normalize_args_str(mode_config["run"]["docker_run_args"])
                 msg = f"CLI args --docker-opts='{getattr(args, 'docker_opts', '')}' "
                 msg += f"overrides mode --docker-opts: {mode_opts}"
-                holohub_cli_util.warn(msg)
+                warn(msg)
             else:
-                config["docker_opts"] = holohub_cli_util.normalize_args_str(
-                    mode_config["run"]["docker_run_args"]
-                )
+                config["docker_opts"] = normalize_args_str(mode_config["run"]["docker_run_args"])
 
         return config
 
@@ -379,20 +372,18 @@ class HoloscanCLI:
                     f"CLI args --run-args='{getattr(args, 'run_args', '')}' "
                     f"will be appended to mode command"
                 )
-                holohub_cli_util.warn(msg)
+                warn(msg)
 
             if "docker_run_args" in run_config:
                 if getattr(args, "docker_opts", ""):
-                    mode_opts = holohub_cli_util.normalize_args_str(run_config["docker_run_args"])
+                    mode_opts = normalize_args_str(run_config["docker_run_args"])
                     msg = (
                         f"CLI args --docker-opts='{getattr(args, 'docker_opts', '')}' "
                         f"overrides mode --docker-opts: {mode_opts}"
                     )
-                    holohub_cli_util.warn(msg)
+                    warn(msg)
                 else:
-                    config["docker_opts"] = holohub_cli_util.normalize_args_str(
-                        run_config["docker_run_args"]
-                    )
+                    config["docker_opts"] = normalize_args_str(run_config["docker_run_args"])
         return config
 
     def make_project_container(
@@ -418,8 +409,7 @@ class HoloscanCLI:
     def _suggest_command(self, invalid_value: str, valid_options: list[str]) -> list[str]:
         """Suggest similar values using Levenshtein distance."""
         distances = [
-            (option, holohub_cli_util.levenshtein_distance(invalid_value, option))
-            for option in valid_options
+            (option, levenshtein_distance(invalid_value, option)) for option in valid_options
         ]
         distances.sort(key=lambda x: x[1])
         return [option for option, dist in distances[:2] if dist <= 2]  # Show up to 2 matches
@@ -488,18 +478,6 @@ class HoloscanCLI:
         else:
             self.parser.print_help()
             sys.exit(1)
-
-
-#: Deprecated alias for :class:`HoloscanCLI`.
-#:
-#: ``HoloHubCLI`` was the canonical name through v1; new code should import
-#: :class:`HoloscanCLI` directly. The alias is kept so downstream wrappers
-#: and the in-container recursion in ``commands.test_cmd._ctest_script_arg``
-#: (which spawns a fresh Python that ``from holoscan_cli.cli import
-#: HoloHubCLI``) keep working across the deprecation window. Drop alongside
-#: the rest of the HoloHub-name compatibility surface in the next minor
-#: release.
-HoloHubCLI = HoloscanCLI
 
 
 def main(argv: Optional[List[str]] = None):

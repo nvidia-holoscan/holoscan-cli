@@ -22,18 +22,15 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import List, Optional
 
-from .util import (
-    Color,
-    dir_size_mb,
-    format_size,
+from .utils.io import Color, run_info_command
+from .utils.sdk import (
     get_default_cuda_version,
     get_gpu_name,
     get_host_arch,
     get_host_gpu,
     get_sdk_version,
-    relative_time,
-    run_info_command,
 )
+from .utils.text import dir_size_mb, format_size, relative_time
 
 
 @dataclass

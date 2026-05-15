@@ -21,10 +21,17 @@ import shlex
 import shutil
 from pathlib import Path
 
-import holoscan_cli.util as holohub_cli_util
 from holoscan_cli.commands.build import build_project_locally
 from holoscan_cli.commands.registry import help_for
 from holoscan_cli.metadata.utils import normalize_language
+from holoscan_cli.utils.docker import get_entrypoint_command_args
+from holoscan_cli.utils.holohub import (
+    build_holohub_path_mapping,
+    check_skip_builds,
+    replace_placeholders,
+    update_env,
+)
+from holoscan_cli.utils.io import fatal, format_cmd, run_command
 
 
 def register_run_parser(
@@ -106,18 +113,18 @@ def handle_run(cli, args: argparse.Namespace) -> None:
     run_config = mode_config.get("run", project_data.get("metadata", {}).get("run", {}))
 
     if not run_config:
-        holohub_cli_util.fatal(f"Project '{args.project}' does not have a run configuration")
+        fatal(f"Project '{args.project}' does not have a run configuration")
 
     # Get mode-specific build environment variables
     build_mode_env = mode_config.get("env", {}).copy()
-    holohub_cli_util.update_env(build_mode_env, mode_config.get("build", {}).get("env", {}))
+    update_env(build_mode_env, mode_config.get("build", {}).get("env", {}))
 
     # Get mode-specific run environment variables
     run_mode_env = mode_config.get("env", {}).copy()
-    holohub_cli_util.update_env(run_mode_env, run_config.get("env", {}))
+    update_env(run_mode_env, run_config.get("env", {}))
 
     # Check if builds should be skipped
-    skip_docker_build, skip_local_build = holohub_cli_util.check_skip_builds(args)
+    skip_docker_build, skip_local_build = check_skip_builds(args)
 
     # Check if local mode is requested
     is_local_mode = (
@@ -135,14 +142,14 @@ def handle_run(cli, args: argparse.Namespace) -> None:
 
     if is_local_mode:
         if args.docker_opts:
-            holohub_cli_util.fatal(
+            fatal(
                 "Container arguments were provided with `--docker-opts` but a non-containerized build was requested."
             )
         if skip_local_build:
             # Skip building; reuse previously resolved project_data and build directory
             build_dir = cli.DEFAULT_BUILD_PARENT_DIR / args.project
             if not build_dir.is_dir() and not args.dryrun:
-                holohub_cli_util.fatal(
+                fatal(
                     f"The build directory {build_dir} for this application does not exist.\n"
                     f"Did you forget to build the application first? Try running:\n"
                     f"  {cli.script_name} build {args.project}"
@@ -162,7 +169,7 @@ def handle_run(cli, args: argparse.Namespace) -> None:
             )
 
         # Build path mapping
-        path_mapping = holohub_cli_util.build_holohub_path_mapping(
+        path_mapping = build_holohub_path_mapping(
             holohub_root=cli.HOLOHUB_ROOT,
             project_data=project_data,
             build_dir=build_dir,
@@ -177,20 +184,14 @@ def handle_run(cli, args: argparse.Namespace) -> None:
             f"{run_env.get('PYTHONPATH', '')}:{cli.DEFAULT_SDK_DIR}/python/lib:{build_dir}/python/lib:{cli.HOLOHUB_ROOT}"
         )
         run_env["HOLOSCAN_CLI_DATA_PATH"] = str(cli.DEFAULT_DATA_DIR)
-        # Legacy alias for downstream code still reading HOLOHUB_DATA_PATH.
-        # Drop alongside the rest of the HOLOHUB_* env-var surface in the
-        # next minor release.
-        run_env["HOLOHUB_DATA_PATH"] = str(cli.DEFAULT_DATA_DIR)
         run_env["HOLOSCAN_INPUT_PATH"] = run_env.get(
             "HOLOSCAN_INPUT_PATH", str(cli.DEFAULT_DATA_DIR)
         )
         # Apply mode environment variables (mode.run.env takes precedence over run.env)
-        holohub_cli_util.update_env(
-            run_env, run_mode_env, path_mapping, verbose=(args.verbose or args.dryrun)
-        )
+        update_env(run_env, run_mode_env, path_mapping, verbose=(args.verbose or args.dryrun))
 
         # Process command template using the path mapping and environment variables
-        cmd = holohub_cli_util.replace_placeholders(run_config["command"], path_mapping)
+        cmd = replace_placeholders(run_config["command"], path_mapping)
 
         # Use effective run args (which may come from mode or CLI)
         effective_run_args = run_args.get("run_args")
@@ -202,7 +203,7 @@ def handle_run(cli, args: argparse.Namespace) -> None:
 
         if language == "cpp":
             if not build_dir.is_dir() and not args.dryrun:
-                holohub_cli_util.fatal(
+                fatal(
                     f"The build directory {build_dir} for this application does not exist.\n"
                     f"Did you forget to '{cli.script_name} build {args.project}'?"
                 )
@@ -214,25 +215,21 @@ def handle_run(cli, args: argparse.Namespace) -> None:
             target_dir = Path(path_mapping[workdir_spec])
         else:
             target_dir = Path(workdir_spec)
-        print(holohub_cli_util.format_cmd("cd " + str(target_dir), is_dryrun=args.dryrun))
+        print(format_cmd("cd " + str(target_dir), is_dryrun=args.dryrun))
         if not args.dryrun:
             os.chdir(target_dir)
 
         # Print environment setup
         if args.verbose or args.dryrun:
+            print(format_cmd("export PYTHONPATH=" + run_env["PYTHONPATH"], is_dryrun=args.dryrun))
             print(
-                holohub_cli_util.format_cmd(
-                    "export PYTHONPATH=" + run_env["PYTHONPATH"], is_dryrun=args.dryrun
-                )
-            )
-            print(
-                holohub_cli_util.format_cmd(
+                format_cmd(
                     "export HOLOSCAN_CLI_DATA_PATH=" + run_env["HOLOSCAN_CLI_DATA_PATH"],
                     is_dryrun=args.dryrun,
                 )
             )
             print(
-                holohub_cli_util.format_cmd(
+                format_cmd(
                     "export HOLOSCAN_INPUT_PATH=" + run_env["HOLOSCAN_INPUT_PATH"],
                     is_dryrun=args.dryrun,
                 )
@@ -245,7 +242,7 @@ def handle_run(cli, args: argparse.Namespace) -> None:
                 and not os.path.isdir("/opt/nvidia/nsys-host")
                 and not args.dryrun
             ):
-                holohub_cli_util.fatal(
+                fatal(
                     "Nsight Systems CLI command 'nsys' not found. No Nsight installation from the host is also mounted."
                 )
             nsys_cmd = "/opt/nvidia/nsys-host/bin/nsys" if not shutil.which("nsys") else "nsys"
@@ -255,7 +252,7 @@ def handle_run(cli, args: argparse.Namespace) -> None:
                 try:
                     with open("/proc/sys/kernel/perf_event_paranoid") as f:
                         if int(f.read()) > 2:
-                            holohub_cli_util.fatal(
+                            fatal(
                                 "For Nsight Systems profiling the Linux operating system's perf_event_paranoid level must be 2 or less."
                             )
                 except (IOError, ValueError):
@@ -264,7 +261,7 @@ def handle_run(cli, args: argparse.Namespace) -> None:
             cmd = f"{nsys_cmd} profile --trace=cuda,vulkan,nvtx,osrt {cmd}"
 
         cmd_to_run = cmd if isinstance(cmd, list) else shlex.split(cmd)
-        holohub_cli_util.run_command(cmd_to_run, env=run_env, dry_run=args.dryrun)
+        run_command(cmd_to_run, env=run_env, dry_run=args.dryrun)
     else:
         container = cli.make_project_container(
             project_name=args.project,
@@ -315,7 +312,7 @@ def handle_run(cli, args: argparse.Namespace) -> None:
 
         img = getattr(args, "img", None) or container.image_name
         docker_opts = build_args.get("docker_opts", "")
-        docker_opts_extra, extra_args = holohub_cli_util.get_entrypoint_command_args(
+        docker_opts_extra, extra_args = get_entrypoint_command_args(
             img, run_cmd, docker_opts, dry_run=args.dryrun
         )
         if docker_opts_extra:

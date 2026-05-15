@@ -13,6 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from .core import HoloHubContainer, HoloscanContainer
+from .core import HoloscanContainer
 
-__all__ = ["HoloHubContainer", "HoloscanContainer"]
+__all__ = ["HoloscanContainer"]

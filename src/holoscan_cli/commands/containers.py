@@ -29,8 +29,10 @@ package while describing what these commands act on.
 
 import argparse
 
-import holoscan_cli.util as holohub_cli_util
 from holoscan_cli.commands.registry import help_for
+from holoscan_cli.utils.docker import get_entrypoint_command_args
+from holoscan_cli.utils.holohub import check_skip_builds
+from holoscan_cli.utils.text import normalize_args_str
 
 # ---- build-container ---------------------------------------------------------
 
@@ -134,7 +136,7 @@ def handle_run_container(cli, args: argparse.Namespace) -> None:
             if mode_name:
                 print(f"Running container for {args.project} in '{mode_name}' mode")
 
-    skip_docker_build, _ = holohub_cli_util.check_skip_builds(args)
+    skip_docker_build, _ = check_skip_builds(args)
     container = cli.make_project_container(
         project_name=args.project, language=args.language if hasattr(args, "language") else None
     )
@@ -156,8 +158,8 @@ def handle_run_container(cli, args: argparse.Namespace) -> None:
 
     trailing_args = getattr(args, "_trailing_args", [])
     if trailing_args:  # additional commands requires a bash entrypoint
-        command = holohub_cli_util.normalize_args_str(trailing_args)
-        docker_opts_extra, extra_args = holohub_cli_util.get_entrypoint_command_args(
+        command = normalize_args_str(trailing_args)
+        docker_opts_extra, extra_args = get_entrypoint_command_args(
             args.img or container.image_name, command, docker_opts, dry_run=args.dryrun
         )
         if docker_opts_extra:

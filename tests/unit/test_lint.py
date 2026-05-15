@@ -20,8 +20,8 @@ from types import SimpleNamespace
 import pytest
 
 from holoscan_cli import cli as project_cli
-from holoscan_cli import util as project_util
 from holoscan_cli.commands import lint as commands_lint
+from holoscan_cli.utils import holohub as project_holohub
 
 
 def _lint_cli(root, monkeypatch):
@@ -37,7 +37,7 @@ def test_holoscan_cli_root_discovery_from_subdirectory(tmp_path, monkeypatch):
 
     monkeypatch.chdir(subdir)
 
-    assert project_util._get_holohub_root() == root
+    assert project_holohub._get_holohub_root() == root
 
 
 def test_lint_dryrun_uses_pre_commit_all_files(tmp_path, monkeypatch):
@@ -51,7 +51,7 @@ def test_lint_dryrun_uses_pre_commit_all_files(tmp_path, monkeypatch):
         calls.append({"cmd": cmd, "check": check, "dry_run": dry_run, "env": env})
         return SimpleNamespace(returncode=0)
 
-    monkeypatch.setattr(commands_lint.holohub_cli_util, "run_command", fake_run_command)
+    monkeypatch.setattr(commands_lint, "run_command", fake_run_command)
 
     args = argparse.Namespace(path=".", fix=False, install_dependencies=False, dryrun=True)
     with pytest.raises(SystemExit) as exc_info:
@@ -87,7 +87,7 @@ def test_lint_dryrun_limits_to_git_tracked_path(tmp_path, monkeypatch):
         calls.append(cmd)
         return SimpleNamespace(returncode=0)
 
-    monkeypatch.setattr(commands_lint.holohub_cli_util, "run_command", fake_run_command)
+    monkeypatch.setattr(commands_lint, "run_command", fake_run_command)
     monkeypatch.setattr(
         commands_lint.subprocess,
         "check_output",
@@ -128,7 +128,7 @@ def test_install_lint_deps_falls_back_to_pre_commit_package(tmp_path, monkeypatc
         calls.append({"cmd": cmd, "dry_run": dry_run, "env": env})
         return SimpleNamespace(returncode=0)
 
-    monkeypatch.setattr(commands_lint.holohub_cli_util, "run_command", fake_run_command)
+    monkeypatch.setattr(commands_lint, "run_command", fake_run_command)
     monkeypatch.setattr(commands_lint, "_running_in_virtual_env", lambda: True)
 
     commands_lint._install_lint_deps(lint_cli, dry_run=True, env={})

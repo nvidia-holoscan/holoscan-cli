@@ -23,9 +23,10 @@ collection conventions) so the file's purpose is unambiguous.
 import argparse
 import os
 
-import holoscan_cli.util as holohub_cli_util
 from holoscan_cli.commands.registry import help_for
 from holoscan_cli.metadata.utils import normalize_language
+from holoscan_cli.utils.holohub import check_skip_builds, determine_project_prefix
+from holoscan_cli.utils.io import format_cmd, run_command
 
 
 def register_test_parser(cli, subparsers, *, container_build) -> argparse.ArgumentParser:
@@ -79,28 +80,28 @@ def _ctest_script_arg(cli, args: argparse.Namespace, in_container: bool) -> str:
 
     When the ctest invocation will run inside a separate container (i.e. the
     host is recursing in via ``docker run ... bash -c "<ctest_cmd>"``), the
-    host's ``HoloHubCLI.DEFAULT_CTEST_SCRIPT`` points at the host's
+    host's ``HoloscanCLI.DEFAULT_CTEST_SCRIPT`` points at the host's
     ``site-packages`` and will not exist inside the container if the install
     prefix differs. Defer the resolution to runtime by emitting a Python
     one-liner the in-container shell evaluates; this honors any
-    ``HOLOHUB_CTEST_SCRIPT`` value forwarded into the container and falls
-    back to the in-container package's bundled script. The host's local path
-    (``--local`` on the host, or the in-container ``--local`` recursion
-    branch) keeps the direct host-resolved path.
+    ``HOLOSCAN_CLI_CTEST_SCRIPT`` value forwarded into the container and
+    falls back to the in-container package's bundled script. The host's
+    local path (``--local`` on the host, or the in-container ``--local``
+    recursion branch) keeps the direct host-resolved path.
     """
     if args.ctest_script:
         return f"-S {args.ctest_script}"
     if not in_container:
         return f"-S {cli.DEFAULT_CTEST_SCRIPT}"
     return (
-        "-S \"$(python3 -c 'from holoscan_cli.cli import HoloHubCLI; "
-        "print(HoloHubCLI.DEFAULT_CTEST_SCRIPT)')\""
+        "-S \"$(python3 -c 'from holoscan_cli.cli import HoloscanCLI; "
+        "print(HoloscanCLI.DEFAULT_CTEST_SCRIPT)')\""
     )
 
 
 def handle_test(cli, args: argparse.Namespace) -> None:
     """Handle test command"""
-    skip_docker_build, _ = holohub_cli_util.check_skip_builds(args)
+    skip_docker_build, _ = check_skip_builds(args)
     container = cli.make_project_container(
         project_name=args.project, language=args.language if hasattr(args, "language") else None
     )
@@ -160,7 +161,7 @@ def handle_test(cli, args: argparse.Namespace) -> None:
         project_metadata = container.project_metadata or {}
         project_name = project_metadata.get("project_name", args.project)
         project_type = project_metadata.get("project_type", "application")
-        proj_prefix = holohub_cli_util.determine_project_prefix(project_type)
+        proj_prefix = determine_project_prefix(project_type)
         ctest_cmd += f"-D{proj_prefix}={project_name} "
     ctest_cmd += f"-DTAG={tag} "
 
@@ -205,7 +206,7 @@ def handle_test(cli, args: argparse.Namespace) -> None:
         ctest_cmd += "-VV "
 
     if is_local_mode:
-        print(holohub_cli_util.format_cmd(f"cd {cli.HOLOHUB_ROOT}", is_dryrun=args.dryrun))
+        print(format_cmd(f"cd {cli.HOLOHUB_ROOT}", is_dryrun=args.dryrun))
         if not args.dryrun:
             os.chdir(cli.HOLOHUB_ROOT)
 
@@ -214,13 +215,9 @@ def handle_test(cli, args: argparse.Namespace) -> None:
             f"{env.get('PYTHONPATH', '')}:{cli.DEFAULT_SDK_DIR}/python/lib:{cli.HOLOHUB_ROOT}"
         )
         env["HOLOSCAN_CLI_DATA_PATH"] = str(cli.DEFAULT_DATA_DIR)
-        # Legacy alias for downstream code still reading HOLOHUB_DATA_PATH.
-        # Drop alongside the rest of the HOLOHUB_* env-var surface in the
-        # next minor release.
-        env["HOLOHUB_DATA_PATH"] = str(cli.DEFAULT_DATA_DIR)
         env.setdefault("HOLOSCAN_INPUT_PATH", str(cli.DEFAULT_DATA_DIR))
 
-        holohub_cli_util.run_command(["bash", "-c", ctest_cmd], dry_run=args.dryrun, env=env)
+        run_command(["bash", "-c", ctest_cmd], dry_run=args.dryrun, env=env)
         return
 
     container.run(

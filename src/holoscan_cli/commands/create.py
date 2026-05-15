@@ -21,11 +21,10 @@ import json
 from pathlib import Path
 from typing import Optional
 
-import holoscan_cli.util as holohub_cli_util
 from holoscan_cli.commands.registry import help_for
 from holoscan_cli.container import HoloscanContainer
 from holoscan_cli.metadata.utils import get_schema_path
-from holoscan_cli.utils.io import Color
+from holoscan_cli.utils.io import Color, fatal
 
 
 def register_create_parser(cli, subparsers) -> argparse.ArgumentParser:
@@ -105,7 +104,7 @@ def validate_generated_metadata(cli, metadata_path: Path, schema_root: Optional[
         from holoscan_cli.metadata import metadata_validator
     except ImportError:
         template_setup_cmd = f"{cli.script_name} setup --scripts template"
-        holohub_cli_util.fatal(
+        fatal(
             "Metadata validation requires the optional 'create' dependencies "
             "(jsonschema, referencing). Install them with "
             "`pip install 'holoscan-cli[create]'` "
@@ -115,24 +114,18 @@ def validate_generated_metadata(cli, metadata_path: Path, schema_root: Optional[
         # No schema installed – skip validation.
         return
     if not metadata_path.exists():
-        holohub_cli_util.fatal(f"Generated project is missing metadata.json at {metadata_path}")
+        fatal(f"Generated project is missing metadata.json at {metadata_path}")
     try:
         with open(metadata_path, "r", encoding="utf-8") as metadata_file:
             metadata_contents = json.load(metadata_file)
     except json.JSONDecodeError as exc:
-        holohub_cli_util.fatal(
-            f"Generated metadata.json is not valid ({exc}). File location: {metadata_path}"
-        )
+        fatal(f"Generated metadata.json is not valid ({exc}). File location: {metadata_path}")
     except OSError as exc:
-        holohub_cli_util.fatal(
-            f"Failed to read metadata.json ({exc}). File location: {metadata_path}"
-        )
+        fatal(f"Failed to read metadata.json ({exc}). File location: {metadata_path}")
     is_valid, message = metadata_validator.validate_json(metadata_contents, str(schema_root))
     schema_file = get_schema_path(schema_root)
     if not is_valid:
-        holohub_cli_util.fatal(
-            f"Generated metadata.json failed validation against {schema_file}:\n{message}"
-        )
+        fatal(f"Generated metadata.json failed validation against {schema_file}:\n{message}")
     print(Color.green(f"Validated metadata.json against {schema_file}"))
 
 
@@ -144,10 +137,10 @@ def handle_create(cli, args: argparse.Namespace) -> None:
     # Ensure template directory exists
     template_dir = cli.HOLOHUB_ROOT / args.template
     if not template_dir.exists() and not args.dryrun:
-        holohub_cli_util.fatal(f"Template directory {template_dir} does not exist")
+        fatal(f"Template directory {template_dir} does not exist")
 
     if not args.directory.exists() and not args.dryrun:
-        holohub_cli_util.fatal(f"Project output directory {args.directory} does not exist")
+        fatal(f"Project output directory {args.directory} does not exist")
 
     # Define minimal context with required fields
     context = {
@@ -165,9 +158,7 @@ def handle_create(cli, args: argparse.Namespace) -> None:
                 key, value = ctx_var.split("=", 1)
                 context[key] = value
             except ValueError:
-                holohub_cli_util.fatal(
-                    f"Invalid context variable format: {ctx_var}. Expected key=value"
-                )
+                fatal(f"Invalid context variable format: {ctx_var}. Expected key=value")
 
     # Print summary if dryrun
     if args.dryrun:
@@ -184,7 +175,7 @@ def handle_create(cli, args: argparse.Namespace) -> None:
         import cookiecutter.main
     except ImportError:
         template_setup_cmd = f"{cli.script_name} setup --scripts template"
-        holohub_cli_util.fatal(
+        fatal(
             "cookiecutter is required to create new projects. "
             f"Install it with `pip install 'holoscan-cli[create]'`, "
             f"or run `{template_setup_cmd}` for the HoloHub bash setup flow."
@@ -192,7 +183,7 @@ def handle_create(cli, args: argparse.Namespace) -> None:
 
     intended_dir = args.directory / context["project_slug"]
     if intended_dir.exists():
-        holohub_cli_util.fatal(f"Project directory {intended_dir} already exists")
+        fatal(f"Project directory {intended_dir} already exists")
 
     try:
         # Let cookiecutter handle all file generation
@@ -203,7 +194,7 @@ def handle_create(cli, args: argparse.Namespace) -> None:
             output_dir=str(args.directory),
         )
     except Exception as e:
-        holohub_cli_util.fatal(f"Failed to create project: {str(e)}")
+        fatal(f"Failed to create project: {str(e)}")
 
     # Add to CMakeLists.txt if in applications directory
     project_dir = Path(generated_path)

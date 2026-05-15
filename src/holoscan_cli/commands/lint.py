@@ -24,9 +24,9 @@ import tempfile
 from pathlib import Path
 from typing import List, Optional
 
-import holoscan_cli.util as holohub_cli_util
 from holoscan_cli.commands.registry import help_for
-from holoscan_cli.utils.io import Color
+from holoscan_cli.utils.docker import is_running_in_docker
+from holoscan_cli.utils.io import Color, fatal, format_cmd, info, run_command, warn
 
 
 def register_lint_parser(cli, subparsers) -> argparse.ArgumentParser:
@@ -74,12 +74,10 @@ def _resolve_lint_target(cli, path_arg: Optional[str]) -> Path:
     path = Path(path_arg)
     target = path.resolve() if path.is_absolute() else (root / path).resolve()
     if not target.exists():
-        holohub_cli_util.fatal(f"Lint path `{path_arg}` does not exist.")
+        fatal(f"Lint path `{path_arg}` does not exist.")
 
     if not target.is_relative_to(root):
-        holohub_cli_util.fatal(
-            f"Lint path `{path_arg}` resolves outside the project root `{root}`."
-        )
+        fatal(f"Lint path `{path_arg}` resolves outside the project root `{root}`.")
 
     return target
 
@@ -105,11 +103,9 @@ def _collect_lint_files(cli, target: Path) -> List[str]:
             stderr=subprocess.DEVNULL,
         )
     except FileNotFoundError:
-        holohub_cli_util.fatal("`git` is not available; cannot resolve lint target files.")
+        fatal("`git` is not available; cannot resolve lint target files.")
     except subprocess.CalledProcessError:
-        holohub_cli_util.fatal(
-            f"Failed to enumerate lint files via `git ls-files` for `{target_arg}`."
-        )
+        fatal(f"Failed to enumerate lint files via `git ls-files` for `{target_arg}`.")
     return [line for line in output.splitlines() if line]
 
 
@@ -122,7 +118,7 @@ def _check_pre_commit_cache_writable(env: dict) -> None:
             pass
     except (PermissionError, OSError):
         quoted = shlex.quote(str(cache_dir))
-        holohub_cli_util.fatal(
+        fatal(
             f"pre-commit cache `{cache_dir}` is not writable by the current user "
             f"(typically caused by a previous `sudo pre-commit` run).\n"
             f"Fix it with one of:\n"
@@ -133,7 +129,7 @@ def _check_pre_commit_cache_writable(env: dict) -> None:
 
 def _install_lint_deps(cli, dry_run: bool, env: dict) -> None:
     """Install pre-commit and prefetch hook environments."""
-    print(holohub_cli_util.format_cmd("cd " + str(cli.HOLOHUB_ROOT), is_dryrun=dry_run))
+    print(format_cmd("cd " + str(cli.HOLOHUB_ROOT), is_dryrun=dry_run))
     if not dry_run:
         os.chdir(cli.HOLOHUB_ROOT)
 
@@ -145,18 +141,16 @@ def _install_lint_deps(cli, dry_run: bool, env: dict) -> None:
         pip_install_cmd.extend(["-r", str(lint_requirements)])
     else:
         pip_install_cmd.append("pre-commit")
-    holohub_cli_util.run_command(
+    run_command(
         pip_install_cmd,
         dry_run=dry_run,
         env=env,
     )
     if not (cli.HOLOHUB_ROOT / ".pre-commit-config.yaml").exists():
-        holohub_cli_util.warn(
-            "No `.pre-commit-config.yaml` found; skipping pre-commit hook prefetch."
-        )
+        warn("No `.pre-commit-config.yaml` found; skipping pre-commit hook prefetch.")
         return
 
-    holohub_cli_util.run_command(
+    run_command(
         [sys.executable, "-m", "pre_commit", "install-hooks"],
         dry_run=dry_run,
         env=env,
@@ -178,11 +172,11 @@ def handle_lint(cli, args: argparse.Namespace) -> None:
         local_bin_path = Path.home() / ".local" / "bin"
         if str(local_bin_path) not in env.get("PATH", ""):
             env["PATH"] = str(local_bin_path) + ":" + env.get("PATH", "")
-            holohub_cli_util.info(f"Added {local_bin_path} to PATH.")
+            info(f"Added {local_bin_path} to PATH.")
 
-    if holohub_cli_util.is_running_in_docker():
+    if is_running_in_docker():
         env["PRE_COMMIT_HOME"] = str(cli.HOLOHUB_ROOT / ".cache" / "pre-commit")
-        holohub_cli_util.info(f"Set PRE_COMMIT_HOME to {env['PRE_COMMIT_HOME']}")
+        info(f"Set PRE_COMMIT_HOME to {env['PRE_COMMIT_HOME']}")
 
     if args.install_dependencies:
         if not args.dryrun:
@@ -190,13 +184,13 @@ def handle_lint(cli, args: argparse.Namespace) -> None:
         _install_lint_deps(cli, args.dryrun, env=env)
         return
 
-    print(holohub_cli_util.format_cmd("cd " + str(cli.HOLOHUB_ROOT), is_dryrun=args.dryrun))
+    print(format_cmd("cd " + str(cli.HOLOHUB_ROOT), is_dryrun=args.dryrun))
     if not args.dryrun:
         os.chdir(cli.HOLOHUB_ROOT)
 
     config_path = cli.HOLOHUB_ROOT / ".pre-commit-config.yaml"
     if not args.dryrun and not config_path.exists():
-        holohub_cli_util.warn(
+        warn(
             "No `.pre-commit-config.yaml` found at the project root. "
             "Nothing configured for linting; we recommend setting up pre-commit "
             "(https://pre-commit.com/) and committing a config."
@@ -206,16 +200,16 @@ def handle_lint(cli, args: argparse.Namespace) -> None:
     if not args.dryrun:
         _check_pre_commit_cache_writable(env)
         if not _pre_commit_available():
-            holohub_cli_util.info("pre-commit is not installed; installing lint dependencies.")
+            info("pre-commit is not installed; installing lint dependencies.")
             _install_lint_deps(cli, False, env=env)
             if not _pre_commit_available():
-                holohub_cli_util.fatal(
+                fatal(
                     "pre-commit was installed but is still not available on PATH. "
                     "Please check your Python environment."
                 )
 
     if args.fix:
-        holohub_cli_util.info(
+        info(
             "`--fix` is a compatibility alias: pre-commit hooks already auto-fix " "where possible."
         )
 
@@ -232,12 +226,12 @@ def handle_lint(cli, args: argparse.Namespace) -> None:
     else:
         files = _collect_lint_files(cli, target)
         if not files:
-            holohub_cli_util.warn(f"No files found under {target}; nothing to lint.")
+            warn(f"No files found under {target}; nothing to lint.")
             sys.exit(0)
         cmd.append("--files")
         cmd.extend(files)
 
-    result = holohub_cli_util.run_command(cmd, check=False, dry_run=args.dryrun, env=env)
+    result = run_command(cmd, check=False, dry_run=args.dryrun, env=env)
     if not args.dryrun and result.returncode == 0:
         print(Color.green("Everything looks good!"))
     sys.exit(result.returncode)

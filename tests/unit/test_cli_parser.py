@@ -130,15 +130,15 @@ def test_version_is_not_a_project_command():
 # ---- naming compatibility aliases -------------------------------------------
 
 
-def test_holohub_cli_alias_is_holoscan_cli():
-    """The deprecated ``HoloHubCLI`` alias must point at ``HoloscanCLI``."""
-    from holoscan_cli.cli import HoloHubCLI, HoloscanCLI
+def test_holohub_cli_alias_was_removed():
+    """The ``HoloHubCLI`` deprecation alias is gone in this release."""
+    from holoscan_cli import cli as project_cli
 
-    assert HoloHubCLI is HoloscanCLI
+    assert not hasattr(project_cli, "HoloHubCLI")
 
 
-def test_holohub_container_alias_is_holoscan_container():
-    """The deprecated ``HoloHubContainer`` alias must point at ``HoloscanContainer``."""
-    from holoscan_cli.container import HoloHubContainer, HoloscanContainer
+def test_holohub_container_alias_was_removed():
+    """The ``HoloHubContainer`` deprecation alias is gone in this release."""
+    from holoscan_cli import container
 
-    assert HoloHubContainer is HoloscanContainer
+    assert not hasattr(container, "HoloHubContainer")

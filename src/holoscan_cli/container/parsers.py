@@ -16,7 +16,7 @@
 
 import argparse
 
-from ..util import warn
+from ..utils.io import warn
 
 
 class _DeprecatedDisplayFlagAction(argparse.Action):
@@ -54,7 +54,7 @@ def get_build_argparse() -> argparse.ArgumentParser:
         "--extra-scripts",
         action="append",
         help="(Build container) Named dependency installation scripts to run as Docker layers."
-        + "Searches in the directory path specified by the HOLOHUB_SETUP_SCRIPTS_DIR environment variable."
+        + "Searches in the directory path specified by the HOLOSCAN_CLI_SETUP_SCRIPTS_DIR environment variable."
         + "Use `./holohub setup --list-scripts` to list all available scripts.",
     )
     return parser
