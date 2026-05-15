@@ -74,6 +74,22 @@ Pipeline:
    staged wheel to Artifactory via
    `release_kitmaker_wheel.py upload --wheel-url https://test.pypi.org/project/holoscan-cli/<v>/ --artifactory-repo-url …`.
 
+### Dispatching a release from the CLI
+
+```bash
+gh workflow run release.yaml --ref <branch> \
+  -f version=vX.Y.Z \
+  -f rc=<optional-rc-number> \
+  -f ga=false                                       # true only for an official GA
+```
+
+`gh run list --workflow release.yaml --limit 1` then `gh run view <id>` to
+watch progress. The `testpypi-installed smoke test` job at the end of the
+pipeline polls `https://test.pypi.org/simple/` for the just-published
+version, pip-installs it into a fresh venv, and re-runs `smoke_test.sh`, so
+a green release run is equivalent to "kitmaker can fetch this wheel and it
+passes the same checks CI runs on push."
+
 Branch naming feeds into the version string via
 `tool.poetry-dynamic-versioning.format-jinja` in `pyproject.toml`:
 
@@ -118,6 +134,12 @@ Given the bin/ directory of a venv that has `holoscan-cli` installed:
 * Negative surface: asserts that the removed commands (`package`, `nics`)
   exit non-zero, and that the legacy `holohub` / `monai-deploy` console
   scripts are **not** installed alongside `holoscan`.
+* Positive source-project surface: points `HOLOSCAN_CLI_ROOT` at the in-tree
+  fixture `tests/fixtures/holohub_smoke/` and runs `holoscan list` +
+  `holoscan modes smoke_app`. The fixture is one HoloHub-style application
+  whose `metadata.json` validates against the application schema, so a wheel
+  that ships but breaks project discovery (missing schema files, broken
+  `iter_metadata_paths`, etc.) fails this check before kitmaker sees it.
 
 ## Other workflows
 
@@ -132,6 +154,26 @@ Given the bin/ directory of a venv that has `holoscan-cli` installed:
   commenting `/build` on a PR kicks off a vulnerability scan and a Jenkins
   job on Blossom-managed runners. Configuration is org-managed; do not edit
   the authorization list without going through the Blossom CI team.
+
+## GitHub Actions allowlist
+
+The repo is configured with an org-level Actions allowlist (Settings →
+Actions → General → Allow select actions). Some entries are wildcard
+(`actions/checkout@*`); others pin a single SHA (e.g.
+`coverallsapp/github-action@cfd0633e...`, which corresponds to v2.3.4 — bumping
+requires extending the allowlist). Adding a new third-party action, or
+upgrading past a SHA-pinned entry, will make the workflow fail to start at
+all: every run shows `startup_failure` with no jobs scheduled and no log
+output.
+
+Dump the current allowlist before introducing a new action:
+
+```bash
+gh api repos/nvidia-holoscan/holoscan-cli/actions/permissions/selected-actions
+```
+
+If the action you need is not on the list, ask a repository admin to extend
+it before merging the workflow change.
 
 ## Adding or removing a subcommand
 

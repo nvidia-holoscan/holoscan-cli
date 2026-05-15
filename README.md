@@ -24,7 +24,7 @@ Per-repo wrappers install this package and delegate to `holoscan`, layering on t
 | Isaac OS | `./isaac_os` | HSB hardware auto-detection, `--privileged` docker run args, sccache memcached endpoint |
 | [I4H Workflows](https://github.com/isaac-for-healthcare/i4h-workflows) | `./i4h` | RTI DDS license auto-download + mount, TTY serial device passthrough |
 
-Common env vars: `HOLOSCAN_CLI_ROOT` (repo root), `HOLOSCAN_CLI_SEARCH_PATH` (subdirs to scan for `metadata.json`), `HOLOSCAN_CLI_PATH_PREFIX` (placeholder prefix in metadata templates), `HOLOSCAN_CLI_REPO_PREFIX` (container image name prefix). The legacy `HOLOHUB_*` spelling is still honored with a one-line deprecation warning and will be removed in the next minor release. `holoscan env-info` lists every env var the CLI reads in the current shell.
+Common env vars: `HOLOSCAN_CLI_ROOT` (repo root), `HOLOSCAN_CLI_SEARCH_PATH` (subdirs to scan for `metadata.json`), `HOLOSCAN_CLI_PATH_PREFIX` (placeholder prefix in metadata templates), `HOLOSCAN_CLI_REPO_PREFIX` (container image name prefix). The legacy `HOLOHUB_*` spelling is no longer honored in v1 — set the `HOLOSCAN_CLI_*` names directly. `holoscan env-info` lists every env var the CLI reads in the current shell.
 
 ## Source layout
 
@@ -62,7 +62,7 @@ poetry env use python3.12
 eval $(poetry env activate)
 
 # Install dependencies + dev tooling
-poetry install
+poetry install --with test
 pre-commit install
 
 # Run the test suite
@@ -72,9 +72,44 @@ poetry run pytest
 poetry build
 ```
 
+### Testing against an in-tree source-project fixture
+
+The repo ships a minimal HoloHub-style fixture at
+`tests/fixtures/holohub_smoke/` (one application with a `metadata.json` that
+validates against the application schema). Point the CLI at it without
+needing a HoloHub / Isaac OS / I4H checkout:
+
+```bash
+HOLOSCAN_CLI_ROOT=tests/fixtures/holohub_smoke holoscan list
+HOLOSCAN_CLI_ROOT=tests/fixtures/holohub_smoke holoscan modes smoke_app
+```
+
+The same fixture is what `.github/scripts/smoke_test.sh` exercises against
+the installed wheel on every CI run, so a passing fixture run locally is a
+strong proxy for the `smoke-test` job passing on push.
+
+### Testing against the downstream wrappers
+
+Each consuming repo (HoloHub / Isaac OS / I4H Workflows) carries a
+`test_holoscan_cli_consolidation.py` that exercises the unified `holoscan`
+CLI against its project tree. Point the wrapper at a local checkout via
+`HOLOSCAN_CLI_SOURCE`:
+
+```bash
+cd /path/to/holohub
+HOLOSCAN_CLI_SOURCE=/path/to/holoscan-cli \
+  python -m pytest -q -o addopts='' utilities/cli/tests/test_holoscan_cli_consolidation.py
+```
+
+The wrapper prepends `<HOLOSCAN_CLI_SOURCE>/src` to `PYTHONPATH`, so an
+in-progress branch can be exercised end-to-end without publishing a wheel
+first.
+
 ## Contributing
 
-See [CONTRIBUTING.md](./CONTRIBUTING.md) for details.
+See [CONTRIBUTING.md](./CONTRIBUTING.md) for details. The
+[`.github/README.md`](./.github/README.md) covers the CI/release pipelines
+that back the workflow badges at the top of this page.
 
 ## Deprecations
 
