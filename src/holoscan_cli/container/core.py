@@ -494,7 +494,7 @@ class HoloscanContainer:
                 except ValueError:
                     fatal(
                         f"Script {script}.sh at {script_path} is not within {HoloscanContainer.HOLOHUB_ROOT}. "
-                        f"The HOLOHUB_SETUP_SCRIPTS_DIR environment variable must resolve to a subdirectory within the project scope."
+                        f"The HOLOSCAN_CLI_SETUP_SCRIPTS_DIR environment variable must resolve to a subdirectory within the project scope."
                     )
                 cmd = [
                     self.DOCKER_EXE,
@@ -769,9 +769,9 @@ class HoloscanContainer:
         _, enable_sccache = get_env_bool("HOLOSCAN_CLI_ENABLE_SCCACHE", default=False)
         sccache_keys = [k for k in os.environ if k.startswith("SCCACHE_")]
         if enable_sccache:
-            # Forward HOLOSCAN_CLI_ENABLE_SCCACHE (and the legacy alias) so the
-            # in-container launcher enables sccache before cmake build.
-            args.extend(["-e", "HOLOSCAN_CLI_ENABLE_SCCACHE", "-e", "HOLOHUB_ENABLE_SCCACHE=1"])
+            # Forward HOLOSCAN_CLI_ENABLE_SCCACHE so the in-container launcher
+            # enables sccache before cmake build.
+            args.extend(["-e", "HOLOSCAN_CLI_ENABLE_SCCACHE"])
             # Always set SCCACHE_DIR inside container to mounted path
             args.extend(["-e", f"SCCACHE_DIR={SCCACHE_CONTAINER_DIR}"])
             # Forward other SCCACHE_* environment variables present on host

@@ -310,7 +310,7 @@ def build_project_locally(
         if not sccache_bin:
             (warn if dryrun else fatal)(
                 "HOLOSCAN_CLI_ENABLE_SCCACHE is enabled but 'sccache' was not found in PATH. "
-                "Install it (e.g., `./holohub setup`) or disable sccache."
+                "Install it (e.g., `holoscan setup`) or disable sccache."
             )
         # Set CMake compiler launchers with -D
         if language != "python":

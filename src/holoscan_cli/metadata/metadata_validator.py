@@ -155,7 +155,9 @@ def validate_json(json_data, directory):
     return True, "valid"
 
 
-def validate_json_directory(directory, ignore_patterns=[], metadata_is_required: bool = True):
+def validate_json_directory(
+    directory, ignore_patterns: list[str] | None = None, metadata_is_required: bool = True
+):
     exit_code = 0
     # Convert json to python object.
     base_path = Path(os.getcwd()) / directory
@@ -183,21 +185,15 @@ def validate_json_directory(directory, ignore_patterns=[], metadata_is_required:
     for name in metadata_entries:
         with open(name, "r") as file:
             try:
-                jsonData = json.load(file)
+                json_data = json.load(file)
             except json.decoder.JSONDecodeError:
                 print("ERROR:" + name + ": invalid")
                 exit_code = 1
                 continue
 
-            is_valid, msg = validate_json(jsonData, directory)
+            is_valid, msg = validate_json(json_data, directory)
             if is_valid:
                 print(name + ": valid")
-
-                # Check if name matches README title
-                # name_matches, name_msg = check_name_matches_readme(name, jsonData)
-                # if not name_matches:
-                #    print("ERROR:" + name + ": " + name_msg)
-                #    exit_code = 1
             else:
                 print("ERROR:" + name + ": invalid")
                 print(msg)

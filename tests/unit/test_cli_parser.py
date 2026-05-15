@@ -79,6 +79,14 @@ def test_full_parser_does_not_add_extra_commands(cli):
     assert set(cli.subparsers) == expected
 
 
+def test_holoscan_cli_default_script_name_is_holoscan(monkeypatch, tmp_path):
+    monkeypatch.setattr(project_cli.HoloscanCLI, "HOLOHUB_ROOT", tmp_path)
+    monkeypatch.delenv("HOLOSCAN_CLI_CMD_NAME", raising=False)
+    with patch.object(project_cli.metadata_util, "gather_metadata", return_value=[]):
+        cli = project_cli.HoloscanCLI()
+    assert cli.script_name == "holoscan"
+
+
 @pytest.mark.parametrize("command", sorted(spec.name for spec in registry.PROJECT_COMMANDS))
 def test_each_subcommand_accepts_help_flag(cli, command, capsys):
     """``holoscan <command> --help`` exits 0 on every registered command."""

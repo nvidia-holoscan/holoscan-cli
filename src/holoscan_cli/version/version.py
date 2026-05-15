@@ -29,7 +29,7 @@ def get_package_version() -> str:
         return __version__
 
 
-def execute_version_command(args: Namespace):
+def execute_version_command(_args: Namespace):
     print(f"Package:     {PACKAGE_NAME}")
     print(f"Version:     {get_package_version()}")
     print(f"Executable:  {Path(sys.argv[0]).resolve()}")

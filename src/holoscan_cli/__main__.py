@@ -31,7 +31,7 @@ logging.getLogger("urllib3").setLevel(logging.WARNING)
 
 LOG_CONFIG_FILENAME = "logging.json"
 
-# Dispatch contract for the HoloHub-only CLI:
+# Dispatch contract for the source-project CLI:
 # source-project commands listed in PROJECT_COMMANDS are forwarded to the
 # project CLI before argparse consumes their command-specific flags. The
 # placeholder subparsers below exist only so top-level `--help` enumerates
@@ -44,7 +44,7 @@ PROJECT_COMMANDS = project_command_help()
 
 LOG_LEVELS = ["DEBUG", "INFO", "WARN", "ERROR", "CRITICAL"]
 
-# Subcommands removed in the HoloHub-only v1 cut. Mapped to a one-line note
+# Subcommands removed in the source-project v1 cut. Mapped to a one-line note
 # explaining what each one did, so users typing the old command get a
 # specific message instead of argparse's generic "invalid choice". HAP/MAP
 # packaging is intentionally out of scope for this package (see
@@ -60,7 +60,7 @@ REMOVED_COMMANDS: dict[str, str] = {
 
 REMOVED_COMMAND_FOOTER = (
     "HAP/MAP packaging is out of scope for holoscan-cli v1. Pin "
-    "holoscan-cli<4 or use the Holoscan SDK packaging workflows directly "
+    "holoscan-cli<=4.2.0 or use the Holoscan SDK packaging workflows directly "
     "if you still need it."
 )
 
@@ -71,7 +71,7 @@ def parse_args(argv: Optional[list[str]] = None) -> argparse.Namespace:
     argv = list(argv)  # copy argv for manipulation to avoid side-effects
 
     # We have intentionally not set the default using `default="INFO"` here so that the default
-    # value from here doesn't override the value in `LOG_CONFIG_FILENAME` unless the user indends
+    # value from here doesn't override the value in `LOG_CONFIG_FILENAME` unless the user intends
     # to do so. If the user doesn't use this flag to set log level, this argument is set to "None"
     # and the logging level specified in `LOG_CONFIG_FILENAME` is used.
 

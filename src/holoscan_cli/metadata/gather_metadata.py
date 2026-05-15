@@ -86,12 +86,12 @@ def generate_build_and_run_command(entry: dict) -> str:
 
     language = list_normalized_languages(entry.get("metadata", {}).get("language", ""))[0]
     if language == "python":
-        return f"./holohub run {project_name} --language=python"
+        return f"holoscan run {project_name} --language=python"
     elif language in ["cpp", "c++"]:
-        return f"./holohub run {project_name} --language=cpp"
+        return f"holoscan run {project_name} --language=cpp"
     else:
         # Unknown language, use default
-        return f"./holohub run {project_name}"
+        return f"holoscan run {project_name}"
 
 
 def _warn_duplicate_projects(metadata_entries: list[dict]) -> None:
@@ -114,7 +114,7 @@ def _warn_duplicate_projects(metadata_entries: list[dict]) -> None:
                 seen[key] = source_folder
 
 
-def gather_metadata(repo_paths: list[str], exclude_paths: list[str] = None) -> list[dict]:
+def gather_metadata(repo_paths: list[str], exclude_paths: list[str] | None = None) -> list[dict]:
     """
     Collect project metadata from JSON files into a single dictionary
 

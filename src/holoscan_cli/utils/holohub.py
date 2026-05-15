@@ -15,7 +15,7 @@
 
 """HoloHub-specific source-project utilities.
 
-Root discovery, search paths, the ``HOLOHUB_PATH_PREFIX`` placeholder
+Root discovery, search paths, the ``HOLOSCAN_CLI_PATH_PREFIX`` placeholder
 namespace, project-type prefixes, build-type translation, sccache
 location, environment-variable interpolation, and git-state helpers for
 tagging container images.
@@ -65,7 +65,7 @@ def check_skip_builds(args) -> Tuple[bool, bool]:
     skip_docker_build = skip_builds or getattr(args, "no_docker_build", False)
     skip_local_build = skip_builds or getattr(args, "no_local_build", False)
     if skip_builds:
-        info(f"Skipping build due to HOLOHUB_ALWAYS_BUILD={holohub_always_build}")
+        info(f"Skipping build due to HOLOSCAN_CLI_ALWAYS_BUILD={holohub_always_build}")
     else:
         if getattr(args, "no_local_build", False):
             info("Skipping local build due to --no-local-build")
@@ -88,7 +88,7 @@ def _get_holohub_root() -> Path:
         if env_path.exists() and env_path.is_dir():
             return env_path
         warn(
-            f"Environment variable HOLOHUB_ROOT='{env_root}' is invalid. "
+            f"Environment variable HOLOSCAN_CLI_ROOT='{env_root}' is invalid. "
             f"Falling back to default path: {Path(__file__).parent.parent.parent}"
         )
     cwd = Path.cwd().resolve()
@@ -216,7 +216,7 @@ def build_holohub_path_mapping(
         project_data: Optional project metadata dictionary
         build_dir: Optional build directory path
         data_dir: Optional data directory path
-        prefix: Prefix for placeholder keys. If None, reads from HOLOHUB_PATH_PREFIX
+        prefix: Prefix for placeholder keys. If None, reads from HOLOSCAN_CLI_PATH_PREFIX
                 environment variable (default: "holohub_")
         verbose: Whether to print verbose output
 

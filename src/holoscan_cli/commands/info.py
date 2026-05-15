@@ -34,7 +34,7 @@ import argparse
 import sys
 from collections import defaultdict
 
-from holoscan_cli.commands.registry import help_for
+from holoscan_cli.commands.registry import help_for, project_command_names
 from holoscan_cli.utils.env_info import collect_env_info, collect_git_info, collect_holohub_info
 from holoscan_cli.utils.io import Color, format_cmd
 
@@ -48,7 +48,7 @@ def register_list_parser(cli, subparsers) -> argparse.ArgumentParser:
     return parser
 
 
-def handle_list(cli, args: argparse.Namespace) -> None:
+def handle_list(cli, _args: argparse.Namespace) -> None:
     """Handle list command"""
     LIST_TYPES = [
         "application",
@@ -121,29 +121,14 @@ def register_autocompletion_list_parser(cli, subparsers) -> argparse.ArgumentPar
     return parser
 
 
-def handle_autocompletion_list(cli, args: argparse.Namespace) -> None:
+def handle_autocompletion_list(cli, _args: argparse.Namespace) -> None:
     """Handle autocompletion_list command - output project names and commands for bash completion"""
     project_names = set()
     for project in cli.projects:
         project_names.add(project["project_name"])
     for name in sorted(project_names):
         print(name)
-    commands = [
-        "build-container",
-        "run-container",
-        "build",
-        "run",
-        "list",
-        "lint",
-        "setup",
-        "install",
-        "create",
-        "status",
-        "env-check",
-        "cpp",
-        "python",
-        "autocompletion_list",
-    ]
+    commands = [*project_command_names(), "cpp", "python"]
     for cmd in commands:
         print(cmd)
 
@@ -158,7 +143,7 @@ def register_env_info_parser(cli, subparsers) -> argparse.ArgumentParser:
     return parser
 
 
-def handle_env_info(cli, args: argparse.Namespace) -> None:
+def handle_env_info(cli, _args: argparse.Namespace) -> None:
     """Handle env-info command to collect debugging information"""
     print(format_cmd("Environment Information"))
     collect_holohub_info(
@@ -234,7 +219,7 @@ def register_env_check_parser(cli, subparsers) -> argparse.ArgumentParser:
     return parser
 
 
-def handle_env_check(cli, args: argparse.Namespace) -> None:
+def handle_env_check(_cli, args: argparse.Namespace) -> None:
     """Handle env-check command to run system checks"""
     import time as _time
 

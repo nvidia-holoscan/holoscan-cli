@@ -341,14 +341,14 @@ def check_disk() -> CheckResult:
                 status="FAIL",
                 name="Disk",
                 message=f"{free_gb:.0f}GB free on {mount_point} (build dir: {check_path})",
-                fix_suggestion="Free disk space: ./holohub clear-cache && docker system prune",
+                fix_suggestion="Free disk space: holoscan clear-cache && docker system prune",
             )
         elif free_gb < 20:
             return CheckResult(
                 status="WARN",
                 name="Disk",
                 message=f"{free_gb:.0f}GB free on {mount_point} (build dir: {check_path}, < 20GB)",
-                fix_suggestion="Consider freeing space: ./holohub clear-cache",
+                fix_suggestion="Consider freeing space: holoscan clear-cache",
             )
         return CheckResult(
             status="OK", name="Disk", message=f"{free_gb:.0f}GB free on {mount_point}"

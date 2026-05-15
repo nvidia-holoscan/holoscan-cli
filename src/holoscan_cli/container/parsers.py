@@ -20,7 +20,7 @@ from ..utils.io import warn
 
 
 class _DeprecatedDisplayFlagAction(argparse.Action):
-    def __call__(self, parser, namespace, values, option_string=None):
+    def __call__(self, _parser, namespace, _values, option_string=None):
         warn(
             f"{option_string} is deprecated and ignored; X11 and Wayland "
             "forwarding now happens automatically when DISPLAY or "
@@ -55,7 +55,7 @@ def get_build_argparse() -> argparse.ArgumentParser:
         action="append",
         help="(Build container) Named dependency installation scripts to run as Docker layers."
         + "Searches in the directory path specified by the HOLOSCAN_CLI_SETUP_SCRIPTS_DIR environment variable."
-        + "Use `./holohub setup --list-scripts` to list all available scripts.",
+        + "Use `holoscan setup --list-scripts` to list all available scripts.",
     )
     return parser
 

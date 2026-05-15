@@ -104,6 +104,20 @@ def test_environment_args_omits_unset_wrapper_vars(monkeypatch):
     ], f"Only the always-on BUILD_LOCAL var should be present; got: {forwarded}"
 
 
+def test_environment_args_forward_sccache_canonical_name_only(monkeypatch):
+    _delenv_wrapper_vars(monkeypatch)
+    monkeypatch.setenv("HOLOSCAN_CLI_ENABLE_SCCACHE", "true")
+    monkeypatch.setenv("SCCACHE_BUCKET", "holoscan-cache")
+    monkeypatch.delenv("SCCACHE_DIR", raising=False)
+
+    args = _make_container().get_environment_args()
+
+    assert "HOLOSCAN_CLI_ENABLE_SCCACHE" in args
+    assert "SCCACHE_DIR=/.cache/sccache" in args
+    assert "SCCACHE_BUCKET" in args
+    assert all(not a.startswith("HOLOHUB_") for a in args)
+
+
 def test_local_source_build_context_args_empty_when_unset(monkeypatch):
     monkeypatch.delenv("HOLOSCAN_CLI_SOURCE", raising=False)
     assert project_container.HoloscanContainer.local_source_build_context_args() == []

@@ -48,7 +48,7 @@ def register_setup_parser(cli, subparsers) -> argparse.ArgumentParser:
         "--list-scripts",
         action="store_true",
         help="List all setup scripts found in the HOLOSCAN_CLI_SETUP_SCRIPTS_DIR directory. "
-        + "Run scripts directly or with `./holohub setup --scripts <script_name>`.",
+        + "Run scripts directly or with `holoscan setup --scripts <script_name>`.",
     )
     parser.add_argument(
         "--scripts",
@@ -67,7 +67,7 @@ def handle_setup(cli, args: argparse.Namespace) -> None:
     if args.list_scripts:
         setup_scripts_dir = get_holohub_setup_scripts_dir()
         print(format_cmd(f"Listing setup scripts available in {setup_scripts_dir}"))
-        print(Color.green("Use with `./holohub setup --scripts <script_name>`"))
+        print(Color.green("Use with `holoscan setup --scripts <script_name>`"))
         for script in setup_scripts_dir.glob("*.sh"):
             print(f"  {script.stem}")
         sys.exit(0)

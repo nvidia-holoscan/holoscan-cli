@@ -32,7 +32,7 @@ def register_create_parser(cli, subparsers) -> argparse.ArgumentParser:
 
     The ``--template`` and ``--directory`` defaults are derived from
     ``cli.HOLOHUB_ROOT`` so wrapper scripts that override the project root
-    (via ``HOLOHUB_ROOT`` env var) automatically pick up the right paths.
+    (via ``HOLOSCAN_CLI_ROOT`` env var) automatically pick up the right paths.
     """
     parser = subparsers.add_parser("create", help=help_for("create"))
     parser.add_argument("project", help="Name of the project to create")

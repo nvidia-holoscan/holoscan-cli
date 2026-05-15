@@ -14,7 +14,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# See cli_dev_guide.md for more information about the CLI and how to use it.
 # See README.md for command and flag reference.
 
 import sys
@@ -68,7 +67,7 @@ def in_container_cli_command() -> str:
 
 
 class HoloscanCLI:
-    """Command-line interface for HoloHub"""
+    """Command-line interface for Holoscan source-project workflows."""
 
     HOLOHUB_ROOT = get_holohub_root()
     DEFAULT_BUILD_PARENT_DIR = Path(
@@ -83,7 +82,7 @@ class HoloscanCLI:
     )
 
     def __init__(self, script_name: Optional[str] = None):
-        self.script_name = script_name or os.environ.get("HOLOSCAN_CLI_CMD_NAME", "./holohub")
+        self.script_name = script_name or os.environ.get("HOLOSCAN_CLI_CMD_NAME", "holoscan")
         self.parser = self._create_parser()
         # Cache for resolved projects to avoid duplicate lookups
         self._project_data: dict[tuple[str, str], dict] = {}

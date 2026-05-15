@@ -21,9 +21,11 @@ agents and downstream wrappers can rely on the same lookups.
 
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 import pytest
 
-from holoscan_cli.commands import registry
+from holoscan_cli.commands import info, registry
 
 
 def test_project_command_names_are_ordered_as_registered():
@@ -69,3 +71,21 @@ def test_project_commands_by_name_keys_match_specs():
     for spec in registry.PROJECT_COMMANDS:
         assert by_name[spec.name] is spec
     assert set(by_name) == {spec.name for spec in registry.PROJECT_COMMANDS}
+
+
+def test_autocompletion_command_list_comes_from_registry(capsys):
+    cli = SimpleNamespace(
+        projects=[
+            {"project_name": "z_project"},
+            {"project_name": "a_project"},
+        ]
+    )
+
+    info.handle_autocompletion_list(cli, SimpleNamespace())
+
+    lines = capsys.readouterr().out.splitlines()
+    assert lines[:2] == ["a_project", "z_project"]
+    for command in registry.project_command_names():
+        assert command in lines
+    assert "cpp" in lines
+    assert "python" in lines

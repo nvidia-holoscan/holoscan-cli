@@ -48,10 +48,7 @@ def _write_metadata(tmp_path, payload: dict):
 
 
 def test_override_env_name_uppercases_and_underscores():
-    assert (
-        _override_env_name("holoscan-example-utils")
-        == "HOLOHUB_LOCAL_HOLOSCAN_EXAMPLE_UTILS"
-    )
+    assert _override_env_name("holoscan-example-utils") == "HOLOHUB_LOCAL_HOLOSCAN_EXAMPLE_UTILS"
 
 
 def test_override_env_name_collapses_non_alnum():
@@ -274,9 +271,7 @@ def test_local_override_populates_override_path(tmp_path, monkeypatch, _clean_ho
     assert deps[0].override_path == override_dir.resolve()
 
 
-def test_local_override_without_metadata_raises(
-    tmp_path, monkeypatch, _clean_holohub_local_env
-):
+def test_local_override_without_metadata_raises(tmp_path, monkeypatch, _clean_holohub_local_env):
     bad_dir = tmp_path / "no_metadata"
     bad_dir.mkdir()
     meta = _write_metadata(
@@ -284,9 +279,7 @@ def test_local_override_without_metadata_raises(
         {
             "application": {
                 "dependencies": {
-                    "modules": [
-                        {"name": "mymod", "source": {"git_url": "/x", "ref": FULL_SHA}}
-                    ]
+                    "modules": [{"name": "mymod", "source": {"git_url": "/x", "ref": FULL_SHA}}]
                 }
             }
         },
@@ -296,9 +289,7 @@ def test_local_override_without_metadata_raises(
         parse_module_dependencies(meta)
 
 
-def test_local_override_skips_source_validation(
-    tmp_path, monkeypatch, _clean_holohub_local_env
-):
+def test_local_override_skips_source_validation(tmp_path, monkeypatch, _clean_holohub_local_env):
     # No source block at all is fine when the override is set — the CLI
     # doesn't need to fetch.
     override_dir = tmp_path / "ok_override"

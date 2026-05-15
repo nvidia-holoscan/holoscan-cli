@@ -69,5 +69,5 @@ class _ContainerTerminationHandler:
             except (OSError, RuntimeError, TypeError, ValueError):
                 continue
 
-    def _handle_signal(self, signum, frame) -> None:
+    def _handle_signal(self, signum, _frame) -> None:
         raise _ContainerTerminationSignal(signum)
