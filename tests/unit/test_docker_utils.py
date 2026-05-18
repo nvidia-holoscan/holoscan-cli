@@ -29,7 +29,6 @@ import pytest
 
 from holoscan_cli.utils import docker as utils_docker
 
-
 # ---- user-supplied --entrypoint in docker_opts ------------------------------
 
 

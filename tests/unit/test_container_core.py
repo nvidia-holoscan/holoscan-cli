@@ -34,7 +34,6 @@ import pytest
 from holoscan_cli.container import core as container_core
 from holoscan_cli.container.core import HoloscanContainer
 
-
 # ---- helpers ----------------------------------------------------------------
 
 
@@ -100,9 +99,7 @@ def test_get_project_name_empty_when_no_metadata(tmp_path):
 # ---- image_name / image_names ----------------------------------------------
 
 
-def test_image_name_falls_back_to_default_image_when_dockerfile_is_default(
-    tmp_path, monkeypatch
-):
+def test_image_name_falls_back_to_default_image_when_dockerfile_is_default(tmp_path, monkeypatch):
     """If the container is using the default Dockerfile, ``image_name`` must
     return the SDK-tagged default image (the same one ``build`` would emit
     from ``default_image``)."""
