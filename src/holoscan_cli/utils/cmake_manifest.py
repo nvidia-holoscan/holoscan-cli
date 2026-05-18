@@ -53,7 +53,7 @@ def write_external_operators_manifest(
 
     * ``FetchContent_Declare(<provider_id> GIT_REPOSITORY <url> GIT_TAG <ref>)``.
       Pure declaration; no fetch.
-    * For ``HOLOHUB_LOCAL_<NAME>`` overrides: also emit
+    * For ``HOLOSCAN_CLI_LOCAL_<NAME>`` overrides: also emit
       ``FETCHCONTENT_SOURCE_DIR_<UPPER>=<path>`` so ``MakeAvailable`` uses the
       local tree instead of cloning.
     * One ``set(HOLOHUB_EXT_OP_<op>_PROVIDER <provider_id>)`` per advertised

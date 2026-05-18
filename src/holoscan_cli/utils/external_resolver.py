@@ -60,10 +60,10 @@ class ModuleDep:
 def _override_env_name(module_name: str) -> str:
     """Translate a module name into the local-override env-var key.
 
-    ``holoscan-example-utils`` -> ``HOLOHUB_LOCAL_HOLOSCAN_EXAMPLE_UTILS``
+    ``holoscan-example-utils`` -> ``HOLOSCAN_CLI_LOCAL_HOLOSCAN_EXAMPLE_UTILS``
     """
     sanitized = re.sub(r"[^A-Za-z0-9]+", "_", module_name).strip("_").upper()
-    return f"HOLOHUB_LOCAL_{sanitized}"
+    return f"HOLOSCAN_CLI_LOCAL_{sanitized}"
 
 
 def _read_metadata(path: Path) -> dict:
@@ -88,7 +88,7 @@ def parse_module_dependencies(metadata_path: Path) -> list[ModuleDep]:
     """Parse a metadata.json's external module dependency list into
     :class:`ModuleDep` records.
 
-    Honors ``HOLOHUB_LOCAL_<NAME>`` env-var overrides by populating
+    Honors ``HOLOSCAN_CLI_LOCAL_<NAME>`` env-var overrides by populating
     ``override_path``. Does not fetch anything. A missing metadata.json is
     treated as "no external deps" rather than an error — unifies the
     file-doesn't-exist path with the file-vanished-between-exists-and-open

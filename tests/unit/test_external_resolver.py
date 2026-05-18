@@ -18,7 +18,7 @@
 Covers:
   - ``parse_module_dependencies`` reading metadata.json:dependencies.modules
     from application/workflow/benchmark shapes and the flat ``module.dependencies``
-    array; honoring ``HOLOHUB_LOCAL_<NAME>``; skipping malformed entries.
+    array; honoring ``HOLOSCAN_CLI_LOCAL_<NAME>``; skipping malformed entries.
   - String helpers ``_override_env_name`` and ``_ref_is_immutable``.
 """
 
@@ -48,11 +48,13 @@ def _write_metadata(tmp_path, payload: dict):
 
 
 def test_override_env_name_uppercases_and_underscores():
-    assert _override_env_name("holoscan-example-utils") == "HOLOHUB_LOCAL_HOLOSCAN_EXAMPLE_UTILS"
+    assert (
+        _override_env_name("holoscan-example-utils") == "HOLOSCAN_CLI_LOCAL_HOLOSCAN_EXAMPLE_UTILS"
+    )
 
 
 def test_override_env_name_collapses_non_alnum():
-    assert _override_env_name("foo.bar/baz") == "HOLOHUB_LOCAL_FOO_BAR_BAZ"
+    assert _override_env_name("foo.bar/baz") == "HOLOSCAN_CLI_LOCAL_FOO_BAR_BAZ"
 
 
 @pytest.mark.parametrize(
@@ -234,19 +236,19 @@ def test_full_sha_does_not_warn(tmp_path, capsys):
     assert "not a 40-char commit SHA" not in capsys.readouterr().err
 
 
-# ---- HOLOHUB_LOCAL_<NAME> override ------------------------------------------
+# ---- HOLOSCAN_CLI_LOCAL_<NAME> override ------------------------------------------
 
 
 @pytest.fixture
-def _clean_holohub_local_env(monkeypatch):
-    """Strip any pre-existing ``HOLOHUB_LOCAL_*`` env vars from the test
+def _clean_local_override_env(monkeypatch):
+    """Strip any pre-existing ``HOLOSCAN_CLI_LOCAL_*`` env vars from the test
     environment so they don't mask the cases below. The fixture restores
     automatically via monkeypatch's teardown."""
-    for key in [k for k in list(__import__("os").environ) if k.startswith("HOLOHUB_LOCAL_")]:
+    for key in [k for k in list(__import__("os").environ) if k.startswith("HOLOSCAN_CLI_LOCAL_")]:
         monkeypatch.delenv(key, raising=False)
 
 
-def test_local_override_populates_override_path(tmp_path, monkeypatch, _clean_holohub_local_env):
+def test_local_override_populates_override_path(tmp_path, monkeypatch, _clean_local_override_env):
     override_dir = tmp_path / "local_mod"
     override_dir.mkdir()
     (override_dir / "metadata.json").write_text("{}", encoding="utf-8")
@@ -266,12 +268,12 @@ def test_local_override_populates_override_path(tmp_path, monkeypatch, _clean_ho
             }
         },
     )
-    monkeypatch.setenv("HOLOHUB_LOCAL_MYMOD", str(override_dir))
+    monkeypatch.setenv("HOLOSCAN_CLI_LOCAL_MYMOD", str(override_dir))
     deps = parse_module_dependencies(meta)
     assert deps[0].override_path == override_dir.resolve()
 
 
-def test_local_override_without_metadata_raises(tmp_path, monkeypatch, _clean_holohub_local_env):
+def test_local_override_without_metadata_raises(tmp_path, monkeypatch, _clean_local_override_env):
     bad_dir = tmp_path / "no_metadata"
     bad_dir.mkdir()
     meta = _write_metadata(
@@ -284,12 +286,12 @@ def test_local_override_without_metadata_raises(tmp_path, monkeypatch, _clean_ho
             }
         },
     )
-    monkeypatch.setenv("HOLOHUB_LOCAL_MYMOD", str(bad_dir))
+    monkeypatch.setenv("HOLOSCAN_CLI_LOCAL_MYMOD", str(bad_dir))
     with pytest.raises(FileNotFoundError, match="metadata.json"):
         parse_module_dependencies(meta)
 
 
-def test_local_override_skips_source_validation(tmp_path, monkeypatch, _clean_holohub_local_env):
+def test_local_override_skips_source_validation(tmp_path, monkeypatch, _clean_local_override_env):
     # No source block at all is fine when the override is set — the CLI
     # doesn't need to fetch.
     override_dir = tmp_path / "ok_override"
@@ -299,7 +301,7 @@ def test_local_override_skips_source_validation(tmp_path, monkeypatch, _clean_ho
     meta = _write_metadata(
         tmp_path, {"application": {"dependencies": {"modules": [{"name": "mymod"}]}}}
     )
-    monkeypatch.setenv("HOLOHUB_LOCAL_MYMOD", str(override_dir))
+    monkeypatch.setenv("HOLOSCAN_CLI_LOCAL_MYMOD", str(override_dir))
     deps = parse_module_dependencies(meta)
     assert deps[0].override_path == override_dir.resolve()
     assert deps[0].git_url is None

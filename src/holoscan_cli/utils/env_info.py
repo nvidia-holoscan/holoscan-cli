@@ -49,8 +49,8 @@ def collect_python_info() -> None:
 def collect_holohub_info(
     holohub_root: Path, build_dir: Path, data_dir: Path, sdk_dir: Path
 ) -> None:
-    """Collect and display HoloHub information"""
-    print(f"\n{Color.blue('HoloHub Information:')}")
+    """Collect and display source-project information"""
+    print(f"\n{Color.blue('Source Project Information:')}")
     print(f"  HOLOSCAN_CLI_ROOT: {holohub_root}")
     print(f"  HOLOSCAN_CLI_BUILD_PARENT_DIR: {build_dir}")
     print(f"  HOLOSCAN_CLI_DATA_DIR: {data_dir}")
@@ -61,13 +61,16 @@ def collect_git_info(holohub_root: Path) -> None:
     """Collect and display Git repository information"""
     print(f"\n{Color.blue('Git Repository Information:')}")
     if not holohub_root.exists() or not holohub_root.is_dir():
-        print(f"  HoloHub root directory does not exist or is not a directory: {holohub_root}")
+        print(
+            "  Source-project root directory does not exist or is not a directory: "
+            f"{holohub_root}"
+        )
         return
     original_cwd = os.getcwd()
     try:
         os.chdir(holohub_root)
     except Exception as e:
-        print(f"  Cannot access HoloHub directory: {e}")
+        print(f"  Cannot access source-project directory: {e}")
         return
     try:
         git_branch = run_info_command(["git", "branch", "--show-current"])

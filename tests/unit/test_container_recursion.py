@@ -124,13 +124,13 @@ def test_local_source_build_context_args_empty_when_unset(monkeypatch):
 
 
 def test_local_source_build_context_args_emits_named_context(monkeypatch):
-    monkeypatch.setenv("HOLOSCAN_CLI_SOURCE", "/home/wenqil/Documents/holoscan-cli")
+    monkeypatch.setenv("HOLOSCAN_CLI_SOURCE", "/tmp/cli-src")
 
     args = project_container.HoloscanContainer.local_source_build_context_args()
 
     assert args == [
         "--build-context",
-        "holoscan-cli-src=/home/wenqil/Documents/holoscan-cli",
+        "holoscan-cli-src=/tmp/cli-src",
     ]
 
 

@@ -67,7 +67,10 @@ def handle_vscode(cli, args: argparse.Namespace) -> None:
     )
     container.dryrun = args.dryrun
     container.verbose = args.verbose
-    dev_container_tag = "holohub-dev-container"
+    # Derive the dev-container repo from the wrapper's CONTAINER_PREFIX
+    # (defaults to "holohub" but Isaac OS, I4H, etc. override it via
+    # HOLOSCAN_CLI_REPO_PREFIX / HOLOSCAN_CLI_CONTAINER_PREFIX).
+    dev_container_tag = f"{container.CONTAINER_PREFIX}-dev-container"
     if args.project:
         dev_container_tag += f"-{args.project}"
     dev_container_tag += ":dev"

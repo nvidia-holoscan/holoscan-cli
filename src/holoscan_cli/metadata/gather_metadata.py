@@ -1,5 +1,3 @@
-#!/usr/bin/env python3
-
 # SPDX-FileCopyrightText: Copyright (c) 2022-2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -15,31 +13,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import argparse
 import codecs
 import json
 import logging
 import os
 from pathlib import Path
 
-try:
-    from holoscan_cli.metadata.utils import (
-        DEFAULT_INCLUDE_PATHS,
-        iter_metadata_paths,
-        list_normalized_languages,
-    )
-except ModuleNotFoundError:  # Allow running via `python utilities/metadata/gather_metadata.py`
-    import sys
-
-    sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
-    from holoscan_cli.metadata.utils import (
-        DEFAULT_INCLUDE_PATHS,
-        iter_metadata_paths,
-        list_normalized_languages,
-    )
+from holoscan_cli.metadata.utils import iter_metadata_paths, list_normalized_languages
 
 logger = logging.getLogger(__name__)
-logging.basicConfig(level=logging.INFO)
 
 
 def extract_readme(file_path):
@@ -92,26 +74,6 @@ def generate_build_and_run_command(entry: dict) -> str:
     else:
         # Unknown language, use default
         return f"holoscan run {project_name}"
-
-
-def _warn_duplicate_projects(metadata_entries: list[dict]) -> None:
-    seen: dict[tuple[str, str], str] = {}
-    for entry in metadata_entries:
-        project_name = entry.get("project_name", "")
-        source_folder = entry.get("source_folder", "")
-        for language in list_normalized_languages(entry.get("metadata", {}).get("language")):
-            key = (project_name, language or "")
-            if key in seen:
-                lang_label = language or "unspecified language"
-                logger.warning(
-                    "Duplicate project '%s' (%s) detected in '%s' and '%s'",
-                    project_name,
-                    lang_label,
-                    seen[key],
-                    source_folder,
-                )
-            else:
-                seen[key] = source_folder
 
 
 def gather_metadata(repo_paths: list[str], exclude_paths: list[str] | None = None) -> list[dict]:
@@ -178,48 +140,3 @@ def gather_metadata(repo_paths: list[str], exclude_paths: list[str] | None = Non
                 continue
 
     return metadata
-
-
-def main(args: argparse.Namespace):
-    """Run the gather application"""
-
-    DEFAULT_OUTPUT_FILEPATH = "aggregate_metadata.json"
-
-    repo_paths = args.include or DEFAULT_INCLUDE_PATHS
-    output_file = args.output or DEFAULT_OUTPUT_FILEPATH
-
-    metadata = gather_metadata(repo_paths, exclude_paths=args.exclude)
-    _warn_duplicate_projects(metadata)
-
-    # Write the metadata to the output file
-    with open(output_file, "w") as output:
-        json.dump(metadata, output, indent=4)
-
-
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser(
-        description="Utility to collect JSON metadata for HoloHub projects"
-    )
-    parser.add_argument(
-        "-o",
-        "--output",
-        type=str,
-        required=False,
-        help="Output filepath for JSON collection of project metadata",
-    )
-    parser.add_argument(
-        "--include",
-        type=str,
-        nargs="*",
-        required=False,
-        help="Path(s) to search for metadata files",
-    )
-    parser.add_argument(
-        "--exclude",
-        type=str,
-        nargs="*",
-        required=False,
-        help="Filepath(s) to exclude from metadata collection. Takes priority over --include.",
-    )
-    args = parser.parse_args()
-    main(args)

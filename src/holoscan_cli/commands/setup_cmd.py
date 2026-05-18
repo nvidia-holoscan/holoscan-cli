@@ -22,8 +22,8 @@ IDEs do not confuse it for a packaging file.
 
 import argparse
 import filecmp
-import os
 import sys
+from pathlib import Path
 
 from holoscan_cli.commands.registry import help_for
 from holoscan_cli.utils.holohub import get_holohub_setup_scripts_dir
@@ -94,19 +94,31 @@ def handle_setup(cli, args: argparse.Namespace) -> None:
         setup_ngc_cli(dry_run=args.dryrun)
         setup_sccache(dry_run=args.dryrun)
 
-        source = f"{cli.HOLOHUB_ROOT}/utilities/holohub_autocomplete"
-        dest_folder = "/etc/bash_completion.d"
-        dest = f"{dest_folder}/holohub_autocomplete"
-        if (
-            not os.path.exists(dest) or not filecmp.cmp(source, dest, shallow=False)
-        ) and os.path.exists(dest_folder):
-            run_command(["cp", source, dest_folder], dry_run=args.dryrun)
+        # Wrappers that ship a bash completion script under
+        # utilities/<wrapper>_autocomplete (HoloHub, Isaac OS, …) get it
+        # installed into /etc/bash_completion.d/ so users can `source` it.
+        # Skip silently when the source isn't present — the consolidated
+        # CLI doesn't ship its own completion script.
+        utilities_dir = Path(cli.HOLOHUB_ROOT) / "utilities"
+        autocomplete_sources = (
+            sorted(utilities_dir.glob("*_autocomplete")) if utilities_dir.is_dir() else []
+        )
+        dest_folder = Path("/etc/bash_completion.d")
+        installed: list[Path] = []
+        if autocomplete_sources and dest_folder.exists():
+            for source in autocomplete_sources:
+                dest = dest_folder / source.name
+                if dest.exists() and filecmp.cmp(source, dest, shallow=False):
+                    continue
+                run_command(["cp", str(source), str(dest_folder)], dry_run=args.dryrun)
+                installed.append(dest)
 
         if not args.dryrun:
-            print(Color.blue("\nTo enable ./holohub autocomplete in your current shell session:"))
-            print("  source /etc/bash_completion.d/holohub_autocomplete")
-            print("Or add it to your shell profile:")
-            print("  echo '. /etc/bash_completion.d/holohub_autocomplete' >> ~/.bashrc")
-            print("  source ~/.bashrc")
+            for dest in installed:
+                print(Color.blue(f"\nTo enable {dest.name} in your current shell session:"))
+                print(f"  source {dest}")
+                print("Or add it to your shell profile:")
+                print(f"  echo '. {dest}' >> ~/.bashrc")
+                print("  source ~/.bashrc")
 
-            print(Color.green("Setup for HoloHub is ready. Happy Holocoding!"))
+            print(Color.green(f"Setup via `{cli.script_name} setup` is ready."))

@@ -225,7 +225,7 @@ class TestMain:
 
     def test_main_wrapper_source_command_dispatches_to_project_cli(self, monkeypatch):
         mock_project_main = MagicMock()
-        monkeypatch.setenv("HOLOHUB_CMD_NAME", "./holohub")
+        monkeypatch.setenv("HOLOSCAN_CLI_CMD_NAME", "./holohub")
         with patch("holoscan_cli.cli.main", mock_project_main):
             main(["holoscan", "list"])
         mock_project_main.assert_called_once_with(["holoscan", "list"])
