@@ -125,7 +125,7 @@ class HoloscanCLI:
         costs tens-to-hundreds of small file reads on a populated HoloHub
         clone, so it's deferred off the ``__init__`` path. Commands that
         never touch project metadata (``status``, ``env-info``, ``env-check``,
-        ``clear-cache``, ``setup``, ``vscode``, ``create``, ``lint``) don't
+        ``clear-cache``, ``setup``, ``create``, ``lint``) don't
         pay the cost.
         """
         # Known exceptions: templates that don't represent a standalone project.

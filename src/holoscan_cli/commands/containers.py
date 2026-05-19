@@ -16,7 +16,7 @@
 """Development-container subcommands.
 
 * ``build-container``  — build a source-project development container
-* ``run-container``    — build (if needed) and launch a dev container
+* ``run-container``    — build (if needed) and launch a development container
 
 Both commands delegate the actual docker work to
 :class:`holoscan_cli.container.HoloscanContainer`; this module is the thin

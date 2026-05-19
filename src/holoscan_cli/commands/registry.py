@@ -92,12 +92,6 @@ PROJECT_COMMANDS: tuple[CommandSpec, ...] = (
         help="Clear cache folders",
         group="workspace",
     ),
-    CommandSpec(
-        "vscode",
-        short_help="launch VS Code for a source project dev container",
-        help="Launch VS Code in Dev Container",
-        group="workspace",
-    ),
     # container commands
     CommandSpec(
         "build-container",
@@ -250,7 +244,6 @@ def register_all(
         run,
         setup_cmd,
         test_cmd,
-        vscode,
     )
 
     registered: dict[str, argparse.ArgumentParser] = {}
@@ -263,7 +256,6 @@ def register_all(
     add(lint.register_lint_parser, "lint")
     add(setup_cmd.register_setup_parser, "setup")
     add(clear_cache.register_clear_cache_parser, "clear-cache")
-    add(vscode.register_vscode_parser, "vscode", container_build=container_build)
 
     # Container build/run commands (both live in commands/containers.py).
     add(

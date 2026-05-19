@@ -12,7 +12,7 @@ The CLI presents a single command surface for the source-project development lif
 - **Project lifecycle:** `build`, `run`, `test`, `install`
 - **Container:** `build-container`, `run-container`
 - **Discovery / diagnostics:** `list`, `modes`, `status`, `env-info`, `env-check`, `autocompletion_list`, `version`
-- **Workspace:** `lint`, `setup`, `clear-cache`, `vscode`, `create`
+- **Workspace:** `lint`, `setup`, `clear-cache`, `create`
 
 Run `holoscan <command> --help` for per-command flags.
 

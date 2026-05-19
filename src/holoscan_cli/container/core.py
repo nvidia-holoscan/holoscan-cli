@@ -29,10 +29,7 @@ from typing import List, Optional, Union
 
 from holoscan_cli.metadata.utils import list_normalized_languages
 
-from ..utils.docker import (
-    docker_args_to_devcontainer_format,
-    get_image_pythonpath,
-)
+from ..utils.docker import get_image_pythonpath
 from ..utils.holohub import (
     build_holohub_path_mapping,
     get_current_branch_slug,
@@ -992,23 +989,3 @@ class HoloscanContainer:
             "HOLOSCAN_TESTS_DATA_PATH=/workspace/holoscan-sdk/tests/data",
         ]
 
-    def get_devcontainer_args(self, docker_opts: str = "") -> str:
-        """Get all devcontainer-formatted arguments as JSON array string"""
-        docker_args = []
-        docker_args.extend(self.get_device_mounts())
-        docker_args.extend(self.group_args())
-        docker_args.extend(self.ucx_args())
-        docker_args.extend(self.get_device_cgroup_args())
-        docker_args.extend(self.get_nvidia_runtime_args())
-        if HoloscanContainer.DEFAULT_DOCKER_RUN_ARGS:
-            docker_args.extend(shlex.split(HoloscanContainer.DEFAULT_DOCKER_RUN_ARGS))
-        if docker_opts:
-            docker_args.extend(shlex.split(docker_opts))
-        project_name = self.get_project_name()
-        hostname = (
-            f"{self.HOSTNAME_PREFIX}-{project_name}" if project_name else self.HOSTNAME_PREFIX
-        )
-        docker_args.extend(["--hostname", hostname])
-
-        devcontainer_options = docker_args_to_devcontainer_format(docker_args)
-        return ",\n        ".join(f'"{opt}"' for opt in devcontainer_options)

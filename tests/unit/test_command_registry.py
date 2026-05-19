@@ -58,7 +58,6 @@ def test_commands_in_group_filters_by_group():
         "lint",
         "setup",
         "clear-cache",
-        "vscode",
     }
 
 
