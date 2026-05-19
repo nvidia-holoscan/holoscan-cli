@@ -988,4 +988,3 @@ class HoloscanContainer:
             "-e",
             "HOLOSCAN_TESTS_DATA_PATH=/workspace/holoscan-sdk/tests/data",
         ]
-
