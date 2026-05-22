@@ -30,12 +30,13 @@ is intentionally named `CI.md` (not `README.md`) so it doesn't compete with the
 pull requests targeting `main` or `release/*`, so the full lint/test/build/smoke
 surface is exercised before merge. Jobs run in this order:
 
-| Job                         | Purpose                                                                    |
-| --------------------------- | -------------------------------------------------------------------------- |
-| `pre-commit`                | Run all hooks listed in `.pre-commit-config.yaml` on Python 3.12.          |
-| `test` matrix               | `poetry run pytest` on Python 3.10, 3.11, 3.12, and 3.13 (Ubuntu).         |
-| `build wheel + sdist`       | `poetry build` + `twine check` + `assert_wheel_contents.sh`.               |
-| `installed-wheel smoke test`| `pip install <wheel>` into a clean venv, then run `smoke_test.sh`.         |
+| Job                           | Purpose                                                                    |
+| ----------------------------- | -------------------------------------------------------------------------- |
+| `pre-commit`                  | Run all hooks listed in `.pre-commit-config.yaml` on Python 3.12.          |
+| `test` matrix                 | `poetry run pytest` on Python 3.10, 3.11, 3.12, and 3.13 (Ubuntu).         |
+| `build wheel + sdist`         | `poetry build` + `twine check` + `assert_wheel_contents.sh`.               |
+| `installed-wheel smoke test`  | `pip install <wheel>` into a clean venv, then run `smoke_test.sh`.         |
+| `CPU CLI + Docker smoke test` | Installed-wheel source-project dry-runs plus a tiny CPU Docker build.      |
 
 The 3.12 `test` entry uploads coverage to Coveralls; the other matrix entries
 exist purely to catch version-specific regressions (e.g. `tomllib` is stdlib
@@ -147,6 +148,19 @@ Given the bin/ directory of a venv that has `holoscan-cli` installed:
   whose `metadata.json` validates against the application schema, so a wheel
   that ships but breaks project discovery (missing schema files, broken
   `iter_metadata_paths`, etc.) fails this check before kitmaker sees it.
+
+### `cpu_cli_docker_smoke.sh <venv-bin-dir>`
+
+Runs only in `main.yaml` against the built wheel. It is intentionally CPU-only:
+
+* Points `HOLOSCAN_CLI_ROOT` at `tests/fixtures/holohub_smoke/` and dry-runs
+  `build`, `run`, `install`, and `test` for `smoke_app`.
+* Dry-runs `build-container` and `run-container`, including `--docker-opts`,
+  `--add-volume`, and trailing command forwarding.
+* Exercises the installed-wheel entrypoint helper directly.
+* If Docker is available, builds one tiny image from `busybox:1.36`; it never
+  pulls Holoscan SDK, CUDA, or NGC images. Set
+  `HOLOSCAN_CLI_CPU_SMOKE_SKIP_DOCKER_BUILD=1` to skip even that tiny build.
 
 ## Other workflows
 

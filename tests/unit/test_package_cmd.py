@@ -144,3 +144,49 @@ def test_package_rejects_non_module_project(tmp_path):
     )
     with pytest.raises(SystemExit):
         package_cmd.handle_package(cli, _args(project="gst_to_holo"))
+
+
+def test_resolve_module_project_prefers_standalone_cwd_metadata(tmp_path, monkeypatch):
+    module_dir = tmp_path / "external-module"
+    module_dir.mkdir()
+    (module_dir / "metadata.json").write_text(
+        json.dumps({"module": {"name": "holoscan-smoke", "language": ["Python"]}}),
+        encoding="utf-8",
+    )
+    cli = _cli(tmp_path)
+    monkeypatch.chdir(module_dir)
+
+    project_data = package_cmd._resolve_module_project(
+        cli, project_arg="different-name", language=None
+    )
+
+    assert project_data == {
+        "project_type": "module",
+        "project_name": "holoscan-smoke",
+        "source_folder": str(module_dir),
+        "metadata": {"name": "holoscan-smoke", "language": ["Python"]},
+        "standalone_module": True,
+    }
+
+
+def test_resolve_module_project_falls_back_to_source_tree_when_cwd_metadata_invalid(
+    tmp_path, monkeypatch
+):
+    module_dir = tmp_path / "broken-cwd"
+    module_dir.mkdir()
+    (module_dir / "metadata.json").write_text("{not json", encoding="utf-8")
+    in_tree_module = {
+        "project_name": "test-module-fixture",
+        "project_type": "module",
+        "source_folder": tmp_path / "repo" / "modules" / "test-module-fixture",
+        "metadata": {"language": ["Python"]},
+    }
+    cli = _cli(tmp_path, in_tree_module)
+    monkeypatch.chdir(module_dir)
+
+    project_data = package_cmd._resolve_module_project(
+        cli, project_arg="test-module-fixture", language="python"
+    )
+
+    assert project_data["project_name"] == "test-module-fixture"
+    assert project_data["standalone_module"] is False

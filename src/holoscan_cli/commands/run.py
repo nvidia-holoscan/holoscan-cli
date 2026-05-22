@@ -214,7 +214,7 @@ def handle_run(cli, args: argparse.Namespace) -> None:
         elif workdir_spec in path_mapping:
             target_dir = Path(path_mapping[workdir_spec])
         else:
-            target_dir = Path(workdir_spec)
+            target_dir = Path(replace_placeholders(str(workdir_spec), path_mapping, run_env))
         print(format_cmd("cd " + str(target_dir), is_dryrun=args.dryrun))
         if not args.dryrun:
             os.chdir(target_dir)

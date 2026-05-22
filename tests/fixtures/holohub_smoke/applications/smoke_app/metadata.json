@@ -16,6 +16,10 @@
     "platforms": ["x86_64"],
     "tags": ["smoke", "test"],
     "ranking": 4,
-    "requirements": {}
+    "requirements": {},
+    "run": {
+      "command": "python -c 'print(\"smoke_app\")'",
+      "workdir": "<holohub_root>"
+    }
   }
 }
