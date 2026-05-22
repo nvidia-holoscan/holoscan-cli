@@ -284,9 +284,7 @@ def build_project_locally(
         subprojects = project_data.get("metadata", {}).get("subprojects", {})
         ops = subprojects.get("operators", [])
         apps = subprojects.get("applications", [])
-        parts = ([f"operators: {ops}"] if ops else []) + (
-            [f"applications: {apps}"] if apps else []
-        )
+        parts = ([f"operators: {ops}"] if ops else []) + ([f"applications: {apps}"] if apps else [])
         detail = f": enabling {', '.join(parts)}" if parts else ""
         print(f"Building module '{project_name}'{detail}")
         for op in ops:

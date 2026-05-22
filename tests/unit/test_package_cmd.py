@@ -41,9 +41,7 @@ def _args(**overrides):
     return Namespace(**defaults)
 
 
-def test_package_deb_emits_module_cmake_flag_for_in_tree_module(
-    tmp_path, monkeypatch
-):
+def test_package_deb_emits_module_cmake_flag_for_in_tree_module(tmp_path, monkeypatch):
     project_data = {
         "project_name": "test-module-fixture",
         "project_type": "module",
@@ -55,9 +53,7 @@ def test_package_deb_emits_module_cmake_flag_for_in_tree_module(
     monkeypatch.setattr(package_cmd, "run_command", lambda cmd, **kwargs: calls.append(cmd))
     monkeypatch.setattr(package_cmd.shutil, "which", lambda _: None)
 
-    package_cmd.handle_package(
-        cli, _args(project="test-module-fixture", pkg_generator="DEB")
-    )
+    package_cmd.handle_package(cli, _args(project="test-module-fixture", pkg_generator="DEB"))
 
     cmake_args = " ".join(str(a) for a in calls[0])
     assert "-DMODULE_test_module_fixture=ON" in cmake_args
@@ -102,9 +98,7 @@ def test_package_wheel_invokes_python_build(tmp_path, monkeypatch):
     calls = []
     monkeypatch.setattr(package_cmd, "run_command", lambda cmd, **kwargs: calls.append(cmd))
 
-    package_cmd.handle_package(
-        cli, _args(project="test-module-fixture", pkg_generator="WHEEL")
-    )
+    package_cmd.handle_package(cli, _args(project="test-module-fixture", pkg_generator="WHEEL"))
 
     assert len(calls) == 1
     wheel_args = [str(a) for a in calls[0]]

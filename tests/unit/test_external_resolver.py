@@ -377,9 +377,7 @@ def test_missing_module_still_raises_with_source_root(tmp_path, _clean_local_ove
         parse_module_dependencies(meta, source_root=source_root)
 
 
-def test_local_override_wins_over_in_tree_module(
-    tmp_path, monkeypatch, _clean_local_override_env
-):
+def test_local_override_wins_over_in_tree_module(tmp_path, monkeypatch, _clean_local_override_env):
     source_root = tmp_path / "source"
     _make_in_tree_module(source_root, "holoscan-gstreamer")
     override_dir = tmp_path / "override"

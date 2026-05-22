@@ -63,7 +63,9 @@ def test_install_dev_uses_most_recent_hook_per_slug(tmp_path):
 def test_install_dev_uninstall_removes_hook_pair(tmp_path):
     site_dir = tmp_path / "site"
     site_dir.mkdir()
-    (site_dir / "holoscan-smoke-dev.pth").write_text("import holoscan_smoke_dev\n", encoding="utf-8")
+    (site_dir / "holoscan-smoke-dev.pth").write_text(
+        "import holoscan_smoke_dev\n", encoding="utf-8"
+    )
     (site_dir / "holoscan_smoke_dev.py").write_text("# helper\n", encoding="utf-8")
     cli = SimpleNamespace(DEFAULT_BUILD_PARENT_DIR=tmp_path / "build", script_name="holoscan")
 
