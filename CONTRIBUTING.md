@@ -105,7 +105,7 @@ how to point the CLI at the fixture directly from your shell.
 
 ### Test against the downstream wrappers
 
-The HoloHub / Isaac OS / I4H wrapper repos each carry a
+The HoloHub / I4H wrapper repos each carry a
 `test_holoscan_cli_consolidation.py` that exercises the unified `holoscan`
 CLI against their respective project trees. Point them at a local checkout
 with `HOLOSCAN_CLI_SOURCE`:
@@ -143,21 +143,9 @@ without publishing a wheel first.
   and deletes the tag when `ga=false` (so RC dispatches leave no stray refs).
   See [`.github/CI.md`](./.github/CI.md) for the full pipeline.
 
-### Heads-up: GitHub Actions allowlist
-
-The repo has an org-level Actions allowlist (configured under repo Settings →
-Actions → General → Allow select actions). Adding a new third-party action,
-or bumping an action that is allowlisted by SHA rather than glob, will make
-the workflow fail to start at all — you'll see a `startup_failure` with zero
-jobs scheduled and zero log output, not a normal job failure. Check the
-allowlist before introducing a new action:
-
-```bash
-gh api repos/nvidia-holoscan/holoscan-cli/actions/permissions/selected-actions
-```
-
-If the action you need is not on the list, ask a repository admin to extend
-the allowlist before opening the PR that introduces it.
+If you need to introduce or bump a third-party Action, see
+[`.github/CI.md`](./.github/CI.md#github-actions-allowlist) — the repo's
+org-level Actions allowlist gates which references are usable.
 
 ## Tracking Development
 

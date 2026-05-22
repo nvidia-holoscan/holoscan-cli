@@ -65,10 +65,13 @@ jobs:
           python-version: ${{ matrix.python-version }}
 
       - name: Install Poetry
-        # Stuck on Gr1N/setup-poetry@v9 — only ref allowed by the repo's
-        # Actions allowlist. Node 20 deprecation warning is benign until
-        # GitHub's 2026-06-02 cutover.
-        uses: Gr1N/setup-poetry@v9
+        # Install via pip on the matrix Python rather than a third-party
+        # action: no allowlist coupling, no Node-20 runtime to chase, and
+        # plugins resolve in the same site-packages so `requires-plugins`
+        # in pyproject.toml is satisfied without `poetry self add`.
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install "poetry>=2.0" "poetry-dynamic-versioning>=1.7.1,<2.0.0"
 
       - name: Install library and dependencies
         run: |
@@ -103,10 +106,13 @@ jobs:
           python-version: ${{ matrix.python.version }}
 
       - name: Install Poetry
-        # Stuck on Gr1N/setup-poetry@v9 — only ref allowed by the repo's
-        # Actions allowlist. Node 20 deprecation warning is benign until
-        # GitHub's 2026-06-02 cutover.
-        uses: Gr1N/setup-poetry@v9
+        # Install via pip on the matrix Python rather than a third-party
+        # action: no allowlist coupling, no Node-20 runtime to chase, and
+        # plugins resolve in the same site-packages so `requires-plugins`
+        # in pyproject.toml is satisfied without `poetry self add`.
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install "poetry>=2.0" "poetry-dynamic-versioning>=1.7.1,<2.0.0"
 
       - name: Install library and dependencies
         run: |
@@ -165,7 +171,9 @@ jobs:
 
     - name: Install Poetry
       # See note in the pre-commit job above.
-      uses: Gr1N/setup-poetry@v9
+      run: |
+        python -m pip install --upgrade pip
+        python -m pip install "poetry>=2.0" "poetry-dynamic-versioning>=1.7.1,<2.0.0"
 
     - name: Build wheel and sdist
       env:

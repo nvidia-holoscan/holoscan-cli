@@ -21,7 +21,6 @@ Per-repo wrappers install this package and delegate to `holoscan`, layering on t
 | Repo | Wrapper | Adds |
 | --- | --- | --- |
 | [HoloHub](https://github.com/nvidia-holoscan/holohub) | `./holohub` | source-project metadata search paths, container/workspace names |
-| Isaac OS | `./isaac_os` | HSB hardware auto-detection, `--privileged` docker run args, sccache memcached endpoint |
 | [I4H Workflows](https://github.com/isaac-for-healthcare/i4h-workflows) | `./i4h` | RTI DDS license auto-download + mount, TTY serial device passthrough |
 
 Common env vars: `HOLOSCAN_CLI_ROOT` (repo root), `HOLOSCAN_CLI_SEARCH_PATH` (subdirs to scan for `metadata.json`), `HOLOSCAN_CLI_PATH_PREFIX` (placeholder prefix in metadata templates), `HOLOSCAN_CLI_REPO_PREFIX` (container image name prefix). The legacy `HOLOHUB_*` spelling is no longer honored in v1 — set the `HOLOSCAN_CLI_*` names directly. `holoscan env-info` lists every env var the CLI reads in the current shell.
@@ -77,7 +76,7 @@ poetry build
 The repo ships a minimal HoloHub-style fixture at
 `tests/fixtures/holohub_smoke/` (one application with a `metadata.json` that
 validates against the application schema). Point the CLI at it without
-needing a HoloHub / Isaac OS / I4H checkout:
+needing a HoloHub / I4H checkout:
 
 ```bash
 HOLOSCAN_CLI_ROOT=tests/fixtures/holohub_smoke holoscan list
@@ -90,7 +89,7 @@ strong proxy for the `smoke-test` job passing on push.
 
 ### Testing against the downstream wrappers
 
-Each consuming repo (HoloHub / Isaac OS / I4H Workflows) carries a
+Each consuming repo (HoloHub / I4H Workflows) carries a
 `test_holoscan_cli_consolidation.py` that exercises the unified `holoscan`
 CLI against its project tree. Point the wrapper at a local checkout via
 `HOLOSCAN_CLI_SOURCE`:
