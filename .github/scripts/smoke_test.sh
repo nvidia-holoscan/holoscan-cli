@@ -32,7 +32,11 @@ done
 
 # Negative surface: removed subcommands must exit non-zero, and the
 # legacy `holohub` / `monai-deploy` console scripts must not be installed.
-if "$holoscan" nics; then exit 1; fi
+removed=$("$python" -c \
+  'from holoscan_cli.__main__ import REMOVED_COMMANDS; print(" ".join(REMOVED_COMMANDS))')
+for cmd in $removed; do
+  if "$holoscan" "$cmd"; then exit 1; fi
+done
 if [ -x "$bin_dir/holohub" ]; then exit 1; fi
 if [ -x "$bin_dir/monai-deploy" ]; then exit 1; fi
 

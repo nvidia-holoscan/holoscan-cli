@@ -121,7 +121,7 @@ def set_up_logging(level: Optional[str], config_path: Union[str, Path] = LOG_CON
 
     Args:
         level (str): A logging level (DEBUG, INFO, WARN, ERROR, CRITICAL).
-        log_config_path (str): A path to logging config file.
+        config_path (str): A path to logging config file.
     """
     # Default log config path
     log_config_path = Path(__file__).absolute().parent / LOG_CONFIG_FILENAME
@@ -201,12 +201,6 @@ def _dispatch_project_cli(argv: list[str]) -> bool:
     return True
 
 
-def _execute_version_command(args: argparse.Namespace) -> None:
-    from .version.version import execute_version_command
-
-    execute_version_command(args)
-
-
 def main(argv: Optional[list[str]] = None):
     if argv is None:
         argv = sys.argv
@@ -222,7 +216,9 @@ def main(argv: Optional[list[str]] = None):
     set_up_logging(args.log_level)
 
     if args.command == "version":
-        _execute_version_command(args)
+        from .version.version import execute_version_command
+
+        execute_version_command(args)
 
 
 if __name__ == "__main__":

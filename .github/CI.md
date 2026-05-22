@@ -20,14 +20,15 @@ is intentionally named `CI.md` (not `README.md`) so it doesn't compete with the
     ├── blossom-ci.yml        ← NVIDIA Blossom hybrid CI bridge (/build comments)
     ├── codeql.yaml           ← CodeQL Advanced (Python)
     ├── dependency-review.yml ← Dependency review on PRs
-    ├── main.yaml             ← Code Check — push CI
+    ├── main.yaml             ← Code Check — push and PR CI
     └── release.yaml          ← Manual release flow (TestPyPI publish → K2 Kitmaker)
 ```
 
-## How CI runs on every push
+## How CI runs before merge
 
-`workflows/main.yaml` (the **Code Check** workflow) runs on every push and is
-the gate for merging. Jobs run in this order:
+`workflows/main.yaml` (the **Code Check** workflow) runs on every push and on
+pull requests targeting `main` or `release/*`, so the full lint/test/build/smoke
+surface is exercised before merge. Jobs run in this order:
 
 | Job                         | Purpose                                                                    |
 | --------------------------- | -------------------------------------------------------------------------- |

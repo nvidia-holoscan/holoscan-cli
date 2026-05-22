@@ -121,7 +121,6 @@ def _resolve_module_project(cli, project_arg: Optional[str], language: Optional[
         "No project specified and no ./metadata.json found in the current working directory. "
         "Run from a module project root, or pass a module name as the first argument."
     )
-    raise AssertionError("fatal exits")
 
 
 def _module_package_flag(project_data: dict, package_slug: str) -> str:

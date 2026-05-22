@@ -209,7 +209,6 @@ class HoloscanCLI:
                     details.append(f"source: {folder}")
                 msg += f"\n  '{name}'" + (f" ({', '.join(details)})" if details else "")
         fatal(msg)
-        return None
 
     def resolve_mode(self, project_data: dict, requested_mode: Optional[str] = None) -> tuple:
         """

@@ -25,7 +25,7 @@ import subprocess
 import sys
 import tempfile
 from pathlib import Path
-from typing import List, Optional, Union
+from typing import Any, List, Optional, Union
 
 from holoscan_cli.metadata.utils import list_normalized_languages
 
@@ -376,10 +376,8 @@ class HoloscanContainer:
         sanitized = re.sub(r"^[^a-z0-9]+", "", sanitized)  # Docker tags must start alnum
         return sanitized or ""
 
-    def __init__(self, project_metadata: Optional[dict[str, any]], language: Optional[str] = None):
-        if not project_metadata:
-            print("No project provided, proceeding with default container")
-        elif not isinstance(project_metadata, dict):
+    def __init__(self, project_metadata: Optional[dict[str, Any]], language: Optional[str] = None):
+        if not isinstance(project_metadata, dict):
             print("No project provided, proceeding with default container")
 
         self.project_metadata = project_metadata

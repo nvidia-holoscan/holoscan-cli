@@ -13,13 +13,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from holoscan_cli.metadata.gather_metadata import generate_build_and_run_command
+from holoscan_cli.metadata.gather_metadata import extract_project_name
 
 
-def test_build_and_run_command_uses_holoscan_entrypoint():
-    entry = {
-        "project_name": "smoke_app",
-        "metadata": {"language": "python"},
-    }
-
-    assert generate_build_and_run_command(entry) == "holoscan run smoke_app --language=python"
+def test_extract_project_name_from_language_subdirectory():
+    assert extract_project_name("applications/smoke_app/python/metadata.json") == "smoke_app"

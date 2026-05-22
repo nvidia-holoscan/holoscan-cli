@@ -25,6 +25,8 @@ name: Code Check
 
 on:
   push:
+  pull_request:
+    branches: ["main", "release/*"]
 
 jobs:
   pre-commit:

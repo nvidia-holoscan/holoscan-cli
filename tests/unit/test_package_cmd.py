@@ -41,6 +41,22 @@ def _args(**overrides):
     return Namespace(**defaults)
 
 
+@pytest.fixture
+def wheel_module(tmp_path):
+    source = tmp_path / "repo" / "modules" / "test-module-fixture"
+    source.mkdir(parents=True)
+    (source / "pyproject.toml").write_text("[build-system]\nrequires=[]\n", encoding="utf-8")
+    project_data = {
+        "project_name": "test-module-fixture",
+        "project_type": "module",
+        "source_folder": source,
+        "metadata": {"language": ["Python"]},
+    }
+    cli = _cli(tmp_path, project_data)
+    cli.HOLOHUB_ROOT.mkdir(exist_ok=True)
+    return cli
+
+
 def test_package_deb_emits_module_cmake_flag_for_in_tree_module(tmp_path, monkeypatch):
     project_data = {
         "project_name": "test-module-fixture",
@@ -83,22 +99,13 @@ def test_package_deb_emits_pkg_flag_for_standalone_module(tmp_path, monkeypatch)
     assert "-DMODULE_" not in cmake_args
 
 
-def test_package_wheel_invokes_python_build(tmp_path, monkeypatch):
-    source = tmp_path / "repo" / "modules" / "test-module-fixture"
-    source.mkdir(parents=True)
-    (source / "pyproject.toml").write_text("[build-system]\nrequires=[]\n", encoding="utf-8")
-    project_data = {
-        "project_name": "test-module-fixture",
-        "project_type": "module",
-        "source_folder": source,
-        "metadata": {"language": ["Python"]},
-    }
-    cli = _cli(tmp_path, project_data)
-    cli.HOLOHUB_ROOT.mkdir(exist_ok=True)
+def test_package_wheel_invokes_python_build(wheel_module, monkeypatch):
     calls = []
     monkeypatch.setattr(package_cmd, "run_command", lambda cmd, **kwargs: calls.append(cmd))
 
-    package_cmd.handle_package(cli, _args(project="test-module-fixture", pkg_generator="WHEEL"))
+    package_cmd.handle_package(
+        wheel_module, _args(project="test-module-fixture", pkg_generator="WHEEL")
+    )
 
     assert len(calls) == 1
     wheel_args = [str(a) for a in calls[0]]
@@ -107,17 +114,7 @@ def test_package_wheel_invokes_python_build(tmp_path, monkeypatch):
     assert "--outdir" in wheel_args
 
 
-def test_package_wheel_requires_python_build_for_real_run(tmp_path, monkeypatch, capsys):
-    source = tmp_path / "repo" / "modules" / "test-module-fixture"
-    source.mkdir(parents=True)
-    (source / "pyproject.toml").write_text("[build-system]\nrequires=[]\n", encoding="utf-8")
-    project_data = {
-        "project_name": "test-module-fixture",
-        "project_type": "module",
-        "source_folder": source,
-        "metadata": {"language": ["Python"]},
-    }
-    cli = _cli(tmp_path, project_data)
+def test_package_wheel_requires_python_build_for_real_run(wheel_module, monkeypatch, capsys):
     monkeypatch.setattr(package_cmd.importlib.util, "find_spec", lambda name: None)
     monkeypatch.setattr(
         package_cmd,
@@ -127,7 +124,7 @@ def test_package_wheel_requires_python_build_for_real_run(tmp_path, monkeypatch,
 
     with pytest.raises(SystemExit) as excinfo:
         package_cmd.handle_package(
-            cli,
+            wheel_module,
             _args(project="test-module-fixture", pkg_generator="WHEEL", dryrun=False),
         )
 

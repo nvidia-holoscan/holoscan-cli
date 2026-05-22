@@ -20,7 +20,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from holoscan_cli.__main__ import main, parse_args, set_up_logging
+from holoscan_cli.__main__ import REMOVED_COMMANDS, main, parse_args, set_up_logging
 
 
 class TestParseArgs:
@@ -42,9 +42,7 @@ class TestParseArgs:
 
     @pytest.mark.parametrize(
         "argv",
-        [
-            ["holoscan", "nics"],
-        ],
+        [["holoscan", command] for command in REMOVED_COMMANDS],
     )
     def test_parse_args_rejects_removed_commands(self, argv):
         with pytest.raises(SystemExit):
@@ -200,31 +198,33 @@ class TestSetUpLogging:
 
 
 class TestMain:
-    def test_main_source_run_dispatches_to_project_cli(self):
+    @pytest.mark.parametrize(
+        "argv,expected_argv,expected_log_level",
+        [
+            (
+                ["holoscan", "run", "endoscopy_tool_tracking", "--dryrun"],
+                ["holoscan", "run", "endoscopy_tool_tracking", "--dryrun"],
+                None,
+            ),
+            (
+                ["holoscan", "run", "some-image:tag", "--driver"],
+                ["holoscan", "run", "some-image:tag", "--driver"],
+                None,
+            ),
+            (
+                ["holoscan", "--log-level", "debug", "list"],
+                ["holoscan", "list"],
+                "DEBUG",
+            ),
+        ],
+    )
+    def test_main_project_dispatches_to_project_cli(self, argv, expected_argv, expected_log_level):
         mock_project_main = MagicMock()
         with patch("holoscan_cli.__main__.set_up_logging") as mock_logging:
             with patch("holoscan_cli.cli.main", mock_project_main):
-                main(["holoscan", "run", "endoscopy_tool_tracking", "--dryrun"])
-        mock_logging.assert_called_once_with(None)
-        mock_project_main.assert_called_once_with(
-            ["holoscan", "run", "endoscopy_tool_tracking", "--dryrun"]
-        )
-
-    def test_main_image_like_run_stays_source_project_dispatch(self):
-        mock_project_main = MagicMock()
-        with patch("holoscan_cli.__main__.set_up_logging") as mock_logging:
-            with patch("holoscan_cli.cli.main", mock_project_main):
-                main(["holoscan", "run", "some-image:tag", "--driver"])
-        mock_logging.assert_called_once_with(None)
-        mock_project_main.assert_called_once_with(["holoscan", "run", "some-image:tag", "--driver"])
-
-    def test_main_project_dispatch_strips_top_level_log_level(self):
-        mock_project_main = MagicMock()
-        with patch("holoscan_cli.__main__.set_up_logging") as mock_logging:
-            with patch("holoscan_cli.cli.main", mock_project_main):
-                main(["holoscan", "--log-level", "debug", "list"])
-        mock_logging.assert_called_once_with("DEBUG")
-        mock_project_main.assert_called_once_with(["holoscan", "list"])
+                main(argv)
+        mock_logging.assert_called_once_with(expected_log_level)
+        mock_project_main.assert_called_once_with(expected_argv)
 
     def test_main_wrapper_source_command_dispatches_to_project_cli(self, monkeypatch):
         mock_project_main = MagicMock()
@@ -243,15 +243,13 @@ class TestMain:
 
         with patch("holoscan_cli.__main__.parse_args", return_value=mock_args):
             with patch("holoscan_cli.__main__.set_up_logging"):
-                with patch("holoscan_cli.__main__._execute_version_command", mock_execute):
+                with patch("holoscan_cli.version.version.execute_version_command", mock_execute):
                     main(["holoscan", "version"])
                     mock_execute.assert_called_once_with(mock_args)
 
     @pytest.mark.parametrize(
         "argv,command",
-        [
-            (["holoscan", "nics"], "nics"),
-        ],
+        [(["holoscan", command], command) for command in REMOVED_COMMANDS],
     )
     def test_main_rejects_removed_commands(self, argv, command, capsys):
         with patch("holoscan_cli.cli.main") as mock_project_main:
@@ -272,7 +270,7 @@ class TestMain:
 
         with patch("holoscan_cli.__main__.parse_args", return_value=mock_args):
             with patch("holoscan_cli.__main__.set_up_logging") as mock_logging:
-                with patch("holoscan_cli.__main__._execute_version_command", mock_execute):
+                with patch("holoscan_cli.version.version.execute_version_command", mock_execute):
                     main(["holoscan", "--log-level", "DEBUG", "version"])
                     mock_logging.assert_called_once_with("DEBUG")
                     mock_execute.assert_called_once_with(mock_args)
@@ -285,7 +283,7 @@ class TestMain:
 
         with patch("holoscan_cli.__main__.parse_args", return_value=mock_args) as mock_parse:
             with patch("holoscan_cli.__main__.set_up_logging"):
-                with patch("holoscan_cli.__main__._execute_version_command", mock_execute):
+                with patch("holoscan_cli.version.version.execute_version_command", mock_execute):
                     main(None)
                     assert mock_parse.call_count == 1
                     mock_execute.assert_called_once_with(mock_args)
@@ -309,7 +307,7 @@ class TestMain:
 
         with patch("holoscan_cli.__main__.parse_args", side_effect=mock_parse_args):
             with patch("holoscan_cli.__main__.set_up_logging", side_effect=mock_set_up_logging):
-                with patch("holoscan_cli.__main__._execute_version_command", mock_execute):
+                with patch("holoscan_cli.version.version.execute_version_command", mock_execute):
                     main(["holoscan", "version"])
 
         assert call_order == ["parse_args", "set_up_logging", "execute_command"]
