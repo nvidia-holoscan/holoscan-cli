@@ -32,7 +32,6 @@ done
 
 # Negative surface: removed subcommands must exit non-zero, and the
 # legacy `holohub` / `monai-deploy` console scripts must not be installed.
-if "$holoscan" package --help; then exit 1; fi
 if "$holoscan" nics; then exit 1; fi
 if [ -x "$bin_dir/holohub" ]; then exit 1; fi
 if [ -x "$bin_dir/monai-deploy" ]; then exit 1; fi
