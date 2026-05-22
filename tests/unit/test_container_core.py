@@ -324,3 +324,134 @@ def test_dockerfile_path_metadata_missing_path_falls_through(tmp_path, monkeypat
         },
     )
     assert Path(c.dockerfile_path) == folder_df
+
+
+# ---- build / run command assembly -------------------------------------------
+
+
+def test_build_dryrun_emits_base_and_extra_script_layers(tmp_path, monkeypatch):
+    """Dry-run container builds still assemble the full docker argv, including
+    cache tags and named setup-script layers, without requiring Docker."""
+    project_dir = tmp_path / "applications" / "my_app"
+    project_dir.mkdir(parents=True)
+    dockerfile = project_dir / "Dockerfile"
+    dockerfile.write_text("FROM scratch\n", encoding="utf-8")
+    setup_dir = tmp_path / "utilities" / "setup"
+    setup_dir.mkdir(parents=True)
+    (setup_dir / "coverage.sh").write_text("#!/bin/sh\n", encoding="utf-8")
+    (setup_dir / "Dockerfile.util").write_text("FROM scratch\n", encoding="utf-8")
+
+    calls = []
+    monkeypatch.setenv("HOLOSCAN_CLI_SETUP_SCRIPTS_DIR", str(setup_dir))
+    monkeypatch.setenv("HOLOSCAN_CLI_SOURCE", "/tmp/cli-src")
+    monkeypatch.setattr(container_core, "get_host_gpu", lambda: "dgpu")
+    monkeypatch.setattr(container_core, "get_compute_capacity", lambda: "90")
+    monkeypatch.setattr(container_core, "get_default_cuda_version", lambda: "13")
+    monkeypatch.setattr(container_core, "get_current_branch_slug", lambda: "feature-x")
+    monkeypatch.setattr(container_core, "get_git_short_sha", lambda: "abcdef0")
+    monkeypatch.setattr(
+        container_core.HoloscanContainer,
+        "DEFAULT_DOCKER_BUILD_ARGS",
+        "--build-arg DEFAULT=1",
+        raising=False,
+    )
+    monkeypatch.setattr(container_core, "run_command", lambda cmd, **kwargs: calls.append(cmd))
+
+    c = _stub_container(
+        tmp_path,
+        project_metadata={
+            "project_name": "my_app",
+            "source_folder": str(project_dir),
+            "metadata": {"language": "python"},
+        },
+    )
+    c.dryrun = True
+
+    c.build(no_cache=True, build_args="--build-arg CUSTOM=1", extra_scripts=["coverage"])
+
+    first = calls[0]
+    assert first[:2] == ["docker", "build"]
+    assert "--no-cache" in first
+    assert "BASE_IMAGE=nvcr.io/x/holoscan:v4.2.0-cuda13" in first
+    assert "GPU_TYPE=dgpu" in first
+    assert "COMPUTE_CAPACITY=90" in first
+    assert "--build-context" in first
+    assert "holoscan-cli-src=/tmp/cli-src" in first
+    assert "--build-arg" in first
+    assert "DEFAULT=1" in first
+    assert "CUSTOM=1" in first
+    assert "-f" in first
+    assert str(dockerfile) in first
+    assert "holohub-my_app:feature-x-base" in first
+
+    layer = calls[1]
+    assert layer[:2] == ["docker", "build"]
+    assert "BASE_IMAGE=holohub-my_app:feature-x" in layer
+    assert "SCRIPT=utilities/setup/coverage.sh" in layer
+    assert str(setup_dir / "Dockerfile.util") in layer
+    assert "holohub-my_app:feature-x-coverage" in layer
+
+
+def test_run_dryrun_assembles_docker_command_without_runtime_checks(tmp_path, monkeypatch):
+    """Dry-run container launch covers docker-run argument composition while
+    skipping NVIDIA runtime validation and the real docker command."""
+    project_dir = tmp_path / "applications" / "my_app"
+    project_dir.mkdir(parents=True)
+    (project_dir / "Dockerfile").write_text("FROM scratch\n", encoding="utf-8")
+    volume = tmp_path / "input-data"
+    volume.mkdir()
+    calls = []
+    monkeypatch.delenv("DISPLAY", raising=False)
+    monkeypatch.delenv("WAYLAND_DISPLAY", raising=False)
+    monkeypatch.delenv("HOLOSCAN_CLI_ENABLE_SCCACHE", raising=False)
+    monkeypatch.setenv("NVIDIA_VISIBLE_DEVICES", "0")
+    monkeypatch.setenv("NGC_CLI_API_KEY", "secret")
+    monkeypatch.setattr(container_core, "get_image_pythonpath", lambda img, dryrun: "/image/python")
+    monkeypatch.setattr(container_core, "get_group_id", lambda group: {"video": 44}.get(group))
+    monkeypatch.setattr(container_core, "run_command", lambda cmd, **kwargs: calls.append(cmd))
+
+    c = _stub_container(
+        tmp_path,
+        project_metadata={
+            "project_name": "my_app",
+            "source_folder": str(project_dir),
+            "metadata": {"language": "python"},
+        },
+    )
+    c.dryrun = True
+    c.verbose = True
+
+    c.run(
+        img="custom:image",
+        use_tini=True,
+        persistent=False,
+        as_root=False,
+        docker_opts="--name smoke --cidfile /tmp/custom.cid",
+        add_volumes=[str(volume)],
+        nsys_profile=True,
+        nsys_location="/opt/nsys",
+        extra_args=["bash", "-lc", "echo ok"],
+    )
+
+    cmd = calls[0]
+    assert cmd[:2] == ["docker", "run"]
+    assert "--interactive" in cmd
+    assert cmd.count("--cidfile") == 1
+    assert "-u" in cmd
+    assert f"{tmp_path}:/workspace/holohub" in cmd
+    assert f"{volume}:/workspace/volumes/input-data" in cmd
+    assert "NVIDIA_VISIBLE_DEVICES=0" in cmd
+    assert "--init" in cmd
+    assert "--rm" in cmd
+    assert "--group-add" in cmd
+    assert "--cap-add=SYS_ADMIN" in cmd
+    assert "/opt/nsys:/opt/nvidia/nsys-host" in cmd
+    assert (
+        "PYTHONPATH=/image/python:/opt/nvidia/holoscan/python/lib:/workspace/holohub/benchmarks/holoscan_flow_benchmarking"
+        in cmd
+    )
+    assert "NGC_CLI_API_KEY" in cmd
+    assert "NGC_CLI_ORG=nvidia" in cmd
+    assert "--name" in cmd
+    assert "/tmp/custom.cid" in cmd
+    assert cmd[-4:] == ["custom:image", "bash", "-lc", "echo ok"]
