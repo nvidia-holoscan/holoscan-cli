@@ -88,3 +88,21 @@ def test_autocompletion_command_list_comes_from_registry(capsys):
         assert command in lines
     assert "cpp" in lines
     assert "python" in lines
+
+
+def test_list_prints_modules_with_languages_and_operators(capsys):
+    cli = SimpleNamespace(
+        projects=[
+            {
+                "project_type": "module",
+                "project_name": "holoscan-gstreamer",
+                "metadata": {"language": ["C++", "Python"], "operators": ["gstreamer"]},
+            }
+        ]
+    )
+
+    info.handle_list(cli, SimpleNamespace())
+
+    out = capsys.readouterr().out
+    assert "== MODULES" in out
+    assert "holoscan-gstreamer (C++, Python) [gstreamer]" in out

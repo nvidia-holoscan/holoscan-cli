@@ -93,6 +93,19 @@ def write_external_operators_manifest(
     seen_provider_ids: dict[str, str] = {}
 
     for dep in deps:
+        if dep.is_internal:
+            # In-tree modules are already part of the consuming source tree.
+            # The tree's normal CMake options enable their operators, so this
+            # manifest must not emit a FetchContent declaration for them.
+            lines.append(f"# {dep.name} (in-tree: {dep.override_path})")
+            if dep.provides_operators:
+                lines.append(
+                    f"# Operators {dep.provides_operators} are built by the source tree "
+                    "when the corresponding OP_* flags are ON."
+                )
+            lines.append("")
+            continue
+
         provider = _provider_id(dep.name)
         if (prior_name := seen_provider_ids.get(provider)) and prior_name != dep.name:
             print(

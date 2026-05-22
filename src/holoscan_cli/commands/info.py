@@ -54,6 +54,7 @@ def handle_list(cli, _args: argparse.Namespace) -> None:
         "application",
         "benchmark",
         "gxf_extension",
+        "module",
         "package",
         "operator",
         "tutorial",
@@ -68,9 +69,17 @@ def handle_list(cli, _args: argparse.Namespace) -> None:
             continue
         print(f"\n{Color.white(f'== {project_type.upper()}S =================', bold=True)}\n")
         for project in sorted(grouped_metadata[project_type], key=lambda x: x["project_name"]):
-            language = project.get("metadata", {}).get("language", "")
+            metadata = project.get("metadata", {})
+            language = metadata.get("language", "")
+            if isinstance(language, list):
+                language = ", ".join(language)
             language = f"({language})" if language else ""
-            print(f'{project["project_name"]} {language}')
+            if project_type == "module":
+                operators = metadata.get("operators", [])
+                ops = f" [{', '.join(operators)}]" if operators else ""
+                print(f'{project["project_name"]} {language}{ops}')
+            else:
+                print(f'{project["project_name"]} {language}')
 
     print(f"\n{Color.white('=================================', bold=True)}\n")
 

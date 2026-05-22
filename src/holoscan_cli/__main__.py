@@ -45,23 +45,17 @@ PROJECT_COMMANDS = project_command_help()
 LOG_LEVELS = ["DEBUG", "INFO", "WARN", "ERROR", "CRITICAL"]
 
 # Subcommands removed in the source-project v1 cut. Mapped to a one-line note
-# explaining what each one did, so users typing the old command get a
-# specific message instead of argparse's generic "invalid choice". HAP/MAP
-# packaging is intentionally out of scope for this package (see
-# cli-migration-consolidation-plan.md → Locked Decisions). The check fires
-# before argparse runs so the message lands even when extra args are passed
-# (e.g. `holoscan package some-image:tag`). Note: the pre-v1 `holoscan run`
-# was the HAP/MAP packaged-image runner; in v1 the same name is reused for
-# the HoloHub-style source-project runner, so it is not listed here.
+# explaining what each one did, so users typing the old command get a specific
+# message instead of argparse's generic "invalid choice". Note: the pre-v1
+# `holoscan run` was the HAP/MAP packaged-image runner; in v1 the same name is
+# reused for the HoloHub-style source-project runner, so it is not listed here.
 REMOVED_COMMANDS: dict[str, str] = {
-    "package": "the HAP/MAP application packager",
     "nics": "the HAP NIC diagnostic command",
 }
 
 REMOVED_COMMAND_FOOTER = (
-    "HAP/MAP packaging is out of scope for holoscan-cli v1. Pin "
-    "holoscan-cli<=4.2.0 or use the Holoscan SDK packaging workflows directly "
-    "if you still need it."
+    "Removed HAP/MAP commands are out of scope for holoscan-cli v1. Pin "
+    "holoscan-cli<=4.2.0 if you still need that legacy command surface."
 )
 
 

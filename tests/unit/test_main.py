@@ -43,7 +43,6 @@ class TestParseArgs:
     @pytest.mark.parametrize(
         "argv",
         [
-            ["holoscan", "package"],
             ["holoscan", "nics"],
         ],
     )
@@ -245,9 +244,7 @@ class TestMain:
     @pytest.mark.parametrize(
         "argv,command",
         [
-            (["holoscan", "package"], "package"),
             (["holoscan", "nics"], "nics"),
-            (["holoscan", "--log-level", "DEBUG", "package"], "package"),
         ],
     )
     def test_main_rejects_removed_commands(self, argv, command, capsys):
@@ -259,7 +256,7 @@ class TestMain:
         assert excinfo.value.code == 2
         err = capsys.readouterr().err
         assert f"'holoscan {command}' was removed" in err
-        assert "HAP/MAP packaging is out of scope" in err
+        assert "Removed HAP/MAP commands are out of scope" in err
 
     def test_main_with_log_level(self):
         mock_args = MagicMock()

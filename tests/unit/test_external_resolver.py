@@ -305,3 +305,105 @@ def test_local_override_skips_source_validation(tmp_path, monkeypatch, _clean_lo
     deps = parse_module_dependencies(meta)
     assert deps[0].override_path == override_dir.resolve()
     assert deps[0].git_url is None
+
+
+# ---- in-tree module resolution ----------------------------------------------
+
+
+def _make_in_tree_module(source_root, name: str):
+    module_dir = source_root / "modules" / name
+    module_dir.mkdir(parents=True, exist_ok=True)
+    (module_dir / "metadata.json").write_text(
+        json.dumps({"$schema": "holoscan/module/v2", "module": {"name": name}}),
+        encoding="utf-8",
+    )
+    return module_dir
+
+
+def test_in_tree_module_recognized(tmp_path, _clean_local_override_env):
+    source_root = tmp_path / "source"
+    module_dir = _make_in_tree_module(source_root, "holoscan-gstreamer")
+    meta = _write_metadata(
+        tmp_path,
+        {
+            "application": {
+                "dependencies": {
+                    "modules": [
+                        {
+                            "name": "holoscan-gstreamer",
+                            "provides_operators": ["gstreamer"],
+                        }
+                    ]
+                }
+            }
+        },
+    )
+
+    deps = parse_module_dependencies(meta, source_root=source_root)
+
+    assert deps == [
+        ModuleDep(
+            name="holoscan-gstreamer",
+            provides_operators=["gstreamer"],
+            override_path=module_dir,
+            is_internal=True,
+        )
+    ]
+
+
+def test_in_tree_module_no_error_for_missing_source(tmp_path, _clean_local_override_env):
+    source_root = tmp_path / "source"
+    _make_in_tree_module(source_root, "holoscan-gstreamer")
+    meta = _write_metadata(
+        tmp_path,
+        {"application": {"dependencies": {"modules": [{"name": "holoscan-gstreamer"}]}}},
+    )
+
+    deps = parse_module_dependencies(meta, source_root=source_root)
+
+    assert len(deps) == 1
+    assert deps[0].is_internal is True
+
+
+def test_missing_module_still_raises_with_source_root(tmp_path, _clean_local_override_env):
+    source_root = tmp_path / "source"
+    source_root.mkdir()
+    meta = _write_metadata(
+        tmp_path,
+        {"application": {"dependencies": {"modules": [{"name": "unknown-module"}]}}},
+    )
+
+    with pytest.raises(ValueError, match="modules/unknown-module/metadata.json"):
+        parse_module_dependencies(meta, source_root=source_root)
+
+
+def test_local_override_wins_over_in_tree_module(
+    tmp_path, monkeypatch, _clean_local_override_env
+):
+    source_root = tmp_path / "source"
+    _make_in_tree_module(source_root, "holoscan-gstreamer")
+    override_dir = tmp_path / "override"
+    override_dir.mkdir()
+    (override_dir / "metadata.json").write_text("{}", encoding="utf-8")
+    meta = _write_metadata(
+        tmp_path,
+        {"application": {"dependencies": {"modules": [{"name": "holoscan-gstreamer"}]}}},
+    )
+    monkeypatch.setenv("HOLOSCAN_CLI_LOCAL_HOLOSCAN_GSTREAMER", str(override_dir))
+
+    deps = parse_module_dependencies(meta, source_root=source_root)
+
+    assert deps[0].override_path == override_dir.resolve()
+    assert deps[0].is_internal is False
+
+
+def test_in_tree_lookup_is_opt_in(tmp_path, _clean_local_override_env):
+    source_root = tmp_path / "source"
+    _make_in_tree_module(source_root, "holoscan-gstreamer")
+    meta = _write_metadata(
+        tmp_path,
+        {"application": {"dependencies": {"modules": [{"name": "holoscan-gstreamer"}]}}},
+    )
+
+    with pytest.raises(ValueError, match="missing source.git_url"):
+        parse_module_dependencies(meta)

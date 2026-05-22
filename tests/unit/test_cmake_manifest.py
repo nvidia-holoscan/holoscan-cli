@@ -164,6 +164,25 @@ def test_writing_twice_is_idempotent(tmp_path):
     assert _emit(tmp_path, deps) == _emit(tmp_path, deps)
 
 
+def test_in_tree_module_emits_comment_only(tmp_path):
+    text = _emit(
+        tmp_path,
+        [
+            ModuleDep(
+                name="holoscan-gstreamer",
+                provides_operators=["gstreamer"],
+                override_path=Path("/repo/modules/holoscan-gstreamer"),
+                is_internal=True,
+            )
+        ],
+    )
+    assert "holoscan-gstreamer (in-tree: /repo/modules/holoscan-gstreamer)" in text
+    assert "gstreamer" in text
+    assert not re.search(r"^holohub_declare_external_module\s*\(", text, re.MULTILINE)
+    assert "FETCHCONTENT_SOURCE_DIR" not in text
+    assert "GIT_REPOSITORY" not in text
+
+
 def test_empty_deps_writes_minimal_skeleton(tmp_path):
     text = _emit(tmp_path, [])
     assert not re.search(r"holohub_declare_external_module\s*\(", text)

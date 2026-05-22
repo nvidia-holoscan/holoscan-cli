@@ -277,8 +277,24 @@ def build_project_locally(
         f"-DCMAKE_BUILD_TYPE={build_type}",
         f"-DCMAKE_PREFIX_PATH={cli.DEFAULT_SDK_DIR}/lib",
         f"-DHOLOHUB_DATA_DIR:PATH={cli.DEFAULT_DATA_DIR}",
-        f"-D{proj_prefix}_{project_name}=ON",
     ]
+    if project_type == "module":
+        module_slug = project_name.replace("-", "_")
+        cmake_args.append(f"-D{proj_prefix}_{module_slug}=ON")
+        subprojects = project_data.get("metadata", {}).get("subprojects", {})
+        ops = subprojects.get("operators", [])
+        apps = subprojects.get("applications", [])
+        parts = ([f"operators: {ops}"] if ops else []) + (
+            [f"applications: {apps}"] if apps else []
+        )
+        detail = f": enabling {', '.join(parts)}" if parts else ""
+        print(f"Building module '{project_name}'{detail}")
+        for op in ops:
+            cmake_args.append(f"-DOP_{op}=ON")
+        for app in apps:
+            cmake_args.append(f"-DAPP_{app}=ON")
+    else:
+        cmake_args.append(f"-D{proj_prefix}_{project_name}=ON")
     # Add benchmark-specific CMake flags
     if benchmark:
         cmake_args.append(

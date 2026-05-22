@@ -48,13 +48,19 @@ def _ref_is_immutable(ref: str) -> bool:
 
 @dataclass
 class ModuleDep:
-    """A parsed external module dependency from a consumer's metadata.json."""
+    """A parsed module dependency from a consumer's metadata.json.
+
+    ``is_internal=True`` means the module lives inside the active source tree
+    under ``modules/<name>/`` and requires no FetchContent fetch; its operators
+    are already part of that tree's normal CMake graph.
+    """
 
     name: str
     git_url: Optional[str] = None
     ref: Optional[str] = None
     provides_operators: list[str] = field(default_factory=list)
     override_path: Optional[Path] = None
+    is_internal: bool = False
 
 
 def _override_env_name(module_name: str) -> str:
@@ -84,12 +90,20 @@ def _module_dependencies_raw(metadata: dict) -> list[dict]:
     return []
 
 
-def parse_module_dependencies(metadata_path: Path) -> list[ModuleDep]:
+def parse_module_dependencies(
+    metadata_path: Path,
+    source_root: Optional[Path] = None,
+) -> list[ModuleDep]:
     """Parse a metadata.json's external module dependency list into
     :class:`ModuleDep` records.
 
     Honors ``HOLOSCAN_CLI_LOCAL_<NAME>`` env-var overrides by populating
-    ``override_path``. Does not fetch anything. A missing metadata.json is
+    ``override_path``. When ``source_root`` is provided, dependencies with no
+    ``source`` block are checked against ``source_root/modules/<name>/``. If a
+    metadata.json exists there, the dependency is treated as an in-tree module
+    instead of an error.
+
+    Does not fetch anything. A missing metadata.json is
     treated as "no external deps" rather than an error — unifies the
     file-doesn't-exist path with the file-vanished-between-exists-and-open
     race window.
@@ -125,10 +139,23 @@ def parse_module_dependencies(metadata_path: Path) -> list[ModuleDep]:
         git_url = source.get("git_url")
         if override_path is None:
             if not (git_url and ref):
+                if source_root is not None:
+                    in_tree_path = source_root / "modules" / name
+                    if (in_tree_path / "metadata.json").exists():
+                        out.append(
+                            ModuleDep(
+                                name=name,
+                                provides_operators=provides,
+                                override_path=in_tree_path,
+                                is_internal=True,
+                            )
+                        )
+                        continue
                 raise ValueError(
                     f"Dependency '{name}' missing source.git_url or source.ref. "
-                    f"Declare a complete source block or set "
-                    f"{_override_env_name(name)}=<path>."
+                    f"Declare a complete source block, set "
+                    f"{_override_env_name(name)}=<path>, or add a module descriptor "
+                    f"at modules/{name}/metadata.json for in-tree modules."
                 )
             if not _ref_is_immutable(ref):
                 import sys as _sys

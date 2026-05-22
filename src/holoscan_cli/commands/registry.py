@@ -125,6 +125,12 @@ PROJECT_COMMANDS: tuple[CommandSpec, ...] = (
         group="project",
     ),
     CommandSpec(
+        "package",
+        short_help="build Holoscan Module distribution artifacts",
+        help="Build a distribution package for a Holoscan Module",
+        group="project",
+    ),
+    CommandSpec(
         "test",
         short_help="test a source project",
         help="Test a project",
@@ -241,6 +247,7 @@ def register_all(
         info,
         install,
         lint,
+        package,
         run,
         setup_cmd,
         test_cmd,
@@ -276,6 +283,7 @@ def register_all(
         (build.register_build_parser, "build"),
         (run.register_run_parser, "run"),
         (install.register_install_parser, "install"),
+        (package.register_package_parser, "package"),
     ):
         add(register_fn, name, container_build=container_build, container_run=container_run)
     add(test_cmd.register_test_parser, "test", container_build=container_build)
