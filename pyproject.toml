@@ -94,7 +94,7 @@ pytest-cov= "^7.0.0"
 pytest-mock= "^3.15.1"
 pytest = "^9.0.2"
 coveralls = { version = "^4.1.0", markers = "python_version < '3.13'" }
-tomli = { version = "^2.0", markers = "python_version < '3.11'" }
+tomli = { version = "^2.4", markers = "python_version < '3.11'" }
 # Mirrors the runtime ``[create]`` extra so the unit tests for the
 # schema validator (``test_metadata_validator.py``) and the smoke
 # fixture (``test_smoke_fixture.py``) can import them without
