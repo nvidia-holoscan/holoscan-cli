@@ -100,7 +100,7 @@ tomli = { version = "^2.4", markers = "python_version < '3.11'" }
 # fixture (``test_smoke_fixture.py``) can import them without
 # requiring callers to ``pip install 'holoscan-cli[create]'`` first.
 jsonschema = ">=4.26.0,<5.0"
-referencing = ">=0.30"
+referencing = ">=0.37.0"
 
 [tool.poetry.requires-plugins]
 poetry-dynamic-versioning = { version = ">=1.5.0,<2.0.0", extras = ["plugin"] }
