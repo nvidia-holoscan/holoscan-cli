@@ -57,15 +57,18 @@ on 3.11+ but missing on 3.10).
 Pipeline:
 
 1. **`pre-commit` + `test`** — same as `main.yaml`, gated as `needs:`.
-2. **`build wheel`** — creates the tag, runs `poetry build --clean`,
-   validates package metadata with `twine check`, asserts the wheel contents
-   with `scripts/assert_wheel_contents.sh`, uploads `dist/*` (both wheel and
-   sdist) as the `build-artifact`, and uploads the `.whl` separately as
-   `wheel-artifact`. The `wheel-artifact` upload is kept as a fallback path
-   for the K2 Kitmaker wheel-release flow (via its GitHub Actions artifact
-   URL shape); the preferred path is to consume the staged wheel from
-   TestPyPI (see step 4). The tag is auto-removed at the end when
-   `ga == false` so RC dispatches do not leave stray refs.
+2. **`build wheel`** — validates that `version` looks like `vX.Y.Z`, creates
+   the tag, runs `poetry build --clean`, validates package metadata with
+   `twine check`, asserts the wheel contents with
+   `scripts/assert_wheel_contents.sh`, uploads `dist/*` (both wheel and sdist)
+   as the `build-artifact`, and uploads the `.whl` separately as
+   `wheel-artifact`. The `wheel-artifact` upload is kept as a fallback path for
+   the K2 Kitmaker wheel-release flow (via its GitHub Actions artifact URL
+   shape); the preferred path is to consume the staged wheel from TestPyPI (see
+   step 4). Use the published wheel version from TestPyPI (for example,
+   `X.Y.ZrcN` for RCs) in the Kitmaker `--wheel-url`, not necessarily the
+   transient tag name. The tag is auto-removed at the end when `ga == false` so
+   RC dispatches do not leave stray refs.
 3. **`smoke-test`** — runs `scripts/smoke_test.sh` against the installed
    wheel.
 4. **`publish-test-pypi`** — runs for both GA and non-GA dispatches.
@@ -116,6 +119,7 @@ each pattern in two lists:
   * `holoscan_cli/logging.json`
   * `holoscan_cli/py.typed`
   * `holoscan_cli/metadata/*.schema.json`
+  * `holoscan_cli/setup_scripts/*`
   * `holoscan_cli/testing/`
 * **forbidden** — paths that must NOT be present (regressions from past
   cleanups):
@@ -133,8 +137,8 @@ Given the bin/ directory of a venv that has `holoscan-cli` installed:
 * Loops `holoscan <cmd> --help` for every name in
   `holoscan_cli.commands.registry.project_command_names()`, so a regression
   in any subcommand's parser surfaces immediately.
-* Negative surface: asserts that the removed commands (`package`, `nics`)
-  exit non-zero, and that the legacy `holohub` / `monai-deploy` console
+* Negative surface: asserts that the removed command `nics` exits non-zero,
+  and that the legacy `holohub` / `monai-deploy` console
   scripts are **not** installed alongside `holoscan`.
 * Positive source-project surface: points `HOLOSCAN_CLI_ROOT` at the in-tree
   fixture `tests/fixtures/holohub_smoke/` and runs `holoscan list` +

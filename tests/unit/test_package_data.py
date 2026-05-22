@@ -18,9 +18,9 @@
 These prevent regressions where ``pyproject.toml`` accidentally drops the
 files an installed ``holoscan-cli`` wheel must ship: the ``py.typed``
 marker, the project metadata JSON schemas under ``holoscan_cli.metadata``,
-and the CTest scripts under ``holoscan_cli.testing``. The tests also pin
-the public ``holoscan`` console script entry point so the installed
-package keeps a single, stable command name on disk.
+the logging configuration, and the CTest scripts under ``holoscan_cli.testing``.
+The tests also pin the public ``holoscan`` console script entry point so the
+installed package keeps a single, stable command name on disk.
 
 Entry-point checks read ``pyproject.toml`` directly (the ground truth for
 what a fresh ``pip install`` will register) instead of the runtime
@@ -86,6 +86,12 @@ def test_py_typed_marker_is_shipped():
     """Typed packages must ship a ``py.typed`` marker file."""
     typed = importlib.resources.files("holoscan_cli").joinpath("py.typed")
     assert typed.is_file()
+
+
+def test_logging_config_is_shipped():
+    """Forwarded project commands load the bundled logging configuration."""
+    logging_config = importlib.resources.files("holoscan_cli").joinpath("logging.json")
+    assert logging_config.is_file()
 
 
 def test_all_metadata_schemas_are_packaged():
@@ -198,6 +204,6 @@ def test_pyproject_create_extra_bundles_validator_deps():
 
     jsonschema_spec = next(spec for spec in create_specs if spec.startswith("jsonschema"))
     assert ">=4.18" in jsonschema_spec, (
-        "metadata_validator uses Draft4Validator(registry=...), which requires "
+        "metadata_validator uses Draft202012Validator(registry=...), which requires "
         f"jsonschema>=4.18; got {jsonschema_spec!r}"
     )

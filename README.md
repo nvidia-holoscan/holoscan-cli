@@ -9,7 +9,7 @@ Command-line tool for discovering, building, running, testing, and linting HoloH
 
 The CLI presents a single command surface for the source-project development lifecycle:
 
-- **Project lifecycle:** `build`, `run`, `test`, `install`
+- **Project lifecycle:** `build`, `run`, `test`, `install`, `package`
 - **Container:** `build-container`, `run-container`
 - **Discovery / diagnostics:** `list`, `modes`, `status`, `env-info`, `env-check`, `autocompletion_list`, `version`
 - **Workspace:** `lint`, `setup`, `clear-cache`, `create`
@@ -114,4 +114,4 @@ the workflow badges at the top of this page.
 
 ### HAP/MAP application packaging
 
-Application packaging (HAP/MAP) is no longer part of this CLI: `holoscan package`, `holoscan nics`, and the `monai-deploy` console script are intentionally not provided. The pre-v1 `holoscan run` was the HAP/MAP packaged-image runner; in v1 the same name now drives the HoloHub-style source-project runner, so it no longer launches packaged images. Developers that still rely on HAP/MAP packaging should pin `holoscan-cli<=4.2.0`, the last release that shipped that interface, or migrate to the Holoscan SDK packaging workflows directly. See [issue #164](https://github.com/nvidia-holoscan/holoscan-cli/issues/164) for the deprecation timeline.
+Application packaging (HAP/MAP) is no longer part of this CLI: `holoscan nics` and the `monai-deploy` console script are intentionally not provided. The current `holoscan package` command is for building Holoscan Module distribution artifacts; it is not the legacy HAP/MAP application packager. The pre-v1 `holoscan run` was the HAP/MAP packaged-image runner; in v1 the same name now drives the HoloHub-style source-project runner, so it no longer launches packaged images. Developers that still rely on HAP/MAP packaging should pin `holoscan-cli<=4.2.0`, the last release that shipped that interface, or migrate to the Holoscan SDK packaging workflows directly. See [issue #164](https://github.com/nvidia-holoscan/holoscan-cli/issues/164) for the deprecation timeline.

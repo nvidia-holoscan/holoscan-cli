@@ -76,7 +76,7 @@ pre-commit run --all-files                 # ruff + black + isort + markdownlint
                                            # + codespell + yaml/json/toml linters
                                            # + cmakelint. Catches every lint
                                            # failure `Code Check` would catch.
-poetry run pytest -q                       # 194 unit tests, < 1s.
+poetry run pytest -q                       # run the unit test suite.
 ```
 
 If `pre-commit run --all-files` passes locally, `Code Check`'s `pre-commit`

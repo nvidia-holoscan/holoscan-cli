@@ -193,8 +193,7 @@ def _dispatch_project_cli(argv: list[str]) -> bool:
     if command not in PROJECT_COMMANDS:
         return False
 
-    if log_level is not None:
-        set_up_logging(log_level)
+    set_up_logging(log_level)
 
     from .cli import main as project_main
 

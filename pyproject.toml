@@ -58,7 +58,7 @@ dependencies = []
 # ``pip install 'holoscan-cli[create]'`` enables the entire ``holoscan create``
 # happy path: schema validation (``jsonschema`` + ``referencing``) plus the
 # cookiecutter scaffold used to materialize the new project. ``jsonschema>=4.18``
-# is required for the ``Draft4Validator(..., registry=...)`` API used by
+# is required for the ``Draft202012Validator(..., registry=...)`` API used by
 # ``metadata_validator.py``; older versions silently lack the kwarg and fail at
 # runtime.
 create = [
@@ -165,10 +165,10 @@ format-jinja = """
         {{ serialize_pep440(base, stage, dev=distance) }}
     {%- elif branch and branch.startswith("release/") -%}
         {# Debug: env["ga"] = {{ env["ga"] }} #}
-        {%- if env["ga"] == 'true' -%}
+        {%- if env.get("ga") == 'true' -%}
             {{ serialize_pep440(base)}}
         {%- else -%}
-            {%- if 'rc' in env -%}
+            {%- if env.get("rc") -%}
                 {{ serialize_pep440(base, stage="rc", revision=env["rc"] ) }}
             {%- else -%}
                 {{ serialize_pep440(base, stage="rc", revision=distance) }}

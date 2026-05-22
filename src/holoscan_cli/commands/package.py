@@ -18,6 +18,7 @@
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import json
 import os
 import shutil
@@ -272,6 +273,11 @@ def _package_locally(cli, args: argparse.Namespace, project_data: dict) -> None:
             fatal(
                 f"Cannot build wheel: {pyproject} not found. The module needs "
                 "a pyproject.toml with a [build-system] block."
+            )
+        if not dryrun and importlib.util.find_spec("build") is None:
+            fatal(
+                "Cannot build wheel: Python package 'build' is not installed. "
+                "Install it in the active environment with `python -m pip install build`."
             )
         dist_dir = cli.DEFAULT_BUILD_PARENT_DIR / "dist"
         wheel_env = build_env.copy()

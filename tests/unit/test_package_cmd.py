@@ -107,6 +107,34 @@ def test_package_wheel_invokes_python_build(tmp_path, monkeypatch):
     assert "--outdir" in wheel_args
 
 
+def test_package_wheel_requires_python_build_for_real_run(tmp_path, monkeypatch, capsys):
+    source = tmp_path / "repo" / "modules" / "test-module-fixture"
+    source.mkdir(parents=True)
+    (source / "pyproject.toml").write_text("[build-system]\nrequires=[]\n", encoding="utf-8")
+    project_data = {
+        "project_name": "test-module-fixture",
+        "project_type": "module",
+        "source_folder": source,
+        "metadata": {"language": ["Python"]},
+    }
+    cli = _cli(tmp_path, project_data)
+    monkeypatch.setattr(package_cmd.importlib.util, "find_spec", lambda name: None)
+    monkeypatch.setattr(
+        package_cmd,
+        "run_command",
+        lambda *args, **kwargs: pytest.fail("build should fail before invoking python -m build"),
+    )
+
+    with pytest.raises(SystemExit) as excinfo:
+        package_cmd.handle_package(
+            cli,
+            _args(project="test-module-fixture", pkg_generator="WHEEL", dryrun=False),
+        )
+
+    assert excinfo.value.code == 1
+    assert "Python package 'build' is not installed" in capsys.readouterr().err
+
+
 def test_package_rejects_non_module_project(tmp_path):
     cli = _cli(
         tmp_path,

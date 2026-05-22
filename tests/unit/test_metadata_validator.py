@@ -17,7 +17,7 @@
 
 The validator is reached through ``holoscan create`` and was at 0%
 coverage after the package consolidation. These tests pin the
-``Draft4Validator`` wrapper that backs ``validate_generated_metadata``
+``Draft202012Validator`` wrapper that backs ``validate_generated_metadata``
 in ``commands/create.py``.
 """
 

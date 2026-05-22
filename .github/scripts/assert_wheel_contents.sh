@@ -23,6 +23,13 @@ required=(
   'holoscan_cli/logging\.json$'
   'holoscan_cli/py\.typed$'
   'holoscan_cli/metadata/.+\.schema\.json$'
+  'holoscan_cli/setup_scripts/Dockerfile\.util$'
+  'holoscan_cli/setup_scripts/benchmarking\.sh$'
+  'holoscan_cli/setup_scripts/coverage\.sh$'
+  'holoscan_cli/setup_scripts/debug\.sh$'
+  'holoscan_cli/setup_scripts/sccache\.sh$'
+  'holoscan_cli/setup_scripts/template\.sh$'
+  'holoscan_cli/setup_scripts/xvfb\.sh$'
   'holoscan_cli/testing/'
 )
 for pattern in "${required[@]}"; do
