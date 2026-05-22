@@ -13,9 +13,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# This workflow will install Python dependencies,
-# run tests with a variety of Python versions,
-# and upload a new build to TestPyPI.
+# Manual release workflow: lint, unit tests, wheel + sdist build,
+# package metadata + content validation, installed-wheel smoke tests,
+# and TestPyPI publish (for both GA and non-GA dispatches). The K2
+# Kitmaker wheel-release flow promotes the staged wheel from TestPyPI
+# (preferred — via the new `release_kitmaker_wheel.py upload
+# --wheel-url https://test.pypi.org/project/holoscan-cli/<v>/` shape)
+# or, as a fallback, from the `wheel-artifact` uploaded here.
 #
 # For more information see:
 # https://help.github.com/actions/language-and-framework-guides/using-python-with-github-actions
@@ -29,7 +33,6 @@ on:
         description: 'Version (e.g. v1.2.34)'
         required: true
         type: string
-        default: v
       rc:
         description: 'RC Build Number'
         required: false
@@ -53,15 +56,21 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
 
       - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6
         with:
           python-version: ${{ matrix.python-version }}
 
       - name: Install Poetry
-        uses: Gr1N/setup-poetry@v9
+        # Install via pip on the matrix Python rather than a third-party
+        # action: no allowlist coupling, no Node-20 runtime to chase, and
+        # plugins resolve in the same site-packages so `requires-plugins`
+        # in pyproject.toml is satisfied without `poetry self add`.
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install "poetry>=2.0" "poetry-dynamic-versioning>=1.7.1,<2.0.0"
 
       - name: Install library and dependencies
         run: |
@@ -69,7 +78,7 @@ jobs:
           poetry -vvv install --with test
 
       - name: Run pre-commit Check
-        uses: pre-commit/action@v3.0.1
+        uses: pre-commit/action@2c7b3805fd2a0fd8c1884dcaebf91fc102a13ecd # v3.0.1
 
   test:
     runs-on: ${{ matrix.os }}
@@ -88,15 +97,21 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
 
       - name: Set up Python ${{ matrix.python.version }}
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6
         with:
           python-version: ${{ matrix.python.version }}
 
       - name: Install Poetry
-        uses: Gr1N/setup-poetry@v9
+        # Install via pip on the matrix Python rather than a third-party
+        # action: no allowlist coupling, no Node-20 runtime to chase, and
+        # plugins resolve in the same site-packages so `requires-plugins`
+        # in pyproject.toml is satisfied without `poetry self add`.
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install "poetry>=2.0" "poetry-dynamic-versioning>=1.7.1,<2.0.0"
 
       - name: Install library and dependencies
         run: |
@@ -111,14 +126,16 @@ jobs:
           poetry run pytest
 
       - name: Upload Coverage Report
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         if: ${{ matrix.python.coveralls }}
         with:
           name: coverage
           path: tests/reports/.coverage.lcov
 
       - name: Upload Coveralls Report
-        uses: coverallsapp/github-action@v2.3.7
+        # Pinned to the SHA the repo's Actions allowlist permits (v2.3.4);
+        # bumping requires extending the allowlist.
+        uses: coverallsapp/github-action@cfd0633edbd2411b532b808ba7a8b5e04f76d2c8 # v2.3.4
         if: ${{ matrix.python.coveralls }}
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
@@ -133,8 +150,23 @@ jobs:
       contents: write
     steps:
 
+    - name: Validate release inputs
+      env:
+        VERSION: ${{ github.event.inputs.version }}
+        RC: ${{ github.event.inputs.rc }}
+        GA: ${{ github.event.inputs.ga }}
+      run: |
+        if [[ ! "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+          echo "version must look like vX.Y.Z, got '$VERSION'" >&2
+          exit 1
+        fi
+        if [[ "$GA" == "true" && -n "$RC" ]]; then
+          echo "rc must be empty for GA releases" >&2
+          exit 1
+        fi
+
     - name: Create tag
-      uses: actions/github-script@v8.0.0
+      uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
@@ -147,14 +179,22 @@ jobs:
           })
 
     - name: Checkout repository
-      uses: actions/checkout@v6
+      uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
       with:
         fetch-depth: 0
 
-    - name: Install Poetry
-      uses: Gr1N/setup-poetry@v9
+    - name: Set up Python 3.12
+      uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6
+      with:
+        python-version: "3.12"
 
-    - name: Build
+    - name: Install Poetry
+      # See note in the pre-commit job above.
+      run: |
+        python -m pip install --upgrade pip
+        python -m pip install "poetry>=2.0" "poetry-dynamic-versioning>=1.7.1,<2.0.0"
+
+    - name: Build wheel and sdist
       env:
         rc: ${{ github.event.inputs.rc }}
         ga: ${{ github.event.inputs.ga }}
@@ -164,16 +204,32 @@ jobs:
         source $(poetry env info --path)/bin/activate
         poetry install
         poetry dynamic-versioning -vvv
-        poetry build -vvv -f wheel --clean
+        poetry build -vvv --clean
 
-    - uses: actions/upload-artifact@v6
+    - name: Validate package metadata
+      run: |
+        source $(poetry env info --path)/bin/activate
+        python -m pip install --upgrade twine
+        python -m twine check dist/*
+
+    - name: Assert wheel package contents
+      run: .github/scripts/assert_wheel_contents.sh dist
+
+    - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
       name: Upload build
       with:
         name: build-artifact
-        path: dist/*.whl
+        path: dist/*
+
+    - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+      name: Upload wheel for K2 Kitmaker
+      with:
+        name: wheel-artifact
+        path: dist/holoscan_cli-*.whl
+        if-no-files-found: error
 
     - name: Remove tag
-      uses: actions/github-script@v8.0.0
+      uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
       if: ${{ inputs.ga == false }}
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -194,10 +250,8 @@ jobs:
             }
           }
 
-  verification-test:
+  smoke-test:
     runs-on: ${{ matrix.os }}
-    env:
-      HOLOSCAN_VERSION: 3.0.0
     needs: [build]
     strategy:
       matrix:
@@ -205,48 +259,85 @@ jobs:
         python-version: ["3.12"]
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
       - name: Download build
-        uses: actions/download-artifact@v8.0.0
+        uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3 # v8.0.0
         with:
           name: build-artifact
-      - name: Install ShellSpec
-        run: curl -fsSL https://git.io/shellspec | sh -s -- --yes
-      - name: Install Holoscan SDK
-        run: |
-          pip install holoscan==${{ env.HOLOSCAN_VERSION }}
-      - name: Install Holoscan CLI
-        run: |
-          wheel=$(find . -name holoscan_cli-*.whl)
-          pip install ${wheel}
-          holoscan version
-      - name: Verification Test
-        working-directory: tests/verification
-        run: |
-          VERSION=${{ github.event.inputs.version }}
-          VERSION="${VERSION/?}"
-          shellspec -e VERSION=$VERSION -e HOLOSCAN_VERSION=$HOLOSCAN_VERSION -o j
-      - name: Upload Test Report
-        uses: test-summary/action@v2.4
-        if: always()
+          path: dist/
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6
         with:
-          paths: 'tests/verification/report/*.xml'
+          python-version: ${{ matrix.python-version }}
+      - name: Install Holoscan CLI in clean venv
+        run: |
+          python -m venv /tmp/holoscan-cli-smoke
+          wheel=$(find dist -name 'holoscan_cli-*.whl' | head -n1)
+          /tmp/holoscan-cli-smoke/bin/pip install "${wheel}"
+      - name: Smoke Test
+        run: .github/scripts/smoke_test.sh /tmp/holoscan-cli-smoke/bin
 
   testpypi-deploy:
-    if: ${{ inputs.ga == false }}
     name: publish-test-pypi
     permissions:
       id-token: write
     runs-on: ubuntu-latest
-    needs: [verification-test]
+    needs: [smoke-test]
     steps:
     - name: Download build
-      uses: actions/download-artifact@v8.0.0
+      uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3 # v8.0.0
       with:
         name: build-artifact
         path: dist/
     - name: Publish package distributions to TestPyPI
-      uses: pypa/gh-action-pypi-publish@release/v1
+      uses: pypa/gh-action-pypi-publish@cef221092ed1bacb1cc03d23a2d87d1d172e277b # release/v1
       with:
         repository-url: https://test.pypi.org/legacy/
         verbose: true
+        attestations: true
+
+  testpypi-smoke:
+    name: testpypi-installed smoke test
+    runs-on: ubuntu-latest
+    needs: [testpypi-deploy]
+    strategy:
+      matrix:
+        python-version: ["3.12"]
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+      - name: Download build
+        uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3 # v8.0.0
+        with:
+          name: build-artifact
+          path: dist/
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install Holoscan CLI from TestPyPI
+        # Poll the TestPyPI simple index until the just-published version
+        # shows up, then install it into a clean venv. Catches publish-time
+        # breakage (file rejected, metadata wrong, index serving stale) that
+        # the artifact-based smoke test cannot see.
+        run: |
+          set -euo pipefail
+          wheel=$(find dist -name 'holoscan_cli-*.whl' | head -n1)
+          version=$(basename "$wheel" | awk -F'-' '{print $2}')
+          echo "Looking for holoscan-cli==$version on TestPyPI"
+          python -m venv /tmp/holoscan-cli-testpypi
+          for i in 1 2 3 4 5 6 7 8 9 10; do
+            if /tmp/holoscan-cli-testpypi/bin/pip install \
+                 --index-url https://test.pypi.org/simple/ \
+                 --extra-index-url https://pypi.org/simple/ \
+                 "holoscan-cli==$version"; then
+              echo "Installed on attempt $i"
+              exit 0
+            fi
+            echo "Attempt $i failed; sleeping 30s then retrying"
+            sleep 30
+          done
+          echo "TestPyPI install did not succeed after 10 attempts"
+          exit 1
+      - name: Smoke test
+        run: .github/scripts/smoke_test.sh /tmp/holoscan-cli-testpypi/bin

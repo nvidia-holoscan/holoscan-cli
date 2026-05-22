@@ -12,39 +12,28 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-# See https://pre-commit.com for more information
-# See https://pre-commit.com/hooks.html for more hooks
-repos:
-  - repo: https://github.com/executablebooks/mdformat
-    rev: 0.7.19
-    hooks:
-    - id: mdformat
-      # Optionally add plugins
-      additional_dependencies:
-      - mdformat-gfm
-      - mdformat-black
-      - mdformat-shfmt
-      - mdformat-tables
 
+# HoloHub-derived lint baseline for the consolidated Holoscan CLI.
+# Run `pre-commit autoupdate` to refresh to latest compatible versions.
+
+repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v5.0.0
+    rev: v6.0.0
     hooks:
       - id: check-added-large-files
       - id: check-ast
       - id: check-case-conflict
       - id: check-docstring-first
-      - id: check-executables-have-shebangs
       - id: check-json
       - id: check-merge-conflict
-      - id: check-shebang-scripts-are-executable
       - id: check-toml
       - id: check-yaml
       - id: detect-private-key
       - id: end-of-file-fixer
         exclude: |
-            (?x)(
-                tests/app/expected-output/.*
-            )$
+          (?x)(
+            tests/app/expected-output/.*
+          )$
       - id: mixed-line-ending
       - id: name-tests-test
         args: ["--pytest-test-first"]
@@ -53,42 +42,49 @@ repos:
       - id: trailing-whitespace
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.8.1
+    rev: v0.15.12
     hooks:
       - id: ruff
-        args: [--fix]
-      - id: ruff-format
+        args: [--ignore, E712, --cache-dir, .cache/ruff]
 
-  - repo: https://github.com/pycqa/flake8
-    rev: 7.1.1
+  - repo: https://github.com/PyCQA/isort
+    rev: 8.0.1
     hooks:
-      - id: flake8
-        additional_dependencies:
-        - Flake8-pyproject
+      - id: isort
+        args: [--settings-path, .]
+
+  - repo: https://github.com/psf/black-pre-commit-mirror
+    rev: 26.3.1
+    hooks:
+      - id: black
 
   - repo: https://github.com/codespell-project/codespell
-    rev: v2.3.0
+    rev: v2.4.2
     hooks:
       - id: codespell
-        additional_dependencies:
-          - tomli
-
-  - repo: https://github.com/Lucas-C/pre-commit-hooks
-    rev: v1.5.5
-    hooks:
-      - id: insert-license
-        exclude: |
-            (?x)(
-                src/holoscan_cli/packager/templates/Dockerfile.jinja2|
-                tests/app/expected-output/.*|
-                src/license-header.txt|
-                LICENSE|
-                poetry.lock|
-                \.json|
-                \.md
-            )$
         args:
-          - --license-filepath
-          - src/license-header.txt        # defaults to: LICENSE.txt
-          - --use-current-year
-          - --no-extra-eol                # see below
+          - --ignore-words=.lint/codespell_ignore_words.txt
+          - --exclude-file=.lint/codespell.txt
+
+  - repo: https://github.com/igorshubovych/markdownlint-cli
+    rev: v0.48.0
+    hooks:
+      - id: markdownlint
+        args: [--config, .lint/markdownlint.yaml, --ignore-path, .lint/markdownlintignore]
+
+  - repo: local
+    hooks:
+      - id: cmakelint
+        name: cmakelint
+        entry: cmakelint
+        language: python
+        additional_dependencies: ["cmakelint==1.4.3"]
+        args:
+          - --filter=-whitespace/indent,-linelength,-readability/wonkycase,-convention/filename,-package/stdargs
+        files: '(^|/)CMakeLists\.txt$|\.cmake$'
+        exclude: |
+          (?x)(
+            ^build[^/]*/
+            | ^install[^/]*/
+            | (^|/)\.[^/]+/
+          )

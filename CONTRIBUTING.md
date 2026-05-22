@@ -51,6 +51,102 @@ we request that you [fork](https://docs.github.com/en/pull-requests/collaboratin
 
 **Note**: We recommend that new GitHub users read GitHub's [Getting Started](https://docs.github.com/en/get-started/start-your-journey) guide before opening their first pull request.
 
+## Local development
+
+Verifying changes locally before pushing keeps the CI feedback loop short and
+avoids tying up shared runners.
+
+### Set up the development environment
+
+Python 3.10+ and [Poetry 2.0+](https://python-poetry.org/docs/#installation)
+are required. From a fresh clone:
+
+```bash
+poetry install --with test
+pre-commit install                         # installs the local Git hooks
+```
+
+`poetry install --with test` mirrors the exact dependency set the `Code Check`
+workflow installs, so passing locally is a strong signal.
+
+### Run the same checks CI runs
+
+```bash
+pre-commit run --all-files                 # ruff + black + isort + markdownlint
+                                           # + codespell + yaml/json/toml linters
+                                           # + cmakelint. Catches every lint
+                                           # failure `Code Check` would catch.
+poetry run pytest -q                       # run the unit test suite.
+```
+
+If `pre-commit run --all-files` passes locally, `Code Check`'s `pre-commit`
+job will pass on push. If `poetry run pytest` passes, the `test` matrix will
+pass on the same Python version locally (CI also runs 3.10 / 3.11 / 3.12 /
+3.13; for full matrix coverage either use the Python you don't normally use,
+or rely on CI).
+
+### Smoke-test the installed wheel
+
+The `smoke-test` job in `Code Check` rebuilds the wheel, installs it into a
+fresh venv, and runs `.github/scripts/smoke_test.sh`. To reproduce locally:
+
+```bash
+poetry build                                          # writes dist/*.whl, dist/*.tar.gz
+python -m venv /tmp/holoscan-cli-smoke
+/tmp/holoscan-cli-smoke/bin/pip install dist/*.whl
+.github/scripts/smoke_test.sh /tmp/holoscan-cli-smoke/bin
+```
+
+The script exercises `--help`, the `version`/`lint`/`list`/`modes` surfaces
+against the in-tree smoke fixture at `tests/fixtures/holohub_smoke/`, and the
+negative surface (removed commands, legacy console scripts). See the
+[README](./README.md#testing-against-an-in-tree-source-project-fixture) for
+how to point the CLI at the fixture directly from your shell.
+
+### Test against the downstream wrappers
+
+The HoloHub / I4H wrapper repos each carry a
+`test_holoscan_cli_consolidation.py` that exercises the unified `holoscan`
+CLI against their respective project trees. Point them at a local checkout
+with `HOLOSCAN_CLI_SOURCE`:
+
+```bash
+cd /path/to/holohub
+HOLOSCAN_CLI_SOURCE=/path/to/holoscan-cli \
+  python -m pytest -q -o addopts='' utilities/cli/tests/test_holoscan_cli_consolidation.py
+```
+
+When `HOLOSCAN_CLI_SOURCE` is set, the wrapper prepends that checkout's
+`src/` to `PYTHONPATH` so the in-progress branch is exercised end-to-end
+without publishing a wheel first.
+
+## Triggering CI
+
+- **Every push to any branch** runs `Code Check` (`.github/workflows/main.yaml`)
+  — pre-commit, the pytest matrix, wheel/sdist build, wheel-content asserts,
+  and the installed-wheel smoke test.
+- **Pull requests** additionally run `CodeQL Advanced`
+  (`.github/workflows/codeql.yaml`) and `Dependency review`
+  (`.github/workflows/dependency-review.yml`).
+- **Manual TestPyPI release** is the `Release` workflow
+  (`.github/workflows/release.yaml`). Dispatch it via the CLI:
+
+  ```bash
+  gh workflow run release.yaml --ref <branch> \
+    -f version=vX.Y.Z \
+    -f rc=<optional-rc-number> \
+    -f ga=false                                   # true only for an official GA
+  ```
+
+  The dispatch creates `refs/tags/vX.Y.Z` at the dispatch SHA, builds, smokes,
+  publishes to TestPyPI, re-installs from `test.pypi.org/simple/` and re-smokes,
+  and deletes the tag when `ga=false` (so RC dispatches leave no stray refs).
+  See [`.github/CI.md`](./.github/CI.md) for the full pipeline.
+
+If you need to introduce or bump a third-party Action, see
+[`.github/CI.md`](./.github/CI.md#github-actions-allowlist) — the repo's
+org-level Actions allowlist gates which references are usable.
+
 ## Tracking Development
 
 We take all community feedback into consideration. If we don't believe a proposed change aligns with our direction for Holoscan CLI, or if we don't expect we can prioritize a task within a reasonable time frame, we'll let you know by appropriately labeling or closing the issue or pull request with an explanatory comment.

@@ -13,9 +13,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# This workflow will install Python dependencies,
-# run tests with a variety of Python versions,
-# and upload a new build to TestPyPI.
+# Normal push/PR CI: lint, unit tests, wheel + sdist build, package
+# metadata + content validation, and installed-wheel smoke tests.
+# Publishing to TestPyPI lives in release.yaml and only runs for
+# explicit release dispatches (both GA and non-GA).
 #
 # For more information see:
 # https://help.github.com/actions/language-and-framework-guides/using-python-with-github-actions
@@ -24,6 +25,8 @@ name: Code Check
 
 on:
   push:
+  pull_request:
+    branches: ["main", "release/*"]
 
 jobs:
   pre-commit:
@@ -37,15 +40,21 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
 
       - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6
         with:
           python-version: ${{ matrix.python-version }}
 
       - name: Install Poetry
-        uses: Gr1N/setup-poetry@v9
+        # Install via pip on the matrix Python rather than a third-party
+        # action: no allowlist coupling, no Node-20 runtime to chase, and
+        # plugins resolve in the same site-packages so `requires-plugins`
+        # in pyproject.toml is satisfied without `poetry self add`.
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install "poetry>=2.0" "poetry-dynamic-versioning>=1.7.1,<2.0.0"
 
       - name: Install library and dependencies
         run: |
@@ -53,7 +62,7 @@ jobs:
           poetry -vvv install --with test
 
       - name: Run pre-commit Check
-        uses: pre-commit/action@v3.0.1
+        uses: pre-commit/action@2c7b3805fd2a0fd8c1884dcaebf91fc102a13ecd # v3.0.1
 
   test:
     runs-on: ${{ matrix.os }}
@@ -72,15 +81,21 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
 
       - name: Set up Python ${{ matrix.python.version }}
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6
         with:
           python-version: ${{ matrix.python.version }}
 
       - name: Install Poetry
-        uses: Gr1N/setup-poetry@v9
+        # Install via pip on the matrix Python rather than a third-party
+        # action: no allowlist coupling, no Node-20 runtime to chase, and
+        # plugins resolve in the same site-packages so `requires-plugins`
+        # in pyproject.toml is satisfied without `poetry self add`.
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install "poetry>=2.0" "poetry-dynamic-versioning>=1.7.1,<2.0.0"
 
       - name: Install library and dependencies
         run: |
@@ -99,255 +114,121 @@ jobs:
           poetry run pytest
 
       - name: Upload Coverage Report
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         if: ${{ matrix.python.coveralls }}
         with:
           name: coverage
           path: tests/reports/.coverage.lcov
 
       - name: Upload Coveralls Report
-        uses: coverallsapp/github-action@v2.3.7
+        # Pinned to the SHA the repo's Actions allowlist permits (v2.3.4);
+        # bumping requires extending the allowlist.
+        uses: coverallsapp/github-action@cfd0633edbd2411b532b808ba7a8b5e04f76d2c8 # v2.3.4
         if: ${{ matrix.python.coveralls }}
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           file: tests/reports/.coverage.lcov
 
-  # Run test-app for non-release branches as HSDK debian/wheel won't be available for a new release
-  test-app:
-    runs-on: linux-amd64-gpu-l4-latest-1
-    if: contains(github.ref, 'refs/heads/release/')
-    container:
-      image: ghcr.io/nvidia-holoscan/holoscan-cli-build:cuda130-u2404
-    strategy:
-      matrix:
-        os: [ubuntu-latest]
-        python-version: ["3.12"]
-    env:
-      PYTHON_VERSION: ${{ matrix.python-version }}
-
-    steps:
-      - name: Print nvidia-smi
-        run: |
-          nvidia-smi
-
-      - name: Verify and configure Git
-        run: |
-          command -v git
-          command -v jq
-          command -v docker
-          git --version
-          jq --version
-          docker --version
-          echo $(pwd)
-          # Configure Git to handle the repository ownership
-          git config --global --add safe.directory $(pwd)
-
-      - name: Checkout repository
-        uses: actions/checkout@v6
-
-      - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v6
-        with:
-          python-version: ${{ matrix.python-version }}
-
-      - name: Install Poetry
-        uses: Gr1N/setup-poetry@v9
-
-      - name: Install library and dependencies
-        run: |
-          poetry run pip install --upgrade pip setuptools
-          poetry install --with test
-
-      - name: Locate Latest Artifacts
-        id: latest_artifact_path
-        run: |
-          export ARTIFACT_PATH=$(find releases -type f | sort | tail -n 1)
-          export CLI_VERSION=$(jq -r 'keys | sort_by(split(".") | map(tonumber)) | reverse | first' $ARTIFACT_PATH)
-          echo "ARTIFACT_PATH=${ARTIFACT_PATH}"
-          echo "CLI_VERSION=${CLI_VERSION}"
-          echo "ARTIFACT_PATH=${ARTIFACT_PATH}" >> $GITHUB_OUTPUT
-          echo "CLI_VERSION=${CLI_VERSION}" >> $GITHUB_OUTPUT
-
-      - name: Determine SDK Version
-        id: sdk_version
-        env:
-          CLI_VERSION: ${{ steps.latest_artifact_path.outputs.CLI_VERSION }}
-        run: |
-          # Check if ${CLI_VERSION} is available on PyPI
-          echo "Checking if holoscan version ${CLI_VERSION} is available on PyPI..."
-          if curl -s -f "https://pypi.org/pypi/holoscan/${CLI_VERSION}/json" > /dev/null 2>&1; then
-            echo "Version ${CLI_VERSION} found on PyPI"
-            SDK_VERSION="${CLI_VERSION}"
-          else
-            echo "Version ${CLI_VERSION} not found on PyPI, getting latest available version..."
-            # Get the latest available version from PyPI
-            SDK_VERSION=$(curl -s "https://pypi.org/pypi/holoscan/json" | jq -r '.releases | keys | map(select(split(".") | length == 3 and all(test("^[0-9]+$")))) | sort_by(split(".") | map(tonumber)) | reverse | first')
-            echo "Using latest PyPI version: ${SDK_VERSION}"
-          fi
-          echo "SDK_VERSION=${SDK_VERSION}"
-          echo "SDK_VERSION=${SDK_VERSION}" >> $GITHUB_OUTPUT
-
-      - name: Build and Install CLI
-        id: build_and_install_cli
-        run: |
-          poetry build
-          wheel=$(find dist/ -name holoscan_cli-*.whl)
-          echo "Installing from ${wheel}"
-          pip install ${wheel}
-
-      - name: Restore cached Build Cache
-        id: cache-build-cache-restore
-        uses: actions/cache/restore@v5
-        with:
-          path: ~/.holoscan_build_cache
-          key: test-app-cache
-
-      - name: Package Test App
-        id: package_test_app
-        env:
-          TMPDIR: ${{ runner.temp }}
-          ARTIFACT_PATH: ${{ steps.latest_artifact_path.outputs.ARTIFACT_PATH }}
-          CLI_VERSION: ${{ steps.latest_artifact_path.outputs.CLI_VERSION }}
-          SDK_VERSION: ${{ steps.sdk_version.outputs.SDK_VERSION }}
-        shell: bash
-        run: |
-          export hosts=("developer.download.nvidia.com" "security.ubuntu.com" "archive.ubuntu.com" "pypi.org" "edge.urm.nvidia.com" "www.mellanox.com" "content.mellanox.com" "files.pythonhosted.org" "download.docker.com" "apt.kitware.com")
-          export ci_package_args=
-          for host in "${hosts[@]}"; do
-            export ip=$(ping -q -W1 -c1 $host | head -n1 | cut -d '(' -f2 | cut -d ')' -f1)
-            export ci_package_args="$ci_package_args --add-host $host:$ip"
-          done
-
-          # Create model directory and files
-          mkdir -p ${{ env.TMPDIR }}/models/model-1
-          mkdir -p ${{ env.TMPDIR }}/models/model-2
-          touch ${{ env.TMPDIR }}/models/model-1/model1.txt
-          touch ${{ env.TMPDIR }}/models/model-2/model2.txt
-
-          echo "SDK_VERSION=${SDK_VERSION}" >> $GITHUB_OUTPUT
-          echo "Testing with SDK Version: ${SDK_VERSION}"
-          holoscan package tests/app/python/ \
-                            -l DEBUG \
-                            -c tests/app/python/app.yaml \
-                            -t test-app-python \
-                            --platform x86_64 \
-                            --model ${{ env.TMPDIR }}/models \
-                            --uid 1000 \
-                            --gid 1000 \
-                            --source ${{ env.ARTIFACT_PATH }} \
-                            --sdk-version $SDK_VERSION \
-                            --add-host developer.download.nvidia.com:23.46.17.44 \
-                            --add-host security.ubuntu.com:91.189.91.81 \
-                            --add-host archive.ubuntu.com:91.189.91.82 \
-                            --add-host pypi.org:151.101.128.223 \
-                            --add-host edge.urm.nvidia.com:23.46.228.176 \
-                            --add-host www.mellanox.com:23.46.228.176 \
-                            --add-host files.pythonhosted.org:151.101.0.223 \
-                            ${ci_package_args}
-
-      - name: Run Test App
-        run: |
-          holoscan run -l DEBUG --rm --uid 1000 --gid 1000 -r $(docker images | grep "test-app-python" | awk '{print $1":"$2}') -i input -o output | tee /tmp/test-app-output.log
-
-      - name: Validate Test Output
-        run: |
-          ./tests/app/validate.sh /tmp/test-app-output.log tests/app/expected-output/app/
-
-      - name: CLI Tools - help
-        run: |
-          docker run -i --rm $(docker images | grep "test-app-python" | awk '{print $1":"$2}') help | tee /tmp/cli-tools-help-output.log
-
-      - name: Validate CLI Tools - help Output
-        run: |
-          ./tests/app/validate.sh /tmp/cli-tools-help-output.log tests/app/expected-output/tools/help.txt
-
-      - name: CLI Tools - show
-        env:
-          CLI_VERSION: ${{ steps.latest_artifact_path.outputs.CLI_VERSION }}
-          SDK_VERSION: ${{ steps.package_test_app.outputs.SDK_VERSION }}
-        run: |
-          docker run -i --rm $(docker images | grep "test-app-python" | awk '{print $1":"$2}') show | tee /tmp/cli-tools-show-output.log
-          sed -i "s/SDKVERSION/${{ env.SDK_VERSION }}/" tests/app/expected-output/tools/show.txt
-
-      - name: Validate CLI Tools - show Output
-        run: |
-          echo "================================================"
-          cat /tmp/cli-tools-show-output.log
-          echo "================================================"
-          cat tests/app/expected-output/tools/show.txt
-          echo "================================================"
-          ./tests/app/validate.sh /tmp/cli-tools-show-output.log tests/app/expected-output/tools/show.txt
-
-      - name: CLI Tools - env
-        env:
-          CLI_VERSION: ${{ steps.latest_artifact_path.outputs.CLI_VERSION }}
-          SDK_VERSION: ${{ steps.package_test_app.outputs.SDK_VERSION }}
-        run: |
-          docker run -i --rm $(docker images | grep "test-app-python" | awk '{print $1":"$2}') env | tee /tmp/cli-tools-env-output.log
-          if ! grep -q "HOLOSCAN_VERSION=${{ env.SDK_VERSION }}" /tmp/cli-tools-env-output.log; then
-            echo "HOLOSCAN_VERSION is not ${{ env.SDK_VERSION }}"
-            exit 1
-          fi
-
-      - name: Validate CLI Tools - env Output
-        env:
-          CLI_VERSION: ${{ steps.latest_artifact_path.outputs.CLI_VERSION }}
-          SDK_VERSION: ${{ steps.package_test_app.outputs.SDK_VERSION }}
-        run: |
-          # remove line that contains "NVIDIA_REQUIRE_CUDA="
-          sed -i '/NVIDIA_REQUIRE_CUDA=/d' /tmp/cli-tools-env-output.log
-          # remove line that contains "NVIDIA_VISIBLE_DEVICES="
-          sed -i '/NVIDIA_VISIBLE_DEVICES=/d' /tmp/cli-tools-env-output.log
-          # remove line that contains "NVIDIA_CTK_LIBCUDA_DIR="
-          sed -i '/NVIDIA_CTK_LIBCUDA_DIR=/d' /tmp/cli-tools-env-output.log
-          # remove line that contains "HOSTNAME="
-          sed -i '/HOSTNAME=/d' /tmp/cli-tools-env-output.log
-          # remove line that contains "PWD="
-          sed -i '/PWD=/d' /tmp/cli-tools-env-output.log
-          # remove line that contains "***"
-          sed -i '/^[*]/d' /tmp/cli-tools-env-output.log
-          # Update SDk version
-          sed -i "s/SDKVERSION/${{ env.SDK_VERSION }}/" tests/app/expected-output/tools/env.txt
-          echo "================================================"
-          cat /tmp/cli-tools-env-output.log
-          echo "================================================"
-          cat tests/app/expected-output/tools/env.txt
-          echo "================================================"
-          ./tests/app/validate.sh /tmp/cli-tools-env-output.log tests/app/expected-output/tools/env.txt
-
-      - name: Save Build Cache
-        id: cache-build-cache-save
-        uses: actions/cache/save@v5
-        with:
-          path: ~/.holoscan_build_cache
-          key: test-app-cache
-
-  testpypi-deploy:
-    name: publish-test-pypi
+  build:
+    name: build wheel + sdist
     runs-on: ubuntu-latest
     needs: [pre-commit, test]
-    permissions:
-      id-token: write
     steps:
-
     - name: Checkout repository
-      uses: actions/checkout@v6
+      uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
       with:
         fetch-depth: 0
 
-    - name: Install Poetry
-      uses: Gr1N/setup-poetry@v9
+    - name: Set up Python 3.12
+      uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6
+      with:
+        python-version: "3.12"
 
-    - name: Build
+    - name: Install Poetry
+      # See note in the pre-commit job above.
+      run: |
+        python -m pip install --upgrade pip
+        python -m pip install "poetry>=2.0" "poetry-dynamic-versioning>=1.7.1,<2.0.0"
+
+    - name: Build wheel and sdist
       run: |
         poetry run which python
         source $(poetry env info --path)/bin/activate
         poetry install
         poetry dynamic-versioning -vvv
-        poetry build -vvv -f wheel --clean
+        poetry build -vvv --clean
 
-    - name: Publish package distributions to TestPyPI
-      uses: pypa/gh-action-pypi-publish@release/v1
+    - name: Validate package metadata
+      run: |
+        source $(poetry env info --path)/bin/activate
+        python -m pip install --upgrade twine
+        python -m twine check dist/*
+
+    - name: Assert wheel package contents
+      run: .github/scripts/assert_wheel_contents.sh dist
+
+    - name: Upload build
+      uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
       with:
-        repository-url: https://test.pypi.org/legacy/
-        verbose: true
+        name: build-artifact
+        path: dist/*
+
+  smoke-test:
+    name: installed-wheel smoke test
+    runs-on: ${{ matrix.os }}
+    needs: [build]
+    strategy:
+      matrix:
+        os: [ubuntu-latest]
+        python-version: ["3.12"]
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+
+      - name: Download build
+        uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3 # v8.0.0
+        with:
+          name: build-artifact
+          path: dist/
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install Holoscan CLI in clean venv
+        run: |
+          python -m venv /tmp/holoscan-cli-smoke
+          wheel=$(find dist -name 'holoscan_cli-*.whl' | head -n1)
+          /tmp/holoscan-cli-smoke/bin/pip install "$wheel"
+
+      - name: Smoke test
+        run: .github/scripts/smoke_test.sh /tmp/holoscan-cli-smoke/bin
+
+  cpu-cli-docker-smoke:
+    name: CPU CLI + Docker smoke test
+    runs-on: ubuntu-latest
+    needs: [build]
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+
+      - name: Download build
+        uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3 # v8.0.0
+        with:
+          name: build-artifact
+          path: dist/
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6
+        with:
+          python-version: "3.12"
+
+      - name: Install Holoscan CLI in clean venv
+        run: |
+          python -m venv /tmp/holoscan-cli-cpu-smoke
+          wheel=$(find dist -name 'holoscan_cli-*.whl' | head -n1)
+          /tmp/holoscan-cli-cpu-smoke/bin/pip install "$wheel"
+
+      - name: CPU CLI + Docker smoke test
+        run: .github/scripts/cpu_cli_docker_smoke.sh /tmp/holoscan-cli-cpu-smoke/bin

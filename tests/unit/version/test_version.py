@@ -13,115 +13,40 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import os
-import sys
-from unittest.mock import patch, MagicMock
-import pytest
+import importlib.metadata
+from argparse import Namespace
+from pathlib import Path
 
-from holoscan_cli.version.version import execute_version_command
-from holoscan_cli.common.enum_types import SdkType
+from holoscan_cli.version.version import execute_version_command, get_package_version
 
 
-@pytest.fixture
-def mock_stdout(monkeypatch):
-    """Fixture to capture stdout"""
-    buffer = []
+def test_get_package_version_from_package_metadata(monkeypatch):
+    monkeypatch.setattr(
+        "holoscan_cli.version.version.importlib.metadata.version",
+        lambda package: "1.2.3" if package == "holoscan-cli" else None,
+    )
 
-    def mock_print(*args, **kwargs):
-        buffer.append(" ".join(map(str, args)))
-
-    monkeypatch.setattr("builtins.print", mock_print)
-    return buffer
+    assert get_package_version() == "1.2.3"
 
 
-def test_execute_version_command_holoscan_sdk(mock_stdout):
-    """Test version command with Holoscan SDK"""
-    args = MagicMock()
+def test_get_package_version_source_tree_fallback(monkeypatch):
+    def raise_not_found(package):
+        raise importlib.metadata.PackageNotFoundError(package)
 
-    with (
-        patch("holoscan_cli.version.version.detect_sdk") as mock_detect_sdk,
-        patch(
-            "holoscan_cli.version.version.detect_holoscan_version"
-        ) as mock_holoscan_version,
-        patch(
-            "holoscan_cli.version.version.detect_holoscan_cli_version"
-        ) as mock_holoscan_cli_version,
-    ):
-        mock_detect_sdk.return_value = SdkType.Holoscan
-        mock_holoscan_version.return_value = "1.0.0"
-        mock_holoscan_cli_version.return_value = "0.1.0"
-        execute_version_command(args)
+    monkeypatch.setattr("holoscan_cli.version.version.importlib.metadata.version", raise_not_found)
+    monkeypatch.setattr("holoscan_cli.version.version.__version__", "0.0.0+test")
 
-        assert any("Holoscan SDK:           1.0.0" in line for line in mock_stdout)
-        assert any("Holoscan CLI:           0.1.0" in line for line in mock_stdout)
-        assert any(
-            f"You are executing Holoscan CLI from: {os.path.dirname(os.path.abspath(sys.argv[0]))}"
-            in line
-            for line in mock_stdout
-        )
+    assert get_package_version() == "0.0.0+test"
 
 
-def test_execute_version_command_monai_sdk(mock_stdout):
-    """Test version command with MONAI Deploy SDK"""
-    args = MagicMock()
+def test_execute_version_command_reports_package_and_paths(monkeypatch, capsys):
+    monkeypatch.setattr("holoscan_cli.version.version.get_package_version", lambda: "1.2.3")
 
-    with (
-        patch("holoscan_cli.version.version.detect_sdk") as mock_detect_sdk,
-        patch(
-            "holoscan_cli.version.version.detect_holoscan_version"
-        ) as mock_holoscan_version,
-        patch(
-            "holoscan_cli.version.version.detect_holoscan_cli_version"
-        ) as mock_holoscan_cli_version,
-        patch(
-            "holoscan_cli.version.version.detect_monaideploy_version"
-        ) as mock_monai_version,
-    ):
-        mock_detect_sdk.return_value = SdkType.MonaiDeploy
-        mock_holoscan_version.return_value = "1.0.0"
-        mock_holoscan_cli_version.return_value = "0.1.0"
-        mock_monai_version.return_value = "0.6.0"
+    execute_version_command(Namespace())
 
-        execute_version_command(args)
-
-        assert any("Holoscan SDK:           1.0.0" in line for line in mock_stdout)
-        assert any("Holoscan CLI:           0.1.0" in line for line in mock_stdout)
-        assert any("MONAI Deploy App SDK:   0.6.0" in line for line in mock_stdout)
-
-
-def test_execute_version_command_holoscan_version_error(mock_stdout):
-    """Test version command when Holoscan version detection fails"""
-    args = MagicMock()
-
-    with (
-        patch("holoscan_cli.version.version.detect_sdk") as mock_detect_sdk,
-        patch(
-            "holoscan_cli.version.version.detect_holoscan_version"
-        ) as mock_holoscan_version,
-        patch(
-            "holoscan_cli.version.version.detect_holoscan_cli_version"
-        ) as mock_holoscan_cli_version,
-    ):
-        mock_detect_sdk.return_value = SdkType.Holoscan
-        mock_holoscan_version.side_effect = Exception("Version detection failed")
-        mock_holoscan_cli_version.side_effect = Exception("Version detection failed")
-        execute_version_command(args)
-
-        assert any("Holoscan SDK:           N/A" in line for line in mock_stdout)
-        assert any("Holoscan CLI:           N/A" in line for line in mock_stdout)
-
-
-def test_execute_version_command_sdk_detection_error(mock_stdout):
-    """Test version command when SDK detection fails"""
-    args = MagicMock()
-
-    with (
-        patch("holoscan_cli.version.version.detect_sdk") as mock_detect_sdk,
-        patch("holoscan_cli.version.version.logging.error") as mock_error,
-    ):
-        mock_detect_sdk.side_effect = Exception("SDK detection failed")
-        with pytest.raises(SystemExit) as exc_info:
-            execute_version_command(args)
-
-        assert exc_info.value.code == 3
-        mock_error.assert_called_once_with("Error executing version command.")
+    output = capsys.readouterr().out
+    assert "Package:     holoscan-cli" in output
+    assert "Version:     1.2.3" in output
+    assert f"Module:      {Path('src/holoscan_cli/version/version.py').resolve()}" in output
+    assert "Holoscan SDK:" not in output
+    assert "MONAI Deploy App SDK:" not in output

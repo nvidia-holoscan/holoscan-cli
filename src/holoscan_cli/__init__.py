@@ -12,24 +12,29 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""
+"""Top-level package marker for ``holoscan_cli``.
+
+This module is intentionally minimal: it exposes ``__title__`` and
+``__version__`` for ``holoscan version`` consumers and otherwise leaves
+import resolution untouched. In particular, it deliberately does **not**
+mutate ``sys.path`` — for an installed PyPI distribution the package
+should always be importable as ``holoscan_cli`` and adding its directory
+to ``sys.path`` would silently shadow unrelated top-level modules
+(``cli``, ``util``, ``status``, ...). The submodules use absolute imports
+of ``holoscan_cli.<module>`` so the standard import machinery is enough.
+
 .. autosummary::
     :toctree: _autosummary
 
-    common
-    packager
-    runner
+    cli
     version
 """
 
 import importlib.metadata
-import os
-import sys
 
 __title__ = "holoscan_cli"
-_current_dir = os.path.abspath(os.path.dirname(__file__))
-if sys.path and os.path.abspath(sys.path[0]) != _current_dir:
-    sys.path.insert(0, _current_dir)
-del _current_dir
 
-__version__ = importlib.metadata.version("holoscan-cli")
+try:
+    __version__ = importlib.metadata.version("holoscan-cli")
+except importlib.metadata.PackageNotFoundError:
+    __version__ = "0.0.0+local"

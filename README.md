@@ -1,68 +1,117 @@
-[![Code Check](https://github.com/nvidia-holoscan/holoscan-cli/actions/workflows/check.yaml/badge.svg)](https://github.com/nvidia-holoscan/holoscan-cli/actions/workflows/check.yaml)
+[![Code Check](https://github.com/nvidia-holoscan/holoscan-cli/actions/workflows/main.yaml/badge.svg)](https://github.com/nvidia-holoscan/holoscan-cli/actions/workflows/main.yaml)
 [![Coverage Status](https://coveralls.io/repos/github/nvidia-holoscan/holoscan-cli/badge.svg)](https://coveralls.io/github/nvidia-holoscan/holoscan-cli)
 
 # Holoscan CLI
 
-Command line interface for packaging and running Holoscan applications.
+Command-line tool for discovering, building, running, testing, and linting HoloHub-style Holoscan source projects. Published as the [`holoscan-cli`](https://pypi.org/project/holoscan-cli/) PyPI package and installs the `holoscan` console script.
 
 ## Overview
 
-This repository is the home for Holoscan CLI. It includes tools for packaging and running Holoscan applications.
+The CLI presents a single command surface for the source-project development lifecycle:
+
+- **Project lifecycle:** `build`, `run`, `test`, `install`, `package`
+- **Container:** `build-container`, `run-container`
+- **Discovery / diagnostics:** `list`, `modes`, `status`, `env-info`, `env-check`, `autocompletion_list`, `version`
+- **Workspace:** `lint`, `setup`, `clear-cache`, `create`
+
+Run `holoscan <command> --help` for per-command flags.
+
+Per-repo wrappers install this package and delegate to `holoscan`, layering on their own configuration via `HOLOSCAN_CLI_*` environment variables:
+
+| Repo | Wrapper | Adds |
+| --- | --- | --- |
+| [HoloHub](https://github.com/nvidia-holoscan/holohub) | `./holohub` | source-project metadata search paths, container/workspace names |
+| [I4H Workflows](https://github.com/isaac-for-healthcare/i4h-workflows) | `./i4h` | RTI DDS license auto-download + mount, TTY serial device passthrough |
+
+Common env vars: `HOLOSCAN_CLI_ROOT` (repo root), `HOLOSCAN_CLI_SEARCH_PATH` (subdirs to scan for `metadata.json`), `HOLOSCAN_CLI_PATH_PREFIX` (placeholder prefix in metadata templates), `HOLOSCAN_CLI_REPO_PREFIX` (container image name prefix). The legacy `HOLOHUB_*` spelling is no longer honored in v1 — set the `HOLOSCAN_CLI_*` names directly. `holoscan env-info` lists every env var the CLI reads in the current shell.
+
+## Source layout
+
+```text
+src/holoscan_cli/
+  cli.py              top-level argparse + dispatch (HoloscanCLI)
+  commands/           one file per subcommand + a central registry
+  container/          HoloscanContainer + docker arg helpers + parser builders
+  utils/              io.py, text.py, sdk.py, docker.py, host_setup.py,
+                      env_info.py, holohub.py
+  setup_scripts/      bundled bash scripts backing `setup --scripts` and
+                      `build-container --extra-scripts`
+  metadata/           project metadata JSON schemas
+  testing/            CTest helpers shipped in the wheel
+```
 
 ## Prerequisites
 
-You will need a platform supported by [NVIDIA Holoscan SDK](https://docs.nvidia.com/holoscan/sdk-user-guide/sdk_installation.html#prerequisites). Refer to the Holoscan SDK User Guide for the latest requirements. In general, Holoscan-supported platforms include:
-
-- An x64 PC with an Ubuntu operating system and an NVIDIA GPU or
-- A supported NVIDIA ARM development kit.
+A platform supported by the [NVIDIA Holoscan SDK](https://docs.nvidia.com/holoscan/sdk-user-guide/sdk_installation.html#prerequisites): an x64 PC with Ubuntu and an NVIDIA GPU, or a supported NVIDIA ARM development kit.
 
 ## Installation
 
-Holoscan CLI is delivered as a Python package and can be installed from PyPI.org using one of the following commands:
-
-| Holoscan SDK Version | Installation Command       | CUDA Version |
-| -------------------- | -------------------------- | ------------ |
-| 2.8 or earlier       | `pip install holoscan`     | 12.6         |
-| 2.9 or later         | `pip install holoscan-cli` | 12.6         |
-
-## Build From Source
-
-### Prerequisites
-
-To build the Holoscan CLI from source, you will need to clone this repository and install the following dependencies:
-
-- Python 3.10+.
-- [poetry 2.0+](https://python-poetry.org/docs/#installation)
-
-### Development Environment
-
-Holoscan CLI uses [Poetry](https://python-poetry.org/) for package and dependency management. After installing Poetry, run the following commands to get started:
-
 ```bash
-# Create virtual environment
-poetry env use python3.12
-
-# Activate virtual environment
-eval $(poetry env activate)
-
-# Install dependencies
-poetry install
-
-# Configure pre-commit hooks
-pre-commit install
-
-# Run pre-commit against all files
-pre-commit run --all-files
-
-# Build sdist package
-poetry build
-
-# Run tests
-poetry run pytest
+pip install holoscan-cli
+holoscan --help
 ```
 
-For more information on Poetry and its usages, see the [Poetry documentation](https://python-poetry.org/docs/).
+## Build from source
 
-## Contributing to the Holoscan CLI
+Python 3.10+ and [Poetry 2.0+](https://python-poetry.org/docs/#installation) required.
+
+```bash
+# Create + activate a virtual environment
+poetry env use python3.12
+eval $(poetry env activate)
+
+# Install dependencies + dev tooling
+poetry install --with test
+pre-commit install
+
+# Run the test suite
+poetry run pytest
+
+# Build sdist + wheel
+poetry build
+```
+
+### Testing against an in-tree source-project fixture
+
+The repo ships a minimal HoloHub-style fixture at
+`tests/fixtures/holohub_smoke/` (one application with a `metadata.json` that
+validates against the application schema). Point the CLI at it without
+needing a HoloHub / I4H checkout:
+
+```bash
+HOLOSCAN_CLI_ROOT=tests/fixtures/holohub_smoke holoscan list
+HOLOSCAN_CLI_ROOT=tests/fixtures/holohub_smoke holoscan modes smoke_app
+```
+
+The same fixture is what `.github/scripts/smoke_test.sh` exercises against
+the installed wheel on every CI run, so a passing fixture run locally is a
+strong proxy for the `smoke-test` job passing on push.
+
+### Testing against the downstream wrappers
+
+Each consuming repo (HoloHub / I4H Workflows) carries a
+`test_holoscan_cli_consolidation.py` that exercises the unified `holoscan`
+CLI against its project tree. Point the wrapper at a local checkout via
+`HOLOSCAN_CLI_SOURCE`:
+
+```bash
+cd /path/to/holohub
+HOLOSCAN_CLI_SOURCE=/path/to/holoscan-cli \
+  python -m pytest -q -o addopts='' utilities/cli/tests/test_holoscan_cli_consolidation.py
+```
+
+The wrapper prepends `<HOLOSCAN_CLI_SOURCE>/src` to `PYTHONPATH`, so an
+in-progress branch can be exercised end-to-end without publishing a wheel
+first.
+
+## Contributing
 
 See [CONTRIBUTING.md](./CONTRIBUTING.md) for details.
+[`.github/CI.md`](./.github/CI.md) covers the CI/release pipelines that back
+the workflow badges at the top of this page.
+
+## Deprecations
+
+### HAP/MAP application packaging
+
+Application packaging (HAP/MAP) is no longer part of this CLI: `holoscan nics` and the `monai-deploy` console script are intentionally not provided. The current `holoscan package` command is for building Holoscan Module distribution artifacts; it is not the legacy HAP/MAP application packager. The pre-v1 `holoscan run` was the HAP/MAP packaged-image runner; in v1 the same name now drives the HoloHub-style source-project runner, so it no longer launches packaged images. Developers that still rely on HAP/MAP packaging should pin `holoscan-cli<=4.2.0`, the last release that shipped that interface, or migrate to the Holoscan SDK packaging workflows directly. See [issue #164](https://github.com/nvidia-holoscan/holoscan-cli/issues/164) for the deprecation timeline.

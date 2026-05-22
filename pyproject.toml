@@ -13,30 +13,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 [project]
-dynamic = ["version"]
 name = "holoscan-cli"
-requires-python = ">=3.10,<3.14"
-dependencies = [
-    "pip (>25.1.0)",
-    "python-on-whales (>=0.77.0)",
-    "Jinja2 (>=3.1.6,<4.0.0)",
-    "packaging (>=25.0,<26.0)",
-    "pyyaml (>=6.0,<7.0)",
-    "requests (>=2.32,<3.0)",
-    "psutil (>=7.0.0,<8.0)",
-]
-
-[tool.poetry]
-requires-poetry = ">=2.0"
-description = "Command line interface for packaging and running Holoscan applications."
-authors = ["NVIDIA"]
-maintainers = ["mocsharp"]
-license = "Apache-2.0"
+dynamic = ["version"]
+description = "Command line interface for HoloHub-style Holoscan source-project workflows."
 readme = "README.md"
-packages = [{ include = "holoscan_cli", from = "src"  }]
-homepage = "https://github.com/nvidia-holoscan/holoscan-cli"
-repository = "https://github.com/nvidia-holoscan/holoscan-cli"
-documentation = "https://docs.nvidia.com/holoscan/sdk-user-guide/index.html"
+license = "Apache-2.0"
+license-files = ["LICENSE"]
+requires-python = ">=3.10,<3.14"
+authors = [{ name = "NVIDIA" }]
+maintainers = [{ name = "NVIDIA" }]
 keywords = [
     "AI",
     "holoscan",
@@ -52,11 +37,11 @@ classifiers = [
     "Development Status :: 5 - Production/Stable",
     "Environment :: Console",
     "Environment :: GPU :: NVIDIA CUDA :: 12",
+    "Environment :: GPU :: NVIDIA CUDA :: 13",
     "Intended Audience :: Developers",
     "Intended Audience :: Education",
     "Intended Audience :: Science/Research",
     "Intended Audience :: Healthcare Industry",
-    "License :: OSI Approved :: Apache Software License",
     "Operating System :: POSIX :: Linux",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.10",
@@ -66,6 +51,34 @@ classifiers = [
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
     "Topic :: Software Development :: Libraries :: Python Modules",
     "Typing :: Typed",
+]
+dependencies = []
+
+[project.optional-dependencies]
+# ``pip install 'holoscan-cli[create]'`` enables the entire ``holoscan create``
+# happy path: schema validation (``jsonschema`` + ``referencing``) plus the
+# cookiecutter scaffold used to materialize the new project. ``jsonschema>=4.18``
+# is required for the ``Draft202012Validator(..., registry=...)`` API used by
+# ``metadata_validator.py``; older versions silently lack the kwarg and fail at
+# runtime.
+create = [
+    "jsonschema (>=4.18,<5.0)",
+    "referencing (>=0.30)",
+    "cookiecutter (>=2.5)",
+]
+
+[project.urls]
+Homepage = "https://github.com/nvidia-holoscan/holoscan-cli"
+Repository = "https://github.com/nvidia-holoscan/holoscan-cli"
+Documentation = "https://docs.nvidia.com/holoscan/sdk-user-guide/index.html"
+
+[tool.poetry]
+requires-poetry = ">=2.0"
+packages = [{ include = "holoscan_cli", from = "src" }]
+include = [
+    { path = "src/holoscan_cli/metadata/*.schema.json", format = ["sdist", "wheel"] },
+    { path = "src/holoscan_cli/setup_scripts/*", format = ["sdist", "wheel"] },
+    { path = "src/holoscan_cli/testing/**/*", format = ["sdist", "wheel"] },
 ]
 version = "0.0.0"
 
@@ -81,27 +94,57 @@ pytest-cov= "^7.0.0"
 pytest-mock= "^3.15.1"
 pytest = "^9.0.2"
 coveralls = { version = "^4.1.0", markers = "python_version < '3.13'" }
-
-[tool.poetry.group.docs]
-optional = true
-
-[tool.poetry.group.docs.dependencies]
-mkdocs = "*"
+tomli = { version = "^2.0", markers = "python_version < '3.11'" }
+# Mirrors the runtime ``[create]`` extra so the unit tests for the
+# schema validator (``test_metadata_validator.py``) and the smoke
+# fixture (``test_smoke_fixture.py``) can import them without
+# requiring callers to ``pip install 'holoscan-cli[create]'`` first.
+jsonschema = ">=4.18,<5.0"
+referencing = ">=0.30"
 
 [tool.poetry.requires-plugins]
 poetry-dynamic-versioning = { version = ">=1.5.0,<2.0.0", extras = ["plugin"] }
 
 [project.scripts]
 holoscan = 'holoscan_cli.__main__:main'
-monai-deploy = 'holoscan_cli.__main__:main'
 
 [tool.codespell]
-skip = '.ruff_cache'
+skip = '.ruff_cache,.cache,build,dist,htmlcov,tests/reports'
 count = true
 quiet-level = 3
 
-[tool.flake8]
-max-line-length = 160
+[tool.isort]
+profile = "black"
+line_length = 100
+known_first_party = "holoscan_cli"
+skip_glob = ["build*/*", "dist/*", ".cache/*", ".ruff_cache/*"]
+
+[tool.black]
+line-length = 100
+target-version = ["py310", "py311", "py312", "py313"]
+extend-exclude = '''
+(
+  ^\.cache/
+  | ^build[^/]*/
+  | ^dist/
+  | tests/reports/
+)
+'''
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+cache-dir = ".cache/ruff"
+exclude = [
+  ".cache",
+  ".ruff_cache",
+  "build*",
+  "dist",
+  "tests/reports",
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["holoscan_cli"]
 
 [tool.pytest.ini_options]
 pythonpath = "src"
@@ -110,8 +153,7 @@ addopts = """
 --cov=holoscan_cli ./tests/unit \
 --cov-append \
 --cov-report=term-missing \
---cov-report lcov:tests/reports/.coverage.lcov \
---ignore=docs/
+--cov-report lcov:tests/reports/.coverage.lcov
 """
 
 [tool.poetry-dynamic-versioning]
@@ -123,10 +165,10 @@ format-jinja = """
         {{ serialize_pep440(base, stage, dev=distance) }}
     {%- elif branch and branch.startswith("release/") -%}
         {# Debug: env["ga"] = {{ env["ga"] }} #}
-        {%- if env["ga"] == 'true' -%}
+        {%- if env.get("ga") == 'true' -%}
             {{ serialize_pep440(base)}}
         {%- else -%}
-            {%- if 'rc' in env -%}
+            {%- if env.get("rc") -%}
                 {{ serialize_pep440(base, stage="rc", revision=env["rc"] ) }}
             {%- else -%}
                 {{ serialize_pep440(base, stage="rc", revision=distance) }}

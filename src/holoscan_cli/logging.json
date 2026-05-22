@@ -13,10 +13,6 @@
         "console": {
             "class": "logging.StreamHandler",
             "formatter": "simple"
-        },
-        "runner_console": {
-            "class": "logging.StreamHandler",
-            "formatter": "single"
         }
     },
     "root": {
@@ -25,13 +21,5 @@
         "handlers": [
             "console"
         ]
-    },
-    "loggers": {
-        "app_runner": {
-            "propagate": false,
-            "handlers": [
-                "runner_console"
-            ]
-        }
     }
 }
