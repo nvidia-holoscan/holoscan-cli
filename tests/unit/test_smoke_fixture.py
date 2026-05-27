@@ -98,8 +98,9 @@ def test_autocompletion_list_emits_fixture_project_and_commands(smoke_cli, capsy
     fixture's project name followed by the dispatch command set used by
     shell completion. Pre-consolidation
     `test_holohub_autocompletion_list`."""
-    from holoscan_cli.commands import info as info_cmd
     from types import SimpleNamespace
+
+    from holoscan_cli.commands import info as info_cmd
 
     info_cmd.handle_autocompletion_list(smoke_cli, SimpleNamespace())
 

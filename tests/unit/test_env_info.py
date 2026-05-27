@@ -10,8 +10,8 @@ from pathlib import Path
 
 import pytest
 
-from holoscan_cli.commands import info as info_cmd
 from holoscan_cli import system_check as system_check_module
+from holoscan_cli.commands import info as info_cmd
 from holoscan_cli.utils import env_info
 
 
@@ -141,9 +141,7 @@ def test_env_check_json_emits_elapsed_seconds_key(monkeypatch, capsys):
 def test_env_check_exits_one_when_any_check_fails(monkeypatch):
     """FAIL results must surface as non-zero exit so CI / shell pipelines
     can react. WARN-only results stay informational (exit 0)."""
-    monkeypatch.setattr(
-        system_check_module, "run_all_checks", lambda: _make_results(fail=True)
-    )
+    monkeypatch.setattr(system_check_module, "run_all_checks", lambda: _make_results(fail=True))
 
     with pytest.raises(SystemExit) as excinfo:
         info_cmd.handle_env_check(None, argparse.Namespace(json=False))
@@ -151,9 +149,7 @@ def test_env_check_exits_one_when_any_check_fails(monkeypatch):
 
 
 def test_env_check_does_not_exit_on_warn_only(monkeypatch, capsys):
-    monkeypatch.setattr(
-        system_check_module, "run_all_checks", lambda: _make_results(warn=True)
-    )
+    monkeypatch.setattr(system_check_module, "run_all_checks", lambda: _make_results(warn=True))
 
     # Must not raise SystemExit.
     info_cmd.handle_env_check(None, argparse.Namespace(json=False))
