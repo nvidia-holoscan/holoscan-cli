@@ -150,3 +150,36 @@ def test_holohub_container_alias_was_removed():
     from holoscan_cli import container
 
     assert not hasattr(container, "HoloHubContainer")
+
+
+# ---- ambiguous dash-prefixed argument hint -----------------------------------
+
+
+@pytest.mark.parametrize(
+    "ambiguous_args",
+    [
+        ["--run-args", "--local"],
+        ["--build-args", "--no-cache"],
+        ["--docker-opts", "--memory=4g"],
+        ["--configure-args", "-DDEBUG=ON"],
+    ],
+)
+def test_dash_prefix_hint_triggered_on_dash_value_args(ambiguous_args):
+    """When a ``--run-args`` / ``--build-args`` / ``--docker-opts`` /
+    ``--configure-args`` value starts with a dash, the CLI must surface
+    the equals-format tip. Pre-consolidation
+    `test_cli_ambiguous_dash_prefixed_arguments`."""
+    cli = object.__new__(project_cli.HoloscanCLI)
+
+    tip = cli._check_for_dash_prefix_issue(ambiguous_args)
+
+    assert tip is not None
+    assert "ambiguous dash-prefixed arguments" in tip
+    assert "Use:" in tip
+    assert f"{ambiguous_args[0]}={ambiguous_args[1]}" in tip
+
+
+def test_dash_prefix_hint_silent_when_value_is_not_a_flag():
+    """A non-dash value is unambiguous; the tip must stay quiet."""
+    cli = object.__new__(project_cli.HoloscanCLI)
+    assert cli._check_for_dash_prefix_issue(["--run-args", "config/file"]) is None
