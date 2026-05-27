@@ -496,7 +496,7 @@ def test_build_forwards_explicit_build_args_to_docker(tmp_path, monkeypatch):
         },
     )
     c.dryrun = True
-    c.build(build_args='--build-arg TEST=value')
+    c.build(build_args="--build-arg TEST=value")
 
     cmd = calls[0]
     assert cmd[:2] == ["docker", "build"]
