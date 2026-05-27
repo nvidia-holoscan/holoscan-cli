@@ -455,3 +455,175 @@ def test_run_dryrun_assembles_docker_command_without_runtime_checks(tmp_path, mo
     assert "--name" in cmd
     assert "/tmp/custom.cid" in cmd
     assert cmd[-4:] == ["custom:image", "bash", "-lc", "echo ok"]
+
+
+# ---- build-args / cuda forwarding -------------------------------------------
+#
+# Each of the following pins one piece of build-time argument plumbing that
+# the pre-consolidation HoloHub CTest suite exercised end-to-end. They live
+# here as unit tests because the assertion is about CLI plumbing, not about
+# a real HoloHub tree.
+
+
+def _stub_build_env(tmp_path, monkeypatch):
+    """Shared monkeypatching for the build-args / cuda assertions: drop the
+    network / git / SDK probes so we can inspect the assembled `docker build`
+    argv in isolation."""
+    project_dir = tmp_path / "applications" / "my_app"
+    project_dir.mkdir(parents=True)
+    (project_dir / "Dockerfile").write_text("FROM scratch\n", encoding="utf-8")
+    monkeypatch.setattr(container_core, "get_host_gpu", lambda: "dgpu")
+    monkeypatch.setattr(container_core, "get_compute_capacity", lambda: "90")
+    monkeypatch.setattr(container_core, "get_default_cuda_version", lambda: "12")
+    monkeypatch.setattr(container_core, "get_current_branch_slug", lambda: "main")
+    monkeypatch.setattr(container_core, "get_git_short_sha", lambda: "deadbee")
+    return project_dir
+
+
+def test_build_forwards_explicit_build_args_to_docker(tmp_path, monkeypatch):
+    """`--build-args "--build-arg TEST=value"` must land verbatim in
+    `docker build` (pre-consolidation `test_holohub_build_container_build_args`)."""
+    project_dir = _stub_build_env(tmp_path, monkeypatch)
+    calls = []
+    monkeypatch.setattr(container_core, "run_command", lambda cmd, **kw: calls.append(cmd))
+
+    c = _stub_container(
+        tmp_path,
+        project_metadata={
+            "project_name": "my_app",
+            "source_folder": str(project_dir),
+            "metadata": {"language": "python"},
+        },
+    )
+    c.dryrun = True
+    c.build(build_args="--build-arg TEST=value")
+
+    cmd = calls[0]
+    assert cmd[:2] == ["docker", "build"]
+    assert "--build-arg" in cmd
+    assert "TEST=value" in cmd
+
+
+def test_default_docker_build_args_env_propagates_to_docker_build(tmp_path, monkeypatch):
+    """`HOLOSCAN_CLI_DEFAULT_DOCKER_BUILD_ARGS` must merge into the `docker
+    build` argv even when the caller passes nothing
+    (pre-consolidation `test_holohub_default_docker_build_args_env`)."""
+    project_dir = _stub_build_env(tmp_path, monkeypatch)
+    calls = []
+    monkeypatch.setattr(container_core, "run_command", lambda cmd, **kw: calls.append(cmd))
+    monkeypatch.setattr(
+        container_core.HoloscanContainer,
+        "DEFAULT_DOCKER_BUILD_ARGS",
+        "--build-arg DEFAULT_FLAG=abc",
+        raising=False,
+    )
+
+    c = _stub_container(
+        tmp_path,
+        project_metadata={
+            "project_name": "my_app",
+            "source_folder": str(project_dir),
+            "metadata": {"language": "python"},
+        },
+    )
+    c.dryrun = True
+    c.build()
+
+    cmd = calls[0]
+    assert "--build-arg" in cmd
+    assert "DEFAULT_FLAG=abc" in cmd
+
+
+def test_cuda_version_arg_lands_as_cuda_major_build_arg(tmp_path, monkeypatch):
+    """`--cuda 13` propagates to a `CUDA_MAJOR=13` build-arg
+    (pre-consolidation `test_holohub_build_container_cuda_version`)."""
+    project_dir = _stub_build_env(tmp_path, monkeypatch)
+    calls = []
+    monkeypatch.setattr(container_core, "run_command", lambda cmd, **kw: calls.append(cmd))
+
+    c = _stub_container(
+        tmp_path,
+        project_metadata={
+            "project_name": "my_app",
+            "source_folder": str(project_dir),
+            "metadata": {"language": "python"},
+        },
+    )
+    c.dryrun = True
+    c.build(cuda_version="13")
+
+    cmd = calls[0]
+    assert "CUDA_MAJOR=13" in cmd
+
+
+# ---- run-args / volume forwarding -------------------------------------------
+
+
+def _stub_run_env(tmp_path, monkeypatch):
+    project_dir = tmp_path / "applications" / "my_app"
+    project_dir.mkdir(parents=True)
+    (project_dir / "Dockerfile").write_text("FROM scratch\n", encoding="utf-8")
+    monkeypatch.delenv("DISPLAY", raising=False)
+    monkeypatch.delenv("WAYLAND_DISPLAY", raising=False)
+    monkeypatch.delenv("HOLOSCAN_CLI_ENABLE_SCCACHE", raising=False)
+    monkeypatch.setattr(container_core, "get_image_pythonpath", lambda img, dryrun: "/p")
+    monkeypatch.setattr(container_core, "get_group_id", lambda g: None)
+    return project_dir
+
+
+def test_add_volume_appears_as_v_mount_in_docker_run(tmp_path, monkeypatch):
+    """`--add-volume /some/path` lands as `-v /some/path:/workspace/volumes/...`
+    in `docker run` (pre-consolidation `test_holohub_run_container_add_volume`)."""
+    project_dir = _stub_run_env(tmp_path, monkeypatch)
+    volume = tmp_path / "extra"
+    volume.mkdir()
+    calls = []
+    monkeypatch.setattr(container_core, "run_command", lambda cmd, **kw: calls.append(cmd))
+
+    c = _stub_container(
+        tmp_path,
+        project_metadata={
+            "project_name": "my_app",
+            "source_folder": str(project_dir),
+            "metadata": {"language": "python"},
+        },
+    )
+    c.dryrun = True
+    c.run(img="custom:image", add_volumes=[str(volume)])
+
+    cmd = calls[0]
+    assert cmd[:2] == ["docker", "run"]
+    expected_mount = f"{volume}:/workspace/volumes/extra"
+    assert expected_mount in cmd
+    # The mount must follow a `-v` arg.
+    idx = cmd.index(expected_mount)
+    assert cmd[idx - 1] == "-v"
+
+
+def test_default_docker_run_args_env_propagates_to_docker_run(tmp_path, monkeypatch):
+    """`HOLOSCAN_CLI_DEFAULT_DOCKER_RUN_ARGS` must reach the `docker run`
+    argv even with no caller-supplied `--docker-opts`
+    (pre-consolidation `test_holohub_default_docker_run_args_env`)."""
+    project_dir = _stub_run_env(tmp_path, monkeypatch)
+    calls = []
+    monkeypatch.setattr(container_core, "run_command", lambda cmd, **kw: calls.append(cmd))
+    monkeypatch.setattr(
+        container_core.HoloscanContainer,
+        "DEFAULT_DOCKER_RUN_ARGS",
+        "-e TEST_ENV=123",
+        raising=False,
+    )
+
+    c = _stub_container(
+        tmp_path,
+        project_metadata={
+            "project_name": "my_app",
+            "source_folder": str(project_dir),
+            "metadata": {"language": "python"},
+        },
+    )
+    c.dryrun = True
+    c.run(img="custom:image")
+
+    cmd = calls[0]
+    assert "TEST_ENV=123" in cmd
