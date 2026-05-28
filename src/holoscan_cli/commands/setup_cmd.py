@@ -83,8 +83,21 @@ def handle_setup(cli, args: argparse.Namespace) -> None:
         sys.exit(0)
 
     if not args.scripts:
+        # `build-essential` pulls in gcc/g++/make — without it, CUDA base
+        # images (e.g. `nvcr.io/nvidia/cuda:*-base-*`) ship with `ninja-build`
+        # but no compiler, so cmake fails with `No CMAKE_C_COMPILER could
+        # be found` the moment a downstream project tries to configure.
         install_packages_if_missing(
-            ["wget", "xvfb", "git", "unzip", "ffmpeg", "ninja-build", "libv4l-dev"],
+            [
+                "build-essential",
+                "wget",
+                "xvfb",
+                "git",
+                "unzip",
+                "ffmpeg",
+                "ninja-build",
+                "libv4l-dev",
+            ],
             dry_run=args.dryrun,
         )
 
