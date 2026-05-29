@@ -22,12 +22,17 @@ internal refactors cannot accidentally change the public CLI contract.
 
 from __future__ import annotations
 
+import os
+import re
+import subprocess
+import sys
+from pathlib import Path
 from unittest.mock import patch
 
 import pytest
 
 from holoscan_cli import cli as project_cli
-from holoscan_cli.__main__ import PROJECT_COMMANDS
+from holoscan_cli.__main__ import PROJECT_COMMANDS, parse_args
 from holoscan_cli.commands import registry
 
 # ---- registry / dispatch consistency ----------------------------------------
@@ -150,3 +155,66 @@ def test_holohub_container_alias_was_removed():
     from holoscan_cli import container
 
     assert not hasattr(container, "HoloHubContainer")
+
+
+# ---- top-level ``--help`` surface (shell-probe contract) --------------------
+#
+# Downstream Dockerfiles and wrappers detect the *consolidated* CLI with a
+# shell probe -- ``holoscan --help | grep -qw build``. It is reliable because
+# the legacy packaging-only holoscan-cli (<= 4.2.0) exposes only
+# ``package/run/version/nics``, while the consolidated CLI's top-level help
+# enumerates every source-project command. These tests pin that contract so an
+# internal refactor cannot silently break those probes.
+
+
+def test_top_level_help_lists_every_source_project_command(capsys):
+    """``holoscan --help`` enumerates every registered source-project command."""
+    with pytest.raises(SystemExit) as exc_info:
+        parse_args(["holoscan", "--help"])
+    assert exc_info.value.code == 0
+    help_text = capsys.readouterr().out
+
+    # Mirror ``grep -w <name>``: word-boundary match against the rendered help.
+    missing = [
+        spec.name
+        for spec in registry.PROJECT_COMMANDS
+        if not re.search(rf"\b{re.escape(spec.name)}\b", help_text)
+    ]
+    assert not missing, f"`holoscan --help` omits source-project commands: {missing}"
+
+
+def test_build_token_discriminates_consolidated_from_legacy_cli(capsys):
+    """``grep -qw build`` is a valid version check; ``grep -qw version`` is not.
+
+    ``build`` is a source-project command unique to the consolidated CLI,
+    whereas ``version`` is a native command the legacy holoscan-cli (<= 4.2.0)
+    also ships -- so only a source-project command distinguishes the two.
+    """
+    assert "build" in PROJECT_COMMANDS
+    assert "version" not in PROJECT_COMMANDS
+
+    with pytest.raises(SystemExit):
+        parse_args(["holoscan", "--help"])
+    assert re.search(r"\bbuild\b", capsys.readouterr().out)
+
+
+def test_help_grep_probe_succeeds_from_any_directory(tmp_path):
+    """End-to-end check of the literal ``holoscan --help | grep -qw build`` probe.
+
+    Invoked via ``python -m holoscan_cli`` (no console script required) from an
+    unrelated working directory, proving the help surface is not project-context
+    dependent -- exactly the conditions under which downstream wrappers run it.
+    """
+    import holoscan_cli
+
+    src_dir = Path(holoscan_cli.__file__).resolve().parents[1]
+    env = {**os.environ, "PYTHONPATH": str(src_dir)}
+    proc = subprocess.run(
+        [sys.executable, "-m", "holoscan_cli", "--help"],
+        capture_output=True,
+        text=True,
+        env=env,
+        cwd=tmp_path,
+    )
+    assert proc.returncode == 0, proc.stderr
+    assert re.search(r"\bbuild\b", proc.stdout), proc.stdout  # `grep -qw build`
