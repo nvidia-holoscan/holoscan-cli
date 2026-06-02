@@ -63,28 +63,39 @@ release line, for example `holoscan-cli==4.4.1` before the next SDK-aligned
 `4.5.0` release.
 
 Version alignment does not imply that the CLI selects, installs, or requires a
-matching Holoscan SDK runtime or container base image. For container builds,
-choose the base image explicitly with `--base-img` or configure one in the
-environment:
+matching Holoscan SDK runtime or container base image. For container builds, the
+base image can be set with the CLI when your component's Dockerfile is configured
+with `FROM ${BASE_IMAGE}`, using any of the methods below:
 
-```bash
-export HOLOSCAN_CLI_BASE_IMAGE=nvcr.io/nvidia/clara-holoscan/holoscan:v4.4.0-cuda13
-holoscan build-container my_app
-```
+1. Pass the image to the `--base-img` flag:
 
-Wrapper repos can also configure the Holoscan SDK container repository and SDK
-version separately:
+   ```bash
+   holoscan build-container my_app --base-img nvcr.io/nvidia/clara-holoscan/holoscan:v4.4.0-cuda13
+   ```
 
-```bash
-export HOLOSCAN_CLI_BASE_IMAGE=nvcr.io/nvidia/clara-holoscan/holoscan
-export HOLOSCAN_CLI_BASE_SDK_VERSION=4.4.0
-holoscan build-container my_app
-```
+2. Set the `HOLOSCAN_CLI_BASE_IMAGE` environment variable to a fully qualified
+   image path:
 
-With the default CUDA selection, that derives the full base image string
-`nvcr.io/nvidia/clara-holoscan/holoscan:v4.4.0-cuda13`. If neither an explicit
-base image tag nor a base SDK version is configured, the CLI asks for a base
-image instead of inferring one from its own package version.
+   ```bash
+   export HOLOSCAN_CLI_BASE_IMAGE=nvcr.io/nvidia/clara-holoscan/holoscan:v4.4.0-cuda13
+   holoscan build-container my_app
+   ```
+
+3. Set `HOLOSCAN_CLI_BASE_IMAGE` to an image repository (no tag) and
+   `HOLOSCAN_CLI_BASE_SDK_VERSION` to a Holoscan semantic version. The base image
+   then resolves to
+   `$HOLOSCAN_CLI_BASE_IMAGE:v$HOLOSCAN_CLI_BASE_SDK_VERSION-$CUDA_TAG`, with the
+   CUDA tag chosen dynamically from your host environment:
+
+   ```bash
+   export HOLOSCAN_CLI_BASE_IMAGE=nvcr.io/nvidia/clara-holoscan/holoscan
+   export HOLOSCAN_CLI_BASE_SDK_VERSION=4.4.0
+   # Resolves to nvcr.io/nvidia/clara-holoscan/holoscan:v4.4.0-cuda13 on hosts with NVIDIA drivers >= 580
+   holoscan build-container my_app
+   ```
+
+If none of these is configured, the CLI asks for a base image instead of
+inferring one from its own package version.
 
 ## Build from source
 
