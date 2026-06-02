@@ -34,8 +34,6 @@ from typing import Optional, Union
 from holoscan_cli.utils.io import fatal, run_info_command, warn
 from holoscan_cli.utils.text import parse_semantic_version
 
-DEFAULT_BASE_SDK_VERSION = "4.2.0"
-
 
 def check_nvidia_ctk(min_version: str = "1.12.0", recommended_version: str = "1.14.1") -> None:
     """Check NVIDIA Container Toolkit version"""
@@ -140,7 +138,9 @@ def get_default_cuda_version() -> str:
     return result
 
 
-def get_cuda_tag(cuda_version: Optional[Union[str, int]] = None, sdk_version: str = "3.6.1") -> str:
+def get_cuda_tag(
+    cuda_version: Optional[Union[str, int]] = None, sdk_version: Optional[str] = None
+) -> str:
     """
     Determine the CUDA container tag based on CUDA version and GPU type.
 
@@ -154,16 +154,19 @@ def get_cuda_tag(cuda_version: Optional[Union[str, int]] = None, sdk_version: st
 
     Args:
         cuda_version: CUDA major version (e.g., 12, 13). If None, uses platform default.
-        sdk_version: SDK version string (e.g., "3.6.0", "3.6.1", "3.7.0").
+        sdk_version: Optional SDK version string (e.g., "3.6.0", "3.6.1", "3.7.0").
+            When omitted or unparsable, the current CUDA tag scheme is used.
 
     Returns:
         The appropriate container tag string
     """
-    try:
-        sdk_ver = parse_semantic_version(sdk_version)
-    except (ValueError, IndexError):
-        sdk_ver = parse_semantic_version(DEFAULT_BASE_SDK_VERSION)
-    if sdk_ver < (3, 6, 1):
+    sdk_ver = None
+    if sdk_version:
+        try:
+            sdk_ver = parse_semantic_version(sdk_version)
+        except (ValueError, IndexError):
+            sdk_ver = None
+    if sdk_ver is not None and sdk_ver < (3, 6, 1):
         return get_host_gpu()
     if sdk_ver == (3, 6, 1):
         return "cuda13-dgpu"

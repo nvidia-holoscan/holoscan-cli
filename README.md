@@ -51,6 +51,32 @@ pip install holoscan-cli
 holoscan --help
 ```
 
+## Versioning
+
+`holoscan-cli` release versions are aligned with Holoscan SDK GA release
+versions. For example, the CLI released with Holoscan SDK 4.4.0 is published as
+`holoscan-cli==4.4.0`; the CLI released with Holoscan SDK 4.5.0 is published as
+`holoscan-cli==4.5.0`.
+
+CLI-only fixes between SDK releases use the patch component for the current SDK
+release line, for example `holoscan-cli==4.4.1` before the next SDK-aligned
+`4.5.0` release.
+
+Version alignment does not imply that the CLI selects, installs, or requires a
+matching Holoscan SDK runtime or container base image. For container builds,
+choose the base image explicitly with `--base-img` or configure one in the
+environment:
+
+```bash
+export HOLOSCAN_CLI_BASE_IMAGE=nvcr.io/nvidia/clara-holoscan/holoscan:v4.4.0-cuda13
+holoscan build-container my_app
+```
+
+If you prefer to keep the base repository and SDK version separate, set
+`HOLOSCAN_CLI_BASE_SDK_VERSION` to derive the default Holoscan SDK base image
+tag. If neither an explicit base image nor a base SDK version is configured, the
+CLI asks for a base image instead of inferring one from its own package version.
+
 ## Build from source
 
 Python 3.10+ and [Poetry 2.0+](https://python-poetry.org/docs/#installation) required.

@@ -90,6 +90,18 @@ def test_dryrun_application_template_uses_slug_output_folder(fake_cli, tmp_path,
     assert "applications/CMakeLists.txt" in captured
 
 
+def test_dryrun_omits_holoscan_version_when_not_configured(
+    fake_cli, tmp_path, capsys, monkeypatch
+):
+    monkeypatch.setattr(create.HoloscanContainer, "BASE_SDK_VERSION", None, raising=False)
+    (tmp_path / "applications").mkdir()
+    args = _make_args(template="applications/template", dryrun=True)
+    create.handle_create(fake_cli, args)
+
+    captured = capsys.readouterr().out
+    assert "holoscan_version" not in captured
+
+
 def test_module_template_prompts_for_directory_when_omitted(
     fake_cli, tmp_path, capsys, monkeypatch
 ):

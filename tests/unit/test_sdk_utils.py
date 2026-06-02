@@ -87,6 +87,7 @@ def test_get_cuda_tag_handles_sdk_and_cuda_matrix(monkeypatch):
 
     assert sdk.get_cuda_tag(sdk_version="3.6.0") == "igpu"
     assert sdk.get_cuda_tag(sdk_version="3.6.1") == "cuda13-dgpu"
+    assert sdk.get_cuda_tag(None) == "cuda12-igpu"
     assert sdk.get_cuda_tag(None, sdk_version="4.2.0") == "cuda12-igpu"
     assert sdk.get_cuda_tag("13", sdk_version="4.2.0") == "cuda13"
     assert sdk.get_cuda_tag("14", sdk_version="4.2.0") == "cuda14-igpu"
