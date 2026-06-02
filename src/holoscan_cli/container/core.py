@@ -42,7 +42,6 @@ from ..utils.holohub import (
 )
 from ..utils.io import fatal, info, run_command, warn
 from ..utils.sdk import (
-    DEFAULT_BASE_SDK_VERSION,
     check_nvidia_ctk,
     find_hsdk_build_rel_dir,
     get_arch_gpu_str,
@@ -84,7 +83,7 @@ class HoloscanContainer:
 
     # SDK and path configuration
     SDK_PATH = os.environ.get("HOLOSCAN_CLI_DEFAULT_HSDK_DIR", "/opt/nvidia/holoscan")
-    BASE_SDK_VERSION = os.environ.get("HOLOSCAN_CLI_BASE_SDK_VERSION", DEFAULT_BASE_SDK_VERSION)
+    BASE_SDK_VERSION = os.environ.get("HOLOSCAN_CLI_BASE_SDK_VERSION") or None
     BENCHMARKING_SUBDIR = os.environ.get(
         "HOLOSCAN_CLI_BENCHMARKING_SUBDIR", "benchmarks/holoscan_flow_benchmarking"
     )
@@ -93,15 +92,10 @@ class HoloscanContainer:
     )
 
     # Image naming format templates
-    BASE_IMAGE_NAME = os.environ.get(
-        "HOLOSCAN_CLI_BASE_IMAGE", "nvcr.io/nvidia/clara-holoscan/holoscan"
-    )
-    BASE_IMAGE_FORMAT = os.environ.get(
-        "HOLOSCAN_CLI_BASE_IMAGE_FORMAT", "{base_image}:v{sdk_version}-{cuda_tag}"
-    )
-    DEFAULT_IMAGE_FORMAT = os.environ.get(
-        "HOLOSCAN_CLI_DEFAULT_IMAGE_FORMAT", "{container_prefix}:ngc-v{sdk_version}-{cuda_tag}"
-    )
+    DEFAULT_BASE_IMAGE_NAME = "nvcr.io/nvidia/clara-holoscan/holoscan"
+    BASE_IMAGE_NAME = os.environ.get("HOLOSCAN_CLI_BASE_IMAGE", DEFAULT_BASE_IMAGE_NAME)
+    BASE_IMAGE_FORMAT = os.environ.get("HOLOSCAN_CLI_BASE_IMAGE_FORMAT") or None
+    DEFAULT_IMAGE_FORMAT = os.environ.get("HOLOSCAN_CLI_DEFAULT_IMAGE_FORMAT") or None
     # Additional Default build arguments for docker build command (e.g., --build-context flags)
     DEFAULT_DOCKER_BUILD_ARGS = os.environ.get("HOLOSCAN_CLI_DEFAULT_DOCKER_BUILD_ARGS", "")
     # Additional Default run arguments for docker run command
@@ -127,20 +121,47 @@ class HoloscanContainer:
         return ["--build-context", f"holoscan-cli-src={source}"]
 
     @classmethod
+    def _format_image_template(cls, template: str, **values: Optional[str]) -> str:
+        if "{sdk_version" in template and not values.get("sdk_version"):
+            fatal(
+                "Image format references sdk_version, but HOLOSCAN_CLI_BASE_SDK_VERSION "
+                "is not set."
+            )
+        return template.format(**values)
+
+    @classmethod
     def default_base_image(cls, cuda_version: Optional[Union[str, int]] = None) -> str:
-        return cls.BASE_IMAGE_FORMAT.format(
-            base_image=cls.BASE_IMAGE_NAME,
-            sdk_version=cls.BASE_SDK_VERSION,
-            cuda_tag=get_cuda_tag(cuda_version, cls.BASE_SDK_VERSION),
+        cuda_tag = get_cuda_tag(cuda_version, cls.BASE_SDK_VERSION)
+        if cls.BASE_IMAGE_FORMAT:
+            return cls._format_image_template(
+                cls.BASE_IMAGE_FORMAT,
+                base_image=cls.BASE_IMAGE_NAME,
+                sdk_version=cls.BASE_SDK_VERSION,
+                cuda_tag=cuda_tag,
+            )
+        if cls.BASE_SDK_VERSION:
+            return f"{cls.BASE_IMAGE_NAME}:v{cls.BASE_SDK_VERSION}-{cuda_tag}"
+        if cls.BASE_IMAGE_NAME != cls.DEFAULT_BASE_IMAGE_NAME:
+            return cls.BASE_IMAGE_NAME
+        fatal(
+            "No default Holoscan SDK base image is configured. Pass --base-img, "
+            "set HOLOSCAN_CLI_BASE_IMAGE to a fully qualified image tag, or set "
+            "HOLOSCAN_CLI_BASE_SDK_VERSION."
         )
 
     @classmethod
     def default_image(cls, cuda_version: Optional[Union[str, int]] = None) -> str:
-        return cls.DEFAULT_IMAGE_FORMAT.format(
-            container_prefix=cls.CONTAINER_PREFIX,
-            sdk_version=cls.BASE_SDK_VERSION,
-            cuda_tag=get_cuda_tag(cuda_version, cls.BASE_SDK_VERSION),
-        )
+        cuda_tag = get_cuda_tag(cuda_version, cls.BASE_SDK_VERSION)
+        if cls.DEFAULT_IMAGE_FORMAT:
+            return cls._format_image_template(
+                cls.DEFAULT_IMAGE_FORMAT,
+                container_prefix=cls.CONTAINER_PREFIX,
+                sdk_version=cls.BASE_SDK_VERSION,
+                cuda_tag=cuda_tag,
+            )
+        if cls.BASE_SDK_VERSION:
+            return f"{cls.CONTAINER_PREFIX}:ngc-v{cls.BASE_SDK_VERSION}-{cuda_tag}"
+        return f"{cls.CONTAINER_PREFIX}:ngc-{cuda_tag}"
 
     @classmethod
     def default_dockerfile(cls) -> Path:
@@ -449,13 +470,13 @@ class HoloscanContainer:
             "--build-arg",
             f"GPU_TYPE={gpu_type}",
             "--build-arg",
-            f"BASE_SDK_VERSION={self.BASE_SDK_VERSION}",
-            "--build-arg",
             f"COMPUTE_CAPACITY={compute_capacity}",
             "--build-arg",
             f"CUDA_MAJOR={cuda_major}",
             "--network=host",
         ]
+        if self.BASE_SDK_VERSION:
+            cmd.extend(["--build-arg", f"BASE_SDK_VERSION={self.BASE_SDK_VERSION}"])
 
         if no_cache:
             cmd.append("--no-cache")

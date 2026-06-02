@@ -40,12 +40,14 @@ from holoscan_cli.container.core import HoloscanContainer
 @pytest.fixture(autouse=True)
 def _isolate_container_class_attrs(monkeypatch):
     """Pin HoloscanContainer class attrs so individual tests can assert against
-    a known REPO_PREFIX/CONTAINER_PREFIX/BASE_SDK_VERSION irrespective of the
-    user's env.
+    known container/image defaults irrespective of the user's env.
     """
     monkeypatch.setattr(HoloscanContainer, "REPO_PREFIX", "holohub", raising=False)
     monkeypatch.setattr(HoloscanContainer, "CONTAINER_PREFIX", "holohub", raising=False)
     monkeypatch.setattr(HoloscanContainer, "BASE_SDK_VERSION", "4.2.0", raising=False)
+    monkeypatch.setattr(
+        HoloscanContainer, "DEFAULT_BASE_IMAGE_NAME", "nvcr.io/x/holoscan", raising=False
+    )
     monkeypatch.setattr(HoloscanContainer, "BASE_IMAGE_NAME", "nvcr.io/x/holoscan", raising=False)
     monkeypatch.setattr(
         HoloscanContainer,
@@ -110,6 +112,34 @@ def test_image_name_falls_back_to_default_image_when_dockerfile_is_default(tmp_p
     name = c.image_name
     # Default image format: "{container_prefix}:ngc-v{sdk_version}-{cuda_tag}"
     assert name.startswith("holohub:ngc-v4.2.0-cuda13")
+
+
+def test_default_image_does_not_include_sdk_version_unless_configured(tmp_path, monkeypatch):
+    monkeypatch.setattr(HoloscanContainer, "BASE_SDK_VERSION", None, raising=False)
+    monkeypatch.setattr(HoloscanContainer, "BASE_IMAGE_FORMAT", None, raising=False)
+    monkeypatch.setattr(HoloscanContainer, "DEFAULT_IMAGE_FORMAT", None, raising=False)
+    monkeypatch.setattr(container_core, "get_default_cuda_version", lambda: "13")
+    c = _stub_container(tmp_path, project_metadata=None)
+
+    assert c.image_name == "holohub:ngc-cuda13"
+
+
+def test_default_base_image_requires_explicit_base_when_sdk_version_unset(tmp_path, monkeypatch):
+    monkeypatch.setattr(HoloscanContainer, "BASE_SDK_VERSION", None, raising=False)
+    monkeypatch.setattr(HoloscanContainer, "BASE_IMAGE_FORMAT", None, raising=False)
+    c = _stub_container(tmp_path, project_metadata=None)
+
+    with pytest.raises(SystemExit):
+        c.default_base_image()
+
+
+def test_default_base_image_uses_explicit_base_image_without_sdk_version(tmp_path, monkeypatch):
+    monkeypatch.setattr(HoloscanContainer, "BASE_SDK_VERSION", None, raising=False)
+    monkeypatch.setattr(HoloscanContainer, "BASE_IMAGE_FORMAT", None, raising=False)
+    monkeypatch.setattr(HoloscanContainer, "BASE_IMAGE_NAME", "example.com/base:tag", raising=False)
+    c = _stub_container(tmp_path, project_metadata=None)
+
+    assert c.default_base_image() == "example.com/base:tag"
 
 
 def test_image_name_uses_project_tag_when_dockerfile_is_overridden(tmp_path, monkeypatch):
@@ -390,6 +420,37 @@ def test_build_dryrun_emits_base_and_extra_script_layers(tmp_path, monkeypatch):
     assert "SCRIPT=utilities/setup/coverage.sh" in layer
     assert str(setup_dir / "Dockerfile.util") in layer
     assert "holohub-my_app:feature-x-coverage" in layer
+
+
+def test_build_dryrun_omits_base_sdk_version_when_not_configured(tmp_path, monkeypatch):
+    project_dir = tmp_path / "applications" / "my_app"
+    project_dir.mkdir(parents=True)
+    dockerfile = project_dir / "Dockerfile"
+    dockerfile.write_text("FROM scratch\n", encoding="utf-8")
+
+    calls = []
+    monkeypatch.setattr(HoloscanContainer, "BASE_SDK_VERSION", None, raising=False)
+    monkeypatch.setattr(HoloscanContainer, "BASE_IMAGE_FORMAT", None, raising=False)
+    monkeypatch.setattr(container_core, "get_default_cuda_version", lambda: "13")
+    monkeypatch.setattr(container_core, "get_host_gpu", lambda: "dgpu")
+    monkeypatch.setattr(container_core, "get_compute_capacity", lambda: "90")
+    monkeypatch.setattr(container_core, "run_command", lambda cmd, **kwargs: calls.append(cmd))
+
+    c = _stub_container(
+        tmp_path,
+        project_metadata={
+            "project_name": "my_app",
+            "source_folder": str(project_dir),
+            "metadata": {"language": "python"},
+        },
+    )
+    c.dryrun = True
+
+    c.build(base_img="example.com/base:tag")
+
+    first = calls[0]
+    assert "BASE_IMAGE=example.com/base:tag" in first
+    assert not any(arg.startswith("BASE_SDK_VERSION=") for arg in first)
 
 
 def test_run_dryrun_assembles_docker_command_without_runtime_checks(tmp_path, monkeypatch):

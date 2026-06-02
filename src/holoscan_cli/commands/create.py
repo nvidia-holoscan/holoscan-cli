@@ -171,9 +171,10 @@ def handle_create(cli, args: argparse.Namespace) -> None:
         "project_name": args.project,
         "project_slug": project_slug,
         "language": args.language.lower() if args.language else None,  # Only set if provided
-        "holoscan_version": HoloscanContainer.BASE_SDK_VERSION,
         "year": datetime.datetime.now().year,
     }
+    if HoloscanContainer.BASE_SDK_VERSION:
+        context["holoscan_version"] = HoloscanContainer.BASE_SDK_VERSION
 
     # For module templates the generated folder is the kebab module_repo_name
     # (holoscan-<slug>) rather than the snake_case slug.
