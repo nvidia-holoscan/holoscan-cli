@@ -93,9 +93,7 @@ class HoloscanContainer:
 
     # Image naming format templates
     DEFAULT_BASE_IMAGE_NAME = "nvcr.io/nvidia/clara-holoscan/holoscan"
-    BASE_IMAGE_NAME = os.environ.get(
-        "HOLOSCAN_CLI_BASE_IMAGE", DEFAULT_BASE_IMAGE_NAME
-    )
+    BASE_IMAGE_NAME = os.environ.get("HOLOSCAN_CLI_BASE_IMAGE", DEFAULT_BASE_IMAGE_NAME)
     BASE_IMAGE_FORMAT = os.environ.get("HOLOSCAN_CLI_BASE_IMAGE_FORMAT") or None
     DEFAULT_IMAGE_FORMAT = os.environ.get("HOLOSCAN_CLI_DEFAULT_IMAGE_FORMAT") or None
     # Additional Default build arguments for docker build command (e.g., --build-context flags)

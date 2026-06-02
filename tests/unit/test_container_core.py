@@ -124,9 +124,7 @@ def test_default_image_does_not_include_sdk_version_unless_configured(tmp_path, 
     assert c.image_name == "holohub:ngc-cuda13"
 
 
-def test_default_base_image_requires_explicit_base_when_sdk_version_unset(
-    tmp_path, monkeypatch
-):
+def test_default_base_image_requires_explicit_base_when_sdk_version_unset(tmp_path, monkeypatch):
     monkeypatch.setattr(HoloscanContainer, "BASE_SDK_VERSION", None, raising=False)
     monkeypatch.setattr(HoloscanContainer, "BASE_IMAGE_FORMAT", None, raising=False)
     c = _stub_container(tmp_path, project_metadata=None)
@@ -135,9 +133,7 @@ def test_default_base_image_requires_explicit_base_when_sdk_version_unset(
         c.default_base_image()
 
 
-def test_default_base_image_uses_explicit_base_image_without_sdk_version(
-    tmp_path, monkeypatch
-):
+def test_default_base_image_uses_explicit_base_image_without_sdk_version(tmp_path, monkeypatch):
     monkeypatch.setattr(HoloscanContainer, "BASE_SDK_VERSION", None, raising=False)
     monkeypatch.setattr(HoloscanContainer, "BASE_IMAGE_FORMAT", None, raising=False)
     monkeypatch.setattr(HoloscanContainer, "BASE_IMAGE_NAME", "example.com/base:tag", raising=False)
