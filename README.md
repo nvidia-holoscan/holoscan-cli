@@ -72,10 +72,19 @@ export HOLOSCAN_CLI_BASE_IMAGE=nvcr.io/nvidia/clara-holoscan/holoscan:v4.4.0-cud
 holoscan build-container my_app
 ```
 
-If you prefer to keep the base repository and SDK version separate, set
-`HOLOSCAN_CLI_BASE_SDK_VERSION` to derive the default Holoscan SDK base image
-tag. If neither an explicit base image nor a base SDK version is configured, the
-CLI asks for a base image instead of inferring one from its own package version.
+Wrapper repos can also configure the Holoscan SDK container repository and SDK
+version separately:
+
+```bash
+export HOLOSCAN_CLI_BASE_IMAGE=nvcr.io/nvidia/clara-holoscan/holoscan
+export HOLOSCAN_CLI_BASE_SDK_VERSION=4.4.0
+holoscan build-container my_app
+```
+
+With the default CUDA selection, that derives the full base image string
+`nvcr.io/nvidia/clara-holoscan/holoscan:v4.4.0-cuda13`. If neither an explicit
+base image tag nor a base SDK version is configured, the CLI asks for a base
+image instead of inferring one from its own package version.
 
 ## Build from source
 
