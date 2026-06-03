@@ -96,6 +96,16 @@ def test_each_subcommand_accepts_help_flag(cli, command, capsys):
     assert capsys.readouterr().out  # argparse printed help text
 
 
+def test_package_accepts_no_docker_build_flag(cli):
+    """``holoscan package`` exposes --no-docker-build like the other
+    container-first commands (holohub#1596)."""
+    args = cli.parser.parse_args(["package", "fixture", "--no-docker-build"])
+    assert args.no_docker_build is True
+    # Default stays False so check_skip_builds doesn't skip unexpectedly.
+    args = cli.parser.parse_args(["package", "fixture"])
+    assert args.no_docker_build is False
+
+
 def _subparser_help_strings(parser):
     """Return ``{command_name: help}`` recorded on the parser's subparsers action.
 
