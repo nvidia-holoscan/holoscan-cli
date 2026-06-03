@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import json
 from argparse import Namespace
 
 from holoscan_cli.commands import build as build_cmd
@@ -260,6 +261,47 @@ def test_build_project_locally_module_enables_subprojects_and_sccache(
     assert "-DCMAKE_CXX_COMPILER_LAUNCHER=/usr/bin/sccache" in cmake_args
     assert calls[-1] == ["sccache", "--show-stats"]
     assert "Building module 'holoscan-smoke'" in capsys.readouterr().out
+
+
+def test_build_writes_external_operators_manifest_from_module_sites(tmp_path, monkeypatch):
+    """build_project_locally emits external_operators_manifest.cmake from
+    modules/module-sites.json before configuring CMake (holohub#1587)."""
+    modules_dir = tmp_path / "repo" / "modules"
+    modules_dir.mkdir(parents=True)
+    (modules_dir / "module-sites.json").write_text(
+        json.dumps(
+            {
+                "modules": [
+                    {
+                        "name": "holoscan-deltacast",
+                        "url": "https://github.com/deltacasttv/holoscan-modules",
+                        "ref": "0" * 40,
+                        "provides_operators": ["videomaster_source"],
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    app_dir = tmp_path / "repo" / "applications" / "demo"
+    app_dir.mkdir(parents=True)
+    project = {
+        "project_name": "demo",
+        "project_type": "application",
+        "source_folder": app_dir,
+        "metadata": {"language": "python"},
+    }
+    cli = RecordingCLI(tmp_path, project)
+    monkeypatch.setattr(build_cmd, "run_command", lambda cmd, **kwargs: None)
+    monkeypatch.setattr(build_cmd.shutil, "which", lambda name: None)
+
+    build_dir, _ = build_cmd.build_project_locally(cli, "demo", dryrun=False)
+
+    manifest = build_dir / "external_operators_manifest.cmake"
+    assert manifest.exists()
+    content = manifest.read_text(encoding="utf-8")
+    assert "deltacasttv/holoscan-modules" in content
+    assert "videomaster_source" in content
 
 
 def test_handle_build_container_branch_passes_recursive_local_command(tmp_path, monkeypatch):
