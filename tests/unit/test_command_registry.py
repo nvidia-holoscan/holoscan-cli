@@ -96,7 +96,10 @@ def test_list_prints_modules_with_languages_and_operators(capsys):
             {
                 "project_type": "module",
                 "project_name": "holoscan-gstreamer",
-                "metadata": {"language": ["C++", "Python"], "operators": ["gstreamer"]},
+                "metadata": {
+                    "language": ["C++", "Python"],
+                    "operator_names": ["GstVideoRecorderOp"],
+                },
             }
         ]
     )
@@ -105,4 +108,30 @@ def test_list_prints_modules_with_languages_and_operators(capsys):
 
     out = capsys.readouterr().out
     assert "== MODULES" in out
-    assert "holoscan-gstreamer (C++, Python) [gstreamer]" in out
+    assert "holoscan-gstreamer (C++, Python) [GstVideoRecorderOp]" in out
+
+
+@pytest.mark.parametrize(
+    "metadata, expected",
+    [
+        ({"operator_names": ["GstVideoRecorderOp"]}, "[GstVideoRecorderOp]"),
+        # Falls back to the legacy top-level ``operators`` field …
+        ({"operators": ["gstreamer"]}, "[gstreamer]"),
+        # … then to ``subprojects.operators`` (the build-gating list).
+        ({"subprojects": {"operators": ["gstreamer"]}}, "[gstreamer]"),
+    ],
+)
+def test_list_module_operator_display_fallbacks(capsys, metadata, expected):
+    cli = SimpleNamespace(
+        projects=[
+            {
+                "project_type": "module",
+                "project_name": "holoscan-gstreamer",
+                "metadata": metadata,
+            }
+        ]
+    )
+
+    info.handle_list(cli, SimpleNamespace())
+
+    assert expected in capsys.readouterr().out

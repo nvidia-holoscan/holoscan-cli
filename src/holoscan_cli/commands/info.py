@@ -75,7 +75,11 @@ def handle_list(cli, _args: argparse.Namespace) -> None:
                 language = ", ".join(language)
             language = f"({language})" if language else ""
             if project_type == "module":
-                operators = metadata.get("operators", [])
+                operators = (
+                    metadata.get("operator_names")
+                    or metadata.get("operators")
+                    or metadata.get("subprojects", {}).get("operators", [])
+                )
                 ops = f" [{', '.join(operators)}]" if operators else ""
                 print(f'{project["project_name"]} {language}{ops}')
             else:
