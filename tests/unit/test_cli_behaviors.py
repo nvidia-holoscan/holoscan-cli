@@ -216,3 +216,34 @@ def test_run_preserves_container_command_after_separator(monkeypatch, tmp_path):
     assert captured["img"] == "smoke:latest"
     assert captured["no_docker_build"] is True
     assert captured["_trailing_args"] == ["echo", "hello world"]
+
+
+def test_clear_cache_dryrun_reports_would_remove_paths(tmp_path, monkeypatch, capsys):
+    """`clear-cache --dryrun` previews the work it would do — the build
+    directory should appear behind a `Would remove:` marker so users can
+    confirm before the real run. Pre-consolidation `test_holohub_clear_cache`."""
+    repo_root = tmp_path / "repo"
+    repo_root.mkdir()
+    build_parent = tmp_path / "build"
+    data_dir = tmp_path / "data"
+    install_dir = repo_root / "install"
+    for path in (build_parent, data_dir, install_dir):
+        path.mkdir(parents=True)
+
+    monkeypatch.setattr(project_cli.HoloscanCLI, "HOLOHUB_ROOT", repo_root)
+    cli = object.__new__(project_cli.HoloscanCLI)
+    cli.DEFAULT_BUILD_PARENT_DIR = build_parent
+    cli.DEFAULT_DATA_DIR = data_dir
+
+    clear_cache_cmd.handle_clear_cache(
+        cli, Namespace(dryrun=True, build=False, data=False, install=False)
+    )
+
+    # Nothing should be removed in dryrun.
+    assert build_parent.is_dir()
+    assert data_dir.is_dir()
+    assert install_dir.is_dir()
+
+    out = capsys.readouterr().out
+    assert "Would remove:" in out
+    assert str(build_parent) in out

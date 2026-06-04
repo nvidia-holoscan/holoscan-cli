@@ -502,6 +502,9 @@ def test_handle_test_container_adds_coverage_build_args_and_ctest_options(tmp_pa
     )
     assert "-DCTEST_SUBMIT_URL=https://cdash.example" in ctest_command
     assert "-DCOVERAGE=ON" in ctest_command
+    # `--ctest-options` must propagate verbatim into the ctest invocation
+    # (pre-consolidation `test_holohub_test_ctest_options`).
+    assert "-DCASE=smoke" in ctest_command
 
 
 def test_handle_test_local_runs_ctest_in_repo_with_environment(tmp_path, monkeypatch):
