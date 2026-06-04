@@ -273,14 +273,21 @@ def build_project_locally(
     # Write external_operators_manifest.cmake before cmake configure so that
     # CMakeLists.txt:include(…OPTIONAL) picks it up and FetchContent_MakeAvailable
     # is called for any external modules whose operators end up enabled.
-    metadata_path = Path(project_data.get("source_folder", "")) / "metadata.json"
     sites_deps = parse_module_sites(
         cli.HOLOHUB_ROOT / "modules" / "module-sites.json",
         source_root=cli.HOLOHUB_ROOT,
         env=build_env,
     )
-    project_deps = parse_module_dependencies(
-        metadata_path, source_root=cli.HOLOHUB_ROOT, env=build_env
+    # Only parse the project's own metadata.json when we know where it lives —
+    # an empty source_folder would otherwise resolve to a cwd-relative
+    # "metadata.json" and pick up an unrelated file.
+    source_folder = project_data.get("source_folder")
+    project_deps = (
+        parse_module_dependencies(
+            Path(source_folder) / "metadata.json", source_root=cli.HOLOHUB_ROOT, env=build_env
+        )
+        if source_folder
+        else []
     )
     ext_deps = merge_deps(sites_deps, project_deps)
     manifest_path = build_dir / "external_operators_manifest.cmake"

@@ -210,7 +210,6 @@ def test_resolve_module_project_prefers_standalone_cwd_metadata(tmp_path, monkey
         "project_name": "holoscan-smoke",
         "source_folder": str(module_dir),
         "metadata": {"name": "holoscan-smoke", "language": ["Python"]},
-        "standalone_module": True,
     }
 
 
@@ -234,4 +233,3 @@ def test_resolve_module_project_falls_back_to_source_tree_when_cwd_metadata_inva
     )
 
     assert project_data["project_name"] == "test-module-fixture"
-    assert project_data["standalone_module"] is False

@@ -105,7 +105,6 @@ def _resolve_module_project(cli, project_arg: Optional[str], language: Optional[
                 "project_name": module_name,
                 "source_folder": str(cwd),
                 "metadata": module,
-                "standalone_module": True,
             }
 
     if project_arg:
@@ -116,9 +115,7 @@ def _resolve_module_project(cli, project_arg: Optional[str], language: Optional[
                 f"'holoscan package' only supports modules; "
                 f"'{project_arg}' is type '{project_type}'"
             )
-        project_data = dict(project_data)
-        project_data.setdefault("standalone_module", False)
-        return project_data
+        return dict(project_data)
 
     fatal(
         "No project specified and no ./metadata.json found in the current working directory. "
