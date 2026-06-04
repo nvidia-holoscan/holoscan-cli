@@ -65,6 +65,9 @@ def register_package_parser(
     )
     parser.add_argument("--language", choices=["cpp", "python"], default=None)
     parser.add_argument("--verbose", action="store_true")
+    parser.add_argument(
+        "--no-docker-build", action="store_true", help="Skip building the container"
+    )
     parser.add_argument("--dryrun", action="store_true", default=False)
     parser.set_defaults(func=lambda args: handle_package(cli, args))
     return parser
@@ -102,7 +105,6 @@ def _resolve_module_project(cli, project_arg: Optional[str], language: Optional[
                 "project_name": module_name,
                 "source_folder": str(cwd),
                 "metadata": module,
-                "standalone_module": True,
             }
 
     if project_arg:
@@ -113,21 +115,12 @@ def _resolve_module_project(cli, project_arg: Optional[str], language: Optional[
                 f"'holoscan package' only supports modules; "
                 f"'{project_arg}' is type '{project_type}'"
             )
-        project_data = dict(project_data)
-        project_data.setdefault("standalone_module", False)
-        return project_data
+        return dict(project_data)
 
     fatal(
         "No project specified and no ./metadata.json found in the current working directory. "
         "Run from a module project root, or pass a module name as the first argument."
     )
-
-
-def _module_package_flag(project_data: dict, package_slug: str) -> str:
-    """Return the CMake flag that enables packaging for this module shape."""
-    if project_data.get("standalone_module"):
-        return f"-DPKG_{package_slug}=ON"
-    return f"-DMODULE_{package_slug}=ON"
 
 
 def handle_package(cli, args: argparse.Namespace) -> None:
@@ -231,8 +224,17 @@ def _package_locally(cli, args: argparse.Namespace, project_data: dict) -> None:
             f"-DPython3_ROOT_DIR={os.path.dirname(os.path.dirname(sys.executable))}",
             f"-DCMAKE_BUILD_TYPE={build_type}",
             f"-DCMAKE_PREFIX_PATH={cli.DEFAULT_SDK_DIR}/lib",
+            # BUILD_ALL=OFF keeps unrelated subprojects out of this package.
+            # MODULE_<slug>=ON enters the module subdir for in-tree HoloHub
+            # builds (modules/CMakeLists.txt gates add_holohub_module() on it);
+            # PKG_<slug>=ON then activates the target's add_holohub_package()
+            # cascade, which FORCEs its OP_/APP_/EXT_ deps ON and emits the
+            # CPack config. In-tree packaging needs BOTH. For standalone module
+            # repos (where add_holohub_module() never runs because the module is
+            # the top-level project) MODULE_<slug>=ON is a harmless unused entry.
             "-DBUILD_ALL=OFF",
-            _module_package_flag(project_data, package_slug),
+            f"-DMODULE_{package_slug}=ON",
+            f"-DPKG_{package_slug}=ON",
         ]
         if shutil.which("ninja"):
             cmake_args.extend(["-G", "Ninja"])

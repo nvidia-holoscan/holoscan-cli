@@ -31,7 +31,13 @@ from typing import Optional
 
 from holoscan_cli.commands.registry import help_for
 from holoscan_cli.metadata.utils import normalize_language
+from holoscan_cli.utils.cmake_manifest import write_external_operators_manifest
 from holoscan_cli.utils.docker import get_entrypoint_command_args
+from holoscan_cli.utils.external_resolver import (
+    merge_deps,
+    parse_module_dependencies,
+    parse_module_sites,
+)
 from holoscan_cli.utils.holohub import (
     build_holohub_path_mapping,
     check_skip_builds,
@@ -250,10 +256,10 @@ def build_project_locally(
     build_dir = cli.DEFAULT_BUILD_PARENT_DIR / project_name
     build_dir.mkdir(parents=True, exist_ok=True)
 
-    # Prepare environment with extra env vars
+    # Prepare environment with extra env vars first so that HOLOSCAN_CLI_LOCAL_*
+    # overrides from the mode's env block are visible to the module resolvers.
     build_env = os.environ.copy()
     if extra_env:
-        # Build path mapping
         path_mapping = build_holohub_path_mapping(
             holohub_root=cli.HOLOHUB_ROOT,
             project_data=project_data,
@@ -263,6 +269,32 @@ def build_project_locally(
             verbose=dryrun,
         )
         update_env(build_env, extra_env, path_mapping, verbose=dryrun)
+
+    # Write external_operators_manifest.cmake before cmake configure so that
+    # CMakeLists.txt:include(…OPTIONAL) picks it up and FetchContent_MakeAvailable
+    # is called for any external modules whose operators end up enabled.
+    sites_deps = parse_module_sites(
+        cli.HOLOHUB_ROOT / "modules" / "module-sites.json",
+        source_root=cli.HOLOHUB_ROOT,
+        env=build_env,
+    )
+    # Only parse the project's own metadata.json when we know where it lives —
+    # an empty source_folder would otherwise resolve to a cwd-relative
+    # "metadata.json" and pick up an unrelated file.
+    source_folder = project_data.get("source_folder")
+    project_deps = (
+        parse_module_dependencies(
+            Path(source_folder) / "metadata.json", source_root=cli.HOLOHUB_ROOT, env=build_env
+        )
+        if source_folder
+        else []
+    )
+    ext_deps = merge_deps(sites_deps, project_deps)
+    manifest_path = build_dir / "external_operators_manifest.cmake"
+    if dryrun:
+        info(f"[dryrun] Would write {manifest_path}")
+    else:
+        write_external_operators_manifest(ext_deps, manifest_path)
 
     proj_prefix = determine_project_prefix(project_type)
     cmake_args = [
@@ -350,7 +382,7 @@ def build_project_locally(
         )
 
     if configure_args:
-        cmake_args.extend(configure_args)
+        cmake_args.extend(os.path.expandvars(arg) for arg in configure_args)
 
     run_command(cmake_args, dry_run=dryrun, env=build_env)
 
