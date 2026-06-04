@@ -107,6 +107,77 @@ Branch naming feeds into the version string via
 so dispatching from a feature branch always emits a unique alpha that cannot
 collide with a published RC.
 
+## Release procedure (RC → GA runbook)
+
+End-to-end steps a maintainer follows to ship a release. Versions are **derived
+automatically** from the dispatch branch + inputs (see the format-jinja mapping
+above) — you never hand-edit a version. All versions are
+[PEP 440](https://peps.python.org/pep-0440/) (what PyPI requires), e.g. the RC
+is `4.3.0rc1`, the PEP 440 spelling of SemVer's `4.3.0-rc.1`.
+
+### Version scheme at a glance
+
+| Dispatch `--ref` | `ga` | `rc` | Published version | Purpose |
+| --- | --- | --- | --- | --- |
+| `main` | – | – | `X.Y.Z.devN` | dev snapshots of `main` |
+| any feature branch | – | – | `X.Y.ZaNNN` (`NNN` = run id) | throwaway per-branch alphas |
+| `release/X.Y.0` | `false` | `N` | `X.Y.ZrcN` | release candidates |
+| `release/X.Y.0` | `false` | – | `X.Y.Zrc<distance>` | RC without an explicit number |
+| `release/X.Y.0` | `true` | – | `X.Y.Z` | official GA |
+
+Every dispatch publishes to **TestPyPI**. Non-GA dispatches auto-remove the
+temporary `vX.Y.Z` tag; a **GA** dispatch keeps the `vX.Y.Z` tag and is the one
+K2 Kitmaker promotes to the release registry (Artifactory). The cutover to
+public PyPI happens out of band — until then, installs use the TestPyPI index.
+
+### Steps
+
+1. **Land everything on `main`** and confirm it is green.
+2. **Cut the release branch (once per minor line):**
+
+   ```bash
+   git push origin origin/main:refs/heads/release/X.Y.0
+   ```
+
+   This branch is what flips the version scheme from `.dev` to `rc`.
+3. **Cut RC1:**
+
+   ```bash
+   gh workflow run release.yaml --ref release/X.Y.0 \
+     -f version=vX.Y.Z -f rc=1 -f ga=false        # → X.Y.Zrc1 on TestPyPI
+   ```
+
+   The run's `testpypi-installed smoke test` job installs the just-published
+   wheel from TestPyPI and re-runs the smoke checks, so a green run means the
+   RC is fetchable and passes the same checks CI runs on push.
+4. **Validate the RC** (e.g. against downstream HoloHub usage) in a throwaway venv:
+
+   ```bash
+   python3 -m venv /tmp/rc && . /tmp/rc/bin/activate
+   pip install --pre --index-url https://test.pypi.org/simple/ \
+       --extra-index-url https://pypi.org/simple/ "holoscan-cli==X.Y.Zrc1"
+   ```
+
+5. **Iterate** if fixes are needed: cherry-pick onto `release/X.Y.0` (or merge
+   from `main`), then dispatch with `-f rc=2`, `-f rc=3`, … (bump each time).
+6. **Cut GA** once an RC is accepted:
+
+   ```bash
+   gh workflow run release.yaml --ref release/X.Y.0 \
+     -f version=vX.Y.Z -f ga=true                 # → X.Y.Z, keeps the vX.Y.Z tag
+   ```
+
+### Worked example (4.3.0)
+
+```bash
+git push origin origin/main:refs/heads/release/4.3.0          # cut the branch
+gh workflow run release.yaml --ref release/4.3.0 \
+    -f version=v4.3.0 -f rc=1 -f ga=false                     # → 4.3.0rc1 (TestPyPI)
+# …validate, iterate -f rc=2 as needed… then:
+gh workflow run release.yaml --ref release/4.3.0 \
+    -f version=v4.3.0 -f ga=true                              # → 4.3.0 (GA)
+```
+
 ## Shared shell scripts
 
 These live under `.github/scripts/` so `main.yaml` and `release.yaml` can call
