@@ -54,7 +54,7 @@ REMOVED_COMMANDS: dict[str, str] = {
 }
 
 REMOVED_COMMAND_FOOTER = (
-    "Removed HAP/MAP commands are out of scope for holoscan-cli v1. Pin "
+    "Removed HAP/MAP commands are not available since holoscan v4.3.0. Pin "
     "holoscan-cli<=4.2.0 if you still need that legacy command surface."
 )
 
@@ -179,7 +179,7 @@ def _exit_if_removed_command(argv: list[str]) -> None:
         return
     program = _program_name(argv)
     print(
-        f"Error: '{program} {command}' was removed in holoscan-cli v1 — "
+        f"Error: '{program} {command}' was removed since holoscan v4.3.0 — "
         f"{REMOVED_COMMANDS[command]} is no longer shipped.\n"
         f"{REMOVED_COMMAND_FOOTER}",
         file=sys.stderr,
