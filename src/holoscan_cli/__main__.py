@@ -44,17 +44,17 @@ PROJECT_COMMANDS = project_command_help()
 
 LOG_LEVELS = ["DEBUG", "INFO", "WARN", "ERROR", "CRITICAL"]
 
-# Subcommands removed in the source-project v1 cut. Mapped to a one-line note
+# Subcommands removed since holoscan v4.3.0. Mapped to a one-line note
 # explaining what each one did, so users typing the old command get a specific
-# message instead of argparse's generic "invalid choice". Note: the pre-v1
-# `holoscan run` was the HAP/MAP packaged-image runner; in v1 the same name is
-# reused for the HoloHub-style source-project runner, so it is not listed here.
+# message instead of argparse's generic "invalid choice". Note: the pre-4.3.0
+# `holoscan run` was the HAP/MAP packaged-image runner; since v4.3.0 the same
+# name is reused for the HoloHub-style source-project runner, so it is not listed here.
 REMOVED_COMMANDS: dict[str, str] = {
     "nics": "the HAP NIC diagnostic command",
 }
 
 REMOVED_COMMAND_FOOTER = (
-    "Removed HAP/MAP commands are out of scope for holoscan-cli v1. Pin "
+    "Removed HAP/MAP commands are not available since holoscan v4.3.0. Pin "
     "holoscan-cli<=4.2.0 if you still need that legacy command surface."
 )
 
@@ -179,7 +179,7 @@ def _exit_if_removed_command(argv: list[str]) -> None:
         return
     program = _program_name(argv)
     print(
-        f"Error: '{program} {command}' was removed in holoscan-cli v1 — "
+        f"Error: '{program} {command}' was removed since holoscan v4.3.0 — "
         f"{REMOVED_COMMANDS[command]} is no longer shipped.\n"
         f"{REMOVED_COMMAND_FOOTER}",
         file=sys.stderr,
