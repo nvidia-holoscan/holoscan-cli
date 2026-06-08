@@ -261,6 +261,7 @@ class TestMain:
         err = capsys.readouterr().err
         assert f"'holoscan {command}' was removed since holoscan v4.3.0" in err
         assert "Removed HAP/MAP commands are not available since holoscan v4.3.0" in err
+        assert "holoscan-cli<=4.2.0 and holoscan<=4.2.0" in err
 
     def test_main_with_log_level(self):
         mock_args = MagicMock()

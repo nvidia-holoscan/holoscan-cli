@@ -55,7 +55,7 @@ REMOVED_COMMANDS: dict[str, str] = {
 
 REMOVED_COMMAND_FOOTER = (
     "Removed HAP/MAP commands are not available since holoscan v4.3.0. Pin "
-    "holoscan-cli<=4.2.0 if you still need that legacy command surface."
+    "holoscan-cli<=4.2.0 and holoscan<=4.2.0 if you still need that legacy command surface."
 )
 
 
