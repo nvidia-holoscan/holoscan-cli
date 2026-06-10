@@ -19,10 +19,18 @@ set -e
 
 # Install dependencies used by project templates and metadata validation
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REQUIREMENTS_FILE="${SCRIPT_DIR}/../requirements.template.txt"
+REQUIREMENTS_FILE=""
+for candidate in \
+    "${SCRIPT_DIR}/requirements.template.txt" \
+    "${SCRIPT_DIR}/../requirements.template.txt"; do
+    if [[ -f "${candidate}" ]]; then
+        REQUIREMENTS_FILE="${candidate}"
+        break
+    fi
+done
 
-if [[ ! -f "${REQUIREMENTS_FILE}" ]]; then
-    echo "requirements.template.txt not found at ${REQUIREMENTS_FILE}" >&2
+if [[ -z "${REQUIREMENTS_FILE}" ]]; then
+    echo "requirements.template.txt not found next to or above ${SCRIPT_DIR}" >&2
     exit 1
 fi
 
