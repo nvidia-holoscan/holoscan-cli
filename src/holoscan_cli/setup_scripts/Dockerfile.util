@@ -22,6 +22,6 @@ ARG BASE_IMAGE
 FROM ${BASE_IMAGE} AS base
 
 ARG SCRIPT
-COPY ${SCRIPT} ${SCRIPT}
-RUN chmod +x ${SCRIPT}
-RUN ${SCRIPT}
+COPY . /tmp/holoscan-cli-setup/
+RUN chmod +x /tmp/holoscan-cli-setup/${SCRIPT}
+RUN /tmp/holoscan-cli-setup/${SCRIPT}

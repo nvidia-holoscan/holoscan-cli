@@ -422,6 +422,46 @@ def test_build_dryrun_emits_base_and_extra_script_layers(tmp_path, monkeypatch):
     assert "holohub-my_app:feature-x-coverage" in layer
 
 
+def test_build_dryrun_allows_bundled_extra_script_dir(tmp_path, monkeypatch):
+    """Bundled setup scripts live outside the source project but can still
+    serve as the Docker build context for extra-script layers."""
+    root = tmp_path / "project"
+    project_dir = root / "applications" / "my_app"
+    project_dir.mkdir(parents=True)
+    dockerfile = project_dir / "Dockerfile"
+    dockerfile.write_text("FROM scratch\n", encoding="utf-8")
+    setup_dir = tmp_path / "package_setup"
+    setup_dir.mkdir()
+    (setup_dir / "coverage.sh").write_text("#!/bin/sh\n", encoding="utf-8")
+    (setup_dir / "Dockerfile.util").write_text("FROM scratch\n", encoding="utf-8")
+
+    calls = []
+    monkeypatch.setenv("HOLOSCAN_CLI_SETUP_SCRIPTS_DIR", str(setup_dir))
+    monkeypatch.setattr(container_core, "get_host_gpu", lambda: "dgpu")
+    monkeypatch.setattr(container_core, "get_compute_capacity", lambda: "90")
+    monkeypatch.setattr(container_core, "get_default_cuda_version", lambda: "13")
+    monkeypatch.setattr(container_core, "get_current_branch_slug", lambda: "feature-x")
+    monkeypatch.setattr(container_core, "get_git_short_sha", lambda: "abcdef0")
+    monkeypatch.setattr(container_core, "run_command", lambda cmd, **kwargs: calls.append(cmd))
+
+    c = _stub_container(
+        root,
+        project_metadata={
+            "project_name": "my_app",
+            "source_folder": str(project_dir),
+            "metadata": {"language": "python"},
+        },
+    )
+    c.dryrun = True
+
+    c.build(extra_scripts=["coverage"])
+
+    layer = calls[1]
+    assert "SCRIPT=coverage.sh" in layer
+    assert str(setup_dir / "Dockerfile.util") in layer
+    assert str(setup_dir) in layer
+
+
 def test_build_dryrun_omits_base_sdk_version_when_not_configured(tmp_path, monkeypatch):
     project_dir = tmp_path / "applications" / "my_app"
     project_dir.mkdir(parents=True)
