@@ -77,6 +77,7 @@ def test_package_deb_emits_module_cmake_flag_for_in_tree_module(tmp_path, monkey
     assert "-DMODULE_test_module_fixture=ON" in cmake_args
     assert "-DPKG_test_module_fixture=ON" in cmake_args
     assert "-DBUILD_ALL=OFF" in cmake_args
+    assert "-DHOLOHUB_PKG_TGZ=ON" not in cmake_args
     assert calls[2][0] == "cpack"
 
 
@@ -233,3 +234,138 @@ def test_resolve_module_project_falls_back_to_source_tree_when_cwd_metadata_inva
     )
 
     assert project_data["project_name"] == "test-module-fixture"
+
+
+def _tgz_project_data(tmp_path):
+    return {
+        "project_name": "test-module-fixture",
+        "project_type": "module",
+        "source_folder": tmp_path / "repo" / "modules" / "test-module-fixture",
+        "metadata": {"language": ["C++"]},
+    }
+
+
+def test_package_tgz_sets_cmake_flag(tmp_path, monkeypatch):
+    """TGZ generator adds -DHOLOHUB_PKG_TGZ=ON to the cmake configure call."""
+    cli = _cli(tmp_path, _tgz_project_data(tmp_path))
+    calls = []
+    monkeypatch.setattr(package_cmd, "run_command", lambda cmd, **kwargs: calls.append(cmd))
+    monkeypatch.setattr(package_cmd.shutil, "which", lambda _: None)
+
+    package_cmd.handle_package(cli, _args(project="test-module-fixture", pkg_generator="TGZ"))
+
+    cmake_args = " ".join(str(a) for a in calls[0])
+    assert "-DHOLOHUB_PKG_TGZ=ON" in cmake_args
+
+
+def test_package_tgz_invokes_cpack_tgz(tmp_path, monkeypatch):
+    """TGZ generator calls cpack with -G TGZ using a generator-specific config."""
+    cli = _cli(tmp_path, _tgz_project_data(tmp_path))
+    pkg_dir = cli.DEFAULT_BUILD_PARENT_DIR / "test_module_fixture" / "package" / "pkg"
+    pkg_dir.mkdir(parents=True)
+    (pkg_dir / "CPackConfig-test-module-fixture-TGZ.cmake").touch()
+
+    calls = []
+    monkeypatch.setattr(package_cmd, "run_command", lambda cmd, **kwargs: calls.append(cmd))
+    monkeypatch.setattr(package_cmd.shutil, "which", lambda _: None)
+
+    package_cmd.handle_package(
+        cli, _args(project="test-module-fixture", pkg_generator="TGZ", dryrun=False)
+    )
+
+    assert len(calls) == 3  # cmake configure, cmake build, cpack
+    cmake_args = " ".join(str(a) for a in calls[0])
+    assert "-DHOLOHUB_PKG_TGZ=ON" in cmake_args
+    cpack_args = calls[2]
+    assert cpack_args[0] == "cpack"
+    assert "-G" in cpack_args
+    assert "TGZ" in cpack_args
+
+
+def test_package_multi_generator_deb_tgz(tmp_path, monkeypatch):
+    """DEB,TGZ produces two cpack calls, one per generator."""
+    cli = _cli(tmp_path, _tgz_project_data(tmp_path))
+    pkg_dir = cli.DEFAULT_BUILD_PARENT_DIR / "test_module_fixture" / "package" / "pkg"
+    pkg_dir.mkdir(parents=True)
+    (pkg_dir / "CPackConfig-test-module-fixture.cmake").touch()
+    (pkg_dir / "CPackConfig-test-module-fixture-TGZ.cmake").touch()
+
+    calls = []
+    monkeypatch.setattr(package_cmd, "run_command", lambda cmd, **kwargs: calls.append(cmd))
+    monkeypatch.setattr(package_cmd.shutil, "which", lambda _: None)
+
+    package_cmd.handle_package(
+        cli, _args(project="test-module-fixture", pkg_generator="DEB,TGZ", dryrun=False)
+    )
+
+    assert len(calls) == 4  # cmake configure, cmake build, cpack DEB, cpack TGZ
+    cmake_args = " ".join(str(a) for a in calls[0])
+    assert "-DHOLOHUB_PKG_TGZ=ON" in cmake_args
+    assert "DEB" in calls[2]
+    assert "TGZ" in calls[3]
+
+
+def test_package_tgz_routes_to_generator_specific_config(tmp_path, monkeypatch):
+    """Generator-specific config is used for TGZ; base config is used for DEB."""
+    cli = _cli(tmp_path, _tgz_project_data(tmp_path))
+    pkg_dir = cli.DEFAULT_BUILD_PARENT_DIR / "test_module_fixture" / "package" / "pkg"
+    pkg_dir.mkdir(parents=True)
+    base_cfg = pkg_dir / "CPackConfig-test-module-fixture.cmake"
+    tgz_cfg = pkg_dir / "CPackConfig-test-module-fixture-TGZ.cmake"
+    base_cfg.touch()
+    tgz_cfg.touch()
+
+    calls = []
+    monkeypatch.setattr(package_cmd, "run_command", lambda cmd, **kwargs: calls.append(cmd))
+    monkeypatch.setattr(package_cmd.shutil, "which", lambda _: None)
+
+    package_cmd.handle_package(
+        cli, _args(project="test-module-fixture", pkg_generator="DEB,TGZ", dryrun=False)
+    )
+
+    deb_args = " ".join(str(a) for a in calls[2])
+    assert str(base_cfg) in deb_args
+    assert str(tgz_cfg) not in deb_args
+
+    tgz_args = " ".join(str(a) for a in calls[3])
+    assert str(tgz_cfg) in tgz_args
+    assert str(base_cfg) not in tgz_args
+
+
+def test_package_missing_cpack_configs_fatal(tmp_path, monkeypatch, capsys):
+    """When the build produces no CPack configs, fatal is called with a clear message."""
+    cli = _cli(tmp_path, _tgz_project_data(tmp_path))
+    pkg_dir = cli.DEFAULT_BUILD_PARENT_DIR / "test_module_fixture" / "package" / "pkg"
+    pkg_dir.mkdir(parents=True)
+
+    monkeypatch.setattr(package_cmd, "run_command", lambda cmd, **kwargs: None)
+    monkeypatch.setattr(package_cmd.shutil, "which", lambda _: None)
+
+    with pytest.raises(SystemExit) as excinfo:
+        package_cmd.handle_package(
+            cli, _args(project="test-module-fixture", pkg_generator="TGZ", dryrun=False)
+        )
+
+    assert excinfo.value.code == 1
+    assert "No CPack config files" in capsys.readouterr().err
+
+
+def test_package_missing_generator_config_fatal(tmp_path, monkeypatch, capsys):
+    """When no config exists for the requested generator, fatal lists available generators."""
+    cli = _cli(tmp_path, _tgz_project_data(tmp_path))
+    pkg_dir = cli.DEFAULT_BUILD_PARENT_DIR / "test_module_fixture" / "package" / "pkg"
+    pkg_dir.mkdir(parents=True)
+    (pkg_dir / "CPackConfig-test-module-fixture-DEB.cmake").touch()
+
+    monkeypatch.setattr(package_cmd, "run_command", lambda cmd, **kwargs: None)
+    monkeypatch.setattr(package_cmd.shutil, "which", lambda _: None)
+
+    with pytest.raises(SystemExit) as excinfo:
+        package_cmd.handle_package(
+            cli, _args(project="test-module-fixture", pkg_generator="TGZ", dryrun=False)
+        )
+
+    assert excinfo.value.code == 1
+    err = capsys.readouterr().err
+    assert "TGZ" in err
+    assert "DEB" in err
