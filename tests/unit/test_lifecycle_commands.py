@@ -507,6 +507,32 @@ def test_handle_test_container_adds_coverage_build_args_and_ctest_options(tmp_pa
     assert "-DCASE=smoke" in ctest_command
 
 
+def test_handle_test_container_uses_env_ctest_script_literal(tmp_path, monkeypatch):
+    monkeypatch.setenv("HOLOSCAN_CLI_CTEST_SCRIPT", "utilities/testing/holohub.container.ctest")
+    cli = RecordingCLI(tmp_path)
+    args = _container_args(
+        coverage=False,
+        clear_cache=False,
+        no_xvfb=True,
+        site_name=None,
+        cdash_url=None,
+        platform_name=None,
+        cmake_options=None,
+        ctest_options=None,
+        ctest_script=None,
+        build_name_suffix=None,
+        language=None,
+        no_docker_build=True,
+    )
+
+    test_cmd.handle_test(cli, args)
+
+    assert cli.container.build_calls == []
+    ctest_command = cli.container.run_calls[0]["extra_args"][1]
+    assert "-S utilities/testing/holohub.container.ctest" in ctest_command
+    assert "from holoscan_cli.cli import HoloscanCLI" not in ctest_command
+
+
 def test_handle_test_local_runs_ctest_in_repo_with_environment(tmp_path, monkeypatch):
     cli = RecordingCLI(tmp_path)
     calls = []
