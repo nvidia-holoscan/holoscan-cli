@@ -32,6 +32,8 @@ from __future__ import annotations
 
 import importlib.metadata
 import importlib.resources
+import os
+import subprocess
 import sys
 from pathlib import Path
 
@@ -67,6 +69,7 @@ REQUIRED_SETUP_SCRIPTS = {
     "sccache.sh",
     "template.sh",
     "xvfb.sh",
+    "requirements.template.txt",
 }
 
 
@@ -120,6 +123,39 @@ def test_setup_scripts_are_packaged():
     }
     missing = REQUIRED_SETUP_SCRIPTS - files
     assert not missing, f"missing bundled setup scripts: {missing}"
+
+
+def test_bundled_template_script_uses_bundled_requirements(tmp_path):
+    """The fallback template setup script must not depend on HoloHub's
+    ``utilities/requirements.template.txt`` being present."""
+    setup_dir = importlib.resources.files("holoscan_cli.setup_scripts")
+    script = setup_dir.joinpath("template.sh")
+    requirements = setup_dir.joinpath("requirements.template.txt")
+    assert script.is_file()
+    assert requirements.is_file()
+
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    args_file = tmp_path / "python-args.txt"
+    fake_python = bin_dir / "python3"
+    fake_python.write_text(
+        "#!/usr/bin/env bash\n" 'printf \'%s\\n\' "$@" > "${PYTHON_ARGS_FILE}"\n',
+        encoding="utf-8",
+    )
+    fake_python.chmod(0o755)
+
+    env = os.environ.copy()
+    env["PATH"] = f"{bin_dir}:{env['PATH']}"
+    env["PYTHON_ARGS_FILE"] = str(args_file)
+    subprocess.run(["bash", str(script)], check=True, env=env)
+
+    assert args_file.read_text(encoding="utf-8").splitlines() == [
+        "-m",
+        "pip",
+        "install",
+        "-r",
+        str(requirements),
+    ]
 
 
 # ---- pyproject.toml entry-point declarations --------------------------------

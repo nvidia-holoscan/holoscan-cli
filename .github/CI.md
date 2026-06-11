@@ -130,6 +130,13 @@ temporary `vX.Y.Z` tag; a **GA** dispatch keeps the `vX.Y.Z` tag and is the one
 K2 Kitmaker promotes to the release registry (Artifactory). The cutover to
 public PyPI happens out of band — until then, installs use the TestPyPI index.
 
+Release-candidate fixes follow the normal review path first: create a PR
+against `main`, wait for it to merge, cherry-pick the merged commit onto
+`release/X.Y.0`, and only then dispatch the next RC from the release branch.
+Do not direct-push unreviewed fixes to `release/X.Y.0`, and do not submit an RC
+workflow or Kitmaker release before the fix has merged to `main` and has been
+picked onto the release branch.
+
 ### Steps
 
 1. **Land everything on `main`** and confirm it is green.
@@ -158,8 +165,9 @@ public PyPI happens out of band — until then, installs use the TestPyPI index.
        --extra-index-url https://pypi.org/simple/ "holoscan-cli==X.Y.Zrc1"
    ```
 
-5. **Iterate** if fixes are needed: cherry-pick onto `release/X.Y.0` (or merge
-   from `main`), then dispatch with `-f rc=2`, `-f rc=3`, … (bump each time).
+5. **Iterate** if fixes are needed: merge the fix to `main`, cherry-pick the
+   merged commit onto `release/X.Y.0`, then dispatch with `-f rc=2`,
+   `-f rc=3`, … (bump each time).
 6. **Cut GA** once an RC is accepted:
 
    ```bash

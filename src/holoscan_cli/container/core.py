@@ -501,17 +501,17 @@ class HoloscanContainer:
         run_command(cmd, dry_run=self.dryrun)
 
         if extra_scripts:
+            setup_scripts_dir = get_holohub_setup_scripts_dir()
             for script in extra_scripts:
-                script_path = get_holohub_setup_scripts_dir() / f"{script}.sh"
+                script_path = setup_scripts_dir / f"{script}.sh"
                 if not script_path.exists():
-                    fatal(f"Script {script}.sh not found in {get_holohub_setup_scripts_dir()}")
+                    fatal(f"Script {script}.sh not found in {setup_scripts_dir}")
                 try:
                     relative_script_path = script_path.relative_to(HoloscanContainer.HOLOHUB_ROOT)
+                    script_build_context = HoloscanContainer.HOLOHUB_ROOT
                 except ValueError:
-                    fatal(
-                        f"Script {script}.sh at {script_path} is not within {HoloscanContainer.HOLOHUB_ROOT}. "
-                        f"The HOLOSCAN_CLI_SETUP_SCRIPTS_DIR environment variable must resolve to a subdirectory within the project scope."
-                    )
+                    relative_script_path = script_path.relative_to(setup_scripts_dir)
+                    script_build_context = setup_scripts_dir
                 cmd = [
                     self.DOCKER_EXE,
                     "build",
@@ -523,8 +523,8 @@ class HoloscanContainer:
                     "--build-arg",
                     f"SCRIPT={relative_script_path}",
                     "-f",
-                    str(get_holohub_setup_scripts_dir() / "Dockerfile.util"),
-                    str(HoloscanContainer.HOLOHUB_ROOT),
+                    str(setup_scripts_dir / "Dockerfile.util"),
+                    str(script_build_context),
                 ]
                 for tag_name in tags:
                     # We override the default tag so we can add the next scripts on top of this.
