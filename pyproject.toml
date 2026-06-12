@@ -107,6 +107,7 @@ poetry-dynamic-versioning = { version = ">=1.5.0,<2.0.0", extras = ["plugin"] }
 
 [project.scripts]
 holoscan = 'holoscan_cli.__main__:main'
+holoscan-cli = 'holoscan_cli.__main__:main'
 
 [tool.codespell]
 skip = '.ruff_cache,.cache,build,dist,htmlcov,tests/reports'

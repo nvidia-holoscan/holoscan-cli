@@ -51,6 +51,22 @@ pip install holoscan-cli
 holoscan --help
 ```
 
+For transient use without keeping an installed environment, package-name based
+tool runners can use the compatibility alias:
+
+```bash
+uvx holoscan-cli --help
+pipx run holoscan-cli --help
+```
+
+The primary CLI command remains `holoscan`. Explicit package/command forms also
+work when you want the canonical command name from a transient runner:
+
+```bash
+uvx --from holoscan-cli holoscan --help
+pipx run --spec holoscan-cli holoscan --help
+```
+
 ## Versioning
 
 `holoscan-cli` release versions are aligned with Holoscan SDK GA release
