@@ -19,8 +19,8 @@ These prevent regressions where ``pyproject.toml`` accidentally drops the
 files an installed ``holoscan-cli`` wheel must ship: the ``py.typed``
 marker, the project metadata JSON schemas under ``holoscan_cli.metadata``,
 the logging configuration, and the CTest scripts under ``holoscan_cli.testing``.
-The tests also pin the public ``holoscan`` console script entry point so the
-installed package keeps a single, stable command name on disk.
+The tests also pin the public ``holoscan`` console script entry point and the
+``holoscan-cli`` package-name tool-runner alias.
 
 Entry-point checks read ``pyproject.toml`` directly (the ground truth for
 what a fresh ``pip install`` will register) instead of the runtime
@@ -161,10 +161,13 @@ def test_bundled_template_script_uses_bundled_requirements(tmp_path):
 # ---- pyproject.toml entry-point declarations --------------------------------
 
 
-def test_pyproject_declares_only_holoscan_console_script():
-    """The shipped wheel must register exactly one console script."""
+def test_pyproject_declares_expected_console_scripts():
+    """The shipped wheel must register the canonical CLI and tool-runner alias."""
     declared = _pyproject().get("project", {}).get("scripts", {})
-    assert declared == {"holoscan": "holoscan_cli.__main__:main"}, declared
+    assert declared == {
+        "holoscan": "holoscan_cli.__main__:main",
+        "holoscan-cli": "holoscan_cli.__main__:main",
+    }, declared
 
 
 def test_pyproject_does_not_declare_legacy_console_scripts():
