@@ -146,8 +146,18 @@ def test_ctest_script_arg_uses_user_override():
     assert _ctest_script_arg(cli, args, in_container=False) == "-S cmake/isaac_os.container.ctest"
 
 
+def test_ctest_script_arg_uses_env_override(monkeypatch):
+    monkeypatch.setenv("HOLOSCAN_CLI_CTEST_SCRIPT", "cmake/env.container.ctest")
+    cli = _bare_cli()
+    args = SimpleNamespace(ctest_script=None)
+
+    assert _ctest_script_arg(cli, args, in_container=True) == "-S cmake/env.container.ctest"
+    assert _ctest_script_arg(cli, args, in_container=False) == "-S cmake/env.container.ctest"
+
+
 def test_ctest_script_arg_local_uses_host_resolved_path(monkeypatch):
     cli = _bare_cli()
+    monkeypatch.delenv("HOLOSCAN_CLI_CTEST_SCRIPT", raising=False)
     monkeypatch.setattr(
         project_cli.HoloscanCLI, "DEFAULT_CTEST_SCRIPT", "/host/path/container.ctest"
     )
@@ -156,7 +166,8 @@ def test_ctest_script_arg_local_uses_host_resolved_path(monkeypatch):
     assert _ctest_script_arg(cli, args, in_container=False) == "-S /host/path/container.ctest"
 
 
-def test_ctest_script_arg_container_defers_resolution_to_runtime():
+def test_ctest_script_arg_container_defers_resolution_to_runtime(monkeypatch):
+    monkeypatch.delenv("HOLOSCAN_CLI_CTEST_SCRIPT", raising=False)
     cli = _bare_cli()
     args = SimpleNamespace(ctest_script=None)
 
