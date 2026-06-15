@@ -276,6 +276,10 @@ jobs:
           /tmp/holoscan-cli-smoke/bin/pip install "${wheel}"
       - name: Smoke Test
         run: .github/scripts/smoke_test.sh /tmp/holoscan-cli-smoke/bin
+      - name: Install tool runners
+        run: python -m pip install --upgrade uv pipx
+      - name: Tool-runner smoke test
+        run: .github/scripts/tool_runner_smoke.sh dist
 
   testpypi-deploy:
     name: publish-test-pypi

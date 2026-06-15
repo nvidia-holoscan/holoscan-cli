@@ -15,11 +15,15 @@ set -euo pipefail
 
 bin_dir=${1:?usage: smoke_test.sh <venv-bin-dir>}
 holoscan="$bin_dir/holoscan"
+holoscan_cli="$bin_dir/holoscan-cli"
 python="$bin_dir/python"
 
 "$holoscan" --help
 "$holoscan" version
 "$holoscan" lint --dryrun
+"$holoscan_cli" --help
+diff -u <("$holoscan" version | sed '/^Executable:/d') \
+        <("$holoscan_cli" version | sed '/^Executable:/d')
 
 # Every registered command must surface working `--help`. Pull the list
 # from the registry so this cannot drift if a subcommand is renamed.
