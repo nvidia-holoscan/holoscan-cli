@@ -157,9 +157,12 @@ first.
 
 ## Contributing
 
-See [CONTRIBUTING.md](./CONTRIBUTING.md) for details.
-[`.github/CI.md`](./.github/CI.md) covers the CI/release pipelines that back
-the workflow badges at the top of this page.
+See
+[CONTRIBUTING.md](https://github.com/nvidia-holoscan/holoscan-cli/blob/main/CONTRIBUTING.md)
+for details.
+[`.github/CI.md`](https://github.com/nvidia-holoscan/holoscan-cli/blob/main/.github/CI.md)
+covers the CI/release pipelines that back the workflow badges at the top of
+this page.
 
 ## Deprecations
 

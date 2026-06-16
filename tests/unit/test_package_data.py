@@ -33,6 +33,7 @@ from __future__ import annotations
 import importlib.metadata
 import importlib.resources
 import os
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -74,12 +75,19 @@ REQUIRED_SETUP_SCRIPTS = {
 
 
 PYPROJECT = Path(__file__).resolve().parents[2] / "pyproject.toml"
+README = Path(__file__).resolve().parents[2] / "README.md"
 
 
 def _pyproject() -> dict:
     if not PYPROJECT.exists():
         pytest.skip(f"pyproject.toml not found at {PYPROJECT}")
     return tomllib.loads(PYPROJECT.read_text())
+
+
+def _readme() -> str:
+    if not README.exists():
+        pytest.skip(f"README.md not found at {README}")
+    return README.read_text(encoding="utf-8")
 
 
 # ---- bundled package data ---------------------------------------------------
@@ -156,6 +164,24 @@ def test_bundled_template_script_uses_bundled_requirements(tmp_path):
         "-r",
         str(requirements),
     ]
+
+
+def test_readme_links_are_valid_for_pypi_rendering():
+    """PyPI renders README.md as the long description, outside the GitHub repo.
+
+    Repo-relative links such as ``./CONTRIBUTING.md`` become broken PyPI URLs, so
+    docs shipped in package metadata should use absolute URLs or page anchors.
+    """
+    relative_links = []
+    for match in re.finditer(r"(?<!!)\[[^\]]+\]\(([^)]+)\)", _readme()):
+        target = match.group(1).strip()
+        if target.startswith(("#", "http://", "https://", "mailto:")):
+            continue
+        if "://" in target:
+            continue
+        relative_links.append(target)
+
+    assert not relative_links, f"README has PyPI-broken relative links: {relative_links}"
 
 
 # ---- pyproject.toml entry-point declarations --------------------------------
