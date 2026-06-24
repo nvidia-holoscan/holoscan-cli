@@ -34,6 +34,30 @@ from holoscan_cli.utils.holohub import (
 from holoscan_cli.utils.io import fatal, format_cmd, run_command
 
 
+def _staged_module_dev_hook_names(build_dir: Path) -> list[str]:
+    """Return generated Holoscan Module dev hook module names."""
+    return sorted(helper.stem for helper in build_dir.glob("holoscan_*_dev.py"))
+
+
+def _with_staged_module_dev_hooks(cmd: list[str], hook_names: list[str]) -> list[str]:
+    """Import staged module dev hooks before running a Python script."""
+    if not hook_names or len(cmd) < 2:
+        return cmd
+    if not Path(cmd[0]).name.startswith("python") or cmd[1].startswith("-"):
+        return cmd
+
+    hook_loader = (
+        "import importlib, runpy, sys;"
+        "from pathlib import Path;"
+        f"[importlib.import_module(name) for name in {hook_names!r}];"
+        "script = sys.argv[1];"
+        "sys.argv = sys.argv[1:];"
+        "sys.path[0] = str(Path(script).resolve().parent);"
+        "runpy.run_path(script, run_name='__main__')"
+    )
+    return [cmd[0], "-c", hook_loader, *cmd[1:]]
+
+
 def register_run_parser(
     cli, subparsers, *, container_build, container_run
 ) -> argparse.ArgumentParser:
@@ -180,9 +204,19 @@ def handle_run(cli, args: argparse.Namespace) -> None:
 
         # Set up run environment variables
         run_env = os.environ.copy()
-        run_env["PYTHONPATH"] = (
-            f"{run_env.get('PYTHONPATH', '')}:{cli.DEFAULT_SDK_DIR}/python/lib:{build_dir}/python/lib:{cli.HOLOHUB_ROOT}"
+        module_dev_hook_names = _staged_module_dev_hook_names(build_dir)
+        pythonpath_entries = [str(build_dir)] if module_dev_hook_names else []
+        pythonpath_entries.extend(
+            entry
+            for entry in (
+                run_env.get("PYTHONPATH", ""),
+                f"{cli.DEFAULT_SDK_DIR}/python/lib",
+                str(build_dir / "python" / "lib"),
+                str(cli.HOLOHUB_ROOT),
+            )
+            if entry
         )
+        run_env["PYTHONPATH"] = ":".join(pythonpath_entries)
         run_env["HOLOSCAN_CLI_DATA_PATH"] = str(cli.DEFAULT_DATA_DIR)
         run_env["HOLOSCAN_INPUT_PATH"] = run_env.get(
             "HOLOSCAN_INPUT_PATH", str(cli.DEFAULT_DATA_DIR)
@@ -261,6 +295,7 @@ def handle_run(cli, args: argparse.Namespace) -> None:
             cmd = f"{nsys_cmd} profile --trace=cuda,vulkan,nvtx,osrt {cmd}"
 
         cmd_to_run = cmd if isinstance(cmd, list) else shlex.split(cmd)
+        cmd_to_run = _with_staged_module_dev_hooks(cmd_to_run, module_dev_hook_names)
         run_command(cmd_to_run, env=run_env, dry_run=args.dryrun)
     else:
         container = cli.make_project_container(

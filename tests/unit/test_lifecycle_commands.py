@@ -382,6 +382,53 @@ def test_handle_run_local_dryrun_builds_mapping_and_executes_command(tmp_path, m
     assert kwargs["dry_run"] is True
 
 
+def test_handle_run_local_activates_staged_module_dev_hook(tmp_path, monkeypatch):
+    module_dir = tmp_path / "repo" / "modules" / "holoscan-smoke"
+    module_dir.mkdir(parents=True)
+    project = {
+        "project_name": "holoscan-smoke",
+        "project_type": "module",
+        "source_folder": module_dir,
+        "metadata": {
+            "language": "python",
+            "run": {"command": "python3 app.py", "workdir": ""},
+        },
+    }
+    cli = RecordingCLI(tmp_path, project)
+    build_dir = tmp_path / "build" / "holoscan-smoke"
+    build_dir.mkdir(parents=True)
+    (build_dir / "holoscan_smoke_dev.py").write_text("# helper\n", encoding="utf-8")
+    (build_dir / "holoscan-smoke-dev.pth").write_text(
+        "import holoscan_smoke_dev\n", encoding="utf-8"
+    )
+    calls = []
+    monkeypatch.setattr(
+        run_cmd,
+        "build_project_locally",
+        lambda *args, **kwargs: (build_dir, cli.project_data),
+    )
+    monkeypatch.setattr(run_cmd, "run_command", lambda cmd, **kwargs: calls.append((cmd, kwargs)))
+
+    run_cmd.handle_run(
+        cli,
+        _project_args(
+            project="holoscan-smoke",
+            local=True,
+            language="python",
+            dryrun=False,
+        ),
+    )
+
+    command, kwargs = calls[0]
+    assert command[0:2] == ["python3", "-c"]
+    assert "importlib.import_module(name)" in command[2]
+    assert "holoscan_smoke_dev" in command[2]
+    assert "sys.path[0]" in command[2]
+    assert command[3:] == ["app.py"]
+    assert not (build_dir / ".holoscan_cli_runtime").exists()
+    assert kwargs["env"]["PYTHONPATH"].split(":")[0] == str(build_dir)
+
+
 def test_handle_run_container_branch_passes_recursive_local_command(tmp_path, monkeypatch):
     cli = RecordingCLI(tmp_path)
     captured = {}
