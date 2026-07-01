@@ -36,7 +36,9 @@ def test_install_packages_if_missing_installs_only_missing_and_pinned(monkeypatc
 
     assert selected == ["missing", "pinned=1.2*"]
     assert updates == [True]
-    assert commands == [(["apt", "install", "-y", "missing", "pinned=1.2*"], {"dry_run": True})]
+    assert commands == [
+        (["apt", "install", "-y", "missing", "pinned=1.2*"], {"dry_run": True, "as_root": True})
+    ]
 
 
 def test_install_cuda_dependencies_package_selects_matching_available_version(

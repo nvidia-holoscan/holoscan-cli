@@ -22,6 +22,9 @@ IDEs do not confuse it for a packaging file.
 
 import argparse
 import filecmp
+import os
+import shutil
+import subprocess
 import sys
 from pathlib import Path
 
@@ -36,6 +39,33 @@ from holoscan_cli.utils.host_setup import (
     setup_sccache,
 )
 from holoscan_cli.utils.io import Color, fatal, format_cmd, run_command
+
+
+def _build_script_env() -> dict:
+    """Environment for running a setup script.
+
+    Puts the project's Python on ``PATH`` so a bare ``pip``/``python`` in the
+    script resolves to it — the active venv when the user has one, otherwise the
+    wrapper-managed venv (i.e. wherever the CLI itself is running).
+    """
+    env = os.environ.copy()
+    env["PATH"] = os.path.dirname(sys.executable) + os.pathsep + env.get("PATH", "")
+    if sys.prefix != sys.base_prefix:  # running inside a venv
+        env["VIRTUAL_ENV"] = sys.prefix
+        env.pop("PYTHONHOME", None)
+    return env
+
+
+def _prime_sudo(dry_run: bool) -> None:
+    """Prompt for the sudo password once up front, so a script's per-command
+    ``sudo`` (and the CLI's own system steps) don't each re-prompt.
+
+    No-op when already root, when ``sudo`` is unavailable, or in dry-run.
+    """
+    if dry_run or os.geteuid() == 0:
+        return
+    if shutil.which("sudo"):
+        subprocess.run(["sudo", "-v"], check=False)
 
 
 def register_setup_parser(cli, subparsers) -> argparse.ArgumentParser:
@@ -73,16 +103,23 @@ def handle_setup(cli, args: argparse.Namespace) -> None:
         sys.exit(0)
 
     if args.scripts:
+        # Scripts run as the invoking user, in the project's Python environment,
+        # with sudo available — authors write plain `sudo apt-get ...` / `pip install ...`.
+        # We don't pre-prompt for sudo here: a script that needs it prompts on its
+        # first `sudo` (and pip-only scripts never prompt at all).
+        script_env = _build_script_env()
         for script in args.scripts:
             if any(sep in script for sep in ("/", "\\")):
                 fatal(f"Invalid script name '{script}': path separators are not allowed")
             script_path = get_holohub_setup_scripts_dir().resolve() / f"{script}.sh"
             if not script_path.exists():
                 fatal(f"Script {script}.sh not found in {get_holohub_setup_scripts_dir()}")
-            run_command(["bash", str(script_path)], dry_run=args.dryrun)
+            run_command(["bash", str(script_path)], dry_run=args.dryrun, env=script_env)
         sys.exit(0)
 
     if not args.scripts:
+        # The default setup always installs apt packages; prompt for sudo once up front.
+        _prime_sudo(args.dryrun)
         install_packages_if_missing(
             ["wget", "xvfb", "git", "unzip", "ffmpeg", "ninja-build", "libv4l-dev"],
             dry_run=args.dryrun,
@@ -110,7 +147,9 @@ def handle_setup(cli, args: argparse.Namespace) -> None:
                 dest = dest_folder / source.name
                 if dest.exists() and filecmp.cmp(source, dest, shallow=False):
                     continue
-                run_command(["cp", str(source), str(dest_folder)], dry_run=args.dryrun)
+                run_command(
+                    ["cp", str(source), str(dest_folder)], dry_run=args.dryrun, as_root=True
+                )
                 installed.append(dest)
 
         if not args.dryrun:

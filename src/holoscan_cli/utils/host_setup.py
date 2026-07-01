@@ -34,7 +34,7 @@ import subprocess
 import sys
 from typing import List, Optional
 
-from holoscan_cli.utils.io import _get_maybe_sudo, fatal, info, run_command, warn
+from holoscan_cli.utils.io import fatal, info, run_command, warn, write_system_file
 from holoscan_cli.utils.sdk import get_cuda_runtime_version
 from holoscan_cli.utils.text import parse_semantic_version
 
@@ -94,7 +94,7 @@ def ensure_apt_updated(dry_run: bool = False) -> None:
     """Ensure apt package list is updated, but only once per session"""
     global _apt_updated
     if not _apt_updated:
-        run_command(["apt-get", "update"], dry_run=dry_run)
+        run_command(["apt-get", "update"], dry_run=dry_run, as_root=True)
         _apt_updated = True
 
 
@@ -132,7 +132,7 @@ def install_packages_if_missing(
     if packages_to_install:
         ensure_apt_updated(dry_run=dry_run)
         install_cmd = ["apt", "install"] + apt_options + packages_to_install
-        run_command(install_cmd, dry_run=dry_run)
+        run_command(install_cmd, dry_run=dry_run, as_root=True)
 
     return packages_to_install
 
@@ -210,21 +210,25 @@ def setup_cmake(min_version: str = "3.26.4", dry_run: bool = False) -> None:
         return
     ubuntu_codename = get_ubuntu_codename()
     install_packages_if_missing(["gpg"], dry_run=dry_run)
-    maybe_sudo = _get_maybe_sudo()
-    run_command(
-        "wget -O - https://apt.kitware.com/keys/kitware-archive-latest.asc | "
-        "gpg --dearmor - | "
-        f"{maybe_sudo} tee /usr/share/keyrings/kitware-archive-keyring.gpg >/dev/null",
-        dry_run=dry_run,
-        shell=True,
+
+    keyring_path = "/usr/share/keyrings/kitware-archive-keyring.gpg"
+    source_line = (
+        "deb [signed-by=/usr/share/keyrings/kitware-archive-keyring.gpg] "
+        f"https://apt.kitware.com/ubuntu/ {ubuntu_codename} main\n"
     )
-    run_command(
-        f'echo "deb [signed-by=/usr/share/keyrings/kitware-archive-keyring.gpg] '
-        f'https://apt.kitware.com/ubuntu/ {ubuntu_codename} main" | '
-        f"{maybe_sudo} tee /etc/apt/sources.list.d/kitware.list >/dev/null",
-        dry_run=dry_run,
-        shell=True,
-    )
+    if dry_run:
+        info(f"[dryrun] Would fetch the Kitware archive key -> {keyring_path}")
+        write_system_file("/etc/apt/sources.list.d/kitware.list", source_line, dry_run=True)
+    else:
+        # Fetch + dearmor the key as the invoking user; install the keyring as root.
+        dearmored = subprocess.run(
+            "wget -O - https://apt.kitware.com/keys/kitware-archive-latest.asc | gpg --dearmor",
+            shell=True,
+            check=True,
+            capture_output=True,
+        ).stdout
+        write_system_file(keyring_path, dearmored)
+        write_system_file("/etc/apt/sources.list.d/kitware.list", source_line)
     install_packages_if_missing(["cmake", "cmake-curses-gui"], dry_run=dry_run)
 
 
@@ -259,9 +263,12 @@ def setup_ngc_cli(dry_run: bool = False) -> None:
         run_command(["unzip", "-q", ngc_filename], dry_run=dry_run)
         run_command(["chmod", "u+x", "ngc-cli/ngc"], dry_run=dry_run)
 
-        # Use absolute path for symlink
+        # Link into the user's ~/.local/bin (on PATH for most shells) — no root needed.
         abs_path = os.path.abspath("ngc-cli/ngc")
-        run_command(["ln", "-s", abs_path, "/usr/local/bin/ngc"], dry_run=dry_run)
+        local_bin = os.path.expanduser("~/.local/bin")
+        if not dry_run:
+            os.makedirs(local_bin, exist_ok=True)
+        run_command(["ln", "-sf", abs_path, os.path.join(local_bin, "ngc")], dry_run=dry_run)
 
     except Exception as e:
         fatal(f"Failed to install NGC CLI: {e}")
