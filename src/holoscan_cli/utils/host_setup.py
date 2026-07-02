@@ -205,6 +205,7 @@ def get_ubuntu_codename() -> str:
 
 def setup_cmake(min_version: str = "3.26.4", dry_run: bool = False) -> None:
     """Setup CMake from Kitware if needed"""
+    global _apt_updated
     cmake_ver = get_installed_package_version("cmake")
     if cmake_ver and parse_semantic_version(cmake_ver) >= parse_semantic_version(min_version):
         return
@@ -220,12 +221,19 @@ def setup_cmake(min_version: str = "3.26.4", dry_run: bool = False) -> None:
         info(f"[dryrun] Would fetch the Kitware archive key -> {keyring_path}")
         write_system_file("/etc/apt/sources.list.d/kitware.list", source_line, dry_run=True)
     else:
-        # Fetch + dearmor the key as the invoking user; install the keyring as root.
+        # Fetch + dearmor the key as the invoking user; install the keyring as
+        # root. Two separate steps (not a shell pipeline) so a download failure
+        # cannot be masked by the pipeline's exit status and produce an empty
+        # keyring.
         try:
+            key = subprocess.run(
+                ["wget", "-qO-", "https://apt.kitware.com/keys/kitware-archive-latest.asc"],
+                check=True,
+                capture_output=True,
+            ).stdout
             dearmored = subprocess.run(
-                "wget -O - https://apt.kitware.com/keys/kitware-archive-latest.asc"
-                " | gpg --dearmor",
-                shell=True,
+                ["gpg", "--dearmor"],
+                input=key,
                 check=True,
                 capture_output=True,
             ).stdout
@@ -236,6 +244,10 @@ def setup_cmake(min_version: str = "3.26.4", dry_run: bool = False) -> None:
             )
         write_system_file(keyring_path, dearmored)
         write_system_file("/etc/apt/sources.list.d/kitware.list", source_line)
+    # The new source must be visible to apt even when an earlier step already
+    # ran `apt-get update` (which would make install_packages_if_missing skip it).
+    run_command(["apt-get", "update"], dry_run=dry_run, as_root=True)
+    _apt_updated = True
     install_packages_if_missing(["cmake", "cmake-curses-gui"], dry_run=dry_run)
 
 

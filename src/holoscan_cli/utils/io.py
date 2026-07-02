@@ -217,12 +217,15 @@ def run_command(
     if elevate:
         sudo = shutil.which("sudo") or ""
         if not sudo:
-            display = cmd if isinstance(cmd, str) else " ".join(str(x) for x in cmd)
-            fatal(
-                "This step needs root privileges but 'sudo' is not available:\n"
-                f"  {display}\n"
-                "Re-run it as an administrator, or install sudo."
-            )
+            if dry_run:
+                sudo = "sudo"  # display only; a dry run executes nothing
+            else:
+                display = cmd if isinstance(cmd, str) else " ".join(str(x) for x in cmd)
+                fatal(
+                    "This step needs root privileges but 'sudo' is not available:\n"
+                    f"  {display}\n"
+                    "Re-run it as an administrator, or install sudo."
+                )
 
     if isinstance(cmd, str):
         exec_cmd: Union[str, List[str]] = f"{sudo} {cmd}" if elevate else cmd
