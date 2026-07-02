@@ -221,12 +221,19 @@ def setup_cmake(min_version: str = "3.26.4", dry_run: bool = False) -> None:
         write_system_file("/etc/apt/sources.list.d/kitware.list", source_line, dry_run=True)
     else:
         # Fetch + dearmor the key as the invoking user; install the keyring as root.
-        dearmored = subprocess.run(
-            "wget -O - https://apt.kitware.com/keys/kitware-archive-latest.asc | gpg --dearmor",
-            shell=True,
-            check=True,
-            capture_output=True,
-        ).stdout
+        try:
+            dearmored = subprocess.run(
+                "wget -O - https://apt.kitware.com/keys/kitware-archive-latest.asc"
+                " | gpg --dearmor",
+                shell=True,
+                check=True,
+                capture_output=True,
+            ).stdout
+        except subprocess.CalledProcessError as e:
+            fatal(
+                "Failed to download the Kitware apt archive key "
+                f"(is the network available?): {e.stderr.decode(errors='replace').strip()}"
+            )
         write_system_file(keyring_path, dearmored)
         write_system_file("/etc/apt/sources.list.d/kitware.list", source_line)
     install_packages_if_missing(["cmake", "cmake-curses-gui"], dry_run=dry_run)
@@ -269,6 +276,8 @@ def setup_ngc_cli(dry_run: bool = False) -> None:
         if not dry_run:
             os.makedirs(local_bin, exist_ok=True)
         run_command(["ln", "-sf", abs_path, os.path.join(local_bin, "ngc")], dry_run=dry_run)
+        if not dry_run and not shutil.which("ngc"):
+            info(f"Installed ngc to {local_bin}; add it to PATH to use 'ngc' directly.")
 
     except Exception as e:
         fatal(f"Failed to install NGC CLI: {e}")

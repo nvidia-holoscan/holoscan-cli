@@ -254,7 +254,6 @@ def write_system_file(
     path: Union[str, "os.PathLike[str]"],
     content: Union[str, bytes],
     dry_run: bool = False,
-    mode: Optional[str] = None,
 ) -> None:
     """Write ``content`` to a root-owned ``path`` via ``sudo tee``.
 
@@ -271,8 +270,6 @@ def write_system_file(
         text=not is_bytes,
         stdout=subprocess.DEVNULL,
     )
-    if mode is not None:
-        run_command(["chmod", mode, str(path)], as_root=True, dry_run=dry_run)
 
 
 def run_info_command(cmd: List[str], cwd: Optional[str] = None) -> Optional[str]:
