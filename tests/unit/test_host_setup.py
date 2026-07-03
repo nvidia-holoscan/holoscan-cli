@@ -228,3 +228,57 @@ def test_setup_cuda_dependencies_uses_runtime_major_version(monkeypatch):
     host_setup.setup_cuda_dependencies(dry_run=True)
 
     assert captured == [("12", True)]
+
+
+def _run_ngc_setup(monkeypatch):
+    commands = []
+    monkeypatch.setattr(
+        host_setup,
+        "run_command",
+        lambda cmd, **kwargs: commands.append((cmd, kwargs)),
+    )
+    host_setup.setup_ngc_cli(dry_run=False)
+    return commands
+
+
+def test_setup_ngc_cli_links_into_local_bin_for_non_root(monkeypatch, tmp_path):
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setattr(host_setup.os, "geteuid", lambda: 1000)
+    monkeypatch.setattr(host_setup.shutil, "which", lambda _: None)
+
+    commands = _run_ngc_setup(monkeypatch)
+
+    dest = str(tmp_path / ".local" / "bin" / "ngc")
+    assert commands[-1][0][:2] == ["ln", "-sf"]
+    assert commands[-1][0][-1] == dest
+    assert (tmp_path / ".local" / "bin").is_dir()
+
+
+def test_setup_ngc_cli_links_system_wide_for_root(monkeypatch, tmp_path):
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setattr(host_setup.os, "geteuid", lambda: 0)
+    monkeypatch.setattr(host_setup.shutil, "which", lambda _: None)
+    # Keep the test hermetic: ignore any real /usr/local/bin/ngc on the test
+    # machine, and don't create directories outside tmp_path.
+    monkeypatch.setattr(host_setup.os.path, "exists", lambda _: False)
+    monkeypatch.setattr(host_setup.os, "makedirs", lambda *a, **k: None)
+
+    commands = _run_ngc_setup(monkeypatch)
+
+    assert commands[-1][0][:2] == ["ln", "-sf"]
+    assert commands[-1][0][-1] == "/usr/local/bin/ngc"
+
+
+def test_setup_ngc_cli_skips_when_destination_exists(monkeypatch, tmp_path):
+    # ~/.local/bin may not be on PATH; the destination check must still
+    # short-circuit so setup does not re-download NGC on every run.
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setattr(host_setup.os, "geteuid", lambda: 1000)
+    monkeypatch.setattr(host_setup.shutil, "which", lambda _: None)
+    dest = tmp_path / ".local" / "bin" / "ngc"
+    dest.parent.mkdir(parents=True)
+    dest.write_text("")
+
+    commands = _run_ngc_setup(monkeypatch)
+
+    assert commands == []

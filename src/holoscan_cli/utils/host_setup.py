@@ -264,7 +264,17 @@ def setup_python_dev(min_version: str = "3.10.0", dry_run: bool = False) -> None
 
 def setup_ngc_cli(dry_run: bool = False) -> None:
     """Setup NGC CLI if not present"""
-    if shutil.which("ngc"):
+    # Container build (root) = system-wide, on PATH in the built image;
+    # host = per-user under ~/.local/bin (no root needed).
+    if os.geteuid() == 0:
+        dest_dir = "/usr/local/bin"
+    else:
+        dest_dir = os.path.expanduser("~/.local/bin")
+    dest = os.path.join(dest_dir, "ngc")
+    # Also check the destination itself: ~/.local/bin may not be on PATH, and
+    # `which` alone would then re-download NGC on every setup run. A dangling
+    # symlink fails the check and is repaired by the `ln -sf` below.
+    if shutil.which("ngc") or os.path.exists(dest):
         return
 
     arch_suffix = "arm64" if platform.machine() == "aarch64" else "linux"
@@ -282,14 +292,12 @@ def setup_ngc_cli(dry_run: bool = False) -> None:
         run_command(["unzip", "-q", ngc_filename], dry_run=dry_run)
         run_command(["chmod", "u+x", "ngc-cli/ngc"], dry_run=dry_run)
 
-        # Link into the user's ~/.local/bin (on PATH for most shells) — no root needed.
         abs_path = os.path.abspath("ngc-cli/ngc")
-        local_bin = os.path.expanduser("~/.local/bin")
         if not dry_run:
-            os.makedirs(local_bin, exist_ok=True)
-        run_command(["ln", "-sf", abs_path, os.path.join(local_bin, "ngc")], dry_run=dry_run)
+            os.makedirs(dest_dir, exist_ok=True)
+        run_command(["ln", "-sf", abs_path, dest], dry_run=dry_run)
         if not dry_run and not shutil.which("ngc"):
-            info(f"Installed ngc to {local_bin}; add it to PATH to use 'ngc' directly.")
+            info(f"Installed ngc to {dest_dir}; add it to PATH to use 'ngc' directly.")
 
     except Exception as e:
         fatal(f"Failed to install NGC CLI: {e}")
