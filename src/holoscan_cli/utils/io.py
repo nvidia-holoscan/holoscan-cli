@@ -242,7 +242,9 @@ def run_command(
         print(Color.yellow("[system] elevating with sudo"))
     if dry_run:
         print(format_cmd(display_cmd, is_dryrun=True))
-        return subprocess.CompletedProcess(display_cmd, 0)
+        # Return the same args shape as a real run (the exec argv/command,
+        # not the display string), so callers can inspect .args uniformly.
+        return subprocess.CompletedProcess(exec_cmd, 0)
 
     print(format_cmd(display_cmd))
     try:

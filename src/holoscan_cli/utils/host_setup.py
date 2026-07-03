@@ -210,7 +210,7 @@ def setup_cmake(min_version: str = "3.26.4", dry_run: bool = False) -> None:
     if cmake_ver and parse_semantic_version(cmake_ver) >= parse_semantic_version(min_version):
         return
     ubuntu_codename = get_ubuntu_codename()
-    install_packages_if_missing(["gpg"], dry_run=dry_run)
+    install_packages_if_missing(["gpg", "wget"], dry_run=dry_run)
 
     keyring_path = "/usr/share/keyrings/kitware-archive-keyring.gpg"
     source_line = (
@@ -237,6 +237,8 @@ def setup_cmake(min_version: str = "3.26.4", dry_run: bool = False) -> None:
                 check=True,
                 capture_output=True,
             ).stdout
+        except FileNotFoundError as e:
+            fatal(f"Failed to download the Kitware apt archive key: {e}")
         except subprocess.CalledProcessError as e:
             fatal(
                 "Failed to download the Kitware apt archive key "
