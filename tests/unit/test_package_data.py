@@ -213,10 +213,13 @@ def test_holoscan_console_script_is_registered_at_runtime():
     :func:`test_pyproject_does_not_declare_legacy_console_scripts`; we only
     require that the canonical ``holoscan`` entry point is reachable.
     """
+    # entry_points() never raises for a missing package; probe the
+    # distribution explicitly so uninstalled dev environments skip.
     try:
-        scripts = importlib.metadata.entry_points(group="console_scripts")
+        importlib.metadata.distribution("holoscan-cli")
     except importlib.metadata.PackageNotFoundError:  # pragma: no cover - dev only
         pytest.skip("holoscan-cli is not installed in this environment")
+    scripts = importlib.metadata.entry_points(group="console_scripts")
     holoscan = [ep for ep in scripts if ep.name == "holoscan"]
     assert holoscan, "holoscan console script not registered"
     assert holoscan[0].value == "holoscan_cli.__main__:main"

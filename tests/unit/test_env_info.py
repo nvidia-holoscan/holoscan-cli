@@ -156,3 +156,65 @@ def test_env_check_does_not_exit_on_warn_only(monkeypatch, capsys):
 
     out = capsys.readouterr().out
     assert "warning" in out.lower()
+
+
+def test_collect_cli_info_reports_managed_venv(monkeypatch, capsys):
+    import sys
+
+    venv = "/home/user/.local/share/holoscan-cli/venv"
+    monkeypatch.setenv("HOLOSCAN_CLI_VENV", venv)
+    monkeypatch.delenv("HOLOSCAN_CLI_SOURCE", raising=False)
+    monkeypatch.setattr(sys, "prefix", venv)
+
+    env_info.collect_cli_info()
+
+    out = capsys.readouterr().out
+    assert "Holoscan CLI Information:" in out
+    assert "Version:" in out
+    assert "Package:" in out
+    assert "Environment: wrapper-managed venv" in out
+    assert f"Uninstall: rm -rf {venv}" in out
+
+
+def test_collect_cli_info_reports_virtualenv_and_source_override(monkeypatch, capsys):
+    import sys
+
+    monkeypatch.delenv("HOLOSCAN_CLI_VENV", raising=False)
+    monkeypatch.setenv("HOLOSCAN_CLI_SOURCE", "/src/holoscan-cli")
+    monkeypatch.setattr(sys, "prefix", "/some/venv")
+    monkeypatch.setattr(sys, "base_prefix", "/usr")
+
+    env_info.collect_cli_info()
+
+    out = capsys.readouterr().out
+    assert "Environment: virtual environment (/some/venv)" in out
+    assert "pip uninstall holoscan-cli" in out
+    assert "Source override (HOLOSCAN_CLI_SOURCE): /src/holoscan-cli" in out
+
+
+def test_collect_cli_info_reports_system_python(monkeypatch, capsys):
+    import sys
+
+    monkeypatch.delenv("HOLOSCAN_CLI_VENV", raising=False)
+    monkeypatch.delenv("HOLOSCAN_CLI_SOURCE", raising=False)
+    monkeypatch.setattr(sys, "prefix", "/usr")
+    monkeypatch.setattr(sys, "base_prefix", "/usr")
+
+    env_info.collect_cli_info()
+
+    out = capsys.readouterr().out
+    assert "Environment: system Python (/usr)" in out
+    assert "pip uninstall holoscan-cli" in out
+
+
+def test_check_cli_reports_package_version(monkeypatch, tmp_path):
+    import holoscan_cli
+
+    monkeypatch.setattr(system_check_module, "get_holohub_root", lambda: tmp_path)
+    monkeypatch.setattr(system_check_module, "get_git_short_sha", lambda length=7: "abc1234")
+
+    result = system_check_module.check_cli()
+
+    assert result.status == "OK"
+    assert f"holoscan-cli {holoscan_cli.__version__}" in result.message
+    assert "abc1234" in result.message
