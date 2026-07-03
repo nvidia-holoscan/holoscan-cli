@@ -15,7 +15,9 @@ is intentionally named `CI.md` (not `README.md`) so it doesn't compete with the
 ├── dependabot.yml            ← daily updates for pip + github-actions
 ├── scripts/                  ← shell helpers shared by workflows
 │   ├── assert_wheel_contents.sh
-│   └── smoke_test.sh
+│   ├── cpu_cli_docker_smoke.sh
+│   ├── smoke_test.sh
+│   └── tool_runner_smoke.sh
 └── workflows/
     ├── blossom-ci.yml        ← NVIDIA Blossom hybrid CI bridge (/build comments)
     ├── codeql.yaml           ← CodeQL Advanced (Python)
@@ -34,8 +36,9 @@ surface is exercised before merge. Jobs run in this order:
 | ----------------------------- | -------------------------------------------------------------------------- |
 | `pre-commit`                  | Run all hooks listed in `.pre-commit-config.yaml` on Python 3.12.          |
 | `test` matrix                 | `poetry run pytest` on Python 3.10, 3.11, 3.12, and 3.13 (Ubuntu).         |
+| `HoloHub project integration` | Test current CLI against HoloHub's real project tree and wrapper suite.    |
 | `build wheel + sdist`         | `poetry build` + `twine check` + `assert_wheel_contents.sh`.               |
-| `installed-wheel smoke test`  | `pip install <wheel>` into a clean venv, then run `smoke_test.sh`.         |
+| `installed artifact smoke`    | Test clean wheel and sdist installs, the `create` extra, uvx, and pipx.    |
 | `CPU CLI + Docker smoke test` | Installed-wheel source-project dry-runs plus a tiny CPU Docker build.      |
 
 The 3.12 `test` entry uploads coverage to Coveralls; the other matrix entries
@@ -71,8 +74,8 @@ Pipeline:
    `X.Y.ZrcN` for RCs) in the Kitmaker `--wheel-url`, not necessarily the
    transient tag name. The tag is auto-removed at the end when `ga == false` so
    RC dispatches do not leave stray refs.
-3. **`smoke-test`** — runs `scripts/smoke_test.sh` against the installed
-   wheel.
+3. **`smoke-test`** — runs `scripts/smoke_test.sh` against clean installs of
+   both the wheel and sdist, and verifies the wheel's `create` extra resolves.
 4. **`publish-test-pypi`** — runs for both GA and non-GA dispatches.
    Publishes via PyPA's trusted-publisher action
    (`pypa/gh-action-pypi-publish@release/v1`), no API token. Trust is
