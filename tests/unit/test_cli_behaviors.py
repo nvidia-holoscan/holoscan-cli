@@ -247,3 +247,55 @@ def test_clear_cache_dryrun_reports_would_remove_paths(tmp_path, monkeypatch, ca
     out = capsys.readouterr().out
     assert "Would remove:" in out
     assert str(build_parent) in out
+
+
+@pytest.mark.parametrize("target", ["fs_root", "home", "repo_root", "ancestor"])
+def test_clear_cache_refuses_dangerous_roots(tmp_path, monkeypatch, capsys, target):
+    """A hostile/fat-fingered cache root (e.g. ``HOLOSCAN_CLI_BUILD_PARENT_DIR=/``)
+    must never let clear-cache rmtree the filesystem root, ``$HOME``, the repo
+    root, or an ancestor of the repo root."""
+    repo_root = tmp_path / "workspace" / "repo"
+    repo_root.mkdir(parents=True)
+    home = tmp_path / "home"
+    home.mkdir()
+    monkeypatch.setattr(Path, "home", staticmethod(lambda: home))
+    dangerous = {
+        "fs_root": Path("/").resolve(),
+        "home": home,
+        "repo_root": repo_root,
+        "ancestor": repo_root.parent,
+    }[target]
+
+    monkeypatch.setattr(project_cli.HoloscanCLI, "HOLOHUB_ROOT", repo_root)
+    cli = object.__new__(project_cli.HoloscanCLI)
+    cli.DEFAULT_BUILD_PARENT_DIR = dangerous
+    cli.DEFAULT_DATA_DIR = tmp_path / "data"
+
+    with patch.object(clear_cache_cmd.shutil, "rmtree") as rmtree:
+        clear_cache_cmd.handle_clear_cache(
+            cli, Namespace(dryrun=False, build=True, data=False, install=False)
+        )
+
+    rmtree.assert_not_called()
+    assert "Refusing to remove:" in capsys.readouterr().out
+    assert dangerous.is_dir()
+
+
+def test_test_clear_cache_selects_build_install_only(monkeypatch):
+    """`test --clear-cache` clears build/install artifacts but never data."""
+    from holoscan_cli.commands import test_cmd
+
+    captured = {}
+    monkeypatch.setattr(test_cmd, "check_skip_builds", lambda args: (True, True))
+    monkeypatch.setattr(
+        "holoscan_cli.commands.clear_cache.handle_clear_cache",
+        lambda cli, args: captured.update(vars(args)),
+    )
+    cli = object.__new__(project_cli.HoloscanCLI)
+    monkeypatch.setattr(cli, "make_project_container", lambda **kw: Namespace(dryrun=False))
+
+    args = Namespace(project=None, language=None, clear_cache=True, dryrun=False, local=True)
+    with pytest.raises(Exception):  # downstream local run needs more of the namespace
+        test_cmd.handle_test(cli, args)
+
+    assert (captured["build"], captured["install"], captured["data"]) == (True, True, False)
