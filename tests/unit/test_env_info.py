@@ -40,6 +40,7 @@ def test_collectors_print_available_host_tooling(tmp_path, monkeypatch, capsys):
     monkeypatch.setattr(env_info.shutil, "which", lambda name: "/usr/bin/sccache")
     monkeypatch.setenv("HOLOSCAN_CLI_DOCKER_EXE", "docker")
     monkeypatch.setenv("HOLOSCAN_CLI_ENABLE_SCCACHE", "true")
+    monkeypatch.setenv("HOLOSCAN_CLI_PINNED_VERSION", "4.4.1")
     monkeypatch.setenv("SCCACHE_BUCKET", "holoscan-cache")
     monkeypatch.setenv("HOLOSCAN_INPUT_PATH", "/data/input")
     root = tmp_path / "repo"
@@ -59,6 +60,7 @@ def test_collectors_print_available_host_tooling(tmp_path, monkeypatch, capsys):
     assert "NVCC: Cuda compilation tools, release 13.0, V13.0.0" in out
     assert "sccache 0.8.2" in out
     assert "SCCACHE_BUCKET: holoscan-cache" in out
+    assert "HOLOSCAN_CLI_PINNED_VERSION: 4.4.1" in out
     assert "HOLOSCAN_INPUT_PATH: /data/input" in out
 
 

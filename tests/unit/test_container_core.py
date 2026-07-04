@@ -558,6 +558,37 @@ def test_run_dryrun_assembles_docker_command_without_runtime_checks(tmp_path, mo
     assert cmd[-4:] == ["custom:image", "bash", "-lc", "echo ok"]
 
 
+def test_run_default_args_suppression_and_as_root_user_override(tmp_path, monkeypatch):
+    project_dir = tmp_path / "applications" / "my_app"
+    project_dir.mkdir(parents=True)
+    (project_dir / "Dockerfile").write_text("FROM scratch\n", encoding="utf-8")
+    calls = []
+    monkeypatch.delenv("DISPLAY", raising=False)
+    monkeypatch.delenv("WAYLAND_DISPLAY", raising=False)
+    monkeypatch.setattr(HoloscanContainer, "DEFAULT_DOCKER_RUN_ARGS", "--name default --detach")
+    monkeypatch.setattr(container_core, "get_image_pythonpath", lambda img, dryrun: "")
+    monkeypatch.setattr(container_core, "get_group_id", lambda group: None)
+    monkeypatch.setattr(container_core, "run_command", lambda cmd, **kwargs: calls.append(cmd))
+    c = _stub_container(
+        tmp_path,
+        project_metadata={
+            "project_name": "my_app",
+            "source_folder": str(project_dir),
+            "metadata": {"language": "python"},
+        },
+    )
+    c.dryrun = True
+
+    c.run(img="custom:image", docker_opts="--network host", include_default_run_args=False)
+    c.run(img="custom:image", as_root=True, docker_opts="--user 1234:1234")
+
+    suppressed, elevated = calls
+    assert "default" not in suppressed and "--detach" not in suppressed
+    assert "--network" in suppressed
+    image_index = elevated.index("custom:image")
+    assert elevated[image_index - 2 : image_index] == ["--user", "0:0"]
+
+
 # ---- build-args / cuda forwarding -------------------------------------------
 #
 # Each of the following pins one piece of build-time argument plumbing that

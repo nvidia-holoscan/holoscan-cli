@@ -276,8 +276,10 @@ def setup_ngc_cli(dry_run: bool = False) -> None:
     # Also check the destination itself: ~/.local/bin may not be on PATH, and
     # `which` alone would then re-download NGC on every setup run. A dangling
     # symlink fails the check and is repaired by the `ln -sf` below.
-    if shutil.which("ngc") or os.path.exists(dest):
+    if shutil.which("ngc") or (os.path.isfile(dest) and os.access(dest, os.X_OK)):
         return
+    if os.path.isdir(dest):
+        fatal(f"Cannot install NGC CLI: destination is a directory: {dest}")
 
     arch_suffix = "arm64" if platform.machine() == "aarch64" else "linux"
     ngc_url = (
@@ -307,7 +309,7 @@ def setup_ngc_cli(dry_run: bool = False) -> None:
 
 def setup_sccache(min_version: str = "0.12.0-rapids.20", dry_run: bool = False) -> None:
     """
-    Install RAPIDS sccache if missing or older than min_version; link into /usr/local/bin.
+    Install RAPIDS sccache if missing or older than min_version.
 
     Requirements:
         - Only RAPIDS-formatted versions are supported, e.g. "0.12.0-rapids.20".

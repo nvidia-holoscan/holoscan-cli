@@ -25,6 +25,19 @@ def test_build_script_env_uses_cli_virtualenv(monkeypatch):
     assert "PYTHONHOME" not in env
 
 
+def test_build_script_env_removes_stale_virtualenv_for_system_python(monkeypatch):
+    monkeypatch.setattr(setup_cmd.sys, "executable", "/usr/bin/python3")
+    monkeypatch.setattr(setup_cmd.sys, "prefix", "/usr")
+    monkeypatch.setattr(setup_cmd.sys, "base_prefix", "/usr")
+    monkeypatch.setenv("PATH", "/tmp/stale-venv/bin:/usr/bin:/bin")
+    monkeypatch.setenv("VIRTUAL_ENV", "/tmp/stale-venv")
+
+    env = setup_cmd._build_script_env()
+
+    assert env["PATH"].split(":", 1)[0] == "/usr/bin"
+    assert "VIRTUAL_ENV" not in env
+
+
 def test_named_setup_script_runs_in_cli_environment(monkeypatch, tmp_path):
     setup_dir = tmp_path / "setup"
     setup_dir.mkdir()

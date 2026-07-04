@@ -51,6 +51,8 @@ def _build_script_env() -> dict:
     if sys.prefix != sys.base_prefix:  # running inside a venv
         env["VIRTUAL_ENV"] = sys.prefix
         env.pop("PYTHONHOME", None)
+    else:
+        env.pop("VIRTUAL_ENV", None)
     return env
 
 

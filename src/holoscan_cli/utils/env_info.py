@@ -172,6 +172,7 @@ def collect_environment_variables() -> None:
         "HOLOSCAN_CLI_VENV",
         "HOLOSCAN_CLI_PYTHON_BIN",
         "HOLOSCAN_CLI_INSTALL_ARGS",
+        "HOLOSCAN_CLI_PINNED_VERSION",
         "HOLOSCAN_CLI_CMD_NAME",
         "HOLOSCAN_CLI_BUILD_LOCAL",
         "HOLOSCAN_CLI_ALWAYS_BUILD",

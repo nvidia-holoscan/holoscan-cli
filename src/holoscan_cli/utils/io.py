@@ -17,12 +17,13 @@
 """Terminal output (Color + info/warn/fatal) and subprocess execution."""
 
 import os
+import shlex
 import shutil
 import subprocess
 import sys
 import traceback
 from datetime import datetime, timezone
-from typing import List, Optional, Union
+from typing import Iterable, List, Optional, Union
 
 # ---- terminal color formatting -----------------------------------------------
 
@@ -198,22 +199,23 @@ def run_command(
     dry_run: bool = False,
     check: bool = True,
     as_root: bool = False,
+    preserve_env: Optional[Iterable[str]] = None,
     **kwargs,
 ) -> subprocess.CompletedProcess:
     """Run a command, optionally elevated with ``sudo``.
 
-    Elevation is *explicit*: the caller sets ``as_root=True`` for the handful of
-    operations that genuinely modify the host (apt, writes under ``/etc``,
-    ``/usr``, udev rules, ...). It is never inferred from the command text, and
-    it never wraps the CLI, pip, the build, or the application.
-
-    ``sudo`` is prepended only when ``as_root`` is set *and* the process is not
-    already root. If elevation is required but ``sudo`` is unavailable, the
-    command fails with an actionable message rather than silently running
-    unprivileged.
+    Elevation is explicit and per-operation; ``sudo`` is prepended only when
+    ``as_root`` is set and the process is not already root. ``preserve_env``
+    names variables re-applied via ``/usr/bin/env`` after sudo, so policies
+    like ``secure_path`` cannot replace them; root keeps its own HOME (-H).
+    Missing sudo fails clearly rather than running unprivileged.
     """
+    if preserve_env is not None and not as_root:
+        raise ValueError("preserve_env requires as_root=True")
+
     elevate = as_root and os.geteuid() != 0
-    sudo = ""
+    sudo_prefix: List[str] = []
+    sudo_display_prefix: List[str] = []
     if elevate:
         sudo = shutil.which("sudo") or ""
         if not sudo:
@@ -226,16 +228,27 @@ def run_command(
                     f"  {display}\n"
                     "Re-run it as an administrator, or install sudo."
                 )
+        sudo_prefix = [sudo]
+        sudo_display_prefix = [sudo]
+        if preserve_env is not None:
+            sudo_prefix.extend(["-H", "-E", "/usr/bin/env"])
+            sudo_display_prefix.extend(["-H", "-E", "/usr/bin/env"])
+            env = kwargs.get("env") or {}
+            for name in sorted(set(preserve_env)):
+                if name in env:
+                    sudo_prefix.append(f"{name}={env[name]}")
+                    sudo_display_prefix.append(f"{name}=<preserved>")
 
     if isinstance(cmd, str):
-        exec_cmd: Union[str, List[str]] = f"{sudo} {cmd}" if elevate else cmd
-        display_cmd = exec_cmd
+        prefix = shlex.join(sudo_prefix)
+        exec_cmd: Union[str, List[str]] = f"{prefix} {cmd}" if elevate else cmd
+        display_prefix = shlex.join(sudo_display_prefix)
+        display_cmd = f"{display_prefix} {cmd}" if elevate else cmd
     else:
         argv = [str(x) for x in cmd]
-        if elevate:
-            argv = [sudo, *argv]
-        exec_cmd = argv
-        quoted = [f'"{x}"' if " " in x else x for x in argv]
+        exec_cmd = [*sudo_prefix, *argv] if elevate else argv
+        display_argv = [*sudo_display_prefix, *argv] if elevate else argv
+        quoted = [f'"{x}"' if " " in x else x for x in display_argv]
         display_cmd = format_long_command(quoted) if dry_run else " ".join(quoted)
 
     if elevate:

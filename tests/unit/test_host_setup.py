@@ -321,7 +321,7 @@ def test_setup_ngc_cli_links_system_wide_for_root(monkeypatch, tmp_path):
     monkeypatch.setattr(host_setup.shutil, "which", lambda _: None)
     # Keep the test hermetic: ignore any real /usr/local/bin/ngc on the test
     # machine, and don't create directories outside tmp_path.
-    monkeypatch.setattr(host_setup.os.path, "exists", lambda _: False)
+    monkeypatch.setattr(host_setup.os.path, "isfile", lambda _: False)
     monkeypatch.setattr(host_setup.os, "makedirs", lambda *a, **k: None)
 
     commands = _run_ngc_setup(monkeypatch)
@@ -341,7 +341,7 @@ def test_setup_ngc_cli_uses_arm64_archive_on_aarch64(monkeypatch, tmp_path):
     assert "ngccli_arm64.zip" in commands[0][0]
 
 
-def test_setup_ngc_cli_skips_when_destination_exists(monkeypatch, tmp_path):
+def test_setup_ngc_cli_skips_when_executable_destination_exists(monkeypatch, tmp_path):
     # ~/.local/bin may not be on PATH; the destination check must still
     # short-circuit so setup does not re-download NGC on every run.
     monkeypatch.setenv("HOME", str(tmp_path))
@@ -349,8 +349,42 @@ def test_setup_ngc_cli_skips_when_destination_exists(monkeypatch, tmp_path):
     monkeypatch.setattr(host_setup.shutil, "which", lambda _: None)
     dest = tmp_path / ".local" / "bin" / "ngc"
     dest.parent.mkdir(parents=True)
-    dest.write_text("")
+    dest.write_text("#!/usr/bin/env bash\n")
+    dest.chmod(0o755)
 
     commands = _run_ngc_setup(monkeypatch)
 
     assert commands == []
+
+
+def test_setup_ngc_cli_repairs_non_executable_destination(monkeypatch, tmp_path):
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setattr(host_setup.os, "geteuid", lambda: 1000)
+    monkeypatch.setattr(host_setup.shutil, "which", lambda _: None)
+    dest = tmp_path / ".local" / "bin" / "ngc"
+    dest.parent.mkdir(parents=True)
+    dest.write_text("corrupt")
+    dest.chmod(0o644)
+
+    commands = _run_ngc_setup(monkeypatch)
+
+    assert commands[-1][0][:2] == ["ln", "-sf"]
+    assert commands[-1][0][-1] == str(dest)
+
+
+def test_setup_ngc_cli_refuses_directory_destination(monkeypatch, tmp_path, capsys):
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setattr(host_setup.os, "geteuid", lambda: 1000)
+    monkeypatch.setattr(host_setup.shutil, "which", lambda _: None)
+    monkeypatch.setattr(
+        host_setup,
+        "run_command",
+        lambda *args, **kwargs: pytest.fail("directory collision must fail before installation"),
+    )
+    dest = tmp_path / ".local" / "bin" / "ngc"
+    dest.mkdir(parents=True)
+
+    with pytest.raises(SystemExit):
+        host_setup.setup_ngc_cli()
+
+    assert f"destination is a directory: {dest}" in capsys.readouterr().err

@@ -95,7 +95,9 @@ def get_run_argparse() -> argparse.ArgumentParser:
         help="Mount additional volume to `/workspace/volumes`, example: `--add-volume /tmp`",
     )
     parser.add_argument(
-        "--as-root", action="store_true", help="Run the container with root permissions"
+        "--as-root",
+        action="store_true",
+        help="Run as root; for `run`, build as the user and run the application phase as root",
     )
     parser.add_argument(
         "--nsys-location",
