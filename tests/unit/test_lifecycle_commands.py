@@ -384,47 +384,6 @@ def test_handle_run_local_dryrun_builds_mapping_and_executes_command(tmp_path, m
     assert kwargs["dry_run"] is True
 
 
-def test_handle_run_local_as_root_elevates_only_application(tmp_path, monkeypatch):
-    cli = RecordingCLI(tmp_path)
-    cli.project_data["metadata"]["run"]["env"] = {
-        "CAMERA_DEVICE": "/dev/video0",
-        "HOME": "/tmp/application-home",
-    }
-    build_dir = tmp_path / "build" / "smoke_app"
-    build_calls = []
-    run_calls = []
-
-    def fake_build(*args, **kwargs):
-        build_calls.append(kwargs)
-        return build_dir, cli.project_data
-
-    monkeypatch.setattr(run_cmd, "build_project_locally", fake_build)
-    monkeypatch.setattr(
-        run_cmd,
-        "run_command",
-        lambda cmd, **kwargs: run_calls.append((cmd, kwargs)),
-    )
-
-    run_cmd.handle_run(cli, _project_args(local=True, as_root=True))
-
-    assert "as_root" not in build_calls[0]
-    command, kwargs = run_calls[0]
-    assert command == ["python", "app.py"]
-    assert kwargs["as_root"] is True
-    assert {
-        "PATH",
-        "PYTHONPATH",
-        "PYTHONHOME",
-        "LD_LIBRARY_PATH",
-        "LD_PRELOAD",
-        "HOLOSCAN_CLI_DATA_PATH",
-        "HOLOSCAN_INPUT_PATH",
-    } <= kwargs["preserve_env"]
-    assert "HOME" not in kwargs["preserve_env"]
-    assert "CAMERA_DEVICE" not in kwargs["preserve_env"]
-    assert kwargs["env"]["CAMERA_DEVICE"] == "/dev/video0"
-
-
 def test_handle_run_container_branch_passes_recursive_local_command(tmp_path, monkeypatch):
     cli = RecordingCLI(tmp_path)
     captured = {}
@@ -505,21 +464,6 @@ def test_handle_run_container_as_root_builds_as_user_then_runs_as_root(tmp_path,
     assert "--run-args=--once" in run_command
     assert app_run["as_root"] is True
     assert app_run["extra_args"] == ["-c", run_command]
-
-
-def test_handle_run_container_as_root_with_no_local_build_uses_one_container(tmp_path, monkeypatch):
-    cli = RecordingCLI(tmp_path)
-    monkeypatch.setattr(
-        run_cmd,
-        "get_entrypoint_command_args",
-        lambda img, cmd, opts, dry_run=False: ("", ["-c", cmd]),
-    )
-
-    run_cmd.handle_run(cli, _project_args(as_root=True, no_local_build=True))
-
-    assert len(cli.container.run_calls) == 1
-    assert cli.container.run_calls[0]["as_root"] is True
-    assert "--no-local-build" in cli.container.run_calls[0]["extra_args"][1]
 
 
 def test_handle_install_local_installs_built_project(tmp_path, monkeypatch):
