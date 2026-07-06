@@ -45,7 +45,11 @@ def _is_safe_to_remove(path: Path, cli) -> bool:
     """
     candidate = _resolve(path)
 
-    anchors = {_resolve("/"), _resolve(Path.home()), _resolve(cli.HOLOHUB_ROOT)}
+    anchors = {_resolve("/"), _resolve(cli.HOLOHUB_ROOT)}
+    try:
+        anchors.add(_resolve(Path.home()))
+    except RuntimeError:
+        pass  # home directory unresolvable; the remaining anchors still apply
     if candidate in anchors:
         return False
     # Refuse ancestors of any anchor (e.g. a parent of the repo root or home).

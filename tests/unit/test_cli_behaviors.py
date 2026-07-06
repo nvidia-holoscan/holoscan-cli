@@ -281,6 +281,32 @@ def test_clear_cache_refuses_dangerous_roots(tmp_path, monkeypatch, capsys, targ
     assert dangerous.is_dir()
 
 
+def test_clear_cache_survives_unresolvable_home(tmp_path, monkeypatch):
+    """An unresolvable home directory (``Path.home()`` raising ``RuntimeError``)
+    must not abort clear-cache; the remaining anchors still guard removals."""
+
+    def raise_home():
+        raise RuntimeError("Could not determine home directory.")
+
+    monkeypatch.setattr(Path, "home", staticmethod(raise_home))
+    repo_root = tmp_path / "repo"
+    repo_root.mkdir()
+    build_parent = tmp_path / "build"
+    build_parent.mkdir()
+
+    monkeypatch.setattr(project_cli.HoloscanCLI, "HOLOHUB_ROOT", repo_root)
+    cli = object.__new__(project_cli.HoloscanCLI)
+    cli.DEFAULT_BUILD_PARENT_DIR = build_parent
+    cli.DEFAULT_DATA_DIR = tmp_path / "data"
+
+    clear_cache_cmd.handle_clear_cache(
+        cli, Namespace(dryrun=False, build=True, data=False, install=False)
+    )
+
+    assert not build_parent.exists()
+    assert repo_root.is_dir()
+
+
 def test_test_clear_cache_selects_build_install_only(monkeypatch):
     """`test --clear-cache` clears build/install artifacts but never data."""
     from holoscan_cli.commands import test_cmd
