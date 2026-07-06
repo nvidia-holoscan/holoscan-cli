@@ -224,15 +224,18 @@ def setup_cmake(min_version: str = "3.26.4", dry_run: bool = False) -> None:
         # Fetch + dearmor the key as the invoking user; install the keyring as
         # root. Two separate steps (not a shell pipeline) so a download failure
         # cannot be masked by the pipeline's exit status and produce an empty
-        # keyring.
+        # keyring. Resolve the binaries to absolute paths (apt just installed
+        # them) instead of trusting the caller's PATH.
+        wget = shutil.which("wget") or "/usr/bin/wget"
+        gpg = shutil.which("gpg") or "/usr/bin/gpg"
         try:
             key = subprocess.run(
-                ["wget", "-qO-", "https://apt.kitware.com/keys/kitware-archive-latest.asc"],
+                [wget, "-qO-", "https://apt.kitware.com/keys/kitware-archive-latest.asc"],
                 check=True,
                 capture_output=True,
             ).stdout
             dearmored = subprocess.run(
-                ["gpg", "--dearmor"],
+                [gpg, "--dearmor"],
                 input=key,
                 check=True,
                 capture_output=True,

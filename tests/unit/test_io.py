@@ -51,7 +51,6 @@ def test_run_command_preserves_environment_for_elevated_application(monkeypatch,
     assert seen["cmd"] == [
         "/usr/bin/sudo",
         "-H",
-        "-E",
         "/usr/bin/env",
         "LD_PRELOAD=/opt/lib/libcamera.so",
         "PATH=/home/user/bin:/usr/bin",

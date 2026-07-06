@@ -206,9 +206,10 @@ def run_command(
 
     Elevation is explicit and per-operation; ``sudo`` is prepended only when
     ``as_root`` is set and the process is not already root. ``preserve_env``
-    names variables re-applied via ``/usr/bin/env`` after sudo, so policies
-    like ``secure_path`` cannot replace them; root keeps its own HOME (-H).
-    Missing sudo fails clearly rather than running unprivileged.
+    names the only variables re-applied via ``/usr/bin/env`` after sudo resets
+    the environment, so policies like ``secure_path`` cannot replace them and
+    unlisted caller variables never reach the root process; root keeps its own
+    HOME (-H). Missing sudo fails clearly rather than running unprivileged.
     """
     if preserve_env is not None and not as_root:
         raise ValueError("preserve_env requires as_root=True")
@@ -231,8 +232,8 @@ def run_command(
         sudo_prefix = [sudo]
         sudo_display_prefix = [sudo]
         if preserve_env is not None:
-            sudo_prefix.extend(["-H", "-E", "/usr/bin/env"])
-            sudo_display_prefix.extend(["-H", "-E", "/usr/bin/env"])
+            sudo_prefix.extend(["-H", "/usr/bin/env"])
+            sudo_display_prefix.extend(["-H", "/usr/bin/env"])
             env = kwargs.get("env") or {}
             for name in sorted(set(preserve_env)):
                 if name in env:

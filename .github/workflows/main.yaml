@@ -134,17 +134,21 @@ jobs:
   holohub-integration:
     name: HoloHub wrapper integration
     runs-on: ubuntu-24.04
+    permissions:
+      contents: read
     steps:
       - name: Checkout holoscan-cli
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v6
         with:
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Checkout HoloHub
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v6
         with:
           repository: nvidia-holoscan/holohub
           path: holohub
+          persist-credentials: false
 
       - name: Set up Python 3.12
         uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6

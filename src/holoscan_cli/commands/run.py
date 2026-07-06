@@ -321,6 +321,8 @@ def handle_run(cli, args: argparse.Namespace) -> None:
 
         cmd_to_run = cmd if isinstance(cmd, list) else shlex.split(cmd)
         as_root = getattr(args, "as_root", False)
+        # sudo resets the environment; list every variable the elevated app
+        # needs, including the project-declared run/mode env keys.
         root_env = {
             "PATH",
             "PYTHONPATH",
@@ -329,6 +331,7 @@ def handle_run(cli, args: argparse.Namespace) -> None:
             "LD_PRELOAD",
             "HOLOSCAN_CLI_DATA_PATH",
             "HOLOSCAN_INPUT_PATH",
+            *run_mode_env,
         }
         run_command(
             cmd_to_run,
