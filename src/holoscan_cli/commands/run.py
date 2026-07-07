@@ -21,7 +21,7 @@ import shlex
 import shutil
 from pathlib import Path
 
-from holoscan_cli.commands.build import build_project_locally
+from holoscan_cli.commands.build import build_project_locally, make_local_build_command
 from holoscan_cli.commands.registry import help_for
 from holoscan_cli.metadata.utils import normalize_language
 from holoscan_cli.utils.docker import get_entrypoint_command_args
@@ -34,29 +34,8 @@ from holoscan_cli.utils.holohub import (
 from holoscan_cli.utils.io import fatal, format_cmd, run_command
 
 
-def _local_build_command(cli_command, args, mode_name, language):
-    command = f"{cli_command} build {args.project}"
-    if mode_name and getattr(args, "mode", None) is not None:
-        command += f" {mode_name}"
-    command += " --local"
-    if args.build_type:
-        command += f" --build-type {args.build_type}"
-    if getattr(args, "with_operators", None):
-        command += f' --build-with "{args.with_operators}"'
-    if getattr(args, "pkg_generator", None):
-        command += f" --pkg-generator {args.pkg_generator}"
-    if language:
-        command += f" --language {language}"
-    if getattr(args, "parallel", None):
-        command += f" --parallel {args.parallel}"
-    if args.verbose:
-        command += " --verbose"
-    for configure_arg in getattr(args, "configure_args", None) or []:
-        command += f" --configure-args={shlex.quote(configure_arg)}"
-    return command
-
-
-def _builder_docker_opts(docker_opts):
+def _transient_builder_docker_opts(docker_opts):
+    """Keep build-relevant options while removing app lifecycle and user options."""
     tokens = shlex.split(docker_opts or "")
     filtered = []
     options_with_value = {"--cidfile", "--name", "--restart", "--user", "-u"}
@@ -392,8 +371,10 @@ def handle_run(cli, args: argparse.Namespace) -> None:
         docker_opts = build_args.get("docker_opts", "")
         as_root = getattr(args, "as_root", False)
         if as_root and not skip_local_build:
-            build_cmd = _local_build_command(in_container_cli_command(), args, mode_name, language)
-            builder_docker_opts = _builder_docker_opts(
+            build_cmd = make_local_build_command(
+                in_container_cli_command(), args, mode_name, language
+            )
+            builder_docker_opts = _transient_builder_docker_opts(
                 " ".join(filter(None, [container.DEFAULT_DOCKER_RUN_ARGS, docker_opts]))
             )
             builder_opts_extra, builder_extra_args = get_entrypoint_command_args(

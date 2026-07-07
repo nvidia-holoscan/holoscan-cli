@@ -97,7 +97,7 @@ def get_run_argparse() -> argparse.ArgumentParser:
     parser.add_argument(
         "--as-root",
         action="store_true",
-        help="Run as root; for `run`, build as the user and run the application phase as root",
+        help="Run the container as root. For `run`, build as the user and run only the application phase as root",
     )
     parser.add_argument(
         "--nsys-location",

@@ -341,6 +341,7 @@ def test_handle_build_container_branch_passes_recursive_local_command(tmp_path, 
             language="python",
             parallel="2",
             verbose=True,
+            benchmark=True,
             configure_args=["-DCLI=ON"],
         ),
     )
@@ -350,11 +351,11 @@ def test_handle_build_container_branch_passes_recursive_local_command(tmp_path, 
     assert img == "holohub-smoke:latest"
     assert docker_opts == "--ipc=host"
     assert dryrun is True
-    assert command.startswith("holoscan build smoke_app dev --local")
-    assert "--build-type rel-debug" in command
-    assert "--language python" in command
-    assert "--parallel 2" in command
-    assert "--configure-args=-DCLI=ON" in command
+    assert command == (
+        "holoscan build smoke_app dev --local --build-type rel-debug"
+        ' --build-with "cli_op" --pkg-generator DEB --language python'
+        " --parallel 2 --verbose --benchmark --configure-args=-DCLI=ON"
+    )
     assert cli.container.run_calls
 
 

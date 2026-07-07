@@ -50,6 +50,36 @@ from holoscan_cli.utils.io import fatal, info, run_command, warn
 from holoscan_cli.utils.text import get_env_bool
 
 
+def make_local_build_command(
+    cli_command: str,
+    args: argparse.Namespace,
+    mode_name: str | None,
+    language: str | None,
+) -> str:
+    """Build the recursive local-build command used inside a container."""
+    command = f"{cli_command} build {args.project}"
+    if mode_name and getattr(args, "mode", None) is not None:
+        command += f" {mode_name}"
+    command += " --local"
+    if args.build_type:
+        command += f" --build-type {args.build_type}"
+    if getattr(args, "with_operators", None):
+        command += f' --build-with "{args.with_operators}"'
+    if getattr(args, "pkg_generator", None):
+        command += f" --pkg-generator {args.pkg_generator}"
+    if language:
+        command += f" --language {language}"
+    if getattr(args, "parallel", None):
+        command += f" --parallel {args.parallel}"
+    if args.verbose:
+        command += " --verbose"
+    if getattr(args, "benchmark", False):
+        command += " --benchmark"
+    for configure_arg in getattr(args, "configure_args", None) or []:
+        command += f" --configure-args={shlex.quote(configure_arg)}"
+    return command
+
+
 def register_build_parser(
     cli, subparsers, *, container_build, container_run
 ) -> argparse.ArgumentParser:
@@ -171,32 +201,12 @@ def handle_build(cli, args: argparse.Namespace) -> None:
             if hasattr(args, "cuda") and args.cuda is not None:
                 container.cuda_version = args.cuda
 
-        # Build command with all necessary arguments. Use the installed CLI entry
-        # point inside the container regardless of how the host invoked us, so the
-        # recursion does not depend on a wrapper-script being on the in-container
-        # PATH. See in_container_cli_command for the override hook.
-        build_cmd = f"{in_container_cli_command()} build {args.project}"
-        # Only add mode name if it was explicitly requested by user (not implicitly resolved)
-        if mode_name and getattr(args, "mode", None) is not None:
-            build_cmd += f" {mode_name}"
-        build_cmd += " --local"
-        if args.build_type:
-            build_cmd += f" --build-type {args.build_type}"
-        if args.with_operators:
-            build_cmd += f' --build-with "{args.with_operators}"'
-        if hasattr(args, "pkg_generator"):
-            build_cmd += f" --pkg-generator {args.pkg_generator}"
-        if hasattr(args, "language") and args.language:
-            build_cmd += f" --language {args.language}"
-        if getattr(args, "parallel", None):
-            build_cmd += f" --parallel {args.parallel}"
-        if args.verbose:
-            build_cmd += " --verbose"
-        if getattr(args, "benchmark", False):
-            build_cmd += " --benchmark"
-        if getattr(args, "configure_args", None):
-            for configure_arg in args.configure_args:
-                build_cmd += f" --configure-args={shlex.quote(configure_arg)}"
+        # Use the installed CLI entry point inside the container regardless of
+        # how the host invoked us, so recursion does not depend on a wrapper
+        # script being on the in-container PATH.
+        build_cmd = make_local_build_command(
+            in_container_cli_command(), args, mode_name, args.language
+        )
 
         img = getattr(args, "img", None) or container.image_name
         docker_opts = build_args.get("docker_opts", "")
