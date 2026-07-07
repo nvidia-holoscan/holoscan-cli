@@ -549,7 +549,12 @@ class HoloscanContainer:
     ) -> None:
         """Launch the container"""
 
-        if not self.dryrun:
+        default_run_args = shlex.split(HoloscanContainer.DEFAULT_DOCKER_RUN_ARGS or "")
+        extra_run_args = shlex.split(docker_opts or "")
+        configured_runtime = get_cli_arg_value(default_run_args + extra_run_args, "--runtime")
+        runtime = configured_runtime or "nvidia"
+
+        if not self.dryrun and runtime == "nvidia":
             check_nvidia_ctk()
 
         if local_sdk_root is not None:
@@ -562,8 +567,6 @@ class HoloscanContainer:
         # If the caller already supplies --cidfile (via DEFAULT_DOCKER_RUN_ARGS or
         # docker_opts), use that path for cleanup and skip injecting our own —
         # Docker rejects duplicate --cidfile flags.
-        default_run_args = shlex.split(HoloscanContainer.DEFAULT_DOCKER_RUN_ARGS or "")
-        extra_run_args = shlex.split(docker_opts or "")
         explicit_cidfile = get_cli_arg_value(default_run_args + extra_run_args, "--cidfile")
         internal_cidfile: Optional[Path] = None
         if explicit_cidfile:
@@ -579,7 +582,7 @@ class HoloscanContainer:
             cmd.extend(["--cidfile", str(internal_cidfile)])
         cmd.extend(self.get_security_args(as_root))
         cmd.extend(self.get_volume_args(add_volumes, enable_mps))
-        cmd.extend(self.get_gpu_runtime_args())
+        cmd.extend(self.get_gpu_runtime_args(None if configured_runtime is not None else runtime))
         cmd.extend(self.get_environment_args())
 
         cmd.extend(self.get_conditional_options(use_tini, persistent))
@@ -733,9 +736,12 @@ class HoloscanContainer:
             "c 189:* rmw",  # /dev/bus/usb/*
         ]
 
-    def get_gpu_runtime_args(self) -> List[str]:
+    def get_gpu_runtime_args(self, runtime: Optional[str] = "nvidia") -> List[str]:
         args = []
-        args.extend(self.get_nvidia_runtime_args())
+        if runtime == "nvidia":
+            args.extend(self.get_nvidia_runtime_args())
+        elif runtime is not None:
+            args.extend(["--runtime", runtime])
         args.extend(
             [
                 "--cap-add",
