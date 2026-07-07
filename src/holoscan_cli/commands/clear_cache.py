@@ -20,47 +20,34 @@ import shutil
 from pathlib import Path
 
 from holoscan_cli.commands.registry import help_for
-from holoscan_cli.utils.io import Color
-
-
-def _resolve(path) -> Path:
-    """Canonicalize a path: expand ``~``, follow symlinks, make absolute."""
-    return Path(path).expanduser().resolve()
+from holoscan_cli.utils.io import Color, resolve
 
 
 def _is_safe_to_remove(path: Path, cli) -> bool:
-    """Return ``True`` only when ``path`` is a real cache directory we may delete.
+    """Return ``True`` only when ``path`` is a cache directory we may delete.
 
-    ``clear-cache`` feeds :func:`shutil.rmtree` with directories derived from
-    ``DEFAULT_BUILD_PARENT_DIR`` / ``DEFAULT_DATA_DIR`` and repo-root globs, all
-    of which are user-overridable via environment variables. A hostile or
-    fat-fingered value (e.g. ``HOLOSCAN_CLI_BUILD_PARENT_DIR=/``) must never let
-    the command wipe the filesystem root, the user's home, or the repository
-    itself. This guard canonicalizes the candidate and enforces two rules:
-
-    1. It is not a critical anchor (``/``, ``$HOME``, the repo root) and is not
-       an ancestor of one — deleting such a path would take the anchor with it.
-    2. It lives at or under an approved cache root (the repo tree, the build
-       parent dir, or the data dir).
+    The candidate dirs come from env-overridable roots (e.g.
+    ``HOLOSCAN_CLI_BUILD_PARENT_DIR=/``), so a bad value must never let
+    :func:`shutil.rmtree` wipe an anchor (``/``, ``$HOME``, the repo root) or
+    an ancestor of one; the path must also live under an approved cache root.
     """
-    candidate = _resolve(path)
+    candidate = resolve(path)
 
-    anchors = {_resolve("/"), _resolve(cli.HOLOHUB_ROOT)}
+    anchors = {resolve("/"), resolve(cli.HOLOHUB_ROOT)}
     try:
-        anchors.add(_resolve(Path.home()))
+        anchors.add(resolve(Path.home()))
     except RuntimeError:
         pass  # home directory unresolvable; the remaining anchors still apply
     if candidate in anchors:
         return False
-    # Refuse ancestors of any anchor (e.g. a parent of the repo root or home).
     for anchor in anchors:
         if anchor.is_relative_to(candidate):
             return False
 
     approved_roots = [
-        _resolve(cli.HOLOHUB_ROOT),
-        _resolve(cli.DEFAULT_BUILD_PARENT_DIR),
-        _resolve(cli.DEFAULT_DATA_DIR),
+        resolve(cli.HOLOHUB_ROOT),
+        resolve(cli.DEFAULT_BUILD_PARENT_DIR),
+        resolve(cli.DEFAULT_DATA_DIR),
     ]
     return any(candidate.is_relative_to(root) for root in approved_roots)
 

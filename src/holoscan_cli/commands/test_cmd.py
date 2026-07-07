@@ -110,11 +110,9 @@ def handle_test(cli, args: argparse.Namespace) -> None:
 
         from holoscan_cli.commands.clear_cache import handle_clear_cache
 
-        # `test --clear-cache` clears build/install artifacts only — never the
-        # downloaded data cache. Forwarding the test namespace directly would
-        # leave build/data/install unset, which clear-cache treats as "clear
-        # everything" (including data), regressing the historical HoloHub
-        # behavior. Select the families explicitly instead.
+        # Clear build/install artifacts only — forwarding the test namespace
+        # (no build/data/install flags) would mean "clear everything",
+        # including the downloaded data cache.
         handle_clear_cache(
             cli,
             Namespace(dryrun=args.dryrun, build=True, data=False, install=True),
