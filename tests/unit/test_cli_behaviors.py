@@ -247,3 +247,74 @@ def test_clear_cache_dryrun_reports_would_remove_paths(tmp_path, monkeypatch, ca
     out = capsys.readouterr().out
     assert "Would remove:" in out
     assert str(build_parent) in out
+
+
+def test_clear_cache_refuses_dangerous_roots(tmp_path, monkeypatch, capsys):
+    """A bad cache root (e.g. ``HOLOSCAN_CLI_BUILD_PARENT_DIR=/``) must never
+    let clear-cache rmtree an anchor (``/``, ``$HOME``, repo root) or an
+    ancestor of one."""
+    repo_root = tmp_path / "workspace" / "repo"
+    repo_root.mkdir(parents=True)
+    home = tmp_path / "home"
+    home.mkdir()
+    monkeypatch.setattr(Path, "home", staticmethod(lambda: home))
+    monkeypatch.setattr(project_cli.HoloscanCLI, "HOLOHUB_ROOT", repo_root)
+    cli = object.__new__(project_cli.HoloscanCLI)
+    cli.DEFAULT_DATA_DIR = tmp_path / "data"
+
+    for dangerous in (Path("/").resolve(), home, repo_root, repo_root.parent):
+        cli.DEFAULT_BUILD_PARENT_DIR = dangerous
+        with patch.object(clear_cache_cmd.shutil, "rmtree") as rmtree:
+            clear_cache_cmd.handle_clear_cache(
+                cli, Namespace(dryrun=False, build=True, data=False, install=False)
+            )
+        rmtree.assert_not_called()
+        assert dangerous.is_dir()
+    assert "Refusing to remove:" in capsys.readouterr().out
+
+
+def test_clear_cache_survives_unresolvable_home(tmp_path, monkeypatch):
+    """``Path.home()`` raising ``RuntimeError`` must not abort clear-cache."""
+
+    def raise_home():
+        raise RuntimeError("Could not determine home directory.")
+
+    monkeypatch.setattr(Path, "home", staticmethod(raise_home))
+    repo_root = tmp_path / "repo"
+    repo_root.mkdir()
+    build_parent = tmp_path / "build"
+    build_parent.mkdir()
+
+    monkeypatch.setattr(project_cli.HoloscanCLI, "HOLOHUB_ROOT", repo_root)
+    cli = object.__new__(project_cli.HoloscanCLI)
+    cli.DEFAULT_BUILD_PARENT_DIR = build_parent
+    cli.DEFAULT_DATA_DIR = tmp_path / "data"
+
+    clear_cache_cmd.handle_clear_cache(
+        cli, Namespace(dryrun=False, build=True, data=False, install=False)
+    )
+
+    assert not build_parent.exists()
+    assert repo_root.is_dir()
+
+
+def test_test_clear_cache_selects_build_install_only(monkeypatch):
+    """`test --clear-cache` clears build/install artifacts but never data."""
+    from holoscan_cli.commands import test_cmd
+
+    captured = {}
+
+    def fake_clear_cache(cli, args):
+        captured.update(vars(args))
+        raise SystemExit  # stop before the rest of handle_test runs
+
+    monkeypatch.setattr(test_cmd, "check_skip_builds", lambda args: (True, True))
+    monkeypatch.setattr("holoscan_cli.commands.clear_cache.handle_clear_cache", fake_clear_cache)
+    cli = object.__new__(project_cli.HoloscanCLI)
+    monkeypatch.setattr(cli, "make_project_container", lambda **kw: Namespace(dryrun=False))
+
+    args = Namespace(project=None, language=None, clear_cache=True, dryrun=False, local=True)
+    with pytest.raises(SystemExit):
+        test_cmd.handle_test(cli, args)
+
+    assert (captured["build"], captured["install"], captured["data"]) == (True, True, False)
