@@ -493,15 +493,15 @@ def test_build_dryrun_omits_base_sdk_version_when_not_configured(tmp_path, monke
     assert not any(arg.startswith("BASE_SDK_VERSION=") for arg in first)
 
 
-def test_run_dryrun_assembles_docker_command_without_runtime_checks(tmp_path, monkeypatch):
-    """Dry-run container launch covers docker-run argument composition while
-    skipping NVIDIA runtime validation and the real docker command."""
+def test_run_assembles_docker_command_without_ctk_for_custom_runtime(tmp_path, monkeypatch):
+    """A custom Docker runtime bypasses NVIDIA Container Toolkit validation."""
     project_dir = tmp_path / "applications" / "my_app"
     project_dir.mkdir(parents=True)
     (project_dir / "Dockerfile").write_text("FROM scratch\n", encoding="utf-8")
     volume = tmp_path / "input-data"
     volume.mkdir()
     calls = []
+    ctk_checks = []
     monkeypatch.delenv("DISPLAY", raising=False)
     monkeypatch.delenv("WAYLAND_DISPLAY", raising=False)
     monkeypatch.delenv("HOLOSCAN_CLI_ENABLE_SCCACHE", raising=False)
@@ -510,6 +510,7 @@ def test_run_dryrun_assembles_docker_command_without_runtime_checks(tmp_path, mo
     monkeypatch.setattr(container_core, "get_image_pythonpath", lambda img, dryrun: "/image/python")
     monkeypatch.setattr(container_core, "get_group_id", lambda group: {"video": 44}.get(group))
     monkeypatch.setattr(container_core, "run_command", lambda cmd, **kwargs: calls.append(cmd))
+    monkeypatch.setattr(container_core, "check_nvidia_ctk", lambda: ctk_checks.append(True))
 
     c = _stub_container(
         tmp_path,
@@ -519,7 +520,6 @@ def test_run_dryrun_assembles_docker_command_without_runtime_checks(tmp_path, mo
             "metadata": {"language": "python"},
         },
     )
-    c.dryrun = True
     c.verbose = True
 
     c.run(
@@ -527,7 +527,7 @@ def test_run_dryrun_assembles_docker_command_without_runtime_checks(tmp_path, mo
         use_tini=True,
         persistent=False,
         as_root=False,
-        docker_opts="--name smoke --cidfile /tmp/custom.cid",
+        docker_opts="--name smoke --cidfile /tmp/custom.cid --runtime runc",
         add_volumes=[str(volume)],
         nsys_profile=True,
         nsys_location="/opt/nsys",
@@ -555,6 +555,8 @@ def test_run_dryrun_assembles_docker_command_without_runtime_checks(tmp_path, mo
     assert "NGC_CLI_ORG=nvidia" in cmd
     assert "--name" in cmd
     assert "/tmp/custom.cid" in cmd
+    assert container_core.get_cli_arg_value(cmd, "--runtime") == "runc"
+    assert not ctk_checks
     assert cmd[-4:] == ["custom:image", "bash", "-lc", "echo ok"]
 
 

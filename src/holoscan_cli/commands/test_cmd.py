@@ -106,9 +106,17 @@ def handle_test(cli, args: argparse.Namespace) -> None:
         project_name=args.project, language=args.language if hasattr(args, "language") else None
     )
     if args.clear_cache:
+        from argparse import Namespace
+
         from holoscan_cli.commands.clear_cache import handle_clear_cache
 
-        handle_clear_cache(cli, args)
+        # Clear build/install artifacts only — forwarding the test namespace
+        # (no build/data/install flags) would mean "clear everything",
+        # including the downloaded data cache.
+        handle_clear_cache(
+            cli,
+            Namespace(dryrun=args.dryrun, build=True, data=False, install=True),
+        )
 
     container.dryrun = args.dryrun
     container.verbose = args.verbose

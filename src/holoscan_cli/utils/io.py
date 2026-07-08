@@ -14,7 +14,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Terminal output (Color + info/warn/fatal) and subprocess execution."""
+"""Terminal output (Color + info/warn/fatal), path canonicalization, and
+subprocess execution."""
 
 import os
 import shlex
@@ -23,7 +24,14 @@ import subprocess
 import sys
 import traceback
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Iterable, List, Optional, Union
+
+
+def resolve(path) -> Path:
+    """Canonicalize a path: expand ``~``, follow symlinks, make absolute."""
+    return Path(path).expanduser().resolve()
+
 
 # ---- terminal color formatting -----------------------------------------------
 
