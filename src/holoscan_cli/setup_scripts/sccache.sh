@@ -71,12 +71,23 @@ cleanup_install() {
     exit "$exit_code"
 }
 
+# Hint when the symlink directory is not on PATH.
+warn_if_not_on_path() {
+    case ":${PATH}:" in
+        *":$(dirname "$SYMLINK_PATH"):"*) ;;
+        *) echo "Note: add $(dirname "$SYMLINK_PATH") to your PATH to use 'sccache' directly." >&2 ;;
+    esac
+}
+
 # Check if sccache is already installed (on PATH, or at the install symlink —
 # ~/.local/bin may not be on PATH yet) and meets the minimum version.
 check_existing_sccache() {
-    local sccache_bin
+    local sccache_bin found_on_path=1
     sccache_bin="$(command -v sccache 2>/dev/null || true)"
-    [[ -n "$sccache_bin" ]] || sccache_bin="$SYMLINK_PATH"
+    if [[ -z "$sccache_bin" ]]; then
+        found_on_path=0
+        sccache_bin="$SYMLINK_PATH"
+    fi
     [[ -x "$sccache_bin" ]] || return 1
     local ver_output
     ver_output=$("$sccache_bin" --version 2>/dev/null || true)
@@ -88,6 +99,9 @@ check_existing_sccache() {
 
     if version_gte "$installed_ver" "$required_ver"; then
         echo "sccache already installed and meets minimum version requirement"
+        if [[ $found_on_path -eq 0 ]]; then
+            warn_if_not_on_path
+        fi
         return 0
     fi
     return 1
@@ -162,10 +176,7 @@ main() {
 
     echo "sccache ${INSTALL_VERSION} installed successfully"
     "${SYMLINK_PATH}" --version
-    case ":${PATH}:" in
-        *":$(dirname "$SYMLINK_PATH"):"*) ;;
-        *) echo "Note: add $(dirname "$SYMLINK_PATH") to your PATH to use 'sccache' directly." >&2 ;;
-    esac
+    warn_if_not_on_path
 }
 
 main "$@"

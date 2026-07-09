@@ -35,7 +35,15 @@ from holoscan_cli.utils.io import fatal, format_cmd, run_command
 
 
 def _transient_builder_docker_opts(docker_opts):
-    """Keep build-relevant options while removing app lifecycle and user options."""
+    """Keep build-relevant options while removing app lifecycle and user options.
+
+    The transient builder always runs as the invoking user so the build tree
+    stays user-owned — the reason ``--as-root`` no longer elevates the build
+    phase — hence ``--user``/``-u`` are dropped along with lifecycle options
+    that only make sense for the app container. To build under a specific UID,
+    use the two-step flow, where each phase takes its own options unfiltered:
+    ``build --docker-opts '--user ...'`` then ``run --no-local-build``.
+    """
     tokens = shlex.split(docker_opts or "")
     filtered = []
     options_with_value = {"--cidfile", "--name", "--restart", "--user", "-u"}
@@ -308,8 +316,13 @@ def handle_run(cli, args: argparse.Namespace) -> None:
             "PYTHONHOME",
             "LD_LIBRARY_PATH",
             "LD_PRELOAD",
-            "HOLOSCAN_CLI_DATA_PATH",
-            "HOLOSCAN_INPUT_PATH",
+            "DISPLAY",
+            "WAYLAND_DISPLAY",
+            "XAUTHORITY",
+            "XDG_RUNTIME_DIR",
+            "CUDA_VISIBLE_DEVICES",
+            "NVIDIA_VISIBLE_DEVICES",
+            *(name for name in run_env if name.startswith("HOLOSCAN_")),
             *run_mode_env,
         }
         run_command(

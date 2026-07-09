@@ -214,10 +214,12 @@ def run_command(
 
     Elevation is explicit and per-operation; ``sudo`` is prepended only when
     ``as_root`` is set and the process is not already root. ``preserve_env``
-    names the only variables re-applied via ``/usr/bin/env`` after sudo resets
-    the environment, so policies like ``secure_path`` cannot replace them and
-    unlisted caller variables never reach the root process; root keeps its own
-    HOME (-H). Missing sudo fails clearly rather than running unprivileged.
+    names the only variables the elevated command receives beyond sudo's reset
+    environment; root keeps its own HOME (-H). PATH/``LD_*``/``PYTHON*`` are
+    re-applied via ``/usr/bin/env`` (sudo and ld.so scrub them); all other
+    names go through ``--preserve-env`` so their values — possibly secrets —
+    stay out of the world-readable /proc/<pid>/cmdline. Missing sudo fails
+    clearly rather than running unprivileged.
     """
     if preserve_env is not None and not as_root:
         raise ValueError("preserve_env requires as_root=True")
@@ -240,11 +242,24 @@ def run_command(
         sudo_prefix = [sudo]
         sudo_display_prefix = [sudo]
         if preserve_env is not None:
-            sudo_prefix.extend(["-H", "/usr/bin/env"])
-            sudo_display_prefix.extend(["-H", "/usr/bin/env"])
-            env = kwargs.get("env") or {}
-            for name in sorted(set(preserve_env)):
-                if name in env:
+            env = kwargs.get("env")
+            if env is None:
+                env = os.environ
+            present = [name for name in sorted(set(preserve_env)) if name in env]
+            reapply = [
+                name for name in present if name == "PATH" or name.startswith(("LD_", "PYTHON"))
+            ]
+            passthrough = [name for name in present if name not in reapply]
+            sudo_prefix.append("-H")
+            sudo_display_prefix.append("-H")
+            if passthrough:
+                keep = f"--preserve-env={','.join(passthrough)}"
+                sudo_prefix.append(keep)
+                sudo_display_prefix.append(keep)
+            if reapply:
+                sudo_prefix.append("/usr/bin/env")
+                sudo_display_prefix.append("/usr/bin/env")
+                for name in reapply:
                     sudo_prefix.append(f"{name}={env[name]}")
                     sudo_display_prefix.append(f"{name}=<preserved>")
 

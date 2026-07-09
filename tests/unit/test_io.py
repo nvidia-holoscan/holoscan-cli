@@ -44,13 +44,15 @@ def test_run_command_preserves_environment_for_elevated_application(monkeypatch,
     io.run_command(
         ["python3", "app.py"],
         as_root=True,
-        preserve_env={"PATH", "PYTHONPATH", "LD_PRELOAD"},
+        preserve_env={"PATH", "PYTHONPATH", "LD_PRELOAD", "API_TOKEN"},
         env=app_env,
     )
 
+    # loader vars go via /usr/bin/env; the rest via --preserve-env, off the argv
     assert seen["cmd"] == [
         "/usr/bin/sudo",
         "-H",
+        "--preserve-env=API_TOKEN",
         "/usr/bin/env",
         "LD_PRELOAD=/opt/lib/libcamera.so",
         "PATH=/home/user/bin:/usr/bin",

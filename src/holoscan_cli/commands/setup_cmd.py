@@ -48,8 +48,6 @@ def _build_script_env() -> dict:
     """
     env = os.environ.copy()
     env["PATH"] = os.path.dirname(sys.executable) + os.pathsep + env.get("PATH", "")
-    # A stale PYTHONHOME breaks whichever python/pip the prepended PATH resolves.
-    env.pop("PYTHONHOME", None)
     if sys.prefix != sys.base_prefix:  # running inside a venv
         env["VIRTUAL_ENV"] = sys.prefix
     else:

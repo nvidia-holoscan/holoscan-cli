@@ -16,13 +16,11 @@ def test_build_script_env_uses_cli_virtualenv(monkeypatch):
     monkeypatch.setattr(setup_cmd.sys, "prefix", "/tmp/cli-venv")
     monkeypatch.setattr(setup_cmd.sys, "base_prefix", "/usr")
     monkeypatch.setenv("PATH", "/usr/bin:/bin")
-    monkeypatch.setenv("PYTHONHOME", "/unexpected/python-home")
 
     env = setup_cmd._build_script_env()
 
     assert env["PATH"].split(":", 1)[0] == "/tmp/cli-venv/bin"
     assert env["VIRTUAL_ENV"] == "/tmp/cli-venv"
-    assert "PYTHONHOME" not in env
 
 
 def test_named_setup_script_runs_in_cli_environment(monkeypatch, tmp_path):

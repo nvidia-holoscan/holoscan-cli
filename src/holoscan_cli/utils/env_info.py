@@ -23,6 +23,7 @@ command composes them into a single report.
 
 import os
 import platform
+import shlex
 import shutil
 import sys
 from pathlib import Path
@@ -47,18 +48,31 @@ def collect_cli_info() -> None:
     print(f"  Version: {holoscan_cli.__version__}")
     print(f"  Package: {Path(holoscan_cli.__file__).parent}")
     prefix = Path(sys.prefix).resolve()
+    conda_prefix = os.environ.get("CONDA_PREFIX")
     if prefix == _managed_venv_dir().resolve():
         print(f"  Environment: wrapper-managed venv ({prefix})")
-        print(f"  Uninstall: rm -rf {prefix}  (the wrapper re-provisions on next run)")
+        remove_command = shlex.join(["rm", "-rf", str(prefix)])
+        print(f"  Uninstall: {remove_command}  (the wrapper re-provisions on next run)")
+    elif conda_prefix and prefix == Path(conda_prefix).resolve():
+        # Conda does not necessarily distinguish sys.prefix from
+        # sys.base_prefix, so the normal venv test below would misclassify an
+        # active Conda environment as the system interpreter.
+        print(f"  Environment: Conda environment ({prefix})")
+        print(f"  Uninstall: {_pip_uninstall_command()}")
     elif sys.prefix != sys.base_prefix:
         print(f"  Environment: virtual environment ({prefix})")
-        print(f"  Uninstall: {sys.executable} -m pip uninstall holoscan-cli")
+        print(f"  Uninstall: {_pip_uninstall_command()}")
     else:
         print(f"  Environment: system Python ({prefix})")
-        print(f"  Uninstall: {sys.executable} -m pip uninstall holoscan-cli")
+        print(f"  Uninstall: {_pip_uninstall_command()}")
     source = os.environ.get("HOLOSCAN_CLI_SOURCE")
     if source:
         print(f"  Source override (HOLOSCAN_CLI_SOURCE): {source}")
+
+
+def _pip_uninstall_command() -> str:
+    """Return a copy/paste-safe command for removing this CLI package."""
+    return shlex.join([sys.executable, "-m", "pip", "uninstall", "holoscan-cli"])
 
 
 def collect_system_info() -> None:
@@ -214,6 +228,7 @@ def collect_environment_variables() -> None:
         "PATH",
         "LD_LIBRARY_PATH",
         "CMAKE_BUILD_TYPE",
+        "CONDA_PREFIX",
         "DOCKER_BUILDKIT",
         "PIP_BREAK_SYSTEM_PACKAGES",
         "XDG_SESSION_TYPE",

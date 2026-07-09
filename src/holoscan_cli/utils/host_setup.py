@@ -296,7 +296,8 @@ def setup_ngc_cli(dry_run: bool = False) -> None:
             ["wget", "--quiet", "--content-disposition", ngc_url, "-O", ngc_filename],
             dry_run=dry_run,
         )
-        run_command(["unzip", "-q", ngc_filename], dry_run=dry_run)
+        # -o: overwrite leftovers from an interrupted run instead of prompting
+        run_command(["unzip", "-q", "-o", ngc_filename], dry_run=dry_run)
         run_command(["chmod", "u+x", "ngc-cli/ngc"], dry_run=dry_run)
 
         abs_path = os.path.abspath("ngc-cli/ngc")
