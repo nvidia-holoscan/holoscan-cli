@@ -546,10 +546,13 @@ class HoloscanContainer:
         add_volumes: List[str] = None,
         enable_mps: bool = False,
         extra_args: List[str] = None,
+        include_default_run_args: bool = True,
     ) -> None:
         """Launch the container"""
 
-        default_run_args = shlex.split(HoloscanContainer.DEFAULT_DOCKER_RUN_ARGS or "")
+        default_run_args = shlex.split(
+            (HoloscanContainer.DEFAULT_DOCKER_RUN_ARGS or "") if include_default_run_args else ""
+        )
         extra_run_args = shlex.split(docker_opts or "")
         configured_runtime = get_cli_arg_value(default_run_args + extra_run_args, "--runtime")
         runtime = configured_runtime or "nvidia"
@@ -601,6 +604,8 @@ class HoloscanContainer:
         # Default docker run arguments and caller-supplied docker_opts (parsed above).
         cmd.extend(default_run_args)
         cmd.extend(extra_run_args)
+        if as_root:
+            cmd.extend(["--user", "0:0"])
 
         cmd.append(img)
         cmd.extend(extra_args)

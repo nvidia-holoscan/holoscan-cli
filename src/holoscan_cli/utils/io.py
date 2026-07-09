@@ -18,13 +18,14 @@
 subprocess execution."""
 
 import os
+import shlex
 import shutil
 import subprocess
 import sys
 import traceback
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import List, Optional, Tuple, Union
+from typing import Iterable, List, Optional, Union
 
 
 def resolve(path) -> Path:
@@ -198,99 +199,119 @@ def format_long_command(cmd: List[str], max_line_length: int = 80) -> str:
     return formatted
 
 
-# ---- subprocess execution + sudo handling ------------------------------------
-
-_sudo_available = None  # Cache for sudo availability check
-
-
-def _get_maybe_sudo() -> str:
-    """Get sudo command if available, with caching to avoid repeated subprocess calls"""
-    global _sudo_available
-
-    if _sudo_available is not None:
-        return _sudo_available
-    _sudo_available = "sudo" if shutil.which("sudo") else ""
-    return _sudo_available
-
-
-def _classify_sudo_requirement(cmd: Union[str, List[str]]) -> Tuple[bool, str]:
-    """Classify command sudo requirement and return (needs_sudo, reason)"""
-    cmd_parts = cmd.split() if isinstance(cmd, str) else [str(x) for x in cmd]
-    if not cmd_parts:
-        return False, ""
-    # Already has sudo
-    if cmd_parts[0] == "sudo":
-        return True, "Command already includes sudo"
-    cmd_name = cmd_parts[0]
-    # Commands that always need sudo
-    always_sudo = {
-        "apt": "Package management requires root privileges",
-        "apt-get": "Package management requires root privileges",
-        "dpkg": "Package database access requires root privileges",
-        "chmod": "Changing file permissions requires root privileges",
-        "chown": "Changing file ownership requires root privileges",
-    }
-    if cmd_name in always_sudo:
-        return True, always_sudo[cmd_name]
-    # Commands that need sudo for system paths
-    if cmd_name in ["ln", "cp", "mv", "rm", "mkdir"]:
-        if any(
-            arg.startswith(("/etc/", "/usr/", "/var/", "/opt/", "/sys/", "/proc/"))
-            for arg in cmd_parts[1:]
-        ):
-            return True, "Writing to system directories requires root privileges"
-    # Shell commands with system redirections
-    if isinstance(cmd, str) and ("tee /" in cmd or ">/etc/" in cmd or ">/usr/" in cmd):
-        return True, "Writing to system locations requires root privileges"
-
-    return False, ""
-
-
-def _process_command_with_sudo(
-    cmd: Union[str, List[str]], maybe_sudo: str
-) -> Union[str, List[str]]:
-    """Process command and add sudo if needed and available"""
-    needs_sudo, _ = _classify_sudo_requirement(cmd)
-    if not needs_sudo or not maybe_sudo:
-        return cmd
-
-    # Check if already has sudo anywhere in the command
-    if isinstance(cmd, str):
-        if cmd.strip().startswith("sudo ") or " sudo " in cmd:
-            return cmd  # Don't add sudo if it's already present anywhere
-        return f"{maybe_sudo} {cmd}"
-    else:
-        if cmd and (str(cmd[0]) == "sudo" or "sudo" in [str(x) for x in cmd]):
-            return cmd  # Don't add sudo if it's already present anywhere
-        return [maybe_sudo] + cmd
+# ---- subprocess execution + explicit privilege elevation ---------------------
 
 
 def run_command(
-    cmd: Union[str, List[str]], dry_run: bool = False, check: bool = True, **kwargs
+    cmd: Union[str, List[str]],
+    dry_run: bool = False,
+    check: bool = True,
+    as_root: bool = False,
+    preserve_env: Optional[Iterable[str]] = None,
+    **kwargs,
 ) -> subprocess.CompletedProcess:
-    """Run a command and handle errors"""
-    # Process the command and add sudo if needed
-    processed_cmd = _process_command_with_sudo(cmd, _get_maybe_sudo())
-    if isinstance(processed_cmd, str):
-        cmd_str = processed_cmd
+    """Run a command, optionally elevated with ``sudo``.
+
+    Elevation is explicit and per-operation; ``sudo`` is prepended only when
+    ``as_root`` is set and the process is not already root. ``preserve_env``
+    names the only variables the elevated command receives beyond sudo's reset
+    environment; root keeps its own HOME (-H). PATH/``LD_*``/``PYTHON*`` are
+    re-applied via ``/usr/bin/env`` (sudo and ld.so scrub them); all other
+    names go through ``--preserve-env`` so their values — possibly secrets —
+    stay out of the world-readable /proc/<pid>/cmdline. Missing sudo fails
+    clearly rather than running unprivileged.
+    """
+    if preserve_env is not None and not as_root:
+        raise ValueError("preserve_env requires as_root=True")
+
+    elevate = as_root and os.geteuid() != 0
+    sudo_prefix: List[str] = []
+    sudo_display_prefix: List[str] = []
+    if elevate:
+        sudo = shutil.which("sudo") or ""
+        if not sudo:
+            if dry_run:
+                sudo = "sudo"  # display only; a dry run executes nothing
+            else:
+                display = cmd if isinstance(cmd, str) else " ".join(str(x) for x in cmd)
+                fatal(
+                    "This step needs root privileges but 'sudo' is not available:\n"
+                    f"  {display}\n"
+                    "Re-run it as an administrator, or install sudo."
+                )
+        sudo_prefix = [sudo]
+        sudo_display_prefix = [sudo]
+        if preserve_env is not None:
+            env = kwargs.get("env")
+            if env is None:
+                env = os.environ
+            present = [name for name in sorted(set(preserve_env)) if name in env]
+            reapply = [
+                name for name in present if name == "PATH" or name.startswith(("LD_", "PYTHON"))
+            ]
+            passthrough = [name for name in present if name not in reapply]
+            sudo_prefix.append("-H")
+            sudo_display_prefix.append("-H")
+            if passthrough:
+                keep = f"--preserve-env={','.join(passthrough)}"
+                sudo_prefix.append(keep)
+                sudo_display_prefix.append(keep)
+            if reapply:
+                sudo_prefix.append("/usr/bin/env")
+                sudo_display_prefix.append("/usr/bin/env")
+                for name in reapply:
+                    sudo_prefix.append(f"{name}={env[name]}")
+                    sudo_display_prefix.append(f"{name}=<preserved>")
+
+    if isinstance(cmd, str):
+        prefix = shlex.join(sudo_prefix)
+        exec_cmd: Union[str, List[str]] = f"{prefix} {cmd}" if elevate else cmd
+        display_prefix = shlex.join(sudo_display_prefix)
+        display_cmd = f"{display_prefix} {cmd}" if elevate else cmd
     else:
-        cmd_list = [f'"{x}"' if " " in str(x) else str(x) for x in processed_cmd]
-        cmd_str = format_long_command(cmd_list) if dry_run else " ".join(cmd_list)
+        argv = [str(x) for x in cmd]
+        exec_cmd = [*sudo_prefix, *argv] if elevate else argv
+        display_argv = [*sudo_display_prefix, *argv] if elevate else argv
+        quoted = [f'"{x}"' if " " in x else x for x in display_argv]
+        display_cmd = format_long_command(quoted) if dry_run else " ".join(quoted)
 
-    needs_sudo, sudo_reason = _classify_sudo_requirement(cmd)  # Add reason for sudo usage
-    if needs_sudo:
-        print(Color.yellow(f"[SUDO REQUIRED] {sudo_reason}"))
+    if elevate:
+        print(Color.yellow("[system] elevating with sudo"))
     if dry_run:
-        print(format_cmd(cmd_str, is_dryrun=True))
-        return subprocess.CompletedProcess(cmd_str, 0)
+        print(format_cmd(display_cmd, is_dryrun=True))
+        # Return the same args shape as a real run (the exec argv/command,
+        # not the display string), so callers can inspect .args uniformly.
+        return subprocess.CompletedProcess(exec_cmd, 0)
 
-    print(format_cmd(cmd_str))
+    print(format_cmd(display_cmd))
     try:
-        return subprocess.run(processed_cmd, check=check, **kwargs)
+        return subprocess.run(exec_cmd, check=check, **kwargs)
     except subprocess.CalledProcessError as e:
-        print(f"Non-zero exit code running command: {cmd_str}")
+        print(f"Non-zero exit code running command: {display_cmd}")
         print(f"Exit code: {e.returncode}")
         sys.exit(e.returncode)
+
+
+def write_system_file(
+    path: Union[str, "os.PathLike[str]"],
+    content: Union[str, bytes],
+    dry_run: bool = False,
+) -> None:
+    """Write ``content`` to a root-owned ``path`` via ``sudo tee``.
+
+    Do not build ``sudo sh -c 'echo ... > /etc/...'``: that redirection runs in
+    the *unprivileged* shell. ``tee`` runs as the elevated process, so the write
+    itself is privileged. When already root, ``tee`` runs directly.
+    """
+    is_bytes = isinstance(content, bytes)
+    run_command(
+        ["tee", str(path)],
+        as_root=True,
+        dry_run=dry_run,
+        input=content,
+        text=not is_bytes,
+        stdout=subprocess.DEVNULL,
+    )
 
 
 def run_info_command(cmd: List[str], cwd: Optional[str] = None) -> Optional[str]:

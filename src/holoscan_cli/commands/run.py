@@ -21,7 +21,7 @@ import shlex
 import shutil
 from pathlib import Path
 
-from holoscan_cli.commands.build import build_project_locally
+from holoscan_cli.commands.build import build_project_locally, make_local_build_command
 from holoscan_cli.commands.registry import help_for
 from holoscan_cli.metadata.utils import normalize_language
 from holoscan_cli.utils.docker import get_entrypoint_command_args
@@ -32,6 +32,52 @@ from holoscan_cli.utils.holohub import (
     update_env,
 )
 from holoscan_cli.utils.io import fatal, format_cmd, run_command
+
+
+def _transient_builder_docker_opts(docker_opts):
+    """Keep build-relevant options while removing app lifecycle and user options.
+
+    The transient builder always runs as the invoking user so the build tree
+    stays user-owned — the reason ``--as-root`` no longer elevates the build
+    phase — hence ``--user``/``-u`` are dropped along with lifecycle options
+    that only make sense for the app container. To build under a specific UID,
+    use the two-step flow, where each phase takes its own options unfiltered:
+    ``build --docker-opts '--user ...'`` then ``run --no-local-build``.
+    """
+    tokens = shlex.split(docker_opts or "")
+    filtered = []
+    options_with_value = {"--cidfile", "--name", "--restart", "--user", "-u"}
+    standalone_options = {"--detach", "--rm", "-d"}
+    index = 0
+    while index < len(tokens):
+        token = tokens[index]
+        if token in options_with_value:
+            index += 2
+            continue
+        if token in standalone_options or any(
+            token.startswith(f"{option}=") for option in options_with_value | standalone_options
+        ):
+            index += 1
+            continue
+        if token.startswith("-u") and not token.startswith("--"):
+            index += 1
+            continue
+        short_options = token[1:]
+        if (
+            token.startswith("-")
+            and not token.startswith("--")
+            and "d" in short_options
+            and set(short_options) <= {"d", "i", "t", "P"}
+        ):
+            short_options = short_options.replace("d", "")
+            if short_options:
+                filtered.append(f"-{short_options}")
+            index += 1
+            continue
+        filtered.append(token)
+        index += 1
+    filtered.extend(["--user", f"{os.getuid()}:{os.getgid()}"])
+    return shlex.join(filtered)
 
 
 def register_run_parser(
@@ -261,7 +307,31 @@ def handle_run(cli, args: argparse.Namespace) -> None:
             cmd = f"{nsys_cmd} profile --trace=cuda,vulkan,nvtx,osrt {cmd}"
 
         cmd_to_run = cmd if isinstance(cmd, list) else shlex.split(cmd)
-        run_command(cmd_to_run, env=run_env, dry_run=args.dryrun)
+        as_root = getattr(args, "as_root", False)
+        # sudo resets the environment; list every variable the elevated app
+        # needs, including the project-declared run/mode env keys.
+        root_env = {
+            "PATH",
+            "PYTHONPATH",
+            "PYTHONHOME",
+            "LD_LIBRARY_PATH",
+            "LD_PRELOAD",
+            "DISPLAY",
+            "WAYLAND_DISPLAY",
+            "XAUTHORITY",
+            "XDG_RUNTIME_DIR",
+            "CUDA_VISIBLE_DEVICES",
+            "NVIDIA_VISIBLE_DEVICES",
+            *(name for name in run_env if name.startswith("HOLOSCAN_")),
+            *run_mode_env,
+        }
+        run_command(
+            cmd_to_run,
+            env=run_env,
+            dry_run=args.dryrun,
+            as_root=as_root,
+            preserve_env=root_env if as_root else None,
+        )
     else:
         container = cli.make_project_container(
             project_name=args.project,
@@ -312,6 +382,32 @@ def handle_run(cli, args: argparse.Namespace) -> None:
 
         img = getattr(args, "img", None) or container.image_name
         docker_opts = build_args.get("docker_opts", "")
+        as_root = getattr(args, "as_root", False)
+        if as_root and not skip_local_build:
+            build_cmd = make_local_build_command(
+                in_container_cli_command(), args, mode_name, language
+            )
+            builder_docker_opts = _transient_builder_docker_opts(
+                " ".join(filter(None, [container.DEFAULT_DOCKER_RUN_ARGS, docker_opts]))
+            )
+            builder_opts_extra, builder_extra_args = get_entrypoint_command_args(
+                img, build_cmd, builder_docker_opts, dry_run=args.dryrun
+            )
+            if builder_opts_extra:
+                builder_docker_opts = f"{builder_docker_opts} {builder_opts_extra}".strip()
+            container.run(
+                img=getattr(args, "img", None),
+                local_sdk_root=getattr(args, "local_sdk_root", None),
+                enable_x11=getattr(args, "enable_x11", True),
+                ssh_x11=getattr(args, "ssh_x11", False),
+                as_root=False,
+                docker_opts=builder_docker_opts,
+                include_default_run_args=False,
+                add_volumes=getattr(args, "add_volume", None),
+                extra_args=builder_extra_args,
+            )
+            run_cmd += " --no-local-build"
+
         docker_opts_extra, extra_args = get_entrypoint_command_args(
             img, run_cmd, docker_opts, dry_run=args.dryrun
         )
@@ -326,7 +422,7 @@ def handle_run(cli, args: argparse.Namespace) -> None:
             persistent=getattr(args, "persistent", False),
             nsys_profile=getattr(args, "nsys_profile", False),
             nsys_location=getattr(args, "nsys_location", ""),
-            as_root=getattr(args, "as_root", False),
+            as_root=as_root,
             docker_opts=docker_opts,
             add_volumes=getattr(args, "add_volume", None),
             enable_mps=getattr(args, "mps", False),

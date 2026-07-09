@@ -166,6 +166,33 @@ def test_bundled_template_script_uses_bundled_requirements(tmp_path):
     ]
 
 
+def test_bundled_sccache_script_does_not_warn_when_binary_is_on_path(tmp_path):
+    setup_dir = importlib.resources.files("holoscan_cli.setup_scripts")
+    script = setup_dir.joinpath("sccache.sh")
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    fake_sccache = bin_dir / "sccache"
+    fake_sccache.write_text(
+        "#!/usr/bin/env bash\necho 'sccache 0.12.0-rapids.20'\n",
+        encoding="utf-8",
+    )
+    fake_sccache.chmod(0o755)
+
+    env = os.environ.copy()
+    env["HOME"] = str(tmp_path / "home")
+    env["PATH"] = f"{bin_dir}:/usr/bin:/bin"
+    result = subprocess.run(
+        ["bash", str(script)],
+        check=True,
+        env=env,
+        text=True,
+        capture_output=True,
+    )
+
+    assert "already installed and meets minimum version requirement" in result.stdout
+    assert "add " not in result.stderr
+
+
 def test_readme_links_are_valid_for_pypi_rendering():
     """PyPI renders README.md as the long description, outside the GitHub repo.
 
@@ -213,10 +240,13 @@ def test_holoscan_console_script_is_registered_at_runtime():
     :func:`test_pyproject_does_not_declare_legacy_console_scripts`; we only
     require that the canonical ``holoscan`` entry point is reachable.
     """
+    # entry_points() never raises for a missing package; probe the
+    # distribution explicitly so uninstalled dev environments skip.
     try:
-        scripts = importlib.metadata.entry_points(group="console_scripts")
+        importlib.metadata.distribution("holoscan-cli")
     except importlib.metadata.PackageNotFoundError:  # pragma: no cover - dev only
         pytest.skip("holoscan-cli is not installed in this environment")
+    scripts = importlib.metadata.entry_points(group="console_scripts")
     holoscan = [ep for ep in scripts if ep.name == "holoscan"]
     assert holoscan, "holoscan console script not registered"
     assert holoscan[0].value == "holoscan_cli.__main__:main"

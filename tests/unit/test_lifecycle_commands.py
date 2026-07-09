@@ -188,6 +188,7 @@ def test_handle_run_container_skips_build_and_wraps_trailing_command(tmp_path, m
         cli,
         _container_args(
             no_docker_build=True,
+            as_root=True,
             docker_opts="--ipc=host",
             _trailing_args=["echo", "hello world"],
         ),
@@ -196,6 +197,7 @@ def test_handle_run_container_skips_build_and_wraps_trailing_command(tmp_path, m
     assert cli.container.build_calls == []
     assert cli.container.cuda_version == "13"
     run_call = cli.container.run_calls[0]
+    assert run_call["as_root"] is True
     assert run_call["docker_opts"] == "--ipc=host --entrypoint=/bin/bash"
     assert run_call["extra_args"] == ["-c", "echo hello world"]
 
@@ -339,6 +341,7 @@ def test_handle_build_container_branch_passes_recursive_local_command(tmp_path, 
             language="python",
             parallel="2",
             verbose=True,
+            benchmark=True,
             configure_args=["-DCLI=ON"],
         ),
     )
@@ -348,11 +351,11 @@ def test_handle_build_container_branch_passes_recursive_local_command(tmp_path, 
     assert img == "holohub-smoke:latest"
     assert docker_opts == "--ipc=host"
     assert dryrun is True
-    assert command.startswith("holoscan build smoke_app dev --local")
-    assert "--build-type rel-debug" in command
-    assert "--language python" in command
-    assert "--parallel 2" in command
-    assert "--configure-args=-DCLI=ON" in command
+    assert command == (
+        "holoscan build smoke_app dev --local --build-type rel-debug"
+        ' --build-with "cli_op" --pkg-generator DEB --language python'
+        " --parallel 2 --verbose --benchmark --configure-args=-DCLI=ON"
+    )
     assert cli.container.run_calls
 
 
@@ -415,6 +418,53 @@ def test_handle_run_container_branch_passes_recursive_local_command(tmp_path, mo
     assert "--no-local-build" in command
     assert "--run-args=--once" in command
     assert cli.container.run_calls[0]["extra_args"] == ["-c", command]
+
+
+def test_handle_run_container_as_root_builds_as_user_then_runs_as_root(tmp_path, monkeypatch):
+    cli = RecordingCLI(tmp_path)
+    monkeypatch.setattr(run_cmd.os, "getuid", lambda: 12345)
+    monkeypatch.setattr(run_cmd.os, "getgid", lambda: 23456)
+    cli.container.DEFAULT_DOCKER_RUN_ARGS = "--network host --name default -dit"
+    entrypoints = []
+
+    def capture_entrypoint(img, cmd, opts, dry_run=False):
+        entrypoints.append((cmd, opts))
+        return "--entrypoint=/bin/bash", ["-c", cmd]
+
+    monkeypatch.setattr(run_cmd, "get_entrypoint_command_args", capture_entrypoint)
+
+    run_cmd.handle_run(
+        cli,
+        _project_args(
+            as_root=True,
+            build_type="debug",
+            run_args="--once",
+            configure_args=["-DDEV=ON"],
+            docker_opts="--ipc=host --user root --detach",
+        ),
+    )
+
+    assert len(cli.container.run_calls) == 2
+    build_command, build_opts = entrypoints[0]
+    assert build_command.startswith("holoscan build smoke_app --local")
+    assert "--build-type debug" in build_command
+    assert "--configure-args=-DDEV=ON" in build_command
+    assert "--run-args" not in build_command
+    # blocking, user-mapped builder: name/detach/user overrides stripped
+    assert "--user 12345:23456" in build_opts
+    assert "-it" in build_opts
+    assert "--ipc=host" in build_opts and "--network host" in build_opts
+    for stripped in ("--name", "--detach", "--user root"):
+        assert stripped not in build_opts
+
+    build_run, app_run = cli.container.run_calls
+    assert build_run["as_root"] is False
+    assert build_run["include_default_run_args"] is False
+    run_command, _ = entrypoints[1]
+    assert "--no-local-build" in run_command
+    assert "--run-args=--once" in run_command
+    assert app_run["as_root"] is True
+    assert app_run["extra_args"] == ["-c", run_command]
 
 
 def test_handle_install_local_installs_built_project(tmp_path, monkeypatch):

@@ -40,6 +40,8 @@ def test_collectors_print_available_host_tooling(tmp_path, monkeypatch, capsys):
     monkeypatch.setattr(env_info.shutil, "which", lambda name: "/usr/bin/sccache")
     monkeypatch.setenv("HOLOSCAN_CLI_DOCKER_EXE", "docker")
     monkeypatch.setenv("HOLOSCAN_CLI_ENABLE_SCCACHE", "true")
+    monkeypatch.setenv("HOLOSCAN_CLI_PINNED_VERSION", "4.4.1")
+    monkeypatch.setenv("CONDA_PREFIX", "/opt/conda/envs/holoscan")
     monkeypatch.setenv("SCCACHE_BUCKET", "holoscan-cache")
     monkeypatch.setenv("HOLOSCAN_INPUT_PATH", "/data/input")
     root = tmp_path / "repo"
@@ -59,6 +61,8 @@ def test_collectors_print_available_host_tooling(tmp_path, monkeypatch, capsys):
     assert "NVCC: Cuda compilation tools, release 13.0, V13.0.0" in out
     assert "sccache 0.8.2" in out
     assert "SCCACHE_BUCKET: holoscan-cache" in out
+    assert "HOLOSCAN_CLI_PINNED_VERSION: 4.4.1" in out
+    assert "CONDA_PREFIX: /opt/conda/envs/holoscan" in out
     assert "HOLOSCAN_INPUT_PATH: /data/input" in out
 
 
@@ -156,3 +160,39 @@ def test_env_check_does_not_exit_on_warn_only(monkeypatch, capsys):
 
     out = capsys.readouterr().out
     assert "warning" in out.lower()
+
+
+def test_collect_cli_info_reports_managed_venv(monkeypatch, capsys):
+    import sys
+
+    venv = "/home/user/.local/share/Holoscan CLI/venv"
+    monkeypatch.setenv("HOLOSCAN_CLI_VENV", venv)
+    monkeypatch.delenv("HOLOSCAN_CLI_SOURCE", raising=False)
+    monkeypatch.setattr(sys, "prefix", venv)
+
+    env_info.collect_cli_info()
+
+    out = capsys.readouterr().out
+    assert "Holoscan CLI Information:" in out
+    assert "Version:" in out
+    assert "Package:" in out
+    assert "Environment: wrapper-managed venv" in out
+    assert f"Uninstall: rm -rf '{venv}'" in out
+
+
+def test_collect_cli_info_reports_conda_environment(monkeypatch, capsys):
+    import sys
+
+    conda_prefix = "/opt/conda/envs/holoscan"
+    monkeypatch.setenv("CONDA_PREFIX", conda_prefix)
+    monkeypatch.delenv("HOLOSCAN_CLI_VENV", raising=False)
+    monkeypatch.delenv("HOLOSCAN_CLI_SOURCE", raising=False)
+    monkeypatch.setattr(sys, "prefix", conda_prefix)
+    monkeypatch.setattr(sys, "base_prefix", conda_prefix)
+    monkeypatch.setattr(sys, "executable", f"{conda_prefix}/bin/python")
+
+    env_info.collect_cli_info()
+
+    out = capsys.readouterr().out
+    assert f"Environment: Conda environment ({conda_prefix})" in out
+    assert f"Uninstall: {conda_prefix}/bin/python -m pip uninstall holoscan-cli" in out

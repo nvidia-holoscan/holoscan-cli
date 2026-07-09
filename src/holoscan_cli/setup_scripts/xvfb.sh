@@ -24,9 +24,10 @@ if command -v xvfb-run &> /dev/null; then
     exit 0
 fi
 
-apt-get update
-apt-get install --no-install-recommends -y xvfb
-apt-get clean && rm -rf /var/lib/apt/lists/*
+sudo apt-get update
+sudo apt-get install --no-install-recommends -y xvfb
+sudo apt-get clean
+sudo rm -rf /var/lib/apt/lists/*
 
 if command -v xvfb-run &> /dev/null; then
     echo "xvfb installed successfully"

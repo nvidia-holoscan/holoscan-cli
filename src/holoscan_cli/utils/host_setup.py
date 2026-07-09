@@ -34,7 +34,7 @@ import subprocess
 import sys
 from typing import List, Optional
 
-from holoscan_cli.utils.io import _get_maybe_sudo, fatal, info, run_command, warn
+from holoscan_cli.utils.io import fatal, info, run_command, warn, write_system_file
 from holoscan_cli.utils.sdk import get_cuda_runtime_version
 from holoscan_cli.utils.text import parse_semantic_version
 
@@ -94,7 +94,7 @@ def ensure_apt_updated(dry_run: bool = False) -> None:
     """Ensure apt package list is updated, but only once per session"""
     global _apt_updated
     if not _apt_updated:
-        run_command(["apt-get", "update"], dry_run=dry_run)
+        run_command(["apt-get", "update"], dry_run=dry_run, as_root=True)
         _apt_updated = True
 
 
@@ -132,7 +132,7 @@ def install_packages_if_missing(
     if packages_to_install:
         ensure_apt_updated(dry_run=dry_run)
         install_cmd = ["apt", "install"] + apt_options + packages_to_install
-        run_command(install_cmd, dry_run=dry_run)
+        run_command(install_cmd, dry_run=dry_run, as_root=True)
 
     return packages_to_install
 
@@ -205,26 +205,54 @@ def get_ubuntu_codename() -> str:
 
 def setup_cmake(min_version: str = "3.26.4", dry_run: bool = False) -> None:
     """Setup CMake from Kitware if needed"""
+    global _apt_updated
     cmake_ver = get_installed_package_version("cmake")
     if cmake_ver and parse_semantic_version(cmake_ver) >= parse_semantic_version(min_version):
         return
     ubuntu_codename = get_ubuntu_codename()
-    install_packages_if_missing(["gpg"], dry_run=dry_run)
-    maybe_sudo = _get_maybe_sudo()
-    run_command(
-        "wget -O - https://apt.kitware.com/keys/kitware-archive-latest.asc | "
-        "gpg --dearmor - | "
-        f"{maybe_sudo} tee /usr/share/keyrings/kitware-archive-keyring.gpg >/dev/null",
-        dry_run=dry_run,
-        shell=True,
+    install_packages_if_missing(["gpg", "wget"], dry_run=dry_run)
+
+    keyring_path = "/usr/share/keyrings/kitware-archive-keyring.gpg"
+    source_line = (
+        "deb [signed-by=/usr/share/keyrings/kitware-archive-keyring.gpg] "
+        f"https://apt.kitware.com/ubuntu/ {ubuntu_codename} main\n"
     )
-    run_command(
-        f'echo "deb [signed-by=/usr/share/keyrings/kitware-archive-keyring.gpg] '
-        f'https://apt.kitware.com/ubuntu/ {ubuntu_codename} main" | '
-        f"{maybe_sudo} tee /etc/apt/sources.list.d/kitware.list >/dev/null",
-        dry_run=dry_run,
-        shell=True,
-    )
+    if dry_run:
+        info(f"[dryrun] Would fetch the Kitware archive key -> {keyring_path}")
+        write_system_file("/etc/apt/sources.list.d/kitware.list", source_line, dry_run=True)
+    else:
+        # Fetch + dearmor the key as the invoking user; install the keyring as
+        # root. Two separate steps (not a shell pipeline) so a download failure
+        # cannot be masked by the pipeline's exit status and produce an empty
+        # keyring. Resolve the binaries to absolute paths (apt just installed
+        # them) instead of trusting the caller's PATH.
+        wget = shutil.which("wget") or "/usr/bin/wget"
+        gpg = shutil.which("gpg") or "/usr/bin/gpg"
+        try:
+            key = subprocess.run(
+                [wget, "-qO-", "https://apt.kitware.com/keys/kitware-archive-latest.asc"],
+                check=True,
+                capture_output=True,
+            ).stdout
+            dearmored = subprocess.run(
+                [gpg, "--dearmor"],
+                input=key,
+                check=True,
+                capture_output=True,
+            ).stdout
+        except FileNotFoundError as e:
+            fatal(f"Failed to download the Kitware apt archive key: {e}")
+        except subprocess.CalledProcessError as e:
+            fatal(
+                "Failed to download the Kitware apt archive key "
+                f"(is the network available?): {e.stderr.decode(errors='replace').strip()}"
+            )
+        write_system_file(keyring_path, dearmored)
+        write_system_file("/etc/apt/sources.list.d/kitware.list", source_line)
+    # The new source must be visible to apt even when an earlier step already
+    # ran `apt-get update` (which would make install_packages_if_missing skip it).
+    run_command(["apt-get", "update"], dry_run=dry_run, as_root=True)
+    _apt_updated = True
     install_packages_if_missing(["cmake", "cmake-curses-gui"], dry_run=dry_run)
 
 
@@ -241,8 +269,20 @@ def setup_python_dev(min_version: str = "3.10.0", dry_run: bool = False) -> None
 
 def setup_ngc_cli(dry_run: bool = False) -> None:
     """Setup NGC CLI if not present"""
-    if shutil.which("ngc"):
+    # Container build (root) = system-wide, on PATH in the built image;
+    # host = per-user under ~/.local/bin (no root needed).
+    if os.geteuid() == 0:
+        dest_dir = "/usr/local/bin"
+    else:
+        dest_dir = os.path.expanduser("~/.local/bin")
+    dest = os.path.join(dest_dir, "ngc")
+    # Also check the destination itself: ~/.local/bin may not be on PATH, and
+    # `which` alone would then re-download NGC on every setup run. A dangling
+    # symlink fails the check and is repaired by the `ln -sf` below.
+    if shutil.which("ngc") or (os.path.isfile(dest) and os.access(dest, os.X_OK)):
         return
+    if os.path.isdir(dest):
+        fatal(f"Cannot install NGC CLI: destination is a directory: {dest}")
 
     arch_suffix = "arm64" if platform.machine() == "aarch64" else "linux"
     ngc_url = (
@@ -256,12 +296,16 @@ def setup_ngc_cli(dry_run: bool = False) -> None:
             ["wget", "--quiet", "--content-disposition", ngc_url, "-O", ngc_filename],
             dry_run=dry_run,
         )
-        run_command(["unzip", "-q", ngc_filename], dry_run=dry_run)
+        # -o: overwrite leftovers from an interrupted run instead of prompting
+        run_command(["unzip", "-q", "-o", ngc_filename], dry_run=dry_run)
         run_command(["chmod", "u+x", "ngc-cli/ngc"], dry_run=dry_run)
 
-        # Use absolute path for symlink
         abs_path = os.path.abspath("ngc-cli/ngc")
-        run_command(["ln", "-s", abs_path, "/usr/local/bin/ngc"], dry_run=dry_run)
+        if not dry_run:
+            os.makedirs(dest_dir, exist_ok=True)
+        run_command(["ln", "-sf", abs_path, dest], dry_run=dry_run)
+        if not dry_run and not shutil.which("ngc"):
+            info(f"Installed ngc to {dest_dir}; add it to PATH to use 'ngc' directly.")
 
     except Exception as e:
         fatal(f"Failed to install NGC CLI: {e}")
@@ -269,7 +313,7 @@ def setup_ngc_cli(dry_run: bool = False) -> None:
 
 def setup_sccache(min_version: str = "0.12.0-rapids.20", dry_run: bool = False) -> None:
     """
-    Install RAPIDS sccache if missing or older than min_version; link into /usr/local/bin.
+    Install RAPIDS sccache if missing or older than min_version.
 
     Requirements:
         - Only RAPIDS-formatted versions are supported, e.g. "0.12.0-rapids.20".

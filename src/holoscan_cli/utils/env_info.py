@@ -23,13 +23,56 @@ command composes them into a single report.
 
 import os
 import platform
+import shlex
 import shutil
 import sys
 from pathlib import Path
 
+import holoscan_cli
 from holoscan_cli.utils.holohub import get_sccache_dir
 from holoscan_cli.utils.io import Color, run_info_command
 from holoscan_cli.utils.text import get_env_bool
+
+
+def _managed_venv_dir() -> Path:
+    """The wrapper-managed venv location (mirrors the ./holohub default)."""
+    default = Path(os.environ.get("XDG_DATA_HOME") or Path.home() / ".local/share")
+    return Path(os.environ.get("HOLOSCAN_CLI_VENV") or default / "holoscan-cli" / "venv")
+
+
+def collect_cli_info() -> None:
+    """Collect and display information about the holoscan-cli package itself:
+    version, install location, which Python environment it runs in, and how
+    to remove it."""
+    print(f"\n{Color.blue('Holoscan CLI Information:')}")
+    print(f"  Version: {holoscan_cli.__version__}")
+    print(f"  Package: {Path(holoscan_cli.__file__).parent}")
+    prefix = Path(sys.prefix).resolve()
+    conda_prefix = os.environ.get("CONDA_PREFIX")
+    if prefix == _managed_venv_dir().resolve():
+        print(f"  Environment: wrapper-managed venv ({prefix})")
+        remove_command = shlex.join(["rm", "-rf", str(prefix)])
+        print(f"  Uninstall: {remove_command}  (the wrapper re-provisions on next run)")
+    elif conda_prefix and prefix == Path(conda_prefix).resolve():
+        # Conda does not necessarily distinguish sys.prefix from
+        # sys.base_prefix, so the normal venv test below would misclassify an
+        # active Conda environment as the system interpreter.
+        print(f"  Environment: Conda environment ({prefix})")
+        print(f"  Uninstall: {_pip_uninstall_command()}")
+    elif sys.prefix != sys.base_prefix:
+        print(f"  Environment: virtual environment ({prefix})")
+        print(f"  Uninstall: {_pip_uninstall_command()}")
+    else:
+        print(f"  Environment: system Python ({prefix})")
+        print(f"  Uninstall: {_pip_uninstall_command()}")
+    source = os.environ.get("HOLOSCAN_CLI_SOURCE")
+    if source:
+        print(f"  Source override (HOLOSCAN_CLI_SOURCE): {source}")
+
+
+def _pip_uninstall_command() -> str:
+    """Return a copy/paste-safe command for removing this CLI package."""
+    return shlex.join([sys.executable, "-m", "pip", "uninstall", "holoscan-cli"])
 
 
 def collect_system_info() -> None:
@@ -139,6 +182,11 @@ def collect_environment_variables() -> None:
     """Collect and display environment variables"""
     print(f"\n{Color.blue('Holoscan CLI Environment Variables:')}")
     holoscan_cli_env_vars = [
+        "HOLOSCAN_CLI_SOURCE",
+        "HOLOSCAN_CLI_VENV",
+        "HOLOSCAN_CLI_PYTHON_BIN",
+        "HOLOSCAN_CLI_INSTALL_ARGS",
+        "HOLOSCAN_CLI_PINNED_VERSION",
         "HOLOSCAN_CLI_CMD_NAME",
         "HOLOSCAN_CLI_BUILD_LOCAL",
         "HOLOSCAN_CLI_ALWAYS_BUILD",
@@ -180,7 +228,9 @@ def collect_environment_variables() -> None:
         "PATH",
         "LD_LIBRARY_PATH",
         "CMAKE_BUILD_TYPE",
+        "CONDA_PREFIX",
         "DOCKER_BUILDKIT",
+        "PIP_BREAK_SYSTEM_PACKAGES",
         "XDG_SESSION_TYPE",
         "XDG_RUNTIME_DIR",
     ]
@@ -190,6 +240,7 @@ def collect_environment_variables() -> None:
 
 def collect_env_info() -> None:
     """Collect and display comprehensive environment information"""
+    collect_cli_info()
     collect_system_info()
     collect_python_info()
     collect_docker_info()
