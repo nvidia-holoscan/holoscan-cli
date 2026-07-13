@@ -82,10 +82,10 @@ def _ctest_script_arg(cli, args: argparse.Namespace, in_container: bool) -> str:
     host is recursing in via ``docker run ... bash -c "<ctest_cmd>"``), the
     host's ``HoloscanCLI.DEFAULT_CTEST_SCRIPT`` points at the host's
     ``site-packages`` and will not exist inside the container if the install
-    prefix differs. Defer the resolution to runtime by emitting a Python
-    one-liner the in-container shell evaluates; this honors any
-    ``HOLOSCAN_CLI_CTEST_SCRIPT`` value forwarded into the container and
-    falls back to the in-container package's bundled script. The host's
+    prefix differs. Defer the resolution to runtime: use the
+    ``HOLOSCAN_CLI_CTEST_SCRIPT`` value forwarded into the container when
+    set (no in-container CLI install required), and only fall back to
+    importing the in-container package for its bundled script. The host's
     local path (``--local`` on the host, or the in-container ``--local``
     recursion branch) keeps the direct host-resolved path.
     """
@@ -94,8 +94,9 @@ def _ctest_script_arg(cli, args: argparse.Namespace, in_container: bool) -> str:
     if not in_container:
         return f"-S {cli.DEFAULT_CTEST_SCRIPT}"
     return (
-        "-S \"$(python3 -c 'from holoscan_cli.cli import HoloscanCLI; "
-        "print(HoloscanCLI.DEFAULT_CTEST_SCRIPT)')\""
+        '-S "${HOLOSCAN_CLI_CTEST_SCRIPT:-'
+        "$(python3 -c 'from holoscan_cli.cli import HoloscanCLI; "
+        "print(HoloscanCLI.DEFAULT_CTEST_SCRIPT)')}\""
     )
 
 
