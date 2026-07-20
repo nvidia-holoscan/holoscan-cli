@@ -22,6 +22,7 @@ listing=$(unzip -l "$wheel")
 required=(
   'holoscan_cli/logging\.json$'
   'holoscan_cli/py\.typed$'
+  'holoscan_cli/command_plan\.schema\.json$'
   'holoscan_cli/metadata/.+\.schema\.json$'
   'holoscan_cli/setup_scripts/.+'
   'holoscan_cli/setup_scripts/requirements\.template\.txt$'

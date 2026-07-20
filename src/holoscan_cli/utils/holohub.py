@@ -33,6 +33,7 @@ import re
 from pathlib import Path
 from typing import Optional, Tuple
 
+from holoscan_cli.command_plan import record_probe_fallback
 from holoscan_cli.utils.io import format_cmd, info, run_info_command, warn
 from holoscan_cli.utils.text import _slugify, get_env_bool
 
@@ -365,10 +366,14 @@ def get_git_short_sha(length: int = 12) -> str:
         sha = run_info_command(
             ["git", "rev-parse", f"--short={length}", "HEAD"], cwd=str(HOLOHUB_ROOT)
         )
-        return sha or DEFAULT_GIT_REF
+        if sha:
+            return sha
     except Exception:
         warn(f"Failed to get current git sha, defaulting to {DEFAULT_GIT_REF}")
-        return DEFAULT_GIT_REF
+    record_probe_fallback(
+        f"Git SHA detection failed; using the image-tag fallback '{DEFAULT_GIT_REF}'."
+    )
+    return DEFAULT_GIT_REF
 
 
 def get_current_branch_slug() -> str:
@@ -381,9 +386,17 @@ def get_current_branch_slug() -> str:
         branch = run_info_command(
             ["git", "rev-parse", "--abbrev-ref", "HEAD"], cwd=str(HOLOHUB_ROOT)
         )
-        if not branch or branch in ["HEAD", "(no branch)"] or branch.startswith("(HEAD detached"):
-            return DEFAULT_GIT_REF
-        return _slugify(branch) or DEFAULT_GIT_REF
+        if (
+            branch
+            and branch not in ["HEAD", "(no branch)"]
+            and not branch.startswith("(HEAD detached")
+        ):
+            slug = _slugify(branch)
+            if slug:
+                return slug
     except Exception:
         warn(f"Failed to get current branch, defaulting to {DEFAULT_GIT_REF}")
-        return DEFAULT_GIT_REF
+    record_probe_fallback(
+        f"Git branch detection failed or was detached; using '{DEFAULT_GIT_REF}'."
+    )
+    return DEFAULT_GIT_REF

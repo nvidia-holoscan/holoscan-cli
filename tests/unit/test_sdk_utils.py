@@ -46,9 +46,9 @@ def test_cuda_major_from_driver(driver, expected):
 def test_get_gpu_name_returns_first_nvidia_smi_result(monkeypatch):
     monkeypatch.setattr(sdk.shutil, "which", lambda name: "/usr/bin/nvidia-smi")
     monkeypatch.setattr(
-        sdk.subprocess,
-        "check_output",
-        lambda cmd, **kwargs: "NVIDIA H100\n",
+        sdk,
+        "run_probe",
+        lambda cmd, **kwargs: subprocess.CompletedProcess(cmd, 0, stdout="NVIDIA H100\n"),
     )
 
     assert sdk.get_gpu_name() == "NVIDIA H100"
@@ -158,9 +158,9 @@ def test_find_hsdk_build_rel_dir_prefers_install_then_build(tmp_path, monkeypatc
 def test_get_compute_capacity_from_nvidia_smi(monkeypatch):
     monkeypatch.setattr(sdk.shutil, "which", lambda name: "/usr/bin/nvidia-smi")
     monkeypatch.setattr(
-        sdk.subprocess,
-        "check_output",
-        lambda cmd: b"9.0\n8.9\n",
+        sdk,
+        "run_probe",
+        lambda cmd, **kwargs: subprocess.CompletedProcess(cmd, 0, stdout="9.0\n8.9\n"),
     )
 
     assert sdk.get_compute_capacity() == "9.0"
@@ -207,11 +207,11 @@ def test_check_nvidia_ctk_accepts_new_tool(monkeypatch):
 
 def test_get_gpu_name_and_compute_capacity_handle_subprocess_failures(monkeypatch):
     monkeypatch.setattr(sdk.shutil, "which", lambda name: "/usr/bin/nvidia-smi")
-
-    def fail(*args, **kwargs):
-        raise subprocess.CalledProcessError(1, args[0])
-
-    monkeypatch.setattr(sdk.subprocess, "check_output", fail)
+    monkeypatch.setattr(
+        sdk,
+        "run_probe",
+        lambda cmd, **kwargs: subprocess.CompletedProcess(cmd, 1, stdout=""),
+    )
 
     assert sdk.get_gpu_name() is None
     assert sdk.get_compute_capacity() == "0.0"

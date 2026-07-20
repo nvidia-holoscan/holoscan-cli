@@ -193,6 +193,36 @@ def test_effective_mode_config_preserves_cli_overrides(capsys):
     assert "overrides mode" in capsys.readouterr().err
 
 
+def test_mode_override_diagnostics_do_not_echo_argument_values(capsys):
+    cli = object.__new__(project_cli.HoloscanCLI)
+    args = Namespace(
+        with_operators="cli-operator",
+        build_args="--build-arg SERVICE_TOKEN=cli-secret",
+        configure_args=["-DSERVICE_PASSWORD=cli-secret"],
+        docker_opts="--env SERVICE_TOKEN=cli-secret",
+        run_args="--password cli-secret",
+    )
+    mode_config = {
+        "build": {
+            "depends": ["mode-operator"],
+            "docker_build_args": "--build-arg SERVICE_TOKEN=mode-secret",
+            "cmake_options": ["-DSERVICE_PASSWORD=mode-secret"],
+        },
+        "run": {
+            "command": "python app.py",
+            "docker_run_args": "--env SERVICE_TOKEN=mode-secret",
+        },
+    }
+
+    cli.get_effective_build_config(args, mode_config)
+    cli.get_effective_run_config(args, mode_config)
+
+    diagnostics = capsys.readouterr().err
+    assert "overrides mode" in diagnostics
+    assert "cli-secret" not in diagnostics
+    assert "mode-secret" not in diagnostics
+
+
 def test_run_preserves_container_command_after_separator(monkeypatch, tmp_path):
     monkeypatch.setattr(project_cli.HoloscanCLI, "HOLOHUB_ROOT", tmp_path)
     with patch.object(project_cli.metadata_util, "gather_metadata", return_value=[]):
