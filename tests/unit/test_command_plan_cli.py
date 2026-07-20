@@ -168,6 +168,9 @@ def test_shell_output_matches_json_replay(plan_cli, capsys):
     shell = capsys.readouterr().out
 
     assert shell == payload["replay"]["script"]
+    action_id = next(step["id"] for step in payload["steps"] if step["role"] == "action")
+    assert f"# {action_id} (action): docker build\n" in shell
+    assert "docker build \\\n" in shell
     checked = _REAL_SUBPROCESS_RUN(["bash", "-n"], input=shell, text=True, capture_output=True)
     assert checked.returncode == 0, checked.stderr
 

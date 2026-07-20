@@ -175,20 +175,61 @@ def _environment_delta(
     return changed, unset, redacted
 
 
+def _shell_argv_groups(argv: Sequence[str]) -> list[list[str]]:
+    """Group argv tokens into readable lines without changing shell semantics."""
+
+    tokens = [str(token) for token in argv]
+    if not tokens:
+        return []
+
+    head_length = 2 if len(tokens) > 1 and not tokens[1].startswith("-") else 1
+    return [tokens[:head_length], *[[token] for token in tokens[head_length:]]]
+
+
+def _shell_group_lines(
+    groups: Sequence[Sequence[str]], *, first_indent: str, continuation_indent: str
+) -> list[str]:
+    """Quote grouped argv and add Bash line continuations."""
+
+    lines = []
+    for index, group in enumerate(groups):
+        indent = first_indent if index == 0 else continuation_indent
+        suffix = " \\" if index + 1 < len(groups) else ""
+        lines.append(f"{indent}{shlex.join([str(token) for token in group])}{suffix}")
+    return lines
+
+
 def _process_shell(
     argv: Sequence[str],
     cwd: str,
     environment_set: Mapping[str, str],
     environment_unset: Sequence[str],
 ) -> str:
-    command = [str(token) for token in argv]
+    command_groups = _shell_argv_groups(argv)
+    lines = ["(", f"  {shlex.join(['cd', '--', cwd])} && \\"]
     if environment_set or environment_unset:
-        env_argv = ["env"]
-        for name in environment_unset:
-            env_argv.extend(["-u", name])
-        env_argv.extend(f"{name}={value}" for name, value in environment_set.items())
-        command = [*env_argv, *command]
-    return f"{shlex.join(['cd', '--', cwd])} && {shlex.join(command)}"
+        lines.append("    env \\")
+        env_groups = [["-u", name] for name in environment_unset]
+        env_groups.extend([[f"{name}={value}"] for name, value in environment_set.items()])
+        for group in env_groups:
+            lines.append(f"      {shlex.join(group)} \\")
+        lines.extend(
+            _shell_group_lines(
+                command_groups,
+                first_indent="      ",
+                continuation_indent="        ",
+            )
+        )
+    else:
+        lines.extend(
+            _shell_group_lines(
+                command_groups,
+                first_indent="    ",
+                continuation_indent="      ",
+            )
+        )
+    lines.append(")")
+    return "\n".join(lines)
 
 
 @dataclass
@@ -265,6 +306,8 @@ class PlanRecorder:
             raise CommandPlanError(f"unsupported process role: {role}")
 
         private_argv = [str(token) for token in argv]
+        if not private_argv:
+            raise CommandPlanError("process argv must contain at least one token")
         public_argv, argv_redacted, required = _public_argv(private_argv)
         if env is not None:
             if not explicit_env:
@@ -340,10 +383,17 @@ class PlanRecorder:
                 "unavailable_reason": unavailable_reason,
             }
 
-        lines = ["#!/usr/bin/env bash", "set -e"]
+        lines = ["#!/usr/bin/env bash", "set -e", ""]
         for name in required:
             lines.append(f': "${{{name}?Set {name} before running this script}}"')
-        lines.extend(step.shell for step in replay_steps)
+        if required:
+            lines.append("")
+        for index, step in enumerate(replay_steps):
+            summary = shlex.join(step.argv[:2]).replace("\r", "\\r").replace("\n", "\\n")
+            lines.append(f"# {step.id} ({step.role}): {summary}")
+            lines.append(step.shell)
+            if index + 1 < len(replay_steps):
+                lines.append("")
         return {
             "format": "bash",
             "script": "\n".join(lines) + "\n",

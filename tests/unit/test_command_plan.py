@@ -7,6 +7,7 @@ import importlib.resources
 import json
 import os
 import subprocess
+import sys
 
 import pytest
 from jsonschema import Draft202012Validator
@@ -65,6 +66,67 @@ def test_process_plan_has_stable_steps_env_delta_and_replay(monkeypatch, tmp_pat
     checked = subprocess.run(
         ["bash", "-n"], input=payload["replay"]["script"], text=True, capture_output=True
     )
+    assert checked.returncode == 0, checked.stderr
+
+
+def test_shell_replay_is_multiline_editable_and_preserves_execution(monkeypatch, tmp_path):
+    working_dir = tmp_path / "working directory"
+    working_dir.mkdir()
+    monkeypatch.setenv("PLAN_REMOVE", "remove-me")
+    recorder = PlanRecorder()
+    monkeypatch.delenv("PLAN_REMOVE")
+    monkeypatch.setenv("PLAN_VALUE", "value with spaces")
+
+    recorder.record_process(
+        [
+            sys.executable,
+            "-c",
+            (
+                "import os; "
+                "print(os.getcwd()); "
+                "print(os.environ['PLAN_VALUE']); "
+                "print('PLAN_REMOVE' in os.environ)"
+            ),
+        ],
+        role="action",
+        cwd=working_dir,
+        check=True,
+    )
+
+    script = recorder.shell_text()
+    assert script.startswith("#!/usr/bin/env bash\nset -e\n\n# step-001 (action):")
+    assert f"  cd -- '{working_dir}' && \\\n" in script
+    assert "    env \\\n      -u PLAN_REMOVE \\\n" in script
+    assert "      'PLAN_VALUE=value with spaces' \\\n" in script
+    assert " \\\n" in script
+
+    replay = subprocess.run(["bash"], input=script, text=True, capture_output=True, check=True)
+    assert replay.stdout.splitlines() == [str(working_dir), "value with spaces", "False"]
+
+
+def test_shell_replay_maps_multiple_actions_and_cleanup_to_json_steps():
+    recorder = PlanRecorder()
+    recorder.record_process(["docker", "inspect", "example:latest"], role="probe", check=True)
+    recorder.record_process(["docker", "build", "."], role="action", check=True)
+    recorder.record_process(["docker", "run", "example:latest"], role="action", check=True)
+    recorder.record_process(["rm", "-f", "container.cid"], role="cleanup", check=True)
+
+    script = recorder.shell_text()
+
+    assert "docker inspect" not in script
+    assert "# step-002 (action): docker build\n" in script
+    assert "\n\n# step-003 (action): docker run\n" in script
+    assert "\n\n# step-004 (cleanup): rm -f\n" in script
+
+
+def test_shell_replay_comment_escapes_newlines_in_argv():
+    recorder = PlanRecorder()
+    recorder.record_process(["printf", "safe\nnot-a-command"], role="action", check=True)
+
+    script = recorder.shell_text()
+
+    assert "# step-001 (action): printf 'safe\\nnot-a-command'\n" in script
+    checked = subprocess.run(["bash", "-n"], input=script, text=True, capture_output=True)
     assert checked.returncode == 0, checked.stderr
 
 
@@ -251,6 +313,13 @@ def test_shell_renderer_rejects_probe_only_plan():
 
     with pytest.raises(CommandPlanError, match="no action steps"):
         recorder.shell_text()
+
+
+def test_recorder_rejects_empty_process_argv():
+    recorder = PlanRecorder()
+
+    with pytest.raises(CommandPlanError, match="at least one token"):
+        recorder.record_process([], role="action", check=True)
 
 
 def test_replacement_subprocess_environment_fails_closed(monkeypatch):
