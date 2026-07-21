@@ -247,13 +247,16 @@ def test_resolve_module_project_falls_back_to_source_tree_when_cwd_metadata_inva
     assert project_data["project_name"] == "test-module-fixture"
 
 
-def test_package_local_deb_fails_without_cpack_config(wheel_module, monkeypatch):
+def test_package_local_deb_fails_without_cpack_config(wheel_module, monkeypatch, capsys):
     monkeypatch.setattr(package_cmd, "run_command", lambda *a, **k: None)
     monkeypatch.setattr(package_cmd.shutil, "which", lambda _: None)
 
-    with pytest.raises(SystemExit):
+    with pytest.raises(SystemExit) as exc_info:
         package_cmd._package_locally(
             wheel_module,
             _args(dryrun=False, pkg_generator="DEB"),
             wheel_module.find_project("test-module-fixture"),
         )
+
+    assert exc_info.value.code == 1
+    assert "did not generate a CPack configuration" in capsys.readouterr().err
