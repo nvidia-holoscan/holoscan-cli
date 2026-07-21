@@ -23,7 +23,12 @@ from pathlib import Path
 from holoscan_cli.commands.build import build_project_locally
 from holoscan_cli.commands.registry import help_for
 from holoscan_cli.utils.docker import get_entrypoint_command_args
-from holoscan_cli.utils.holohub import build_holohub_path_mapping, check_skip_builds, update_env
+from holoscan_cli.utils.holohub import (
+    build_holohub_path_mapping,
+    check_skip_builds,
+    is_local_build_requested,
+    update_env,
+)
 from holoscan_cli.utils.io import Color, fatal, run_command
 
 
@@ -134,11 +139,7 @@ def handle_install(cli, args: argparse.Namespace) -> None:
     update_env(build_mode_env, mode_config.get("build", {}).get("env", {}))
 
     # Check if local mode is requested
-    is_local_mode = (
-        args.local
-        or os.environ.get("HOLOSCAN_CLI_BUILD_LOCAL")
-        or build_mode_env.get("HOLOSCAN_CLI_BUILD_LOCAL")
-    )
+    is_local_mode = is_local_build_requested(args.local, build_mode_env)
 
     if is_local_mode:
         # Build and install locally

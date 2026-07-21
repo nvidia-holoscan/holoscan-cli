@@ -31,10 +31,10 @@ import grp
 import os
 import re
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import Mapping, Optional, Tuple
 
 from holoscan_cli.utils.io import format_cmd, info, run_info_command, warn
-from holoscan_cli.utils.text import _slugify, get_env_bool
+from holoscan_cli.utils.text import _slugify, get_env_bool, is_env_flag_true
 
 DEFAULT_GIT_REF = "latest"
 
@@ -73,6 +73,14 @@ def check_skip_builds(args) -> Tuple[bool, bool]:
         if getattr(args, "no_docker_build", False):
             info("Skipping container build due to --no-docker-build")
     return skip_docker_build, skip_local_build
+
+
+def is_local_build_requested(local: bool, *mode_envs: Mapping[str, str]) -> bool:
+    """Return whether local execution was selected by CLI or environment."""
+    environments = (os.environ, *mode_envs)
+    return local or any(
+        is_env_flag_true(env.get("HOLOSCAN_CLI_BUILD_LOCAL")) for env in environments
+    )
 
 
 def _get_holohub_root() -> Path:

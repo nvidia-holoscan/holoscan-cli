@@ -28,7 +28,11 @@ from typing import Optional
 
 from holoscan_cli.commands.registry import help_for
 from holoscan_cli.utils.docker import get_entrypoint_command_args
-from holoscan_cli.utils.holohub import check_skip_builds, get_buildtype_str
+from holoscan_cli.utils.holohub import (
+    check_skip_builds,
+    get_buildtype_str,
+    is_local_build_requested,
+)
 from holoscan_cli.utils.io import Color, fatal, run_command, warn
 
 
@@ -127,7 +131,7 @@ def handle_package(cli, args: argparse.Namespace) -> None:
     """Configure a Holoscan Module and build package artifacts."""
     from holoscan_cli.cli import in_container_cli_command
 
-    is_local_mode = args.local or os.environ.get("HOLOSCAN_CLI_BUILD_LOCAL")
+    is_local_mode = is_local_build_requested(args.local)
 
     if is_local_mode:
         project_data = _resolve_module_project(
