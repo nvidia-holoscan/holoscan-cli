@@ -75,12 +75,10 @@ def check_skip_builds(args) -> Tuple[bool, bool]:
     return skip_docker_build, skip_local_build
 
 
-def is_local_build_requested(local: bool, *mode_envs: Mapping[str, str]) -> bool:
-    """Return whether local execution was selected by CLI or environment."""
+def is_env_request_local_build(*mode_envs: Mapping[str, str]) -> bool:
+    """Return whether local execution was selected by the environment."""
     environments = (os.environ, *mode_envs)
-    return local or any(
-        is_env_flag_true(env.get("HOLOSCAN_CLI_BUILD_LOCAL")) for env in environments
-    )
+    return any(is_env_flag_true(env.get("HOLOSCAN_CLI_BUILD_LOCAL")) for env in environments)
 
 
 def _get_holohub_root() -> Path:

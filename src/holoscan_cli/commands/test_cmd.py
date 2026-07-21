@@ -28,7 +28,7 @@ from holoscan_cli.metadata.utils import normalize_language
 from holoscan_cli.utils.holohub import (
     check_skip_builds,
     determine_project_prefix,
-    is_local_build_requested,
+    is_env_request_local_build,
 )
 from holoscan_cli.utils.io import format_cmd, run_command
 
@@ -126,7 +126,7 @@ def handle_test(cli, args: argparse.Namespace) -> None:
     container.dryrun = args.dryrun
     container.verbose = args.verbose
 
-    is_local_mode = is_local_build_requested(args.local)
+    is_local_mode = args.local or is_env_request_local_build()
 
     if not is_local_mode and not skip_docker_build:
         build_args = args.build_args or ""

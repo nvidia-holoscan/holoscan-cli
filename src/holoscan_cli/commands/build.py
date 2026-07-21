@@ -44,7 +44,7 @@ from holoscan_cli.utils.holohub import (
     determine_project_prefix,
     get_buildtype_str,
     get_sccache_dir,
-    is_local_build_requested,
+    is_env_request_local_build,
     update_env,
 )
 from holoscan_cli.utils.io import fatal, info, run_command, warn
@@ -160,7 +160,7 @@ def handle_build(cli, args: argparse.Namespace) -> None:
     update_env(build_mode_env, mode_config.get("build", {}).get("env", {}))
 
     # Check if local mode is requested
-    is_local_mode = is_local_build_requested(args.local, build_mode_env)
+    is_local_mode = args.local or is_env_request_local_build(build_mode_env)
 
     if is_local_mode:
         build_project_locally(
