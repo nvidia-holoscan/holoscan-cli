@@ -97,6 +97,9 @@ def test_get_default_cuda_version_falls_back_without_nvidia_smi(monkeypatch, cap
 
 
 def test_get_cuda_tag_handles_sdk_and_cuda_matrix(monkeypatch):
+    # Host probes are stubbed so the matrix is deterministic: the host GPU is
+    # pinned to igpu and the auto-detected CUDA version to 12. That is why a
+    # ``None`` cuda_version (auto-detect) resolves to an igpu tag at CUDA 12.
     monkeypatch.setattr(sdk, "get_host_gpu", lambda: "igpu")
     monkeypatch.setattr(sdk, "get_default_cuda_version", lambda: "12")
 

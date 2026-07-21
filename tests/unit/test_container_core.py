@@ -142,6 +142,53 @@ def test_default_base_image_uses_explicit_base_image_without_sdk_version(tmp_pat
     assert c.default_base_image() == "example.com/base:tag"
 
 
+def test_default_base_image_does_not_probe_host_when_unconfigured(tmp_path, monkeypatch):
+    """When nothing is configured the method must fatal *without* probing the
+    host GPU. Computing ``cuda_tag`` eagerly used to emit a spurious driver
+    warning before the fatal."""
+    monkeypatch.setattr(HoloscanContainer, "BASE_SDK_VERSION", None, raising=False)
+    monkeypatch.setattr(HoloscanContainer, "BASE_IMAGE_FORMAT", None, raising=False)
+
+    def _boom(*_args, **_kwargs):
+        raise AssertionError("cuda_tag must not be computed on the fatal path")
+
+    monkeypatch.setattr(container_core, "get_cuda_tag", _boom)
+    c = _stub_container(tmp_path, project_metadata=None)
+
+    with pytest.raises(SystemExit):
+        c.default_base_image()
+
+
+# ---- _format_image_template validation --------------------------------------
+
+
+def test_format_image_template_fatals_on_unknown_field():
+    """A mistyped placeholder is rejected with a fatal, not a raw KeyError."""
+    with pytest.raises(SystemExit):
+        HoloscanContainer._format_image_template("{bogus}", base_image="x")
+
+
+def test_format_image_template_fatals_on_missing_value():
+    """A referenced field whose value is unset (e.g. sdk_version) fatals."""
+    with pytest.raises(SystemExit):
+        HoloscanContainer._format_image_template(
+            "{base_image}:v{sdk_version}-{cuda_tag}",
+            base_image="x",
+            sdk_version=None,
+            cuda_tag="cuda13",
+        )
+
+
+def test_format_image_template_allows_escaped_braces():
+    """Escaped ``{{...}}`` is a literal, not an ``sdk_version`` placeholder, so it
+    must not trigger the missing-value fatal (regression for the old substring
+    check)."""
+    assert (
+        HoloscanContainer._format_image_template("{base_image}:{{sdk_version}}", base_image="x")
+        == "x:{sdk_version}"
+    )
+
+
 def test_image_name_uses_project_tag_when_dockerfile_is_overridden(tmp_path, monkeypatch):
     """A project-specific Dockerfile must produce a project-tagged image
     even when ``--img`` is not supplied. Dockerfile detection is via

@@ -21,6 +21,7 @@ import shlex
 import shutil
 import signal
 import stat
+import string
 import subprocess
 import sys
 import tempfile
@@ -122,24 +123,48 @@ class HoloscanContainer:
 
     @classmethod
     def _format_image_template(cls, template: str, **values: Optional[str]) -> str:
-        if "{sdk_version" in template and not values.get("sdk_version"):
+        """Render an image-name template, failing closed on bad configuration.
+
+        The ``HOLOSCAN_CLI_*_IMAGE_FORMAT`` templates are public configuration,
+        so a mistyped or unset placeholder must surface as a CLI ``fatal(...)``
+        instead of a raw ``KeyError`` / ``ValueError`` traceback. Parsing the
+        referenced fields (rather than a substring check) also keeps escaped
+        braces such as ``{{sdk_version}}`` from being mistaken for a real
+        ``sdk_version`` placeholder.
+        """
+        fields = {name for _, name, _, _ in string.Formatter().parse(template) if name}
+        unknown = fields - set(values)
+        if unknown:
             fatal(
-                "Image format references sdk_version, but HOLOSCAN_CLI_BASE_SDK_VERSION "
-                "is not set."
+                f"Image format {template!r} references unknown field(s): "
+                f"{', '.join(sorted(unknown))}."
             )
-        return template.format(**values)
+        missing = sorted(name for name in fields if not values.get(name))
+        if missing:
+            fatal(
+                f"Image format {template!r} requires value(s) that are not set: "
+                f"{', '.join(missing)} (e.g. set HOLOSCAN_CLI_BASE_SDK_VERSION for "
+                "sdk_version)."
+            )
+        try:
+            return template.format(**values)
+        except (KeyError, IndexError, ValueError) as exc:
+            fatal(f"Invalid image format template {template!r}: {exc}")
 
     @classmethod
     def default_base_image(cls, cuda_version: Optional[Union[str, int]] = None) -> str:
-        cuda_tag = get_cuda_tag(cuda_version, cls.BASE_SDK_VERSION)
+        # ``cuda_tag`` is resolved lazily: computing it probes the host GPU /
+        # driver (and can emit a warning), so it must not run on the branches
+        # that return an explicit image or fatal without ever using it.
         if cls.BASE_IMAGE_FORMAT:
             return cls._format_image_template(
                 cls.BASE_IMAGE_FORMAT,
                 base_image=cls.BASE_IMAGE_NAME,
                 sdk_version=cls.BASE_SDK_VERSION,
-                cuda_tag=cuda_tag,
+                cuda_tag=get_cuda_tag(cuda_version, cls.BASE_SDK_VERSION),
             )
         if cls.BASE_SDK_VERSION:
+            cuda_tag = get_cuda_tag(cuda_version, cls.BASE_SDK_VERSION)
             return f"{cls.BASE_IMAGE_NAME}:v{cls.BASE_SDK_VERSION}-{cuda_tag}"
         if cls.BASE_IMAGE_NAME != cls.DEFAULT_BASE_IMAGE_NAME:
             return cls.BASE_IMAGE_NAME
