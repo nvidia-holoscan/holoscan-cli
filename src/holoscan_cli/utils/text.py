@@ -81,10 +81,19 @@ def levenshtein_distance(s1: str, s2: str) -> int:
 # ---- env / CLI arg helpers ---------------------------------------------------
 
 
+_FALSE_ENV_VALUES: Tuple[str, ...] = ("false", "no", "n", "0", "f", "off")
+
+
+def is_env_flag_true(value: Optional[str]) -> bool:
+    """Return whether an optional environment flag is enabled."""
+    normalized = (value or "").strip().lower()
+    return bool(normalized) and normalized not in _FALSE_ENV_VALUES
+
+
 def get_env_bool(
     env_var_name: str,
     default: bool = True,
-    false_values: Tuple[str, ...] = ("false", "no", "n", "0", "f"),
+    false_values: Tuple[str, ...] = _FALSE_ENV_VALUES,
 ) -> Tuple[str, bool]:
     """Check environment variable as boolean flag"""
     env_value = os.environ.get(env_var_name, str(default).lower())

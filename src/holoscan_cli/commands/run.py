@@ -28,6 +28,7 @@ from holoscan_cli.utils.docker import get_entrypoint_command_args
 from holoscan_cli.utils.holohub import (
     build_holohub_path_mapping,
     check_skip_builds,
+    is_env_request_local_build,
     replace_placeholders,
     update_env,
 )
@@ -173,12 +174,7 @@ def handle_run(cli, args: argparse.Namespace) -> None:
     skip_docker_build, skip_local_build = check_skip_builds(args)
 
     # Check if local mode is requested
-    is_local_mode = (
-        args.local
-        or os.environ.get("HOLOSCAN_CLI_BUILD_LOCAL")
-        or build_mode_env.get("HOLOSCAN_CLI_BUILD_LOCAL")
-        or run_mode_env.get("HOLOSCAN_CLI_BUILD_LOCAL")
-    )
+    is_local_mode = args.local or is_env_request_local_build(build_mode_env, run_mode_env)
 
     # Apply mode-specific build configuration for build process
     build_args = cli.get_effective_build_config(args, mode_config)
