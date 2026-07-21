@@ -761,3 +761,17 @@ def test_default_docker_run_args_env_propagates_to_docker_run(tmp_path, monkeypa
 
     cmd = calls[0]
     assert "TEST_ENV=123" in cmd
+
+
+@pytest.mark.parametrize("dryrun", [True, False])
+def test_get_volume_args_only_creates_sccache_dir_for_real_run(tmp_path, monkeypatch, dryrun):
+    sccache_dir = tmp_path / "sccache-cache"
+    monkeypatch.setenv("HOLOSCAN_CLI_ENABLE_SCCACHE", "true")
+    monkeypatch.setenv("SCCACHE_DIR", str(sccache_dir))
+
+    c = _stub_container(tmp_path)
+    c.dryrun = dryrun
+    args = c.get_volume_args(add_volumes=[], enable_mps=False)
+
+    assert sccache_dir.exists() == (not dryrun)
+    assert f"{sccache_dir}:{container_core.SCCACHE_CONTAINER_DIR}" in args

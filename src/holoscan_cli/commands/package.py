@@ -216,7 +216,8 @@ def _package_locally(cli, args: argparse.Namespace, project_data: dict) -> None:
 
     if cpack_generators:
         build_dir = cli.DEFAULT_BUILD_PARENT_DIR / package_slug / "package"
-        build_dir.mkdir(parents=True, exist_ok=True)
+        if not dryrun:
+            build_dir.mkdir(parents=True, exist_ok=True)
         cmake_args = [
             "cmake",
             "-B",
