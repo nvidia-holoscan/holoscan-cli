@@ -27,6 +27,7 @@ import tempfile
 from pathlib import Path
 from typing import Any, List, Optional, Union
 
+from holoscan_cli.command_plan import command_plan_active
 from holoscan_cli.metadata.utils import list_normalized_languages
 
 from ..utils.docker import get_image_pythonpath
@@ -40,7 +41,7 @@ from ..utils.holohub import (
     get_sccache_dir,
     replace_placeholders,
 )
-from ..utils.io import fatal, info, run_command, warn
+from ..utils.io import fatal, info, run_command, run_probe, warn
 from ..utils.sdk import (
     check_nvidia_ctk,
     find_hsdk_build_rel_dir,
@@ -447,18 +448,24 @@ class HoloscanContainer:
             self.cuda_version if self.cuda_version is not None else get_default_cuda_version()
         )
 
-        # Check if buildx exists
-        if not self.dryrun:
+        # Structured planning runs this read-only probe because the real action
+        # requires buildx. Plain human dry-run keeps its historical no-probe behavior.
+        if not self.dryrun or command_plan_active():
             try:
-                run_command([self.DOCKER_EXE, "buildx", "version"], check=True, capture_output=True)
-            except subprocess.CalledProcessError:
+                run_probe(
+                    [self.DOCKER_EXE, "buildx", "version"],
+                    check=True,
+                    echo=True,
+                    capture_output=True,
+                    text=True,
+                )
+            except (subprocess.CalledProcessError, OSError):
                 fatal(
                     "docker buildx plugin is missing. Please install docker-buildx-plugin:\n"
                     "https://docs.docker.com/engine/install/ubuntu/#install-using-the-repository"
                 )
 
-        # Set DOCKER_BUILDKIT environment variable
-        os.environ["DOCKER_BUILDKIT"] = "1"
+        build_env = {"DOCKER_BUILDKIT": "1"}
 
         cmd = [
             self.DOCKER_EXE,
@@ -498,7 +505,7 @@ class HoloscanContainer:
                 cmd.extend(["-t", f"{tag_name}-base"])
         cmd.append(str(HoloscanContainer.HOLOHUB_ROOT))
 
-        run_command(cmd, dry_run=self.dryrun)
+        run_command(cmd, dry_run=self.dryrun, env_updates=build_env)
 
         if extra_scripts:
             setup_scripts_dir = get_holohub_setup_scripts_dir()
@@ -529,7 +536,7 @@ class HoloscanContainer:
                 for tag_name in tags:
                     # We override the default tag so we can add the next scripts on top of this.
                     cmd.extend(["-t", f"{tag_name}-{script}", "-t", f"{tag_name}"])
-                run_command(cmd, dry_run=self.dryrun)
+                run_command(cmd, dry_run=self.dryrun, env_updates=build_env)
 
     def run(
         self,

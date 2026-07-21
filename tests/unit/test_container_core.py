@@ -422,6 +422,39 @@ def test_build_dryrun_emits_base_and_extra_script_layers(tmp_path, monkeypatch):
     assert "holohub-my_app:feature-x-coverage" in layer
 
 
+def test_build_uses_explicit_buildkit_env_without_mutating_process_env(tmp_path, monkeypatch):
+    dockerfile = tmp_path / "Dockerfile"
+    dockerfile.write_text("FROM scratch\n", encoding="utf-8")
+    calls = []
+    monkeypatch.setenv("DOCKER_BUILDKIT", "0")
+    monkeypatch.setattr(container_core, "get_host_gpu", lambda: "dgpu")
+    monkeypatch.setattr(container_core, "get_compute_capacity", lambda: "90")
+    monkeypatch.setattr(container_core, "get_default_cuda_version", lambda: "13")
+    monkeypatch.setattr(
+        container_core,
+        "run_command",
+        lambda cmd, **kwargs: calls.append((cmd, kwargs)),
+    )
+
+    def unexpected_probe(*args, **kwargs):
+        raise AssertionError("plain dry-run must not execute buildx")
+
+    monkeypatch.setattr(container_core, "run_probe", unexpected_probe)
+
+    container = _stub_container(tmp_path)
+    container.dryrun = True
+    container.build(
+        docker_file=str(dockerfile),
+        base_img="example.com/base:latest",
+        img="example:plan",
+        cuda_version="13",
+    )
+
+    assert len(calls) == 1
+    assert calls[0][1]["env_updates"] == {"DOCKER_BUILDKIT": "1"}
+    assert container_core.os.environ["DOCKER_BUILDKIT"] == "0"
+
+
 def test_build_dryrun_allows_bundled_extra_script_dir(tmp_path, monkeypatch):
     """Bundled setup scripts live outside the source project but can still
     serve as the Docker build context for extra-script layers."""

@@ -72,6 +72,11 @@ def test_project_commands_by_name_keys_match_specs():
     assert set(by_name) == {spec.name for spec in registry.PROJECT_COMMANDS}
 
 
+def test_only_audited_commands_advertise_structured_plan_support():
+    supported = {spec.name for spec in registry.PROJECT_COMMANDS if spec.supports_plan}
+    assert supported == {"build-container"}
+
+
 def test_autocompletion_command_list_comes_from_registry(capsys):
     cli = SimpleNamespace(
         projects=[

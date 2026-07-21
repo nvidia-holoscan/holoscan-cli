@@ -33,10 +33,13 @@ if sys.version_info < PYTHON_MIN_VERSION:
 import argparse
 import functools
 import os
+from contextlib import redirect_stdout
+from io import StringIO
 from pathlib import Path
 from typing import List, Optional
 
 import holoscan_cli.metadata.gather_metadata as metadata_util
+from holoscan_cli.command_plan import CommandPlanError, PlanRecorder
 from holoscan_cli.commands import registry as commands_registry
 from holoscan_cli.container import HoloscanContainer
 from holoscan_cli.container.parsers import get_build_argparse, get_run_argparse
@@ -300,47 +303,26 @@ class HoloscanCLI:
 
             if "depends" in build_config:
                 if config["with_operators"]:
-                    mode_deps = [dep.strip() for dep in build_config["depends"] if dep.strip()]
-                    msg = f"CLI args --build-with='{config['with_operators']}' "
-                    msg += f"overrides mode depends: {', '.join(mode_deps)}"
-                    warn(msg)
+                    warn("CLI --build-with overrides mode build.depends")
                 else:
                     mode_deps = [dep.strip() for dep in build_config["depends"] if dep.strip()]
                     config["with_operators"] = ";".join(mode_deps) if mode_deps else ""
 
             if "docker_build_args" in build_config:
                 if config["build_args"]:
-                    mode_args = normalize_args_str(build_config["docker_build_args"])
-                    msg = f"CLI args --build-args='{config['build_args']}' "
-                    msg += f"overrides mode --build-args: {mode_args}"
-                    warn(msg)
+                    warn("CLI --build-args overrides mode build.docker_build_args")
                 else:
                     config["build_args"] = normalize_args_str(build_config["docker_build_args"])
 
             if "cmake_options" in build_config:
                 if config["configure_args"]:
-                    mode_opts = (
-                        " ".join(build_config["cmake_options"])
-                        if isinstance(build_config["cmake_options"], list)
-                        else build_config["cmake_options"]
-                    )
-                    cli_opts = (
-                        " ".join(config["configure_args"])
-                        if isinstance(config["configure_args"], list)
-                        else config["configure_args"]
-                    )
-                    msg = f"CLI args --configure-args='{cli_opts}' "
-                    msg += f"overrides mode --configure-args: {mode_opts}"
-                    warn(msg)
+                    warn("CLI --configure-args overrides mode build.cmake_options")
                 else:
                     config["configure_args"] = build_config["cmake_options"]
 
         if "run" in mode_config and "docker_run_args" in mode_config["run"]:
             if getattr(args, "docker_opts", ""):
-                mode_opts = normalize_args_str(mode_config["run"]["docker_run_args"])
-                msg = f"CLI args --docker-opts='{getattr(args, 'docker_opts', '')}' "
-                msg += f"overrides mode --docker-opts: {mode_opts}"
-                warn(msg)
+                warn("CLI --docker-opts overrides mode run.docker_run_args")
             else:
                 config["docker_opts"] = normalize_args_str(mode_config["run"]["docker_run_args"])
 
@@ -366,20 +348,11 @@ class HoloscanCLI:
                 config["workdir"] = run_config["workdir"]
 
             if "command" in run_config and getattr(args, "run_args", ""):
-                msg = (
-                    f"CLI args --run-args='{getattr(args, 'run_args', '')}' "
-                    f"will be appended to mode command"
-                )
-                warn(msg)
+                warn("CLI --run-args will be appended to mode run.command")
 
             if "docker_run_args" in run_config:
                 if getattr(args, "docker_opts", ""):
-                    mode_opts = normalize_args_str(run_config["docker_run_args"])
-                    msg = (
-                        f"CLI args --docker-opts='{getattr(args, 'docker_opts', '')}' "
-                        f"overrides mode --docker-opts: {mode_opts}"
-                    )
-                    warn(msg)
+                    warn("CLI --docker-opts overrides mode run.docker_run_args")
                 else:
                     config["docker_opts"] = normalize_args_str(run_config["docker_run_args"])
         return config
@@ -471,11 +444,44 @@ class HoloscanCLI:
                             print(file=sys.stderr)
                         sys.exit(1)
             raise
-        if hasattr(args, "func"):
+        plan_format = getattr(args, "plan_format", None)
+        if plan_format is not None:
+            if not getattr(args, "_supports_plan", False):
+                self.subparsers[args.command].error(
+                    "structured command plans are not supported for this command"
+                )
+            if not getattr(args, "dryrun", False):
+                self.subparsers[args.command].error(f"--{plan_format} requires --dryrun")
+            self._run_structured_plan(args, plan_format)
+        elif hasattr(args, "func"):
             args.func(args)
         else:
             self.parser.print_help()
             sys.exit(1)
+
+    @staticmethod
+    def _run_structured_plan(args: argparse.Namespace, plan_format: str) -> None:
+        """Run one audited dry-run and write its artifact atomically to stdout."""
+
+        recorder = PlanRecorder()
+        legacy_stdout = StringIO()
+        try:
+            try:
+                with recorder.activate(), redirect_stdout(legacy_stdout):
+                    args.func(args)
+            finally:
+                notices = legacy_stdout.getvalue()
+                if notices:
+                    sys.stderr.write(notices)
+
+            output = recorder.json_text() if plan_format == "json" else recorder.shell_text()
+        except CommandPlanError as exc:
+            print(f"Command planning failed: {exc}", file=sys.stderr)
+            raise SystemExit(1) from exc
+
+        if plan_format == "json":
+            output += "\n"
+        sys.stdout.write(output)
 
 
 def main(argv: Optional[List[str]] = None):

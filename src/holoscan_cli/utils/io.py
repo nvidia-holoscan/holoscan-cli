@@ -25,7 +25,9 @@ import sys
 import traceback
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Iterable, List, Optional, Union
+from typing import Iterable, List, Mapping, Optional, Union
+
+from holoscan_cli.command_plan import CommandPlanError, get_active_recorder
 
 
 def resolve(path) -> Path:
@@ -208,6 +210,7 @@ def run_command(
     check: bool = True,
     as_root: bool = False,
     preserve_env: Optional[Iterable[str]] = None,
+    env_updates: Optional[Mapping[str, str]] = None,
     **kwargs,
 ) -> subprocess.CompletedProcess:
     """Run a command, optionally elevated with ``sudo``.
@@ -219,10 +222,20 @@ def run_command(
     re-applied via ``/usr/bin/env`` (sudo and ld.so scrub them); all other
     names go through ``--preserve-env`` so their values — possibly secrets —
     stay out of the world-readable /proc/<pid>/cmdline. Missing sudo fails
-    clearly rather than running unprivileged.
+    clearly rather than running unprivileged. ``env_updates`` applies an
+    invocation-owned overlay without mutating :data:`os.environ`; structured
+    plans retain that overlay even when it equals the invocation's initial
+    value.
     """
     if preserve_env is not None and not as_root:
         raise ValueError("preserve_env requires as_root=True")
+
+    explicit_env = {str(name): str(value) for name, value in (env_updates or {}).items()}
+    if explicit_env:
+        base_env = kwargs.get("env")
+        effective_env = dict(os.environ if base_env is None else base_env)
+        effective_env.update(explicit_env)
+        kwargs["env"] = effective_env
 
     elevate = as_root and os.geteuid() != 0
     sudo_prefix: List[str] = []
@@ -275,6 +288,23 @@ def run_command(
         quoted = [f'"{x}"' if " " in x else x for x in display_argv]
         display_cmd = format_long_command(quoted) if dry_run else " ".join(quoted)
 
+    recorder = get_active_recorder()
+    if recorder is not None:
+        if isinstance(exec_cmd, str):
+            raise CommandPlanError(
+                "string subprocess commands are not supported in structured plans"
+            )
+        recorder.record_process(
+            exec_cmd,
+            role="action",
+            cwd=kwargs.get("cwd"),
+            env=kwargs.get("env"),
+            explicit_env=explicit_env,
+            check=check,
+            privilege="system" if as_root else "user",
+        )
+        return subprocess.CompletedProcess(exec_cmd, 0)
+
     if elevate:
         print(Color.yellow("[system] elevating with sudo"))
     if dry_run:
@@ -290,6 +320,40 @@ def run_command(
         print(f"Non-zero exit code running command: {display_cmd}")
         print(f"Exit code: {e.returncode}")
         sys.exit(e.returncode)
+
+
+def run_probe(
+    cmd: List[str],
+    *,
+    check: bool = False,
+    echo: bool = False,
+    **kwargs,
+) -> subprocess.CompletedProcess:
+    """Execute a declared read-only probe, recording it during planning.
+
+    Unlike normal action commands, probes execute while a structured dry-run
+    is active so host-dependent argv can be resolved. Probe output should be
+    captured by the caller.
+    """
+
+    argv = [str(token) for token in cmd]
+    recorder = get_active_recorder()
+    if recorder is not None:
+        recorder.record_process(
+            argv,
+            role="probe",
+            cwd=kwargs.get("cwd"),
+            env=kwargs.get("env"),
+            check=check,
+        )
+        if not kwargs.get("capture_output", False):
+            if kwargs.get("stdout") is None:
+                kwargs["stdout"] = subprocess.PIPE
+            if kwargs.get("stderr") is None:
+                kwargs["stderr"] = subprocess.PIPE
+    elif echo:
+        print(format_cmd(shlex.join(argv)))
+    return subprocess.run(argv, check=check, **kwargs)
 
 
 def write_system_file(
@@ -317,6 +381,16 @@ def write_system_file(
 def run_info_command(cmd: List[str], cwd: Optional[str] = None) -> Optional[str]:
     """Run a command for information gathering and return stripped output or None if failed"""
     try:
-        return subprocess.check_output(cmd, text=True, stderr=subprocess.DEVNULL, cwd=cwd).strip()
-    except (subprocess.CalledProcessError, FileNotFoundError):
+        result = run_probe(
+            cmd,
+            cwd=cwd,
+            check=False,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            text=True,
+        )
+        if result.returncode != 0:
+            return None
+        return result.stdout.strip()
+    except OSError:
         return None

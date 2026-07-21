@@ -111,6 +111,37 @@ def test_package_accepts_no_docker_build_flag(cli):
     assert args.no_docker_build is False
 
 
+@pytest.mark.parametrize("flag,expected", [("--json", "json"), ("--shell", "shell")])
+def test_build_container_accepts_structured_dryrun_formats(cli, flag, expected):
+    args = cli.parser.parse_args(["build-container", "--dryrun", flag])
+    assert args.dryrun is True
+    assert args.plan_format == expected
+    assert args._supports_plan is True
+
+
+def test_build_container_plan_formats_are_mutually_exclusive(cli):
+    with pytest.raises(SystemExit) as exc_info:
+        cli.parser.parse_args(["build-container", "--dryrun", "--json", "--shell"])
+    assert exc_info.value.code == 2
+
+
+@pytest.mark.parametrize("flag", ["--json", "--shell"])
+def test_build_container_plan_format_requires_dryrun(cli, flag, capsys):
+    with pytest.raises(SystemExit) as exc_info:
+        cli.run(["holoscan", "build-container", flag])
+    captured = capsys.readouterr()
+    assert exc_info.value.code == 2
+    assert captured.out == ""
+    assert f"{flag} requires --dryrun" in captured.err
+
+
+@pytest.mark.parametrize("command", ["run-container", "build", "run", "package"])
+def test_unaudited_actions_do_not_accept_plan_json(cli, command):
+    with pytest.raises(SystemExit) as exc_info:
+        cli.parser.parse_args([command, "--dryrun", "--json"])
+    assert exc_info.value.code == 2
+
+
 def _subparser_help_strings(parser):
     """Return ``{command_name: help}`` recorded on the parser's subparsers action.
 
