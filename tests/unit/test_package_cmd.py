@@ -191,26 +191,38 @@ def test_package_rejects_non_module_project(tmp_path):
         package_cmd.handle_package(cli, _args(project="gst_to_holo"))
 
 
-def test_resolve_module_project_prefers_standalone_cwd_metadata(tmp_path, monkeypatch):
+def test_resolve_module_project_respects_explicit_project(tmp_path, monkeypatch):
     module_dir = tmp_path / "external-module"
     module_dir.mkdir()
     (module_dir / "metadata.json").write_text(
         json.dumps({"module": {"name": "holoscan-smoke", "language": ["Python"]}}),
         encoding="utf-8",
     )
-    cli = _cli(tmp_path)
+    requested_module = {
+        "project_name": "different-name",
+        "project_type": "module",
+        "source_folder": tmp_path / "repo" / "modules" / "different-name",
+        "metadata": {"language": ["Python"]},
+    }
+    cli = _cli(tmp_path, requested_module)
     monkeypatch.chdir(module_dir)
 
-    project_data = package_cmd._resolve_module_project(
+    cwd_project = package_cmd._resolve_module_project(cli, project_arg=None, language=None)
+    matching_project = package_cmd._resolve_module_project(
+        cli, project_arg="holoscan-smoke", language=None
+    )
+    explicit_project = package_cmd._resolve_module_project(
         cli, project_arg="different-name", language=None
     )
 
-    assert project_data == {
+    assert cwd_project == {
         "project_type": "module",
         "project_name": "holoscan-smoke",
         "source_folder": str(module_dir),
         "metadata": {"name": "holoscan-smoke", "language": ["Python"]},
     }
+    assert matching_project == cwd_project
+    assert explicit_project == requested_module
 
 
 def test_resolve_module_project_falls_back_to_source_tree_when_cwd_metadata_invalid(
@@ -233,3 +245,15 @@ def test_resolve_module_project_falls_back_to_source_tree_when_cwd_metadata_inva
     )
 
     assert project_data["project_name"] == "test-module-fixture"
+
+
+def test_package_local_deb_fails_without_cpack_config(wheel_module, monkeypatch):
+    monkeypatch.setattr(package_cmd, "run_command", lambda *a, **k: None)
+    monkeypatch.setattr(package_cmd.shutil, "which", lambda _: None)
+
+    with pytest.raises(SystemExit):
+        package_cmd._package_locally(
+            wheel_module,
+            _args(dryrun=False, pkg_generator="DEB"),
+            wheel_module.find_project("test-module-fixture"),
+        )
