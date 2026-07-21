@@ -33,7 +33,7 @@ from holoscan_cli.utils.holohub import (
     get_buildtype_str,
     is_env_request_local_build,
 )
-from holoscan_cli.utils.io import Color, fatal, run_command, warn
+from holoscan_cli.utils.io import Color, fatal, run_command
 
 
 def register_package_parser(
@@ -85,7 +85,7 @@ def _normalize_module_name(value: str) -> str:
 
 
 def _resolve_module_project(cli, project_arg: Optional[str], language: Optional[str]) -> dict:
-    """Resolve a module from cwd metadata or from the active source tree."""
+    """Resolve a module from matching cwd metadata or the active source tree."""
     cwd = Path.cwd()
     cwd_meta = cwd / "metadata.json"
     if cwd_meta.exists():
@@ -96,20 +96,16 @@ def _resolve_module_project(cli, project_arg: Optional[str], language: Optional[
         if isinstance(data, dict) and "module" in data:
             module = data["module"]
             module_name = module.get("name", cwd.name)
-            if project_arg and _normalize_module_name(project_arg) not in {
+            if project_arg is None or _normalize_module_name(project_arg) in {
                 _normalize_module_name(module_name),
                 _normalize_module_name(cwd.name),
             }:
-                warn(
-                    f"Packaging module '{module_name}' from {cwd}; "
-                    f"ignoring project argument '{project_arg}'."
-                )
-            return {
-                "project_type": "module",
-                "project_name": module_name,
-                "source_folder": str(cwd),
-                "metadata": module,
-            }
+                return {
+                    "project_type": "module",
+                    "project_name": module_name,
+                    "source_folder": str(cwd),
+                    "metadata": module,
+                }
 
     if project_arg:
         project_data = cli.find_project(project_arg, language=language)
@@ -256,13 +252,14 @@ def _package_locally(cli, args: argparse.Namespace, project_data: dict) -> None:
         run_command(build_cmd, dry_run=dryrun, env=build_env)
 
         pkg_config_dir = build_dir / "pkg"
-        cpack_configs = (
-            list(pkg_config_dir.glob("CPackConfig-*.cmake")) if pkg_config_dir.exists() else []
-        )
-        if not cpack_configs and dryrun:
-            bare = project_name.replace("_", "-")
-            if bare.startswith("holoscan-"):
-                bare = bare[len("holoscan-") :]
+        cpack_configs = list(pkg_config_dir.glob("CPackConfig-*.cmake"))
+        if not cpack_configs:
+            if not dryrun:
+                fatal(
+                    f"Packaging '{project_name}' did not generate a CPack configuration. "
+                    "Check that the module defines a package target."
+                )
+            bare = project_name.replace("_", "-").removeprefix("holoscan-")
             cpack_configs = [pkg_config_dir / f"CPackConfig-holoscan-{bare}.cmake"]
         for cpack_config in cpack_configs:
             for generator in cpack_generators:
