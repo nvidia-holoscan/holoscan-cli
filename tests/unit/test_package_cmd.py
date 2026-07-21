@@ -105,12 +105,13 @@ def test_package_deb_emits_pkg_flag_for_standalone_module(tmp_path, monkeypatch)
 
 def test_package_container_honors_no_docker_build_and_cuda(tmp_path, monkeypatch):
     """Container packaging skips the build for --no-docker-build and forwards
-    --cuda to the container build args (holohub#1596, #1597)."""
+    --cuda to the container build args (holohub#1596, #1597). A false local-build
+    env flag must still select this container path."""
     from unittest.mock import MagicMock
 
     import holoscan_cli.cli as cli_mod
 
-    monkeypatch.delenv("HOLOSCAN_CLI_BUILD_LOCAL", raising=False)
+    monkeypatch.setenv("HOLOSCAN_CLI_BUILD_LOCAL", "0")
     monkeypatch.setenv("HOLOSCAN_CLI_ALWAYS_BUILD", "1")
 
     project_data = {
