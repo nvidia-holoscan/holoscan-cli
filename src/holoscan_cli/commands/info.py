@@ -149,7 +149,7 @@ def handle_modes(cli, args: argparse.Namespace) -> None:
             json_dumps(
                 {
                     "project": args.project,
-                    "language": metadata.get("language"),
+                    "language": _project_languages(metadata),
                     "modes": modes,
                 }
             )

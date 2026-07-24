@@ -488,7 +488,9 @@ def test_module_sites_local_override_wins(tmp_path, monkeypatch, _clean_local_ov
 def test_merge_deps_site_owns_coords_project_supplies_override():
     site = ModuleDep(name="m", git_url="https://x/y", ref=FULL_SHA)
     proj = ModuleDep(
-        name="m", provides_operators=["op_a"], override_path="/local/m"  # type: ignore[arg-type]
+        name="m",
+        provides_operators=["op_a"],
+        override_path="/local/m",  # type: ignore[arg-type]
     )
 
     merged = merge_deps([site], [proj])
