@@ -721,7 +721,9 @@ class HoloscanContainer:
             sccache_host_dir = get_sccache_dir()
             info(f"Host SCCACHE_DIR: {sccache_host_dir}")
             info(f"Container mount point: {SCCACHE_CONTAINER_DIR}")
-            os.makedirs(sccache_host_dir, exist_ok=True)  # Pre-create for the current user to own
+            if not self.dryrun:
+                # Pre-create for the current user to own.
+                os.makedirs(sccache_host_dir, exist_ok=True)
             args.extend(["-v", f"{sccache_host_dir}:{SCCACHE_CONTAINER_DIR}"])
         elif has_host_sccache_env:
             warn(
