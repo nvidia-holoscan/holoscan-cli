@@ -26,7 +26,6 @@ from holoscan_cli.metadata.utils import BASE_SCHEMA_PATH, SCHEMA_DIR, get_schema
 KNOWN_ENVELOPES = (
     "application",
     "operator",
-    "workflow",
     "tutorial",
     "benchmark",
     "gxf_extension",

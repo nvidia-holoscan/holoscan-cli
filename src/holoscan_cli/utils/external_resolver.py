@@ -83,7 +83,7 @@ def _module_dependencies_raw(metadata: dict) -> list[dict]:
     metadata.json. Returns ``[]`` if no external deps are declared."""
     if "module" in metadata:
         return list(metadata["module"].get("dependencies", []) or [])
-    for key in ("application", "workflow", "benchmark"):
+    for key in ("application", "benchmark"):
         if key in metadata:
             deps = metadata[key].get("dependencies") or {}
             if isinstance(deps, dict) and "modules" in deps:

@@ -50,7 +50,6 @@ LIST_TYPES = [
     "package",
     "operator",
     "tutorial",
-    "workflow",
 ]
 
 
