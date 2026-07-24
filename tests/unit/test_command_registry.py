@@ -21,6 +21,7 @@ agents and downstream wrappers can rely on the same lookups.
 
 from __future__ import annotations
 
+import json
 from types import SimpleNamespace
 
 import pytest
@@ -135,3 +136,45 @@ def test_list_module_operator_display_fallbacks(capsys, metadata, expected):
     info.handle_list(cli, SimpleNamespace())
 
     assert expected in capsys.readouterr().out
+
+
+# ---- list --json / modes --json ----------------------------------------------
+
+
+def test_list_json_emits_schema_and_project_fields(capsys):
+    cli = SimpleNamespace(
+        projects=[
+            {
+                "project_type": "module",
+                "project_name": "holoscan-gstreamer",
+                "source_folder": "/repo/operators/holoscan-gstreamer",
+                "metadata": {"language": "python", "modes": {"default": {}}},
+            }
+        ]
+    )
+
+    info.handle_list(cli, SimpleNamespace(json=True))
+
+    data = json.loads(capsys.readouterr().out)
+    assert data["schema_version"] == 1
+    assert data["projects"] == [
+        {
+            "name": "holoscan-gstreamer",
+            "project_type": "module",
+            "source_folder": "/repo/operators/holoscan-gstreamer",
+            "language": ["python"],  # string normalized to a list
+            "modes": ["default"],
+        }
+    ]
+
+
+def test_modes_json_emits_resolved_modes(capsys):
+    project = {"metadata": {"language": "python", "modes": {"default": {"description": "d"}}}}
+    cli = SimpleNamespace(find_project=lambda name, language=None: project)
+
+    info.handle_modes(cli, SimpleNamespace(project="smoke_app", language=None, json=True))
+
+    data = json.loads(capsys.readouterr().out)
+    assert data["schema_version"] == 1
+    assert data["language"] == ["python"]  # parity with list --json
+    assert data["modes"] == {"default": {"description": "d"}}

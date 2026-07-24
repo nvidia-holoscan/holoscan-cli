@@ -17,7 +17,7 @@
 
 Covers:
   - ``parse_module_dependencies`` reading metadata.json:dependencies.modules
-    from application/workflow/benchmark shapes and the flat ``module.dependencies``
+    from application/benchmark shapes and the flat ``module.dependencies``
     array; honoring ``HOLOSCAN_CLI_LOCAL_<NAME>``; skipping malformed entries.
   - String helpers ``_override_env_name`` and ``_ref_is_immutable``.
 """
@@ -131,8 +131,8 @@ def test_parses_module_metadata_flat_dependencies_array(tmp_path):
     assert [d.name for d in deps] == ["transitive-dep"]
 
 
-@pytest.mark.parametrize("outer", ["workflow", "benchmark"])
-def test_parses_workflow_and_benchmark_shapes(tmp_path, outer):
+@pytest.mark.parametrize("outer", ["application", "benchmark"])
+def test_parses_application_and_benchmark_shapes(tmp_path, outer):
     meta = _write_metadata(
         tmp_path,
         {
@@ -488,7 +488,9 @@ def test_module_sites_local_override_wins(tmp_path, monkeypatch, _clean_local_ov
 def test_merge_deps_site_owns_coords_project_supplies_override():
     site = ModuleDep(name="m", git_url="https://x/y", ref=FULL_SHA)
     proj = ModuleDep(
-        name="m", provides_operators=["op_a"], override_path="/local/m"  # type: ignore[arg-type]
+        name="m",
+        provides_operators=["op_a"],
+        override_path="/local/m",  # type: ignore[arg-type]
     )
 
     merged = merge_deps([site], [proj])

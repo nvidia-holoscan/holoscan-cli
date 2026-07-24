@@ -119,7 +119,7 @@ def register_build_parser(
     parser.add_argument(
         "--benchmark",
         action="store_true",
-        help="Build for Holoscan Flow Benchmarking. Valid for applications/workflows only",
+        help="Build for Holoscan Flow Benchmarking. Valid for applications and benchmarks only",
     )
     parser.add_argument(
         "--no-docker-build", action="store_true", help="Skip building the container"
@@ -249,7 +249,7 @@ def build_project_locally(
     # Handle benchmark patching before building
     app_source_path = None
     if benchmark:
-        if project_type in ["application", "workflow", "benchmark"]:
+        if project_type in ["application", "benchmark"]:
             app_source_path = project_data.get("source_folder", "")
             patch_script = (
                 cli.HOLOHUB_ROOT / "benchmarks/holoscan_flow_benchmarking/patch_application.sh"
@@ -257,7 +257,7 @@ def build_project_locally(
             run_command([str(patch_script), str(app_source_path)], dry_run=dryrun)
             print("Building for Holoscan Flow Benchmarking")
         else:
-            fatal("--benchmark option is only available for applications/workflows")
+            fatal("--benchmark option is only available for applications and benchmarks")
 
     build_type = get_buildtype_str(build_type)
     build_dir = cli.DEFAULT_BUILD_PARENT_DIR / project_name
@@ -435,7 +435,7 @@ def build_project_locally(
                 )
 
     # Handle benchmark restoration after building
-    if benchmark and app_source_path and project_type in ["application", "workflow", "benchmark"]:
+    if benchmark and app_source_path and project_type in ["application", "benchmark"]:
         restore_script = (
             cli.HOLOHUB_ROOT / "benchmarks/holoscan_flow_benchmarking/restore_application.sh"
         )

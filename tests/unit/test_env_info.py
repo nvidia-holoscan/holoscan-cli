@@ -7,6 +7,7 @@ import argparse
 import json
 import os
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -136,6 +137,7 @@ def test_env_check_json_emits_elapsed_seconds_key(monkeypatch, capsys):
 
     out = capsys.readouterr().out
     data = json.loads(out)
+    assert data["schema_version"] == 1
     assert "elapsed_seconds" in data
     assert isinstance(data["elapsed_seconds"], (int, float))
     assert data["summary"]["ok"] == 2
@@ -160,6 +162,28 @@ def test_env_check_does_not_exit_on_warn_only(monkeypatch, capsys):
 
     out = capsys.readouterr().out
     assert "warning" in out.lower()
+
+
+def test_env_info_json_round_trips(tmp_path, monkeypatch, capsys):
+    """``env-info --json`` emits one parseable document; absent host tooling
+    (all probes return ``None``) renders as JSON ``null`` rather than crashing."""
+    monkeypatch.setattr(env_info, "run_info_command", lambda cmd: None)
+    monkeypatch.setattr(env_info.shutil, "which", lambda name: None)
+
+    cli = SimpleNamespace(
+        HOLOHUB_ROOT=tmp_path / "missing",
+        DEFAULT_BUILD_PARENT_DIR=tmp_path / "build",
+        DEFAULT_DATA_DIR=tmp_path / "data",
+        DEFAULT_SDK_DIR=Path("/opt/nvidia/holoscan"),
+    )
+
+    info_cmd.handle_env_info(cli, argparse.Namespace(json=True))
+
+    data = json.loads(capsys.readouterr().out)
+    assert data["schema_version"] == 1
+    assert data["git"] is None
+    assert data["docker"] is None
+    assert data["cuda_gpu"] is None
 
 
 def test_collect_cli_info_reports_managed_venv(monkeypatch, capsys):

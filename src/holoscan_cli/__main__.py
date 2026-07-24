@@ -90,12 +90,15 @@ def parse_args(argv: Optional[list[str]] = None) -> argparse.Namespace:
 
     subparser = parser.add_subparsers(dest="command")
 
-    subparser.add_parser(
+    version_parser = subparser.add_parser(
         "version",
         help="display the holoscan-cli package version",
         formatter_class=argparse.HelpFormatter,
         parents=[parent_parser],
         add_help=False,
+    )
+    version_parser.add_argument(
+        "--json", action="store_true", help="Output version information as JSON"
     )
     for command, help_text in sorted(PROJECT_COMMANDS.items()):
         subparser.add_parser(

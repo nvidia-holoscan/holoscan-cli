@@ -46,7 +46,6 @@ PROJECT_PREFIXES = {
     "operator": "OP",
     "package": "PKG",
     "tutorial": "APP",
-    "workflow": "APP",
     "default": "APP",  # specified type but not recognized
 }
 
@@ -109,7 +108,6 @@ def _get_holohub_root() -> Path:
         "pkg",
         "subgraphs",
         "tutorials",
-        "workflows",
     )
     for candidate in (cwd, *cwd.parents):
         if (candidate / "src" / "holoscan_cli").is_dir() and (
@@ -144,7 +142,6 @@ def get_component_search_paths(base_dir: Optional[Path] = None) -> tuple[Path, .
         "operators",
         "pkg",
         "tutorials",
-        "workflows",
     )
     paths = [token.strip() for token in tokens if token.strip()] or default_paths
     return tuple(
