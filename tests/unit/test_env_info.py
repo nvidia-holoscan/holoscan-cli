@@ -7,6 +7,7 @@ import argparse
 import json
 import os
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -136,6 +137,7 @@ def test_env_check_json_emits_elapsed_seconds_key(monkeypatch, capsys):
 
     out = capsys.readouterr().out
     data = json.loads(out)
+    assert data["schema_version"] == 1
     assert "elapsed_seconds" in data
     assert isinstance(data["elapsed_seconds"], (int, float))
     assert data["summary"]["ok"] == 2
@@ -160,6 +162,83 @@ def test_env_check_does_not_exit_on_warn_only(monkeypatch, capsys):
 
     out = capsys.readouterr().out
     assert "warning" in out.lower()
+
+
+def test_env_info_json_round_trips(tmp_path, monkeypatch, capsys):
+    """``env-info --json`` emits a single parseable document with the expected
+    structured sections."""
+    root = tmp_path / "repo"
+    root.mkdir()
+    root_str = str(root)
+    responses = {
+        ("git", "-C", root_str, "branch", "--show-current"): "main",
+        ("git", "-C", root_str, "rev-parse", "HEAD"): "abcdef0123456789",
+        ("git", "-C", root_str, "status", "--porcelain"): " M README.md\n?? new.txt",
+        ("docker", "--version"): "Docker version 26.1.0",
+        ("docker", "info", "--format", "{{.ServerVersion}}"): "26.1.0",
+        ("nvidia-ctk", "--version"): "NVIDIA Container Toolkit 1.16.2",
+        (
+            "nvidia-smi",
+            "--query-gpu=name,driver_version,memory.total",
+            "--format=csv,noheader,nounits",
+        ): "NVIDIA H100, 550.54, 81559",
+        ("nvcc", "--version"): "Cuda compilation tools, release 13.0, V13.0.0",
+        ("which", "nvcc"): "/usr/local/cuda/bin/nvcc",
+        ("sccache", "--version"): "sccache 0.8.2",
+    }
+    monkeypatch.setattr(env_info, "run_info_command", lambda cmd: responses.get(tuple(cmd)))
+    monkeypatch.setattr(env_info.shutil, "which", lambda name: "/usr/bin/sccache")
+    monkeypatch.setenv("HOLOSCAN_CLI_ENABLE_SCCACHE", "true")
+    monkeypatch.setenv("HOLOSCAN_CLI_PINNED_VERSION", "4.4.1")
+
+    cli = SimpleNamespace(
+        HOLOHUB_ROOT=root,
+        DEFAULT_BUILD_PARENT_DIR=tmp_path / "build",
+        DEFAULT_DATA_DIR=tmp_path / "data",
+        DEFAULT_SDK_DIR=Path("/opt/nvidia/holoscan"),
+    )
+
+    info_cmd.handle_env_info(cli, argparse.Namespace(json=True))
+
+    data = json.loads(capsys.readouterr().out)
+    assert data["schema_version"] == 1
+    assert data["cli"]["environment"] in {
+        "wrapper-managed-venv",
+        "conda",
+        "virtualenv",
+        "system",
+    }
+    assert data["source_project"]["root"] == root_str
+    assert data["git"]["branch"] == "main"
+    assert data["git"]["modified"] == [" M README.md", "?? new.txt"]
+    assert data["docker"]["server_version"] == "26.1.0"
+    assert data["docker"]["nvidia_container_toolkit"] == "NVIDIA Container Toolkit 1.16.2"
+    assert data["cuda_gpu"]["gpus"][0]["name"] == "NVIDIA H100"
+    assert data["cuda_gpu"]["gpus"][0]["memory_total_mb"] == "81559"
+    assert data["sccache"]["enabled"] is True
+    assert data["sccache"]["version"] == "sccache 0.8.2"
+    assert data["environment_variables"]["holoscan_cli"]["HOLOSCAN_CLI_PINNED_VERSION"] == "4.4.1"
+
+
+def test_env_info_json_nulls_unavailable_sections(tmp_path, monkeypatch, capsys):
+    """Absent host tooling renders as JSON ``null``, not a crash or prose."""
+    monkeypatch.setattr(env_info, "run_info_command", lambda cmd: None)
+    monkeypatch.setattr(env_info.shutil, "which", lambda name: None)
+
+    cli = SimpleNamespace(
+        HOLOHUB_ROOT=tmp_path / "missing",
+        DEFAULT_BUILD_PARENT_DIR=tmp_path / "build",
+        DEFAULT_DATA_DIR=tmp_path / "data",
+        DEFAULT_SDK_DIR=Path("/opt/nvidia/holoscan"),
+    )
+
+    info_cmd.handle_env_info(cli, argparse.Namespace(json=True))
+
+    data = json.loads(capsys.readouterr().out)
+    assert data["git"] is None
+    assert data["docker"] is None
+    assert data["cuda_gpu"] is None
+    assert data["sccache"]["binary"] is None
 
 
 def test_collect_cli_info_reports_managed_venv(monkeypatch, capsys):

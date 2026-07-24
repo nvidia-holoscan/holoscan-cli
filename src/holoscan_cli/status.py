@@ -16,13 +16,13 @@
 
 """Compact status display for HoloHub development environment."""
 
-import json
 import os
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import List, Optional
 
 from .utils.io import Color, run_info_command
+from .utils.json_output import dumps as json_dumps
 from .utils.sdk import (
     get_default_cuda_version,
     get_gpu_name,
@@ -280,4 +280,4 @@ def format_status_json(
     }
     if docker_disk:
         data["docker_disk"] = docker_disk
-    return json.dumps(data, indent=2)
+    return json_dumps(data)

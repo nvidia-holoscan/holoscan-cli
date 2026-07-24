@@ -14,6 +14,7 @@
 # limitations under the License.
 
 import importlib.metadata
+import json
 from argparse import Namespace
 from pathlib import Path
 
@@ -50,3 +51,15 @@ def test_execute_version_command_reports_package_and_paths(monkeypatch, capsys):
     assert f"Module:      {Path('src/holoscan_cli/version/version.py').resolve()}" in output
     assert "Holoscan SDK:" not in output
     assert "MONAI Deploy App SDK:" not in output
+
+
+def test_execute_version_command_json_round_trips(monkeypatch, capsys):
+    monkeypatch.setattr("holoscan_cli.version.version.get_package_version", lambda: "1.2.3")
+
+    execute_version_command(Namespace(json=True))
+
+    data = json.loads(capsys.readouterr().out)
+    assert data["schema_version"] == 1
+    assert data["package"] == "holoscan-cli"
+    assert data["version"] == "1.2.3"
+    assert data["module"] == str(Path("src/holoscan_cli/version/version.py").resolve())

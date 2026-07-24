@@ -21,6 +21,7 @@ agents and downstream wrappers can rely on the same lookups.
 
 from __future__ import annotations
 
+import json
 from types import SimpleNamespace
 
 import pytest
@@ -135,3 +136,70 @@ def test_list_module_operator_display_fallbacks(capsys, metadata, expected):
     info.handle_list(cli, SimpleNamespace())
 
     assert expected in capsys.readouterr().out
+
+
+# ---- list --json / modes --json ----------------------------------------------
+
+
+def test_list_json_emits_schema_and_project_fields(capsys):
+    cli = SimpleNamespace(
+        projects=[
+            {
+                "project_type": "module",
+                "project_name": "holoscan-gstreamer",
+                "source_folder": "/repo/operators/holoscan-gstreamer",
+                "metadata": {
+                    "language": ["C++", "Python"],
+                    "modes": {"default": {}, "bench": {}},
+                },
+            },
+            {
+                "project_type": "application",
+                "project_name": "smoke_app",
+                "source_folder": "/repo/applications/smoke_app",
+                "metadata": {"language": "python"},
+            },
+        ]
+    )
+
+    info.handle_list(cli, SimpleNamespace(json=True))
+
+    data = json.loads(capsys.readouterr().out)
+    assert data["schema_version"] == 1
+    # Sorted by (project_type, name): "application" sorts before "module".
+    assert [p["name"] for p in data["projects"]] == ["smoke_app", "holoscan-gstreamer"]
+    app, module = data["projects"]
+    # A string ``language`` is normalized to a list.
+    assert app["language"] == ["python"]
+    assert module["source_folder"] == "/repo/operators/holoscan-gstreamer"
+    assert module["language"] == ["C++", "Python"]
+    # Mode names are sorted.
+    assert module["modes"] == ["bench", "default"]
+
+
+def test_modes_json_emits_resolved_modes(capsys):
+    project = {
+        "project_name": "smoke_app",
+        "metadata": {
+            "language": "python",
+            "modes": {"default": {"description": "d", "requirements": ["gpu"]}},
+        },
+    }
+    cli = SimpleNamespace(find_project=lambda name, language=None: project)
+
+    info.handle_modes(cli, SimpleNamespace(project="smoke_app", language=None, json=True))
+
+    data = json.loads(capsys.readouterr().out)
+    assert data["schema_version"] == 1
+    assert data["project"] == "smoke_app"
+    assert data["language"] == "python"
+    assert data["modes"]["default"]["requirements"] == ["gpu"]
+
+
+def test_modes_json_emits_empty_object_when_no_modes(capsys):
+    cli = SimpleNamespace(find_project=lambda name, language=None: {"metadata": {}})
+
+    info.handle_modes(cli, SimpleNamespace(project="x", language=None, json=True))
+
+    data = json.loads(capsys.readouterr().out)
+    assert data["modes"] == {}
