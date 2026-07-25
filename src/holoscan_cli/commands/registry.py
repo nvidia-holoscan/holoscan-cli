@@ -63,6 +63,7 @@ class CommandSpec:
     short_help: str
     help: str
     group: str  # "project" | "container" | "info" | "workspace"
+    supports_plan: bool = False
 
 
 # Ordered for predictable iteration; ``holoscan --help`` re-sorts alphabetically.
@@ -98,6 +99,7 @@ PROJECT_COMMANDS: tuple[CommandSpec, ...] = (
         short_help="build a source-project development container",
         help="Build the development container",
         group="container",
+        supports_plan=True,
     ),
     CommandSpec(
         "run-container",
@@ -239,6 +241,7 @@ def register_all(
     # Imported lazily so simple ``from holoscan_cli.commands import registry``
     # consumers (e.g. ``__main__.py``) don't pull in every command module
     # just to read :data:`PROJECT_COMMANDS`.
+    from holoscan_cli.command_plan import add_plan_output_arguments
     from holoscan_cli.commands import (
         build,
         clear_cache,
@@ -256,7 +259,12 @@ def register_all(
     registered: dict[str, argparse.ArgumentParser] = {}
 
     def add(register_fn, name: str, **kwargs) -> None:
-        registered[name] = register_fn(cli, subparsers, **kwargs)
+        parser = register_fn(cli, subparsers, **kwargs)
+        supports_plan = PROJECT_COMMANDS_BY_NAME[name].supports_plan
+        if supports_plan:
+            add_plan_output_arguments(parser)
+        parser.set_defaults(_supports_plan=supports_plan)
+        registered[name] = parser
 
     # Workspace-touching commands.
     add(create.register_create_parser, "create")

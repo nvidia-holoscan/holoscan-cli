@@ -1,0 +1,136 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/nvidia-holoscan/holoscan-cli/command_plan.schema.json",
+  "title": "Holoscan CLI dry-run command plan",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "status",
+    "scope",
+    "host_resolved",
+    "complete",
+    "steps",
+    "replay",
+    "limitations",
+    "warnings"
+  ],
+  "properties": {
+    "schema_version": {"const": 1},
+    "status": {"const": "dryrun"},
+    "scope": {"const": "current_cli_process"},
+    "host_resolved": {"const": true},
+    "complete": {"const": true},
+    "steps": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"$ref": "#/$defs/process_step"}
+    },
+    "replay": {"$ref": "#/$defs/replay"},
+    "limitations": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/notice"}
+    },
+    "warnings": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/notice"}
+    }
+  },
+  "additionalProperties": true,
+  "$defs": {
+    "environment": {
+      "type": "object",
+      "required": ["inherit", "set", "unset", "required"],
+      "properties": {
+        "inherit": {"const": true},
+        "set": {
+          "type": "object",
+          "additionalProperties": {"type": "string"}
+        },
+        "unset": {
+          "type": "array",
+          "items": {"type": "string"},
+          "uniqueItems": true
+        },
+        "required": {
+          "type": "array",
+          "items": {"type": "string"},
+          "uniqueItems": true
+        }
+      },
+      "additionalProperties": true
+    },
+    "process_step": {
+      "type": "object",
+      "required": [
+        "id",
+        "kind",
+        "role",
+        "argv",
+        "shell",
+        "cwd",
+        "environment",
+        "check",
+        "privilege",
+        "redacted",
+        "destructive"
+      ],
+      "properties": {
+        "id": {"type": "string", "pattern": "^step-[0-9]{3,}$"},
+        "kind": {"const": "process"},
+        "role": {"enum": ["probe", "action", "cleanup"]},
+        "argv": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"type": "string"}
+        },
+        "shell": {"type": "string"},
+        "cwd": {"type": "string"},
+        "environment": {"$ref": "#/$defs/environment"},
+        "check": {"type": "boolean"},
+        "privilege": {"enum": ["user", "system"]},
+        "redacted": {"type": "boolean"},
+        "destructive": {"type": "boolean"}
+      },
+      "additionalProperties": true
+    },
+    "replay": {
+      "type": "object",
+      "required": ["format", "script", "required_environment", "unavailable_reason"],
+      "properties": {
+        "format": {"const": "bash"},
+        "script": {"type": ["string", "null"]},
+        "required_environment": {
+          "type": "array",
+          "items": {"type": "string"},
+          "uniqueItems": true
+        },
+        "unavailable_reason": {"type": ["string", "null"]}
+      },
+      "oneOf": [
+        {
+          "properties": {
+            "script": {"type": "string", "minLength": 1},
+            "unavailable_reason": {"type": "null"}
+          }
+        },
+        {
+          "properties": {
+            "script": {"type": "null"},
+            "unavailable_reason": {"type": "string", "minLength": 1}
+          }
+        }
+      ],
+      "additionalProperties": true
+    },
+    "notice": {
+      "type": "object",
+      "required": ["code", "message"],
+      "properties": {
+        "code": {"type": "string"},
+        "message": {"type": "string"},
+        "step_id": {"type": "string"}
+      },
+      "additionalProperties": true
+    }
+  }
+}

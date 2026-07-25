@@ -31,7 +31,8 @@ import sys
 from pathlib import Path
 from typing import Optional, Union
 
-from holoscan_cli.utils.io import fatal, run_info_command, warn
+from holoscan_cli.command_plan import record_probe_fallback
+from holoscan_cli.utils.io import fatal, run_info_command, run_probe, warn
 from holoscan_cli.utils.text import parse_semantic_version
 
 
@@ -72,13 +73,17 @@ def get_gpu_name() -> Optional[str]:
     if not shutil.which("nvidia-smi"):
         return None
     try:
-        output = subprocess.check_output(
+        result = run_probe(
             ["nvidia-smi", "--query-gpu=name", "--format=csv,noheader"],
+            check=False,
+            stdout=subprocess.PIPE,
             text=True,
             stderr=subprocess.DEVNULL,
         )
-        return output.strip() if output else None
-    except (subprocess.CalledProcessError, FileNotFoundError):
+        if result.returncode != 0:
+            return None
+        return result.stdout.strip() if result.stdout else None
+    except OSError:
         return None
 
 
@@ -87,6 +92,7 @@ def get_host_gpu() -> str:
     """Determine if running on dGPU or iGPU"""
     gpu_name = get_gpu_name()
     if gpu_name is None:
+        record_probe_fallback("GPU detection failed; using the resolver fallback 'dgpu'.")
         print(
             "Could not find any GPU drivers on host. Defaulting build to target dGPU/CPU stack.",
             file=sys.stderr,
@@ -123,6 +129,9 @@ def get_default_cuda_version() -> str:
         - "12" if driver version < 580
     """
     if not shutil.which("nvidia-smi"):
+        record_probe_fallback(
+            "NVIDIA driver detection was unavailable; using the CUDA major fallback '13'."
+        )
         warn("nvidia-smi not found, default CUDA version is 13")
         return "13"
 
@@ -131,11 +140,15 @@ def get_default_cuda_version() -> str:
     )
 
     if not driver_version:
+        record_probe_fallback("NVIDIA driver detection failed; using the CUDA major fallback '13'.")
         warn("Unable to detect NVIDIA driver version, default CUDA version is 13")
         return "13"
 
     result = cuda_major_from_driver(driver_version)
     if result is None:
+        record_probe_fallback(
+            "The NVIDIA driver version was not parseable; using the CUDA major fallback '13'."
+        )
         warn(f"Unable to parse driver version '{driver_version}', default CUDA version is 13")
         return "13"
     return result
@@ -295,14 +308,24 @@ def get_compute_capacity() -> str:
     """Get GPU compute capacity"""
     nvidia_smi = shutil.which("nvidia-smi")
     if not nvidia_smi:
+        record_probe_fallback(
+            "GPU compute-capability detection was unavailable; using the fallback '0.0'."
+        )
         return "0.0"
     try:
-        output = subprocess.check_output(
-            [nvidia_smi, "--query-gpu=compute_cap", "--format=csv,noheader"]
+        result = run_probe(
+            [nvidia_smi, "--query-gpu=compute_cap", "--format=csv,noheader"],
+            check=False,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            text=True,
         )
-        return output.decode().strip().split("\n")[0]
-    except (subprocess.CalledProcessError, OSError):
-        return "0.0"
+        if result.returncode == 0:
+            return result.stdout.strip().split("\n")[0]
+    except OSError:
+        pass
+    record_probe_fallback("GPU compute-capability detection failed; using the fallback '0.0'.")
+    return "0.0"
 
 
 def get_cuda_runtime_version() -> Optional[str]:

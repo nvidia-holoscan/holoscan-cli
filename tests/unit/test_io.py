@@ -63,3 +63,25 @@ def test_run_command_preserves_environment_for_elevated_application(monkeypatch,
     assert seen["env"] is app_env
     assert all("not-on-the-command-line" not in arg for arg in seen["cmd"])
     assert "PATH=<preserved>" in capsys.readouterr().out
+
+
+def test_run_command_applies_owned_env_overlay_without_mutating_process_env(monkeypatch):
+    monkeypatch.setenv("DOCKER_BUILDKIT", "0")
+    monkeypatch.delenv("PLAN_ONLY", raising=False)
+    seen = {}
+
+    def fake_run(cmd, check=True, **kwargs):
+        seen["env"] = kwargs["env"]
+        return subprocess.CompletedProcess(cmd, 0)
+
+    monkeypatch.setattr(io.subprocess, "run", fake_run)
+
+    io.run_command(
+        ["docker", "build", "."],
+        env_updates={"DOCKER_BUILDKIT": "1", "PLAN_ONLY": "enabled"},
+    )
+
+    assert seen["env"]["DOCKER_BUILDKIT"] == "1"
+    assert seen["env"]["PLAN_ONLY"] == "enabled"
+    assert io.os.environ["DOCKER_BUILDKIT"] == "0"
+    assert "PLAN_ONLY" not in io.os.environ

@@ -105,6 +105,11 @@ def test_logging_config_is_shipped():
     assert logging_config.is_file()
 
 
+def test_command_plan_schema_is_shipped():
+    schema = importlib.resources.files("holoscan_cli").joinpath("command_plan.schema.json")
+    assert schema.is_file()
+
+
 def test_all_metadata_schemas_are_packaged():
     schemas = {
         path.name

@@ -25,6 +25,40 @@ Per-repo wrappers install this package and delegate to `holoscan`, layering on t
 
 Common env vars: `HOLOSCAN_CLI_ROOT` (repo root), `HOLOSCAN_CLI_SEARCH_PATH` (subdirs to scan for `metadata.json`), `HOLOSCAN_CLI_PATH_PREFIX` (placeholder prefix in metadata templates), `HOLOSCAN_CLI_REPO_PREFIX` (container image name prefix). The legacy `HOLOHUB_*` spelling is no longer honored since holoscan v4.3.0 — set the `HOLOSCAN_CLI_*` names directly. `holoscan env-info` lists every env var the CLI reads in the current shell.
 
+### Structured dry-run plans
+
+The core `holoscan build-container` command can resolve its host-dependent
+Docker command without running the build and return either structured JSON or
+one editable Bash script:
+
+```bash
+holoscan build-container my_app --dryrun --json
+holoscan build-container my_app --dryrun --shell > build-container.sh
+```
+
+The JSON `steps` include read-only host probes as well as the ordered action
+commands. The Bash replay contains the resolved action commands; review it
+before execution. Both formats reflect the current host and inherited
+environment rather than forming a portable or hermetic build description.
+
+The JSON scope is `current_cli_process`. Bootstrap or provisioning performed
+by a repository wrapper before it starts `holoscan` is not included. Use the
+installed `holoscan` entry point for machine-readable output until a given
+wrapper documents that it preserves structured stdout; wrapper diagnostics
+must go to stderr.
+
+To override an input, set it on the planning invocation and regenerate the
+plan, or prefer the equivalent typed CLI option when one exists:
+
+```bash
+env HOLOSCAN_CLI_BASE_SDK_VERSION=4.5.0 \
+  holoscan build-container my_app --dryrun --json
+```
+
+Plain `--dryrun` retains its human-readable output. Structured planning is
+being enabled one command at a time; unsupported action commands reject these
+formats instead of returning a partial plan.
+
 ## Source layout
 
 ```text

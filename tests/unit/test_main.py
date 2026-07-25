@@ -212,6 +212,11 @@ class TestMain:
                 None,
             ),
             (
+                ["holoscan", "build-container", "--dryrun", "--json"],
+                ["holoscan", "build-container", "--dryrun", "--json"],
+                None,
+            ),
+            (
                 ["holoscan", "--log-level", "debug", "list"],
                 ["holoscan", "list"],
                 "DEBUG",
