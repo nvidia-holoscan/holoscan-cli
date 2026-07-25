@@ -93,6 +93,26 @@ def test_find_project_unknown_name_exits(smoke_cli):
         smoke_cli.find_project("does_not_exist")
 
 
+def test_autocompletion_list_emits_fixture_project_and_commands(smoke_cli, capsys):
+    """`handle_autocompletion_list` against the smoke fixture must list the
+    fixture's project name followed by the dispatch command set used by
+    shell completion. Pre-consolidation
+    `test_holohub_autocompletion_list`."""
+    from types import SimpleNamespace
+
+    from holoscan_cli.commands import info as info_cmd
+
+    info_cmd.handle_autocompletion_list(smoke_cli, SimpleNamespace())
+
+    lines = capsys.readouterr().out.splitlines()
+    assert "smoke_app" in lines
+    # The dispatch table the wrapper completes against.
+    for command in ("build", "run", "list", "install"):
+        assert command in lines, f"missing `{command}` in autocompletion output: {lines}"
+    assert "cpp" in lines
+    assert "python" in lines
+
+
 def test_smoke_fixture_root_envvar_honored(monkeypatch, tmp_path):
     """``HOLOSCAN_CLI_ROOT`` overrides the discovery walk; this is the seam
     CI's installed-wheel smoke test uses."""

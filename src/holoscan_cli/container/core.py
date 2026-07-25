@@ -526,17 +526,17 @@ class HoloscanContainer:
         run_command(cmd, dry_run=self.dryrun)
 
         if extra_scripts:
+            setup_scripts_dir = get_holohub_setup_scripts_dir()
             for script in extra_scripts:
-                script_path = get_holohub_setup_scripts_dir() / f"{script}.sh"
+                script_path = setup_scripts_dir / f"{script}.sh"
                 if not script_path.exists():
-                    fatal(f"Script {script}.sh not found in {get_holohub_setup_scripts_dir()}")
+                    fatal(f"Script {script}.sh not found in {setup_scripts_dir}")
                 try:
                     relative_script_path = script_path.relative_to(HoloscanContainer.HOLOHUB_ROOT)
+                    script_build_context = HoloscanContainer.HOLOHUB_ROOT
                 except ValueError:
-                    fatal(
-                        f"Script {script}.sh at {script_path} is not within {HoloscanContainer.HOLOHUB_ROOT}. "
-                        f"The HOLOSCAN_CLI_SETUP_SCRIPTS_DIR environment variable must resolve to a subdirectory within the project scope."
-                    )
+                    relative_script_path = script_path.relative_to(setup_scripts_dir)
+                    script_build_context = setup_scripts_dir
                 cmd = [
                     self.DOCKER_EXE,
                     "build",
@@ -548,8 +548,8 @@ class HoloscanContainer:
                     "--build-arg",
                     f"SCRIPT={relative_script_path}",
                     "-f",
-                    str(get_holohub_setup_scripts_dir() / "Dockerfile.util"),
-                    str(HoloscanContainer.HOLOHUB_ROOT),
+                    str(setup_scripts_dir / "Dockerfile.util"),
+                    str(script_build_context),
                 ]
                 for tag_name in tags:
                     # We override the default tag so we can add the next scripts on top of this.
@@ -571,10 +571,18 @@ class HoloscanContainer:
         add_volumes: List[str] = None,
         enable_mps: bool = False,
         extra_args: List[str] = None,
+        include_default_run_args: bool = True,
     ) -> None:
         """Launch the container"""
 
-        if not self.dryrun:
+        default_run_args = shlex.split(
+            (HoloscanContainer.DEFAULT_DOCKER_RUN_ARGS or "") if include_default_run_args else ""
+        )
+        extra_run_args = shlex.split(docker_opts or "")
+        configured_runtime = get_cli_arg_value(default_run_args + extra_run_args, "--runtime")
+        runtime = configured_runtime or "nvidia"
+
+        if not self.dryrun and runtime == "nvidia":
             check_nvidia_ctk()
 
         if local_sdk_root is not None:
@@ -587,8 +595,6 @@ class HoloscanContainer:
         # If the caller already supplies --cidfile (via DEFAULT_DOCKER_RUN_ARGS or
         # docker_opts), use that path for cleanup and skip injecting our own —
         # Docker rejects duplicate --cidfile flags.
-        default_run_args = shlex.split(HoloscanContainer.DEFAULT_DOCKER_RUN_ARGS or "")
-        extra_run_args = shlex.split(docker_opts or "")
         explicit_cidfile = get_cli_arg_value(default_run_args + extra_run_args, "--cidfile")
         internal_cidfile: Optional[Path] = None
         if explicit_cidfile:
@@ -604,7 +610,7 @@ class HoloscanContainer:
             cmd.extend(["--cidfile", str(internal_cidfile)])
         cmd.extend(self.get_security_args(as_root))
         cmd.extend(self.get_volume_args(add_volumes, enable_mps))
-        cmd.extend(self.get_gpu_runtime_args())
+        cmd.extend(self.get_gpu_runtime_args(None if configured_runtime is not None else runtime))
         cmd.extend(self.get_environment_args())
 
         cmd.extend(self.get_conditional_options(use_tini, persistent))
@@ -623,6 +629,8 @@ class HoloscanContainer:
         # Default docker run arguments and caller-supplied docker_opts (parsed above).
         cmd.extend(default_run_args)
         cmd.extend(extra_run_args)
+        if as_root:
+            cmd.extend(["--user", "0:0"])
 
         cmd.append(img)
         cmd.extend(extra_args)
@@ -738,7 +746,9 @@ class HoloscanContainer:
             sccache_host_dir = get_sccache_dir()
             info(f"Host SCCACHE_DIR: {sccache_host_dir}")
             info(f"Container mount point: {SCCACHE_CONTAINER_DIR}")
-            os.makedirs(sccache_host_dir, exist_ok=True)  # Pre-create for the current user to own
+            if not self.dryrun:
+                # Pre-create for the current user to own.
+                os.makedirs(sccache_host_dir, exist_ok=True)
             args.extend(["-v", f"{sccache_host_dir}:{SCCACHE_CONTAINER_DIR}"])
         elif has_host_sccache_env:
             warn(
@@ -758,9 +768,12 @@ class HoloscanContainer:
             "c 189:* rmw",  # /dev/bus/usb/*
         ]
 
-    def get_gpu_runtime_args(self) -> List[str]:
+    def get_gpu_runtime_args(self, runtime: Optional[str] = "nvidia") -> List[str]:
         args = []
-        args.extend(self.get_nvidia_runtime_args())
+        if runtime == "nvidia":
+            args.extend(self.get_nvidia_runtime_args())
+        elif runtime is not None:
+            args.extend(["--runtime", runtime])
         args.extend(
             [
                 "--cap-add",

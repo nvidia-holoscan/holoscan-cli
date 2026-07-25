@@ -32,7 +32,9 @@ from holoscan_cli.utils.external_resolver import (
     ModuleDep,
     _override_env_name,
     _ref_is_immutable,
+    merge_deps,
     parse_module_dependencies,
+    parse_module_sites,
 )
 
 FULL_SHA = "0" * 40
@@ -405,3 +407,113 @@ def test_in_tree_lookup_is_opt_in(tmp_path, _clean_local_override_env):
 
     with pytest.raises(ValueError, match="missing source.git_url"):
         parse_module_dependencies(meta)
+
+
+# ---- module-sites (parse_module_sites) ---------------------------------------
+
+
+def _write_sites(tmp_path, modules: list):
+    p = tmp_path / "module-sites.json"
+    p.write_text(json.dumps({"modules": modules}), encoding="utf-8")
+    return p
+
+
+def test_module_sites_external_entry_becomes_fetchable(tmp_path, _clean_local_override_env):
+    sites = _write_sites(
+        tmp_path,
+        [
+            {
+                "name": "holoscan-deltacast",
+                "url": "https://github.com/deltacasttv/holoscan-modules",
+                "ref": FULL_SHA,
+                "provides_operators": ["videomaster_source"],
+            }
+        ],
+    )
+
+    deps = parse_module_sites(sites)
+
+    assert len(deps) == 1
+    assert deps[0].name == "holoscan-deltacast"
+    assert deps[0].git_url == "https://github.com/deltacasttv/holoscan-modules"
+    assert deps[0].ref == FULL_SHA
+    assert deps[0].provides_operators == ["videomaster_source"]
+    assert deps[0].is_internal is False
+
+
+def test_module_sites_missing_file_returns_empty(tmp_path):
+    assert parse_module_sites(tmp_path / "nope.json") == []
+
+
+def test_module_sites_partial_source_spec_raises(tmp_path, _clean_local_override_env):
+    sites = _write_sites(tmp_path, [{"name": "broken", "url": "https://x/y"}])
+    with pytest.raises(ValueError, match="both 'url' and 'ref'"):
+        parse_module_sites(sites)
+
+
+def test_module_sites_in_tree_entry_when_present(tmp_path, _clean_local_override_env):
+    source_root = tmp_path / "source"
+    _make_in_tree_module(source_root, "holoscan-gstreamer")
+    sites = _write_sites(tmp_path, [{"name": "holoscan-gstreamer"}])
+
+    deps = parse_module_sites(sites, source_root=source_root)
+
+    assert len(deps) == 1
+    assert deps[0].is_internal is True
+    assert deps[0].git_url is None
+
+
+def test_module_sites_local_only_entry_skipped_without_in_tree(tmp_path, _clean_local_override_env):
+    # No url/ref and no matching modules/<name>/ -> silently skipped.
+    sites = _write_sites(tmp_path, [{"name": "ghost"}])
+    assert parse_module_sites(sites, source_root=tmp_path / "source") == []
+
+
+def test_module_sites_local_override_wins(tmp_path, monkeypatch, _clean_local_override_env):
+    override_dir = tmp_path / "local_dc"
+    override_dir.mkdir()
+    (override_dir / "metadata.json").write_text("{}", encoding="utf-8")
+    monkeypatch.setenv("HOLOSCAN_CLI_LOCAL_HOLOSCAN_DELTACAST", str(override_dir))
+    sites = _write_sites(tmp_path, [{"name": "holoscan-deltacast"}])
+
+    deps = parse_module_sites(sites, source_root=tmp_path / "source")
+
+    assert len(deps) == 1
+    assert deps[0].override_path == override_dir.resolve()
+
+
+# ---- merge_deps --------------------------------------------------------------
+
+
+def test_merge_deps_site_owns_coords_project_supplies_override():
+    site = ModuleDep(name="m", git_url="https://x/y", ref=FULL_SHA)
+    proj = ModuleDep(
+        name="m", provides_operators=["op_a"], override_path="/local/m"  # type: ignore[arg-type]
+    )
+
+    merged = merge_deps([site], [proj])
+
+    assert len(merged) == 1
+    assert merged[0].git_url == "https://x/y"
+    assert merged[0].ref == FULL_SHA
+    # Site has no provides_operators -> falls back to the project dep's.
+    assert merged[0].provides_operators == ["op_a"]
+    assert merged[0].override_path == "/local/m"
+
+
+def test_merge_deps_site_provides_operators_authoritative():
+    site = ModuleDep(name="m", git_url="https://x/y", ref=FULL_SHA, provides_operators=["site_op"])
+    proj = ModuleDep(name="m", provides_operators=["proj_op"])
+
+    merged = merge_deps([site], [proj])
+
+    assert merged[0].provides_operators == ["site_op"]
+
+
+def test_merge_deps_project_only_modules_appended_after_sites():
+    site = ModuleDep(name="s", git_url="https://x/y", ref=FULL_SHA)
+    proj_only = ModuleDep(name="p", git_url="https://a/b", ref=FULL_SHA)
+
+    merged = merge_deps([site], [proj_only])
+
+    assert [d.name for d in merged] == ["s", "p"]

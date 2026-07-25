@@ -137,3 +137,37 @@ def test_install_lint_deps_falls_back_to_pre_commit_package(tmp_path, monkeypatc
     assert calls[0]["dry_run"] is True
     assert calls[1]["cmd"] == [sys.executable, "-m", "pre_commit", "install-hooks"]
     assert calls[1]["dry_run"] is True
+
+
+def test_lint_dryrun_with_fix_still_runs_pre_commit_all_files(tmp_path, monkeypatch):
+    """`--fix` is a compatibility alias: pre-commit hooks already auto-fix,
+    so the assembled command is identical to a no-`--fix` invocation.
+    Pre-consolidation `test_holohub_lint_fix`."""
+    root = tmp_path / "repo"
+    root.mkdir()
+    (root / ".pre-commit-config.yaml").write_text("repos: []\n")
+    lint_cli = _lint_cli(root, monkeypatch)
+    calls = []
+
+    monkeypatch.setattr(
+        commands_lint,
+        "run_command",
+        lambda cmd, check=False, dry_run=False, env=None: (
+            calls.append({"cmd": cmd, "check": check, "dry_run": dry_run, "env": env})
+            or SimpleNamespace(returncode=0)
+        ),
+    )
+
+    args = argparse.Namespace(path=".", fix=True, install_dependencies=False, dryrun=True)
+    with pytest.raises(SystemExit) as exc_info:
+        commands_lint.handle_lint(lint_cli, args)
+
+    assert exc_info.value.code == 0
+    assert calls[0]["cmd"] == [
+        sys.executable,
+        "-m",
+        "pre_commit",
+        "run",
+        "--show-diff-on-failure",
+        "--all-files",
+    ]

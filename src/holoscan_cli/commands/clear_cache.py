@@ -17,9 +17,39 @@
 
 import argparse
 import shutil
+from pathlib import Path
 
 from holoscan_cli.commands.registry import help_for
-from holoscan_cli.utils.io import Color
+from holoscan_cli.utils.io import Color, resolve
+
+
+def _is_safe_to_remove(path: Path, cli) -> bool:
+    """Return ``True`` only when ``path`` is a cache directory we may delete.
+
+    The candidate dirs come from env-overridable roots (e.g.
+    ``HOLOSCAN_CLI_BUILD_PARENT_DIR=/``), so a bad value must never let
+    :func:`shutil.rmtree` wipe an anchor (``/``, ``$HOME``, the repo root) or
+    an ancestor of one; the path must also live under an approved cache root.
+    """
+    candidate = resolve(path)
+
+    anchors = {resolve("/"), resolve(cli.HOLOHUB_ROOT)}
+    try:
+        anchors.add(resolve(Path.home()))
+    except RuntimeError:
+        pass  # home directory unresolvable; the remaining anchors still apply
+    if candidate in anchors:
+        return False
+    for anchor in anchors:
+        if anchor.is_relative_to(candidate):
+            return False
+
+    approved_roots = [
+        resolve(cli.HOLOHUB_ROOT),
+        resolve(cli.DEFAULT_BUILD_PARENT_DIR),
+        resolve(cli.DEFAULT_DATA_DIR),
+    ]
+    return any(candidate.is_relative_to(root) for root in approved_roots)
 
 
 def register_clear_cache_parser(cli, subparsers) -> argparse.ArgumentParser:
@@ -67,9 +97,13 @@ def handle_clear_cache(cli, args: argparse.Namespace) -> None:
         cache_dirs.extend(cli.collect_cache_dirs(["install", "install-*"]))
 
     for path in set(cache_dirs):
-        if path.exists() and path.is_dir():
-            if args.dryrun:
-                print(f"  {Color.yellow('Would remove:')} {path}")
-            else:
-                print(f"  {Color.red('Removing:')} {path}")
-                shutil.rmtree(path)
+        if not (path.exists() and path.is_dir()):
+            continue
+        if not _is_safe_to_remove(path, cli):
+            print(f"  {Color.red('Refusing to remove:')} {path} (outside approved cache roots)")
+            continue
+        if args.dryrun:
+            print(f"  {Color.yellow('Would remove:')} {path}")
+        else:
+            print(f"  {Color.red('Removing:')} {path}")
+            shutil.rmtree(path)

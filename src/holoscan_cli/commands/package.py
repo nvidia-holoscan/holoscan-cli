@@ -28,8 +28,12 @@ from typing import Optional
 
 from holoscan_cli.commands.registry import help_for
 from holoscan_cli.utils.docker import get_entrypoint_command_args
-from holoscan_cli.utils.holohub import check_skip_builds, get_buildtype_str
-from holoscan_cli.utils.io import Color, fatal, run_command, warn
+from holoscan_cli.utils.holohub import (
+    check_skip_builds,
+    get_buildtype_str,
+    is_env_request_local_build,
+)
+from holoscan_cli.utils.io import Color, fatal, run_command
 
 
 def register_package_parser(
@@ -65,6 +69,9 @@ def register_package_parser(
     )
     parser.add_argument("--language", choices=["cpp", "python"], default=None)
     parser.add_argument("--verbose", action="store_true")
+    parser.add_argument(
+        "--no-docker-build", action="store_true", help="Skip building the container"
+    )
     parser.add_argument("--dryrun", action="store_true", default=False)
     parser.set_defaults(func=lambda args: handle_package(cli, args))
     return parser
@@ -78,7 +85,7 @@ def _normalize_module_name(value: str) -> str:
 
 
 def _resolve_module_project(cli, project_arg: Optional[str], language: Optional[str]) -> dict:
-    """Resolve a module from cwd metadata or from the active source tree."""
+    """Resolve a module from matching cwd metadata or the active source tree."""
     cwd = Path.cwd()
     cwd_meta = cwd / "metadata.json"
     if cwd_meta.exists():
@@ -89,21 +96,16 @@ def _resolve_module_project(cli, project_arg: Optional[str], language: Optional[
         if isinstance(data, dict) and "module" in data:
             module = data["module"]
             module_name = module.get("name", cwd.name)
-            if project_arg and _normalize_module_name(project_arg) not in {
+            if project_arg is None or _normalize_module_name(project_arg) in {
                 _normalize_module_name(module_name),
                 _normalize_module_name(cwd.name),
             }:
-                warn(
-                    f"Packaging module '{module_name}' from {cwd}; "
-                    f"ignoring project argument '{project_arg}'."
-                )
-            return {
-                "project_type": "module",
-                "project_name": module_name,
-                "source_folder": str(cwd),
-                "metadata": module,
-                "standalone_module": True,
-            }
+                return {
+                    "project_type": "module",
+                    "project_name": module_name,
+                    "source_folder": str(cwd),
+                    "metadata": module,
+                }
 
     if project_arg:
         project_data = cli.find_project(project_arg, language=language)
@@ -113,9 +115,7 @@ def _resolve_module_project(cli, project_arg: Optional[str], language: Optional[
                 f"'holoscan package' only supports modules; "
                 f"'{project_arg}' is type '{project_type}'"
             )
-        project_data = dict(project_data)
-        project_data.setdefault("standalone_module", False)
-        return project_data
+        return dict(project_data)
 
     fatal(
         "No project specified and no ./metadata.json found in the current working directory. "
@@ -123,18 +123,11 @@ def _resolve_module_project(cli, project_arg: Optional[str], language: Optional[
     )
 
 
-def _module_package_flag(project_data: dict, package_slug: str) -> str:
-    """Return the CMake flag that enables packaging for this module shape."""
-    if project_data.get("standalone_module"):
-        return f"-DPKG_{package_slug}=ON"
-    return f"-DMODULE_{package_slug}=ON"
-
-
 def handle_package(cli, args: argparse.Namespace) -> None:
     """Configure a Holoscan Module and build package artifacts."""
     from holoscan_cli.cli import in_container_cli_command
 
-    is_local_mode = args.local or os.environ.get("HOLOSCAN_CLI_BUILD_LOCAL")
+    is_local_mode = args.local or is_env_request_local_build()
 
     if is_local_mode:
         project_data = _resolve_module_project(
@@ -219,7 +212,8 @@ def _package_locally(cli, args: argparse.Namespace, project_data: dict) -> None:
 
     if cpack_generators:
         build_dir = cli.DEFAULT_BUILD_PARENT_DIR / package_slug / "package"
-        build_dir.mkdir(parents=True, exist_ok=True)
+        if not dryrun:
+            build_dir.mkdir(parents=True, exist_ok=True)
         cmake_args = [
             "cmake",
             "-B",
@@ -231,8 +225,17 @@ def _package_locally(cli, args: argparse.Namespace, project_data: dict) -> None:
             f"-DPython3_ROOT_DIR={os.path.dirname(os.path.dirname(sys.executable))}",
             f"-DCMAKE_BUILD_TYPE={build_type}",
             f"-DCMAKE_PREFIX_PATH={cli.DEFAULT_SDK_DIR}/lib",
+            # BUILD_ALL=OFF keeps unrelated subprojects out of this package.
+            # MODULE_<slug>=ON enters the module subdir for in-tree HoloHub
+            # builds (modules/CMakeLists.txt gates add_holohub_module() on it);
+            # PKG_<slug>=ON then activates the target's add_holohub_package()
+            # cascade, which FORCEs its OP_/APP_/EXT_ deps ON and emits the
+            # CPack config. In-tree packaging needs BOTH. For standalone module
+            # repos (where add_holohub_module() never runs because the module is
+            # the top-level project) MODULE_<slug>=ON is a harmless unused entry.
             "-DBUILD_ALL=OFF",
-            _module_package_flag(project_data, package_slug),
+            f"-DMODULE_{package_slug}=ON",
+            f"-DPKG_{package_slug}=ON",
         ]
         if shutil.which("ninja"):
             cmake_args.extend(["-G", "Ninja"])
@@ -250,13 +253,14 @@ def _package_locally(cli, args: argparse.Namespace, project_data: dict) -> None:
         run_command(build_cmd, dry_run=dryrun, env=build_env)
 
         pkg_config_dir = build_dir / "pkg"
-        cpack_configs = (
-            list(pkg_config_dir.glob("CPackConfig-*.cmake")) if pkg_config_dir.exists() else []
-        )
-        if not cpack_configs and dryrun:
-            bare = project_name.replace("_", "-")
-            if bare.startswith("holoscan-"):
-                bare = bare[len("holoscan-") :]
+        cpack_configs = list(pkg_config_dir.glob("CPackConfig-*.cmake"))
+        if not cpack_configs:
+            if not dryrun:
+                fatal(
+                    f"Packaging '{project_name}' did not generate a CPack configuration. "
+                    "Check that the module defines a package target."
+                )
+            bare = project_name.replace("_", "-").removeprefix("holoscan-")
             cpack_configs = [pkg_config_dir / f"CPackConfig-holoscan-{bare}.cmake"]
         for cpack_config in cpack_configs:
             for generator in cpack_generators:

@@ -31,17 +31,54 @@ from typing import Optional
 
 from holoscan_cli.commands.registry import help_for
 from holoscan_cli.metadata.utils import normalize_language
+from holoscan_cli.utils.cmake_manifest import write_external_operators_manifest
 from holoscan_cli.utils.docker import get_entrypoint_command_args
+from holoscan_cli.utils.external_resolver import (
+    merge_deps,
+    parse_module_dependencies,
+    parse_module_sites,
+)
 from holoscan_cli.utils.holohub import (
     build_holohub_path_mapping,
     check_skip_builds,
     determine_project_prefix,
     get_buildtype_str,
     get_sccache_dir,
+    is_env_request_local_build,
     update_env,
 )
 from holoscan_cli.utils.io import fatal, info, run_command, warn
 from holoscan_cli.utils.text import get_env_bool
+
+
+def make_local_build_command(
+    cli_command: str,
+    args: argparse.Namespace,
+    mode_name: str | None,
+    language: str | None,
+) -> str:
+    """Build the recursive local-build command used inside a container."""
+    command = f"{cli_command} build {args.project}"
+    if mode_name and getattr(args, "mode", None) is not None:
+        command += f" {mode_name}"
+    command += " --local"
+    if args.build_type:
+        command += f" --build-type {args.build_type}"
+    if getattr(args, "with_operators", None):
+        command += f' --build-with "{args.with_operators}"'
+    if getattr(args, "pkg_generator", None):
+        command += f" --pkg-generator {args.pkg_generator}"
+    if language:
+        command += f" --language {language}"
+    if getattr(args, "parallel", None):
+        command += f" --parallel {args.parallel}"
+    if args.verbose:
+        command += " --verbose"
+    if getattr(args, "benchmark", False):
+        command += " --benchmark"
+    for configure_arg in getattr(args, "configure_args", None) or []:
+        command += f" --configure-args={shlex.quote(configure_arg)}"
+    return command
 
 
 def register_build_parser(
@@ -123,11 +160,7 @@ def handle_build(cli, args: argparse.Namespace) -> None:
     update_env(build_mode_env, mode_config.get("build", {}).get("env", {}))
 
     # Check if local mode is requested
-    is_local_mode = (
-        args.local
-        or os.environ.get("HOLOSCAN_CLI_BUILD_LOCAL")
-        or build_mode_env.get("HOLOSCAN_CLI_BUILD_LOCAL")
-    )
+    is_local_mode = args.local or is_env_request_local_build(build_mode_env)
 
     if is_local_mode:
         build_project_locally(
@@ -165,32 +198,12 @@ def handle_build(cli, args: argparse.Namespace) -> None:
             if hasattr(args, "cuda") and args.cuda is not None:
                 container.cuda_version = args.cuda
 
-        # Build command with all necessary arguments. Use the installed CLI entry
-        # point inside the container regardless of how the host invoked us, so the
-        # recursion does not depend on a wrapper-script being on the in-container
-        # PATH. See in_container_cli_command for the override hook.
-        build_cmd = f"{in_container_cli_command()} build {args.project}"
-        # Only add mode name if it was explicitly requested by user (not implicitly resolved)
-        if mode_name and getattr(args, "mode", None) is not None:
-            build_cmd += f" {mode_name}"
-        build_cmd += " --local"
-        if args.build_type:
-            build_cmd += f" --build-type {args.build_type}"
-        if args.with_operators:
-            build_cmd += f' --build-with "{args.with_operators}"'
-        if hasattr(args, "pkg_generator"):
-            build_cmd += f" --pkg-generator {args.pkg_generator}"
-        if hasattr(args, "language") and args.language:
-            build_cmd += f" --language {args.language}"
-        if getattr(args, "parallel", None):
-            build_cmd += f" --parallel {args.parallel}"
-        if args.verbose:
-            build_cmd += " --verbose"
-        if getattr(args, "benchmark", False):
-            build_cmd += " --benchmark"
-        if getattr(args, "configure_args", None):
-            for configure_arg in args.configure_args:
-                build_cmd += f" --configure-args={shlex.quote(configure_arg)}"
+        # Use the installed CLI entry point inside the container regardless of
+        # how the host invoked us, so recursion does not depend on a wrapper
+        # script being on the in-container PATH.
+        build_cmd = make_local_build_command(
+            in_container_cli_command(), args, mode_name, args.language
+        )
 
         img = getattr(args, "img", None) or container.image_name
         docker_opts = build_args.get("docker_opts", "")
@@ -248,12 +261,13 @@ def build_project_locally(
 
     build_type = get_buildtype_str(build_type)
     build_dir = cli.DEFAULT_BUILD_PARENT_DIR / project_name
-    build_dir.mkdir(parents=True, exist_ok=True)
+    if not dryrun:
+        build_dir.mkdir(parents=True, exist_ok=True)
 
-    # Prepare environment with extra env vars
+    # Prepare environment with extra env vars first so that HOLOSCAN_CLI_LOCAL_*
+    # overrides from the mode's env block are visible to the module resolvers.
     build_env = os.environ.copy()
     if extra_env:
-        # Build path mapping
         path_mapping = build_holohub_path_mapping(
             holohub_root=cli.HOLOHUB_ROOT,
             project_data=project_data,
@@ -263,6 +277,32 @@ def build_project_locally(
             verbose=dryrun,
         )
         update_env(build_env, extra_env, path_mapping, verbose=dryrun)
+
+    # Write external_operators_manifest.cmake before cmake configure so that
+    # CMakeLists.txt:include(…OPTIONAL) picks it up and FetchContent_MakeAvailable
+    # is called for any external modules whose operators end up enabled.
+    sites_deps = parse_module_sites(
+        cli.HOLOHUB_ROOT / "modules" / "module-sites.json",
+        source_root=cli.HOLOHUB_ROOT,
+        env=build_env,
+    )
+    # Only parse the project's own metadata.json when we know where it lives —
+    # an empty source_folder would otherwise resolve to a cwd-relative
+    # "metadata.json" and pick up an unrelated file.
+    source_folder = project_data.get("source_folder")
+    project_deps = (
+        parse_module_dependencies(
+            Path(source_folder) / "metadata.json", source_root=cli.HOLOHUB_ROOT, env=build_env
+        )
+        if source_folder
+        else []
+    )
+    ext_deps = merge_deps(sites_deps, project_deps)
+    manifest_path = build_dir / "external_operators_manifest.cmake"
+    if dryrun:
+        info(f"[dryrun] Would write {manifest_path}")
+    else:
+        write_external_operators_manifest(ext_deps, manifest_path)
 
     proj_prefix = determine_project_prefix(project_type)
     cmake_args = [
@@ -350,7 +390,7 @@ def build_project_locally(
         )
 
     if configure_args:
-        cmake_args.extend(configure_args)
+        cmake_args.extend(os.path.expandvars(arg) for arg in configure_args)
 
     run_command(cmake_args, dry_run=dryrun, env=build_env)
 
@@ -368,13 +408,15 @@ def build_project_locally(
     # Print sccache stats
     if enable_sccache:
         stats_file = build_dir / "sccache-stats.txt"
-        with open(stats_file, "w", encoding="utf-8") as f:
-            run_command(
-                ["sccache", "--show-stats"],
-                dry_run=dryrun,
-                env=build_env,
-                stdout=f if not dryrun else None,
-            )
+        if dryrun:
+            run_command(["sccache", "--show-stats"], dry_run=True, env=build_env)
+        else:
+            with open(stats_file, "w", encoding="utf-8") as f:
+                run_command(
+                    ["sccache", "--show-stats"],
+                    env=build_env,
+                    stdout=f,
+                )
         try:
             stats_file_rel = stats_file.relative_to(cli.HOLOHUB_ROOT)
         except ValueError:

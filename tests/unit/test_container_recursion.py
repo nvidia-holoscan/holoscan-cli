@@ -162,7 +162,9 @@ def test_ctest_script_arg_container_defers_resolution_to_runtime():
 
     rendered = _ctest_script_arg(cli, args, in_container=True)
 
-    assert rendered.startswith('-S "$(python3 -c '), rendered
+    # Env-first so a forwarded HOLOSCAN_CLI_CTEST_SCRIPT works without any
+    # in-container CLI install; python import is only the fallback.
+    assert rendered.startswith('-S "${HOLOSCAN_CLI_CTEST_SCRIPT:-'), rendered
     assert "from holoscan_cli.cli import HoloscanCLI" in rendered
     assert "HoloscanCLI.DEFAULT_CTEST_SCRIPT" in rendered
     assert "/host/" not in rendered, "must not bake host paths into the in-container command"

@@ -81,3 +81,31 @@ def test_install_requires_project_without_dev(tmp_path):
     cli = SimpleNamespace(DEFAULT_BUILD_PARENT_DIR=tmp_path / "build", script_name="holoscan")
     with pytest.raises(SystemExit):
         install_cmd.handle_install(cli, Namespace(dev=False, project=None))
+
+
+def test_install_help_advertises_dev_uninstall_build_dir_flags():
+    """`install --help` must advertise the dev-hook flags together
+    (pre-consolidation `test_holohub_install_dev_help_advertises_flags`).
+    Catches accidental removal of any of `--dev`, `--uninstall`,
+    `--build-dir` from the install command's argparse."""
+    import argparse
+
+    parser = argparse.ArgumentParser()
+    subparsers = parser.add_subparsers()
+    # The install subcommand inherits flags from the container_build/run
+    # parent parsers; pass empty stubs so the formatter sees the
+    # install-specific flags in isolation.
+    container_build = argparse.ArgumentParser(add_help=False)
+    container_run = argparse.ArgumentParser(add_help=False)
+    install_cmd.register_install_parser(
+        SimpleNamespace(),
+        subparsers,
+        container_build=container_build,
+        container_run=container_run,
+    )
+
+    install_help = subparsers.choices["install"].format_help()
+
+    assert "--dev" in install_help
+    assert "--uninstall" in install_help
+    assert "--build-dir" in install_help

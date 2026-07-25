@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import json
 from argparse import Namespace
 
 from holoscan_cli.commands import build as build_cmd
@@ -187,6 +188,7 @@ def test_handle_run_container_skips_build_and_wraps_trailing_command(tmp_path, m
         cli,
         _container_args(
             no_docker_build=True,
+            as_root=True,
             docker_opts="--ipc=host",
             _trailing_args=["echo", "hello world"],
         ),
@@ -195,6 +197,7 @@ def test_handle_run_container_skips_build_and_wraps_trailing_command(tmp_path, m
     assert cli.container.build_calls == []
     assert cli.container.cuda_version == "13"
     run_call = cli.container.run_calls[0]
+    assert run_call["as_root"] is True
     assert run_call["docker_opts"] == "--ipc=host --entrypoint=/bin/bash"
     assert run_call["extra_args"] == ["-c", "echo hello world"]
 
@@ -219,6 +222,7 @@ def test_build_project_locally_emits_application_cmake_and_build_commands(tmp_pa
 
     cmake_args = " ".join(str(part) for part in calls[0])
     assert build_dir == tmp_path / "build" / "smoke_app"
+    assert not build_dir.exists()
     assert project_data is cli.project_data
     assert "-DAPP_smoke_app=ON" in cmake_args
     assert "-DCMAKE_BUILD_TYPE=Debug" in cmake_args
@@ -244,6 +248,9 @@ def test_build_project_locally_module_enables_subprojects_and_sccache(
         },
     }
     cli = RecordingCLI(tmp_path, project)
+    stats_file = cli.DEFAULT_BUILD_PARENT_DIR / "holoscan-smoke" / "sccache-stats.txt"
+    stats_file.parent.mkdir(parents=True)
+    stats_file.write_text("existing stats", encoding="utf-8")
     calls = []
     monkeypatch.setenv("HOLOSCAN_CLI_ENABLE_SCCACHE", "true")
     monkeypatch.setattr(build_cmd, "run_command", lambda cmd, **kwargs: calls.append(cmd))
@@ -251,7 +258,9 @@ def test_build_project_locally_module_enables_subprojects_and_sccache(
         build_cmd.shutil, "which", lambda name: "/usr/bin/sccache" if name == "sccache" else None
     )
 
-    build_cmd.build_project_locally(cli, "holoscan-smoke", language="cpp", dryrun=True)
+    build_dir, _ = build_cmd.build_project_locally(
+        cli, "holoscan-smoke", language="cpp", dryrun=True
+    )
 
     cmake_args = " ".join(str(part) for part in calls[0])
     assert "-DMODULE_holoscan_smoke=ON" in cmake_args
@@ -259,7 +268,50 @@ def test_build_project_locally_module_enables_subprojects_and_sccache(
     assert "-DAPP_smoke_app=ON" in cmake_args
     assert "-DCMAKE_CXX_COMPILER_LAUNCHER=/usr/bin/sccache" in cmake_args
     assert calls[-1] == ["sccache", "--show-stats"]
+    assert build_dir == stats_file.parent
+    assert stats_file.read_text(encoding="utf-8") == "existing stats"
     assert "Building module 'holoscan-smoke'" in capsys.readouterr().out
+
+
+def test_build_writes_external_operators_manifest_from_module_sites(tmp_path, monkeypatch):
+    """build_project_locally emits external_operators_manifest.cmake from
+    modules/module-sites.json before configuring CMake (holohub#1587)."""
+    modules_dir = tmp_path / "repo" / "modules"
+    modules_dir.mkdir(parents=True)
+    (modules_dir / "module-sites.json").write_text(
+        json.dumps(
+            {
+                "modules": [
+                    {
+                        "name": "holoscan-deltacast",
+                        "url": "https://github.com/deltacasttv/holoscan-modules",
+                        "ref": "0" * 40,
+                        "provides_operators": ["videomaster_source"],
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    app_dir = tmp_path / "repo" / "applications" / "demo"
+    app_dir.mkdir(parents=True)
+    project = {
+        "project_name": "demo",
+        "project_type": "application",
+        "source_folder": app_dir,
+        "metadata": {"language": "python"},
+    }
+    cli = RecordingCLI(tmp_path, project)
+    monkeypatch.setattr(build_cmd, "run_command", lambda cmd, **kwargs: None)
+    monkeypatch.setattr(build_cmd.shutil, "which", lambda name: None)
+
+    build_dir, _ = build_cmd.build_project_locally(cli, "demo", dryrun=False)
+
+    manifest = build_dir / "external_operators_manifest.cmake"
+    assert manifest.exists()
+    content = manifest.read_text(encoding="utf-8")
+    assert "deltacasttv/holoscan-modules" in content
+    assert "videomaster_source" in content
 
 
 def test_handle_build_container_branch_passes_recursive_local_command(tmp_path, monkeypatch):
@@ -297,6 +349,7 @@ def test_handle_build_container_branch_passes_recursive_local_command(tmp_path, 
             language="python",
             parallel="2",
             verbose=True,
+            benchmark=True,
             configure_args=["-DCLI=ON"],
         ),
     )
@@ -306,11 +359,11 @@ def test_handle_build_container_branch_passes_recursive_local_command(tmp_path, 
     assert img == "holohub-smoke:latest"
     assert docker_opts == "--ipc=host"
     assert dryrun is True
-    assert command.startswith("holoscan build smoke_app dev --local")
-    assert "--build-type rel-debug" in command
-    assert "--language python" in command
-    assert "--parallel 2" in command
-    assert "--configure-args=-DCLI=ON" in command
+    assert command == (
+        "holoscan build smoke_app dev --local --build-type rel-debug"
+        ' --build-with "cli_op" --pkg-generator DEB --language python'
+        " --parallel 2 --verbose --benchmark --configure-args=-DCLI=ON"
+    )
     assert cli.container.run_calls
 
 
@@ -373,6 +426,53 @@ def test_handle_run_container_branch_passes_recursive_local_command(tmp_path, mo
     assert "--no-local-build" in command
     assert "--run-args=--once" in command
     assert cli.container.run_calls[0]["extra_args"] == ["-c", command]
+
+
+def test_handle_run_container_as_root_builds_as_user_then_runs_as_root(tmp_path, monkeypatch):
+    cli = RecordingCLI(tmp_path)
+    monkeypatch.setattr(run_cmd.os, "getuid", lambda: 12345)
+    monkeypatch.setattr(run_cmd.os, "getgid", lambda: 23456)
+    cli.container.DEFAULT_DOCKER_RUN_ARGS = "--network host --name default -dit"
+    entrypoints = []
+
+    def capture_entrypoint(img, cmd, opts, dry_run=False):
+        entrypoints.append((cmd, opts))
+        return "--entrypoint=/bin/bash", ["-c", cmd]
+
+    monkeypatch.setattr(run_cmd, "get_entrypoint_command_args", capture_entrypoint)
+
+    run_cmd.handle_run(
+        cli,
+        _project_args(
+            as_root=True,
+            build_type="debug",
+            run_args="--once",
+            configure_args=["-DDEV=ON"],
+            docker_opts="--ipc=host --user root --detach",
+        ),
+    )
+
+    assert len(cli.container.run_calls) == 2
+    build_command, build_opts = entrypoints[0]
+    assert build_command.startswith("holoscan build smoke_app --local")
+    assert "--build-type debug" in build_command
+    assert "--configure-args=-DDEV=ON" in build_command
+    assert "--run-args" not in build_command
+    # blocking, user-mapped builder: name/detach/user overrides stripped
+    assert "--user 12345:23456" in build_opts
+    assert "-it" in build_opts
+    assert "--ipc=host" in build_opts and "--network host" in build_opts
+    for stripped in ("--name", "--detach", "--user root"):
+        assert stripped not in build_opts
+
+    build_run, app_run = cli.container.run_calls
+    assert build_run["as_root"] is False
+    assert build_run["include_default_run_args"] is False
+    run_command, _ = entrypoints[1]
+    assert "--no-local-build" in run_command
+    assert "--run-args=--once" in run_command
+    assert app_run["as_root"] is True
+    assert app_run["extra_args"] == ["-c", run_command]
 
 
 def test_handle_install_local_installs_built_project(tmp_path, monkeypatch):
@@ -460,6 +560,9 @@ def test_handle_test_container_adds_coverage_build_args_and_ctest_options(tmp_pa
     )
     assert "-DCTEST_SUBMIT_URL=https://cdash.example" in ctest_command
     assert "-DCOVERAGE=ON" in ctest_command
+    # `--ctest-options` must propagate verbatim into the ctest invocation
+    # (pre-consolidation `test_holohub_test_ctest_options`).
+    assert "-DCASE=smoke" in ctest_command
 
 
 def test_handle_test_local_runs_ctest_in_repo_with_environment(tmp_path, monkeypatch):

@@ -23,7 +23,7 @@ Per-repo wrappers install this package and delegate to `holoscan`, layering on t
 | [HoloHub](https://github.com/nvidia-holoscan/holohub) | `./holohub` | source-project metadata search paths, container/workspace names |
 | [I4H Workflows](https://github.com/isaac-for-healthcare/i4h-workflows) | `./i4h` | RTI DDS license auto-download + mount, TTY serial device passthrough |
 
-Common env vars: `HOLOSCAN_CLI_ROOT` (repo root), `HOLOSCAN_CLI_SEARCH_PATH` (subdirs to scan for `metadata.json`), `HOLOSCAN_CLI_PATH_PREFIX` (placeholder prefix in metadata templates), `HOLOSCAN_CLI_REPO_PREFIX` (container image name prefix). The legacy `HOLOHUB_*` spelling is no longer honored in v1 — set the `HOLOSCAN_CLI_*` names directly. `holoscan env-info` lists every env var the CLI reads in the current shell.
+Common env vars: `HOLOSCAN_CLI_ROOT` (repo root), `HOLOSCAN_CLI_SEARCH_PATH` (subdirs to scan for `metadata.json`), `HOLOSCAN_CLI_PATH_PREFIX` (placeholder prefix in metadata templates), `HOLOSCAN_CLI_REPO_PREFIX` (container image name prefix). The legacy `HOLOHUB_*` spelling is no longer honored since holoscan v4.3.0 — set the `HOLOSCAN_CLI_*` names directly. `holoscan env-info` lists every env var the CLI reads in the current shell.
 
 ## Source layout
 
@@ -49,6 +49,22 @@ A platform supported by the [NVIDIA Holoscan SDK](https://docs.nvidia.com/holosc
 ```bash
 pip install holoscan-cli
 holoscan --help
+```
+
+For transient use without keeping an installed environment, package-name based
+tool runners can use the compatibility alias:
+
+```bash
+uvx holoscan-cli --help
+pipx run holoscan-cli --help
+```
+
+The primary CLI command remains `holoscan`. Explicit package/command forms also
+work when you want the canonical command name from a transient runner:
+
+```bash
+uvx --from holoscan-cli holoscan --help
+pipx run --spec holoscan-cli holoscan --help
 ```
 
 ## Versioning
@@ -152,12 +168,27 @@ first.
 
 ## Contributing
 
-See [CONTRIBUTING.md](./CONTRIBUTING.md) for details.
-[`.github/CI.md`](./.github/CI.md) covers the CI/release pipelines that back
-the workflow badges at the top of this page.
+See
+[CONTRIBUTING.md](https://github.com/nvidia-holoscan/holoscan-cli/blob/main/CONTRIBUTING.md)
+for details.
+[`.github/CI.md`](https://github.com/nvidia-holoscan/holoscan-cli/blob/main/.github/CI.md)
+covers the CI/release pipelines that back the workflow badges at the top of
+this page.
 
 ## Deprecations
 
 ### HAP/MAP application packaging
 
-Application packaging (HAP/MAP) is no longer part of this CLI: `holoscan nics` and the `monai-deploy` console script are intentionally not provided. The current `holoscan package` command is for building Holoscan Module distribution artifacts; it is not the legacy HAP/MAP application packager. The pre-v1 `holoscan run` was the HAP/MAP packaged-image runner; in v1 the same name now drives the HoloHub-style source-project runner, so it no longer launches packaged images. Developers that still rely on HAP/MAP packaging should pin `holoscan-cli<=4.2.0`, the last release that shipped that interface, or migrate to the Holoscan SDK packaging workflows directly. See [issue #164](https://github.com/nvidia-holoscan/holoscan-cli/issues/164) for the deprecation timeline.
+Application packaging (HAP/MAP) is no longer part of this CLI: `holoscan nics`
+and the `monai-deploy` console script are intentionally not provided. The current
+`holoscan package` command is for building Holoscan Module distribution artifacts;
+it is not the legacy HAP/MAP application packager. Before holoscan v4.3.0,
+`holoscan run` was the HAP/MAP packaged-image runner; since v4.3.0 the same name
+now drives the HoloHub-style source-project runner, so it no longer launches
+packaged images. Developers that still rely on HAP/MAP packaging should pin both
+`holoscan-cli<=4.2.0`, the last CLI release that shipped that interface, and
+`holoscan<=4.2.0`, because the legacy package command depends on the artifacts
+JSON manifest and was only tested with those SDK versions. Otherwise, migrate to
+the Holoscan SDK packaging workflows directly. See
+[issue #164](https://github.com/nvidia-holoscan/holoscan-cli/issues/164) for the
+deprecation timeline.

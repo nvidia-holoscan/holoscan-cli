@@ -72,10 +72,13 @@ def test_package_deb_emits_module_cmake_flag_for_in_tree_module(tmp_path, monkey
     package_cmd.handle_package(cli, _args(project="test-module-fixture", pkg_generator="DEB"))
 
     cmake_args = " ".join(str(a) for a in calls[0])
+    # In-tree packaging needs BOTH MODULE_ (enter the module subdir) and PKG_
+    # (activate the add_holohub_package cascade). See holohub#1582.
     assert "-DMODULE_test_module_fixture=ON" in cmake_args
+    assert "-DPKG_test_module_fixture=ON" in cmake_args
     assert "-DBUILD_ALL=OFF" in cmake_args
-    assert "-DPKG_" not in cmake_args
     assert calls[2][0] == "cpack"
+    assert not (cli.DEFAULT_BUILD_PARENT_DIR / "test_module_fixture" / "package").exists()
 
 
 def test_package_deb_emits_pkg_flag_for_standalone_module(tmp_path, monkeypatch):
@@ -95,8 +98,52 @@ def test_package_deb_emits_pkg_flag_for_standalone_module(tmp_path, monkeypatch)
     package_cmd.handle_package(cli, _args(pkg_generator="DEB"))
 
     cmake_args = " ".join(str(a) for a in calls[0])
+    # Both flags are emitted unconditionally (holohub#1582); for a standalone
+    # module repo MODULE_ is a harmless unused cache entry.
     assert "-DPKG_holoscan_smoke=ON" in cmake_args
-    assert "-DMODULE_" not in cmake_args
+    assert "-DMODULE_holoscan_smoke=ON" in cmake_args
+
+
+def test_package_container_honors_no_docker_build_and_cuda(tmp_path, monkeypatch):
+    """Container packaging skips the build for --no-docker-build and forwards
+    --cuda to the container build args (holohub#1596, #1597). A false local-build
+    env flag must still select this container path."""
+    from unittest.mock import MagicMock
+
+    import holoscan_cli.cli as cli_mod
+
+    monkeypatch.setenv("HOLOSCAN_CLI_BUILD_LOCAL", "0")
+    monkeypatch.setenv("HOLOSCAN_CLI_ALWAYS_BUILD", "1")
+
+    project_data = {
+        "project_name": "test-module-fixture",
+        "project_type": "module",
+        "source_folder": tmp_path / "repo" / "modules" / "test-module-fixture",
+        "metadata": {"language": ["Python"]},
+    }
+    cli = _cli(tmp_path, project_data)
+    monkeypatch.setattr(package_cmd, "get_entrypoint_command_args", lambda *a, **k: ("", []))
+    monkeypatch.setattr(cli_mod, "in_container_cli_command", lambda: "holoscan")
+
+    # --no-docker-build -> the container build is skipped, but --cuda is still
+    # applied to the container so the in-container package build uses it.
+    skip_container = MagicMock()
+    skip_container.image_name = "img:tag"
+    cli.make_project_container = lambda project_name, language=None: skip_container
+    package_cmd.handle_package(
+        cli,
+        _args(project="test-module-fixture", local=False, no_docker_build=True, cuda="13"),
+    )
+    skip_container.build.assert_not_called()
+    assert skip_container.cuda_version == "13"
+
+    # Default (build runs) -> --cuda is forwarded to container.build().
+    build_container = MagicMock()
+    build_container.image_name = "img:tag"
+    cli.make_project_container = lambda project_name, language=None: build_container
+    package_cmd.handle_package(cli, _args(project="test-module-fixture", local=False, cuda="13"))
+    build_container.build.assert_called_once()
+    assert build_container.build.call_args.kwargs.get("cuda_version") == "13"
 
 
 def test_package_wheel_invokes_python_build(wheel_module, monkeypatch):
@@ -146,27 +193,38 @@ def test_package_rejects_non_module_project(tmp_path):
         package_cmd.handle_package(cli, _args(project="gst_to_holo"))
 
 
-def test_resolve_module_project_prefers_standalone_cwd_metadata(tmp_path, monkeypatch):
+def test_resolve_module_project_respects_explicit_project(tmp_path, monkeypatch):
     module_dir = tmp_path / "external-module"
     module_dir.mkdir()
     (module_dir / "metadata.json").write_text(
         json.dumps({"module": {"name": "holoscan-smoke", "language": ["Python"]}}),
         encoding="utf-8",
     )
-    cli = _cli(tmp_path)
+    requested_module = {
+        "project_name": "different-name",
+        "project_type": "module",
+        "source_folder": tmp_path / "repo" / "modules" / "different-name",
+        "metadata": {"language": ["Python"]},
+    }
+    cli = _cli(tmp_path, requested_module)
     monkeypatch.chdir(module_dir)
 
-    project_data = package_cmd._resolve_module_project(
+    cwd_project = package_cmd._resolve_module_project(cli, project_arg=None, language=None)
+    matching_project = package_cmd._resolve_module_project(
+        cli, project_arg="holoscan-smoke", language=None
+    )
+    explicit_project = package_cmd._resolve_module_project(
         cli, project_arg="different-name", language=None
     )
 
-    assert project_data == {
+    assert cwd_project == {
         "project_type": "module",
         "project_name": "holoscan-smoke",
         "source_folder": str(module_dir),
         "metadata": {"name": "holoscan-smoke", "language": ["Python"]},
-        "standalone_module": True,
     }
+    assert matching_project == cwd_project
+    assert explicit_project == requested_module
 
 
 def test_resolve_module_project_falls_back_to_source_tree_when_cwd_metadata_invalid(
@@ -189,4 +247,18 @@ def test_resolve_module_project_falls_back_to_source_tree_when_cwd_metadata_inva
     )
 
     assert project_data["project_name"] == "test-module-fixture"
-    assert project_data["standalone_module"] is False
+
+
+def test_package_local_deb_fails_without_cpack_config(wheel_module, monkeypatch, capsys):
+    monkeypatch.setattr(package_cmd, "run_command", lambda *a, **k: None)
+    monkeypatch.setattr(package_cmd.shutil, "which", lambda _: None)
+
+    with pytest.raises(SystemExit) as exc_info:
+        package_cmd._package_locally(
+            wheel_module,
+            _args(dryrun=False, pkg_generator="DEB"),
+            wheel_module.find_project("test-module-fixture"),
+        )
+
+    assert exc_info.value.code == 1
+    assert "did not generate a CPack configuration" in capsys.readouterr().err

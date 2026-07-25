@@ -358,16 +358,21 @@ def check_disk() -> CheckResult:
 
 
 def check_cli() -> CheckResult:
-    """Check CLI version and commit"""
+    """Check the CLI package version and the source project's commit"""
+    import holoscan_cli
+
+    cli_version = f"holoscan-cli {holoscan_cli.__version__}"
     holohub_root = get_holohub_root()
 
     cli_commit_file = holohub_root / ".cli_commit_hash"
     if cli_commit_file.exists():
         cli_hash = cli_commit_file.read_text().strip()
-        return CheckResult(status="OK", name="CLI", message=f"holohub (cli commit {cli_hash})")
+        return CheckResult(
+            status="OK", name="CLI", message=f"{cli_version}, holohub (cli commit {cli_hash})"
+        )
 
     commit_hash = get_git_short_sha(length=7)
-    msg = f"holohub (commit {commit_hash})"
+    msg = f"{cli_version}, holohub (commit {commit_hash})"
     return CheckResult(status="OK", name="CLI", message=msg)
 
 

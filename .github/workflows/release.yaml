@@ -56,10 +56,10 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v6
 
       - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
           python-version: ${{ matrix.python-version }}
 
@@ -97,10 +97,10 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v6
 
       - name: Set up Python ${{ matrix.python.version }}
-        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
           python-version: ${{ matrix.python.version }}
 
@@ -179,12 +179,12 @@ jobs:
           })
 
     - name: Checkout repository
-      uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+      uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v6
       with:
         fetch-depth: 0
 
     - name: Set up Python 3.12
-      uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6
+      uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
       with:
         python-version: "3.12"
 
@@ -259,14 +259,14 @@ jobs:
         python-version: ["3.12"]
     steps:
       - name: Checkout repository
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v6
       - name: Download build
         uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3 # v8.0.0
         with:
           name: build-artifact
           path: dist/
       - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
           python-version: ${{ matrix.python-version }}
       - name: Install Holoscan CLI in clean venv
@@ -276,6 +276,24 @@ jobs:
           /tmp/holoscan-cli-smoke/bin/pip install "${wheel}"
       - name: Smoke Test
         run: .github/scripts/smoke_test.sh /tmp/holoscan-cli-smoke/bin
+      - name: Validate create extra from wheel
+        run: |
+          wheel=$(find dist -name 'holoscan_cli-*.whl' | head -n1)
+          /tmp/holoscan-cli-smoke/bin/pip install "${wheel}[create]"
+          /tmp/holoscan-cli-smoke/bin/python -c \
+            'import cookiecutter, jsonschema, referencing'
+      - name: Install sdist in clean venv
+        run: |
+          python -m venv /tmp/holoscan-cli-sdist-smoke
+          sdist=$(find dist -name '*.tar.gz' | head -n1)
+          test -n "$sdist"
+          /tmp/holoscan-cli-sdist-smoke/bin/pip install "$sdist"
+      - name: Source-distribution smoke test
+        run: .github/scripts/smoke_test.sh /tmp/holoscan-cli-sdist-smoke/bin
+      - name: Install tool runners
+        run: python -m pip install --upgrade uv pipx
+      - name: Tool-runner smoke test
+        run: .github/scripts/tool_runner_smoke.sh dist
 
   testpypi-deploy:
     name: publish-test-pypi
@@ -305,14 +323,14 @@ jobs:
         python-version: ["3.12"]
     steps:
       - name: Checkout repository
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v6
       - name: Download build
         uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3 # v8.0.0
         with:
           name: build-artifact
           path: dist/
       - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
           python-version: ${{ matrix.python-version }}
       - name: Install Holoscan CLI from TestPyPI

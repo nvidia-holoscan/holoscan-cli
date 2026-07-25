@@ -19,8 +19,8 @@ These prevent regressions where ``pyproject.toml`` accidentally drops the
 files an installed ``holoscan-cli`` wheel must ship: the ``py.typed``
 marker, the project metadata JSON schemas under ``holoscan_cli.metadata``,
 the logging configuration, and the CTest scripts under ``holoscan_cli.testing``.
-The tests also pin the public ``holoscan`` console script entry point so the
-installed package keeps a single, stable command name on disk.
+The tests also pin the public ``holoscan`` console script entry point and the
+``holoscan-cli`` package-name tool-runner alias.
 
 Entry-point checks read ``pyproject.toml`` directly (the ground truth for
 what a fresh ``pip install`` will register) instead of the runtime
@@ -32,6 +32,9 @@ from __future__ import annotations
 
 import importlib.metadata
 import importlib.resources
+import os
+import re
+import subprocess
 import sys
 from pathlib import Path
 
@@ -67,16 +70,24 @@ REQUIRED_SETUP_SCRIPTS = {
     "sccache.sh",
     "template.sh",
     "xvfb.sh",
+    "requirements.template.txt",
 }
 
 
 PYPROJECT = Path(__file__).resolve().parents[2] / "pyproject.toml"
+README = Path(__file__).resolve().parents[2] / "README.md"
 
 
 def _pyproject() -> dict:
     if not PYPROJECT.exists():
         pytest.skip(f"pyproject.toml not found at {PYPROJECT}")
     return tomllib.loads(PYPROJECT.read_text())
+
+
+def _readme() -> str:
+    if not README.exists():
+        pytest.skip(f"README.md not found at {README}")
+    return README.read_text(encoding="utf-8")
 
 
 # ---- bundled package data ---------------------------------------------------
@@ -122,13 +133,94 @@ def test_setup_scripts_are_packaged():
     assert not missing, f"missing bundled setup scripts: {missing}"
 
 
+def test_bundled_template_script_uses_bundled_requirements(tmp_path):
+    """The fallback template setup script must not depend on HoloHub's
+    ``utilities/requirements.template.txt`` being present."""
+    setup_dir = importlib.resources.files("holoscan_cli.setup_scripts")
+    script = setup_dir.joinpath("template.sh")
+    requirements = setup_dir.joinpath("requirements.template.txt")
+    assert script.is_file()
+    assert requirements.is_file()
+
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    args_file = tmp_path / "python-args.txt"
+    fake_python = bin_dir / "python3"
+    fake_python.write_text(
+        "#!/usr/bin/env bash\n" 'printf \'%s\\n\' "$@" > "${PYTHON_ARGS_FILE}"\n',
+        encoding="utf-8",
+    )
+    fake_python.chmod(0o755)
+
+    env = os.environ.copy()
+    env["PATH"] = f"{bin_dir}:{env['PATH']}"
+    env["PYTHON_ARGS_FILE"] = str(args_file)
+    subprocess.run(["bash", str(script)], check=True, env=env)
+
+    assert args_file.read_text(encoding="utf-8").splitlines() == [
+        "-m",
+        "pip",
+        "install",
+        "-r",
+        str(requirements),
+    ]
+
+
+def test_bundled_sccache_script_does_not_warn_when_binary_is_on_path(tmp_path):
+    setup_dir = importlib.resources.files("holoscan_cli.setup_scripts")
+    script = setup_dir.joinpath("sccache.sh")
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    fake_sccache = bin_dir / "sccache"
+    fake_sccache.write_text(
+        "#!/usr/bin/env bash\necho 'sccache 0.12.0-rapids.20'\n",
+        encoding="utf-8",
+    )
+    fake_sccache.chmod(0o755)
+
+    env = os.environ.copy()
+    env["HOME"] = str(tmp_path / "home")
+    env["PATH"] = f"{bin_dir}:/usr/bin:/bin"
+    result = subprocess.run(
+        ["bash", str(script)],
+        check=True,
+        env=env,
+        text=True,
+        capture_output=True,
+    )
+
+    assert "already installed and meets minimum version requirement" in result.stdout
+    assert "add " not in result.stderr
+
+
+def test_readme_links_are_valid_for_pypi_rendering():
+    """PyPI renders README.md as the long description, outside the GitHub repo.
+
+    Repo-relative links such as ``./CONTRIBUTING.md`` become broken PyPI URLs, so
+    docs shipped in package metadata should use absolute URLs or page anchors.
+    """
+    relative_links = []
+    for match in re.finditer(r"(?<!!)\[[^\]]+\]\(([^)]+)\)", _readme()):
+        target = match.group(1).strip()
+        if target.startswith(("#", "http://", "https://", "mailto:")):
+            continue
+        if "://" in target:
+            continue
+        relative_links.append(target)
+
+    assert not relative_links, f"README has PyPI-broken relative links: {relative_links}"
+
+
 # ---- pyproject.toml entry-point declarations --------------------------------
 
 
-def test_pyproject_declares_only_holoscan_console_script():
-    """The shipped wheel must register exactly one console script."""
+def test_pyproject_declares_expected_console_scripts():
+    """The shipped wheel must register the canonical CLI and tool-runner alias."""
     declared = _pyproject().get("project", {}).get("scripts", {})
-    assert declared == {"holoscan": "holoscan_cli.__main__:main"}, declared
+    assert declared == {
+        "holoscan": "holoscan_cli.__main__:main",
+        "holoscan-cli": "holoscan_cli.__main__:main",
+    }, declared
 
 
 def test_pyproject_does_not_declare_legacy_console_scripts():
@@ -148,10 +240,13 @@ def test_holoscan_console_script_is_registered_at_runtime():
     :func:`test_pyproject_does_not_declare_legacy_console_scripts`; we only
     require that the canonical ``holoscan`` entry point is reachable.
     """
+    # entry_points() never raises for a missing package; probe the
+    # distribution explicitly so uninstalled dev environments skip.
     try:
-        scripts = importlib.metadata.entry_points(group="console_scripts")
+        importlib.metadata.distribution("holoscan-cli")
     except importlib.metadata.PackageNotFoundError:  # pragma: no cover - dev only
         pytest.skip("holoscan-cli is not installed in this environment")
+    scripts = importlib.metadata.entry_points(group="console_scripts")
     holoscan = [ep for ep in scripts if ep.name == "holoscan"]
     assert holoscan, "holoscan console script not registered"
     assert holoscan[0].value == "holoscan_cli.__main__:main"

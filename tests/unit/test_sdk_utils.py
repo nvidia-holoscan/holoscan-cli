@@ -61,10 +61,25 @@ def test_get_host_gpu_defaults_to_dgpu_without_driver(monkeypatch, capsys):
     assert "Defaulting build to target dGPU/CPU stack" in capsys.readouterr().err
 
 
-def test_get_host_gpu_detects_orin_igpu(monkeypatch):
+def test_get_host_gpu_orin_driver_disambiguation(monkeypatch):
     monkeypatch.setattr(sdk, "get_gpu_name", lambda: "Orin (nvgpu)")
 
+    monkeypatch.setattr(sdk, "get_default_cuda_version", lambda: "12")
     assert sdk.get_host_gpu() == "igpu"
+
+    sdk.get_host_gpu.cache_clear()
+    monkeypatch.setattr(sdk, "get_default_cuda_version", lambda: "13")
+    assert sdk.get_host_gpu() == "dgpu"
+
+    sdk.get_host_gpu.cache_clear()
+    monkeypatch.setattr(sdk, "get_default_cuda_version", lambda: None)
+    assert sdk.get_host_gpu() == "dgpu"
+
+
+def test_get_host_gpu_non_orin(monkeypatch):
+    monkeypatch.setattr(sdk, "get_gpu_name", lambda: "NVIDIA RTX 4090")
+
+    assert sdk.get_host_gpu() == "dgpu"
 
 
 def test_get_default_cuda_version_from_driver(monkeypatch):

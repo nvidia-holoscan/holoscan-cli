@@ -133,3 +133,16 @@ def test_dry_run_short_circuits_to_no_entrypoint_branch(monkeypatch, capsys):
     # The helper prints a "would inspect" hint in dry-run mode.
     out = capsys.readouterr().out
     assert "docker inspect" in out
+
+
+def test_get_image_pythonpath_dryrun_emits_inspect_hint(capsys):
+    """`run-container --dryrun` must surface the PYTHONPATH inspect command
+    so users see how the helper would look at the image. Pre-consolidation
+    `test_holohub_run_pythonpath`."""
+    result = utils_docker.get_image_pythonpath("holohub:smoke", dry_run=True)
+
+    # Dry-run short-circuits to empty string — no real docker call.
+    assert result == ""
+    out = capsys.readouterr().out
+    assert "Inspect docker image PYTHONPATH: docker inspect" in out
+    assert "holohub:smoke" in out

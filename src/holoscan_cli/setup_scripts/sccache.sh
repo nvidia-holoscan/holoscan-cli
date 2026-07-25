@@ -24,8 +24,23 @@ set -e
 
 # Configuration
 SCCACHE_MIN_VERSION="${SCCACHE_MIN_VERSION:-0.12.0-rapids.20}"
-INSTALL_DIR="/opt/sccache"
-SYMLINK_PATH="/usr/local/bin/sccache"
+# Where the sccache *binary* is installed. This is distinct from SCCACHE_DIR,
+# which is the compiler-cache directory the CLI manages elsewhere. When root
+# (e.g. a container build) install system-wide; on the host install into a
+# user-owned location so no elevation is needed. Both are overridable.
+if [[ "${EUID:-$(id -u)}" -eq 0 ]]; then
+    INSTALL_DIR="${SCCACHE_INSTALL_DIR:-/opt/sccache}"
+    SYMLINK_PATH="${SCCACHE_SYMLINK:-/usr/local/bin/sccache}"
+else
+    # The defaults derive from HOME (and XDG_DATA_HOME); fail clearly instead
+    # of expanding to /.local/... when HOME is unset (minimal environments).
+    if [[ -z "${HOME:-}" && ( -z "${SCCACHE_INSTALL_DIR:-}" || -z "${SCCACHE_SYMLINK:-}" ) ]]; then
+        echo "HOME is not set; set SCCACHE_INSTALL_DIR and SCCACHE_SYMLINK explicitly." >&2
+        exit 1
+    fi
+    INSTALL_DIR="${SCCACHE_INSTALL_DIR:-${XDG_DATA_HOME:-$HOME/.local/share}/holoscan/sccache}"
+    SYMLINK_PATH="${SCCACHE_SYMLINK:-$HOME/.local/bin/sccache}"
+fi
 BASE_URL="https://github.com/rapidsai/sccache/releases/download"
 
 # Expected format: [v]MAJOR.MINOR.PATCH-rapids.NN (e.g. 0.12.0-rapids.20 or v0.12.0-rapids.20)
@@ -56,10 +71,26 @@ cleanup_install() {
     exit "$exit_code"
 }
 
-# Check if sccache is already installed and meets minimum version
+# Hint when the symlink directory is not on PATH.
+warn_if_not_on_path() {
+    case ":${PATH}:" in
+        *":$(dirname "$SYMLINK_PATH"):"*) ;;
+        *) echo "Note: add $(dirname "$SYMLINK_PATH") to your PATH to use 'sccache' directly." >&2 ;;
+    esac
+}
+
+# Check if sccache is already installed (on PATH, or at the install symlink —
+# ~/.local/bin may not be on PATH yet) and meets the minimum version.
 check_existing_sccache() {
-    command -v sccache &>/dev/null || return 1
-    local ver_output=$(sccache --version 2>/dev/null || true)
+    local sccache_bin found_on_path=1
+    sccache_bin="$(command -v sccache 2>/dev/null || true)"
+    if [[ -z "$sccache_bin" ]]; then
+        found_on_path=0
+        sccache_bin="$SYMLINK_PATH"
+    fi
+    [[ -x "$sccache_bin" ]] || return 1
+    local ver_output
+    ver_output=$("$sccache_bin" --version 2>/dev/null || true)
     echo "$ver_output" | grep -q "rapids" || return 1
 
     local installed_ver=$(parse_version "$(echo "$ver_output" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)")
@@ -68,6 +99,9 @@ check_existing_sccache() {
 
     if version_gte "$installed_ver" "$required_ver"; then
         echo "sccache already installed and meets minimum version requirement"
+        if [[ $found_on_path -eq 0 ]]; then
+            warn_if_not_on_path
+        fi
         return 0
     fi
     return 1
@@ -119,8 +153,8 @@ main() {
     # Ensure cleanup on exit (partial download or failed extraction)
     trap cleanup_install EXIT
 
-    # Prepare install directory
-    mkdir -p "$INSTALL_DIR"
+    # Prepare install + symlink directories (user-owned on host, system when root)
+    mkdir -p "$INSTALL_DIR" "$(dirname "$SYMLINK_PATH")"
 
     # Download, verify, and extract release tarball
     echo "Downloading from ${url}..."
@@ -134,14 +168,15 @@ main() {
     fi
     chmod u+x "${INSTALL_DIR}/sccache"
 
-    # Create symlink in /usr/local/bin
+    # Symlink onto PATH (system dir when root, ~/.local/bin on the host)
     ln -sf "${INSTALL_DIR}/sccache" "$SYMLINK_PATH"
 
     trap - EXIT
     rm -f "$tar_path"
 
     echo "sccache ${INSTALL_VERSION} installed successfully"
-    sccache --version
+    "${SYMLINK_PATH}" --version
+    warn_if_not_on_path
 }
 
 main "$@"

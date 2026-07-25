@@ -3,9 +3,15 @@
 
 from __future__ import annotations
 
+import argparse
+import json
 import os
 from pathlib import Path
 
+import pytest
+
+from holoscan_cli import system_check as system_check_module
+from holoscan_cli.commands import info as info_cmd
 from holoscan_cli.utils import env_info
 
 
@@ -34,6 +40,8 @@ def test_collectors_print_available_host_tooling(tmp_path, monkeypatch, capsys):
     monkeypatch.setattr(env_info.shutil, "which", lambda name: "/usr/bin/sccache")
     monkeypatch.setenv("HOLOSCAN_CLI_DOCKER_EXE", "docker")
     monkeypatch.setenv("HOLOSCAN_CLI_ENABLE_SCCACHE", "true")
+    monkeypatch.setenv("HOLOSCAN_CLI_PINNED_VERSION", "4.4.1")
+    monkeypatch.setenv("CONDA_PREFIX", "/opt/conda/envs/holoscan")
     monkeypatch.setenv("SCCACHE_BUCKET", "holoscan-cache")
     monkeypatch.setenv("HOLOSCAN_INPUT_PATH", "/data/input")
     root = tmp_path / "repo"
@@ -53,6 +61,8 @@ def test_collectors_print_available_host_tooling(tmp_path, monkeypatch, capsys):
     assert "NVCC: Cuda compilation tools, release 13.0, V13.0.0" in out
     assert "sccache 0.8.2" in out
     assert "SCCACHE_BUCKET: holoscan-cache" in out
+    assert "HOLOSCAN_CLI_PINNED_VERSION: 4.4.1" in out
+    assert "CONDA_PREFIX: /opt/conda/envs/holoscan" in out
     assert "HOLOSCAN_INPUT_PATH: /data/input" in out
 
 
@@ -75,3 +85,114 @@ def test_collectors_print_unavailable_paths(tmp_path, monkeypatch, capsys):
     assert "NVIDIA GPU/CUDA not available" in out
     assert "sccache binary: (not found in PATH)" in out
     assert "SCCACHE_* environment variables: (none set)" in out
+
+
+# ---- env-check handler --------------------------------------------------------
+#
+# Closes the `FNDA:0` coverage gap on `handle_env_check`: only the underlying
+# `system_check` helpers were unit-tested previously. These exercise the CLI
+# command handler end-to-end with a stubbed `run_all_checks`.
+
+
+def _make_results(*, fail: bool = False, warn: bool = False):
+    results = [
+        system_check_module.CheckResult(status="OK", name="GPU", message="ok"),
+        system_check_module.CheckResult(status="OK", name="Docker", message="ok"),
+    ]
+    if warn:
+        results.append(
+            system_check_module.CheckResult(
+                status="WARN", name="Disk", message="low", fix_suggestion="free space"
+            )
+        )
+    if fail:
+        results.append(
+            system_check_module.CheckResult(
+                status="FAIL", name="CUDA", message="absent", fix_suggestion="install cuda"
+            )
+        )
+    return results
+
+
+def test_env_check_text_emits_system_info_check_header(monkeypatch, capsys):
+    """`holoscan env-check` prints the `System Info Check` banner used by
+    downstream parsers (replaces the pre-consolidation `test_cli_env_check`)."""
+    monkeypatch.setattr(system_check_module, "run_all_checks", lambda: _make_results())
+
+    info_cmd.handle_env_check(None, argparse.Namespace(json=False))
+
+    out = capsys.readouterr().out
+    assert "System Info Check" in out
+    assert "All checks passed" in out
+
+
+def test_env_check_json_emits_elapsed_seconds_key(monkeypatch, capsys):
+    """`env-check --json` must include a top-level `elapsed_seconds` field —
+    machine-readable hook used by the pre-consolidation
+    `test_cli_env_check_json` regression."""
+    monkeypatch.setattr(system_check_module, "run_all_checks", lambda: _make_results())
+
+    info_cmd.handle_env_check(None, argparse.Namespace(json=True))
+
+    out = capsys.readouterr().out
+    data = json.loads(out)
+    assert "elapsed_seconds" in data
+    assert isinstance(data["elapsed_seconds"], (int, float))
+    assert data["summary"]["ok"] == 2
+    assert data["summary"]["fail"] == 0
+
+
+def test_env_check_exits_one_when_any_check_fails(monkeypatch):
+    """FAIL results must surface as non-zero exit so CI / shell pipelines
+    can react. WARN-only results stay informational (exit 0)."""
+    monkeypatch.setattr(system_check_module, "run_all_checks", lambda: _make_results(fail=True))
+
+    with pytest.raises(SystemExit) as excinfo:
+        info_cmd.handle_env_check(None, argparse.Namespace(json=False))
+    assert excinfo.value.code == 1
+
+
+def test_env_check_does_not_exit_on_warn_only(monkeypatch, capsys):
+    monkeypatch.setattr(system_check_module, "run_all_checks", lambda: _make_results(warn=True))
+
+    # Must not raise SystemExit.
+    info_cmd.handle_env_check(None, argparse.Namespace(json=False))
+
+    out = capsys.readouterr().out
+    assert "warning" in out.lower()
+
+
+def test_collect_cli_info_reports_managed_venv(monkeypatch, capsys):
+    import sys
+
+    venv = "/home/user/.local/share/Holoscan CLI/venv"
+    monkeypatch.setenv("HOLOSCAN_CLI_VENV", venv)
+    monkeypatch.delenv("HOLOSCAN_CLI_SOURCE", raising=False)
+    monkeypatch.setattr(sys, "prefix", venv)
+
+    env_info.collect_cli_info()
+
+    out = capsys.readouterr().out
+    assert "Holoscan CLI Information:" in out
+    assert "Version:" in out
+    assert "Package:" in out
+    assert "Environment: wrapper-managed venv" in out
+    assert f"Uninstall: rm -rf '{venv}'" in out
+
+
+def test_collect_cli_info_reports_conda_environment(monkeypatch, capsys):
+    import sys
+
+    conda_prefix = "/opt/conda/envs/holoscan"
+    monkeypatch.setenv("CONDA_PREFIX", conda_prefix)
+    monkeypatch.delenv("HOLOSCAN_CLI_VENV", raising=False)
+    monkeypatch.delenv("HOLOSCAN_CLI_SOURCE", raising=False)
+    monkeypatch.setattr(sys, "prefix", conda_prefix)
+    monkeypatch.setattr(sys, "base_prefix", conda_prefix)
+    monkeypatch.setattr(sys, "executable", f"{conda_prefix}/bin/python")
+
+    env_info.collect_cli_info()
+
+    out = capsys.readouterr().out
+    assert f"Environment: Conda environment ({conda_prefix})" in out
+    assert f"Uninstall: {conda_prefix}/bin/python -m pip uninstall holoscan-cli" in out
