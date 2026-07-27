@@ -15,7 +15,6 @@
 # limitations under the License.
 
 import glob
-import json
 import os
 import re
 import shutil
@@ -28,6 +27,7 @@ from typing import List, Optional
 from .utils.docker import is_running_in_docker
 from .utils.holohub import get_git_short_sha, get_holohub_root
 from .utils.io import Color, run_info_command
+from .utils.json_output import dumps as json_dumps
 from .utils.sdk import (
     cuda_major_from_driver,
     find_hsdk_build_rel_dir,
@@ -547,4 +547,4 @@ def format_results_json(results: List[CheckResult], elapsed: float) -> str:
             "skip": sum(1 for r in results if r.status == "SKIP"),
         },
     }
-    return json.dumps(data, indent=2)
+    return json_dumps(data)

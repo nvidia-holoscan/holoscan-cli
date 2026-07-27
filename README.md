@@ -25,6 +25,19 @@ Per-repo wrappers install this package and delegate to `holoscan`, layering on t
 
 Common env vars: `HOLOSCAN_CLI_ROOT` (repo root), `HOLOSCAN_CLI_SEARCH_PATH` (subdirs to scan for `metadata.json`), `HOLOSCAN_CLI_PATH_PREFIX` (placeholder prefix in metadata templates), `HOLOSCAN_CLI_REPO_PREFIX` (container image name prefix). The legacy `HOLOHUB_*` spelling is no longer honored since holoscan v4.3.0 — set the `HOLOSCAN_CLI_*` names directly. `holoscan env-info` lists every env var the CLI reads in the current shell.
 
+## JSON output
+
+`list`, `modes`, `status`, `env-info`, `env-check`, and `version` accept `--json`
+and print a single machine-readable document instead of prose.
+
+Every payload starts with a `schema_version` field, currently `1`. Within a
+version the payloads change additively: new keys may appear, existing keys are
+not removed or renamed. Consumers should ignore keys they do not recognize; a
+removal or rename bumps `schema_version`.
+
+`env-info --json` reports host state, so the values vary by machine — the
+`docker`, `cuda_gpu`, and `git` sections are `null` when unavailable.
+
 ## Source layout
 
 ```text

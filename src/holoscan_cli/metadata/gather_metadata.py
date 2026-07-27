@@ -34,7 +34,6 @@ def extract_project_name(metadata_filepath: str) -> str:
     The following are valid examples:
     - applications/my_application/metadata.json -> my_application
     - applications/nested/paths/my_application/cpp/metadata.json -> my_application
-    - workflows/my_workflow/metadata.json -> my_workflow
 
     """
     parts = metadata_filepath.split(os.sep)
@@ -65,7 +64,6 @@ def gather_metadata(repo_paths: list[str], exclude_paths: list[str] | None = Non
         "package",
         "operator",
         "tutorial",
-        "workflow",
     ]
 
     metadata = []
