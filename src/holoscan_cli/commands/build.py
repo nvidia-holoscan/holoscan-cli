@@ -261,7 +261,8 @@ def build_project_locally(
 
     build_type = get_buildtype_str(build_type)
     build_dir = cli.DEFAULT_BUILD_PARENT_DIR / project_name
-    build_dir.mkdir(parents=True, exist_ok=True)
+    if not dryrun:
+        build_dir.mkdir(parents=True, exist_ok=True)
 
     # Prepare environment with extra env vars first so that HOLOSCAN_CLI_LOCAL_*
     # overrides from the mode's env block are visible to the module resolvers.
@@ -407,13 +408,15 @@ def build_project_locally(
     # Print sccache stats
     if enable_sccache:
         stats_file = build_dir / "sccache-stats.txt"
-        with open(stats_file, "w", encoding="utf-8") as f:
-            run_command(
-                ["sccache", "--show-stats"],
-                dry_run=dryrun,
-                env=build_env,
-                stdout=f if not dryrun else None,
-            )
+        if dryrun:
+            run_command(["sccache", "--show-stats"], dry_run=True, env=build_env)
+        else:
+            with open(stats_file, "w", encoding="utf-8") as f:
+                run_command(
+                    ["sccache", "--show-stats"],
+                    env=build_env,
+                    stdout=f,
+                )
         try:
             stats_file_rel = stats_file.relative_to(cli.HOLOHUB_ROOT)
         except ValueError:

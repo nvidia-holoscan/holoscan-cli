@@ -78,6 +78,7 @@ def test_package_deb_emits_module_cmake_flag_for_in_tree_module(tmp_path, monkey
     assert "-DPKG_test_module_fixture=ON" in cmake_args
     assert "-DBUILD_ALL=OFF" in cmake_args
     assert calls[2][0] == "cpack"
+    assert not (cli.DEFAULT_BUILD_PARENT_DIR / "test_module_fixture" / "package").exists()
 
 
 def test_package_deb_emits_pkg_flag_for_standalone_module(tmp_path, monkeypatch):

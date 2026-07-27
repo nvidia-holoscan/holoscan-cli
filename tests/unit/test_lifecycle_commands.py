@@ -222,6 +222,7 @@ def test_build_project_locally_emits_application_cmake_and_build_commands(tmp_pa
 
     cmake_args = " ".join(str(part) for part in calls[0])
     assert build_dir == tmp_path / "build" / "smoke_app"
+    assert not build_dir.exists()
     assert project_data is cli.project_data
     assert "-DAPP_smoke_app=ON" in cmake_args
     assert "-DCMAKE_BUILD_TYPE=Debug" in cmake_args
@@ -247,6 +248,9 @@ def test_build_project_locally_module_enables_subprojects_and_sccache(
         },
     }
     cli = RecordingCLI(tmp_path, project)
+    stats_file = cli.DEFAULT_BUILD_PARENT_DIR / "holoscan-smoke" / "sccache-stats.txt"
+    stats_file.parent.mkdir(parents=True)
+    stats_file.write_text("existing stats", encoding="utf-8")
     calls = []
     monkeypatch.setenv("HOLOSCAN_CLI_ENABLE_SCCACHE", "true")
     monkeypatch.setattr(build_cmd, "run_command", lambda cmd, **kwargs: calls.append(cmd))
@@ -254,7 +258,9 @@ def test_build_project_locally_module_enables_subprojects_and_sccache(
         build_cmd.shutil, "which", lambda name: "/usr/bin/sccache" if name == "sccache" else None
     )
 
-    build_cmd.build_project_locally(cli, "holoscan-smoke", language="cpp", dryrun=True)
+    build_dir, _ = build_cmd.build_project_locally(
+        cli, "holoscan-smoke", language="cpp", dryrun=True
+    )
 
     cmake_args = " ".join(str(part) for part in calls[0])
     assert "-DMODULE_holoscan_smoke=ON" in cmake_args
@@ -262,6 +268,8 @@ def test_build_project_locally_module_enables_subprojects_and_sccache(
     assert "-DAPP_smoke_app=ON" in cmake_args
     assert "-DCMAKE_CXX_COMPILER_LAUNCHER=/usr/bin/sccache" in cmake_args
     assert calls[-1] == ["sccache", "--show-stats"]
+    assert build_dir == stats_file.parent
+    assert stats_file.read_text(encoding="utf-8") == "existing stats"
     assert "Building module 'holoscan-smoke'" in capsys.readouterr().out
 
 
