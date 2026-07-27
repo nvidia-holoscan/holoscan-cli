@@ -37,29 +37,64 @@ from collections import defaultdict
 from holoscan_cli.commands.registry import help_for, project_command_names
 from holoscan_cli.utils.env_info import collect_env_info, collect_git_info, collect_holohub_info
 from holoscan_cli.utils.io import Color, format_cmd
+from holoscan_cli.utils.json_output import dumps as json_dumps
 
 # ---- list --------------------------------------------------------------------
+
+
+LIST_TYPES = [
+    "application",
+    "benchmark",
+    "gxf_extension",
+    "module",
+    "package",
+    "operator",
+    "tutorial",
+]
 
 
 def register_list_parser(cli, subparsers) -> argparse.ArgumentParser:
     """Register the ``list`` subcommand."""
     parser = subparsers.add_parser("list", help=help_for("list"))
+    parser.add_argument("--json", action="store_true", help="Output project list as JSON")
     parser.set_defaults(func=lambda args: handle_list(cli, args))
     return parser
 
 
-def handle_list(cli, _args: argparse.Namespace) -> None:
+def _project_languages(metadata: dict) -> list:
+    """Normalize a project's ``language`` metadata to a list of strings."""
+    language = metadata.get("language", [])
+    if isinstance(language, str):
+        return [language] if language else []
+    return list(language)
+
+
+def _project_to_json(project: dict) -> dict:
+    """Lean, machine-readable summary of one discovered project.
+
+    ``source_folder`` is the field agents currently have to guess — it locates
+    the project on disk.
+    """
+    metadata = project.get("metadata", {})
+    return {
+        "name": project.get("project_name"),
+        "project_type": project.get("project_type", ""),
+        "source_folder": project.get("source_folder"),
+        "language": _project_languages(metadata),
+        "modes": sorted(metadata.get("modes", {}).keys()),
+    }
+
+
+def handle_list(cli, args: argparse.Namespace) -> None:
     """Handle list command"""
-    LIST_TYPES = [
-        "application",
-        "benchmark",
-        "gxf_extension",
-        "module",
-        "package",
-        "operator",
-        "tutorial",
-        "workflow",
-    ]
+    if getattr(args, "json", False):
+        projects = sorted(
+            cli.projects,
+            key=lambda p: (p.get("project_type", ""), p.get("project_name", "")),
+        )
+        print(json_dumps({"projects": [_project_to_json(p) for p in projects]}))
+        return
+
     grouped_metadata = defaultdict(list)
     for project in cli.projects:
         grouped_metadata[project.get("project_type", "")].append(project)
@@ -81,9 +116,9 @@ def handle_list(cli, _args: argparse.Namespace) -> None:
                     or metadata.get("subprojects", {}).get("operators", [])
                 )
                 ops = f" [{', '.join(operators)}]" if operators else ""
-                print(f'{project["project_name"]} {language}{ops}')
+                print(f"{project['project_name']} {language}{ops}")
             else:
-                print(f'{project["project_name"]} {language}')
+                print(f"{project['project_name']} {language}")
 
     print(f"\n{Color.white('=================================', bold=True)}\n")
 
@@ -98,6 +133,7 @@ def register_modes_parser(cli, subparsers) -> argparse.ArgumentParser:
     parser.add_argument(
         "--language", choices=["cpp", "python"], help="Specify language implementation"
     )
+    parser.add_argument("--json", action="store_true", help="Output modes as JSON")
     parser.set_defaults(func=lambda args: handle_modes(cli, args))
     return parser
 
@@ -105,7 +141,20 @@ def register_modes_parser(cli, subparsers) -> argparse.ArgumentParser:
 def handle_modes(cli, args: argparse.Namespace) -> None:
     """Handle modes command"""
     project_data = cli.find_project(args.project, language=args.language)
-    modes = project_data.get("metadata", {}).get("modes", {})
+    metadata = project_data.get("metadata", {})
+    modes = metadata.get("modes", {})
+
+    if getattr(args, "json", False):
+        print(
+            json_dumps(
+                {
+                    "project": args.project,
+                    "language": _project_languages(metadata),
+                    "modes": modes,
+                }
+            )
+        )
+        return
 
     if not modes:
         print(f"No modes defined for {args.project}")
@@ -152,12 +201,26 @@ def handle_autocompletion_list(cli, _args: argparse.Namespace) -> None:
 def register_env_info_parser(cli, subparsers) -> argparse.ArgumentParser:
     """Register the ``env-info`` subcommand."""
     parser = subparsers.add_parser("env-info", help=help_for("env-info"))
+    parser.add_argument("--json", action="store_true", help="Output environment info as JSON")
     parser.set_defaults(func=lambda args: handle_env_info(cli, args))
     return parser
 
 
-def handle_env_info(cli, _args: argparse.Namespace) -> None:
+def handle_env_info(cli, args: argparse.Namespace) -> None:
     """Handle env-info command to collect debugging information"""
+    if args.json:
+        from holoscan_cli.utils.env_info import format_env_info_json
+
+        print(
+            format_env_info_json(
+                holohub_root=cli.HOLOHUB_ROOT,
+                build_dir=cli.DEFAULT_BUILD_PARENT_DIR,
+                data_dir=cli.DEFAULT_DATA_DIR,
+                sdk_dir=cli.DEFAULT_SDK_DIR,
+            )
+        )
+        return
+
     print(format_cmd("Environment Information"))
     collect_holohub_info(
         holohub_root=cli.HOLOHUB_ROOT,

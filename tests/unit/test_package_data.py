@@ -54,7 +54,6 @@ REQUIRED_SCHEMAS = {
     "package.schema.json",
     "project.schema.json",
     "tutorial.schema.json",
-    "workflow.schema.json",
 }
 
 REQUIRED_TESTING_FILES = {

@@ -46,11 +46,6 @@ METADATA_DIRECTORY_CONFIG = {
         "metadata_is_required": False,
         "schema": "tutorial",
     },
-    "workflows": {
-        "ignore_patterns": ["template"],
-        "metadata_is_required": True,
-        "schema": "workflow",
-    },
 }
 
 SCHEMA_DIR = Path(__file__).resolve().parent

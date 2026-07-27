@@ -311,6 +311,7 @@ def test_format_status_json_round_trips():
         docker_disk="Images: 4GB",
     )
     parsed = json.loads(out)
+    assert parsed["schema_version"] == 1
     assert parsed["platform"]["arch"] == "x86_64"
     assert parsed["git"]["commit"] == "abc1234"
     assert len(parsed["images"]) == 2

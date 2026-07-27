@@ -18,6 +18,7 @@ from argparse import Namespace
 from pathlib import Path
 
 from holoscan_cli import __version__
+from holoscan_cli.utils.json_output import dumps as json_dumps
 
 PACKAGE_NAME = "holoscan-cli"
 
@@ -29,8 +30,22 @@ def get_package_version() -> str:
         return __version__
 
 
-def execute_version_command(_args: Namespace):
-    print(f"Package:     {PACKAGE_NAME}")
-    print(f"Version:     {get_package_version()}")
-    print(f"Executable:  {Path(sys.argv[0]).resolve()}")
-    print(f"Module:      {Path(__file__).resolve()}")
+def collect_version_info() -> dict:
+    """Return the version fields shared by the prose and JSON renderers."""
+    return {
+        "package": PACKAGE_NAME,
+        "version": get_package_version(),
+        "executable": str(Path(sys.argv[0]).resolve()),
+        "module": str(Path(__file__).resolve()),
+    }
+
+
+def execute_version_command(args: Namespace):
+    info = collect_version_info()
+    if getattr(args, "json", False):
+        print(json_dumps(info))
+        return
+    print(f"Package:     {info['package']}")
+    print(f"Version:     {info['version']}")
+    print(f"Executable:  {info['executable']}")
+    print(f"Module:      {info['module']}")
