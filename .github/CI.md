@@ -83,6 +83,11 @@ Pipeline:
    must match what TestPyPI has registered. K2 Kitmaker then promotes the
    staged wheel to Artifactory via
    `release_kitmaker_wheel.py upload --wheel-url https://test.pypi.org/project/holoscan-cli/<v>/ --artifactory-repo-url …`.
+5. **GitHub Release / changelog** — remains an explicit maintainer step after
+   a successful **GA** workflow. RCs are validation artifacts recorded by
+   annotated `vX.Y.ZrcN` tags; they do not get separate GitHub Release pages.
+   The GA release notes compare the previous GA tag with the new retained
+   `vX.Y.Z` tag, giving users one cumulative changelog for the release line.
 
 ### Dispatching a release from the CLI
 
@@ -132,6 +137,17 @@ Every dispatch publishes to **TestPyPI**. Non-GA dispatches auto-remove the
 temporary `vX.Y.Z` tag; a **GA** dispatch keeps the `vX.Y.Z` tag and is the one
 K2 Kitmaker promotes to the release registry (Artifactory). The cutover to
 public PyPI happens out of band — until then, installs use the TestPyPI index.
+Before every dispatch or retry, confirm that the temporary base tag does not
+already exist on the remote: a failure before the cleanup step can leave it
+behind. Never delete or move a permanent `vX.Y.ZrcN` or published GA tag as
+part of that cleanup.
+
+The user-facing changelog is the GitHub Release attached to the retained GA
+tag. Generate it from the previous GA tag (for example,
+`v4.4.0...v4.5.0`), not from an RC tag, so it describes the complete upgrade
+for package users. Keep RC traceability in annotated RC tags and the linked
+workflow, TestPyPI, and Kitmaker records. A Git tag alone does not create the
+formatted GitHub Release page.
 
 Release-candidate fixes follow the normal review path first: create a PR
 against `main`, wait for it to merge, cherry-pick the merged commit onto
@@ -168,14 +184,54 @@ picked onto the release branch.
        --extra-index-url https://pypi.org/simple/ "holoscan-cli==X.Y.Zrc1"
    ```
 
-5. **Iterate** if fixes are needed: merge the fix to `main`, cherry-pick the
+5. **Record the successful RC** after TestPyPI validation and the Kitmaker
+   handoff. Point a permanent annotated RC tag at the exact release-branch
+   commit; do not reuse or move it:
+
+   ```bash
+   git tag -a vX.Y.ZrcN <release-sha> \
+     -m "holoscan-cli X.Y.ZrcN" \
+     -m "Release workflow: <workflow-url>" \
+     -m "TestPyPI: https://test.pypi.org/project/holoscan-cli/X.Y.ZrcN/" \
+     -m "Kitmaker release: <release-id>"
+   git push origin vX.Y.ZrcN
+   ```
+
+6. **Iterate** if fixes are needed: merge the fix to `main`, cherry-pick the
    merged commit onto `release/X.Y.0`, then dispatch with `-f rc=2`,
    `-f rc=3`, … (bump each time).
-6. **Cut GA** once an RC is accepted:
+7. **Cut GA** once an RC is accepted:
 
    ```bash
    gh workflow run release.yaml --ref release/X.Y.0 \
      -f version=vX.Y.Z -f ga=true                 # → X.Y.Z, keeps the vX.Y.Z tag
+   ```
+
+8. **Publish the cumulative GA changelog** only after the GA workflow,
+   downstream validation, and Kitmaker promotion have succeeded. Use the
+   previous **GA** tag as the release-note baseline:
+
+   ```bash
+   gh release create vX.Y.Z \
+     --repo nvidia-holoscan/holoscan-cli \
+     --verify-tag \
+     --draft \
+     --title "holoscan-cli X.Y.Z" \
+     --generate-notes \
+     --notes-start-tag vPREVIOUS.GA
+   ```
+
+   Review the draft before publishing it. Curate generated notes into
+   user-facing **Highlights**, **Added**, **Changed**, **Fixed**, **Upgrade
+   notes**, and **Release validation** sections. Include the accepted RC,
+   release workflow, TestPyPI, Kitmaker, and downstream HoloHub validation
+   references. Check that cherry-picked fixes link back to their original PRs
+   and remove internal-only or security-sensitive details. The published pages
+   are:
+
+   ```text
+   https://github.com/nvidia-holoscan/holoscan-cli/releases/tag/vX.Y.Z
+   https://github.com/nvidia-holoscan/holoscan-cli/compare/vPREVIOUS.GA...vX.Y.Z
    ```
 
 ### Worked example (4.3.0)
@@ -187,6 +243,10 @@ gh workflow run release.yaml --ref release/4.3.0 \
 # …validate, iterate -f rc=2 as needed… then:
 gh workflow run release.yaml --ref release/4.3.0 \
     -f version=v4.3.0 -f ga=true                              # → 4.3.0 (GA)
+gh release create v4.3.0 \
+    --repo nvidia-holoscan/holoscan-cli \
+    --verify-tag --draft --title "holoscan-cli 4.3.0" \
+    --generate-notes --notes-start-tag v4.2.0                 # → cumulative GA changelog
 ```
 
 ## Shared shell scripts
