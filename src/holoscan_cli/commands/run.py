@@ -321,12 +321,15 @@ def handle_run(cli, args: argparse.Namespace) -> None:
             *(name for name in run_env if name.startswith("HOLOSCAN_")),
             *run_mode_env,
         }
+        # Nothing follows the foreground launch, so hand this process over to
+        # the application instead of remaining as a signal-handling supervisor.
         run_command(
             cmd_to_run,
             env=run_env,
             dry_run=args.dryrun,
             as_root=as_root,
             preserve_env=root_env if as_root else None,
+            replace_process=True,
         )
     else:
         container = cli.make_project_container(
@@ -414,7 +417,9 @@ def handle_run(cli, args: argparse.Namespace) -> None:
             local_sdk_root=getattr(args, "local_sdk_root", None),
             enable_x11=getattr(args, "enable_x11", True),
             ssh_x11=getattr(args, "ssh_x11", False),
-            use_tini=getattr(args, "init", False),
+            # Keep the exec'd application out of the PID-namespace init slot,
+            # where default-disposition signals have special semantics.
+            use_tini=True,
             persistent=getattr(args, "persistent", False),
             nsys_profile=getattr(args, "nsys_profile", False),
             nsys_location=getattr(args, "nsys_location", ""),

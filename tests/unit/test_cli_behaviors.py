@@ -13,6 +13,7 @@ import pytest
 
 from holoscan_cli import cli as project_cli
 from holoscan_cli.commands import clear_cache as clear_cache_cmd
+from holoscan_cli.commands import run as run_cmd
 
 FIXTURE_ROOT = Path(__file__).resolve().parent.parent / "fixtures" / "holohub_smoke"
 
@@ -26,6 +27,16 @@ def _copy_smoke_repo(tmp_path: Path) -> Path:
 def test_cli_dispatch_runs_smoke_app_locally_from_metadata(tmp_path, monkeypatch, capfd):
     if shutil.which("python") is None:
         pytest.skip("the smoke fixture command requires a python executable on PATH")
+
+    original_run_command = run_cmd.run_command
+
+    def run_without_replacement(cmd, **kwargs):
+        # Keep this existing metadata smoke in-process. The real exec boundary
+        # is covered by the external signal test.
+        kwargs["replace_process"] = False
+        return original_run_command(cmd, **kwargs)
+
+    monkeypatch.setattr(run_cmd, "run_command", run_without_replacement)
 
     repo_root = _copy_smoke_repo(tmp_path)
     build_parent = tmp_path / "build"

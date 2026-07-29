@@ -20,12 +20,13 @@ subprocess execution."""
 import os
 import shlex
 import shutil
+import signal
 import subprocess
 import sys
 import traceback
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Iterable, List, Optional, Union
+from typing import Iterable, List, Mapping, NoReturn, Optional, Union
 
 
 def resolve(path) -> Path:
@@ -202,12 +203,31 @@ def format_long_command(cmd: List[str], max_line_length: int = 80) -> str:
 # ---- subprocess execution + explicit privilege elevation ---------------------
 
 
+# exec preserves ignored signals. Reset the signals Python normally restores
+# when starting a child process.
+_RESTORE_SIGNAL_NAMES = ("SIGPIPE", "SIGXFZ", "SIGXFSZ")
+
+
+def _replace_process(argv: List[str], env: Mapping[str, str]) -> NoReturn:
+    """Replace this process with ``argv``. Only raises if ``exec`` fails."""
+    sys.stdout.flush()
+    sys.stderr.flush()
+
+    for name in _RESTORE_SIGNAL_NAMES:
+        signum = getattr(signal, name, None)
+        if signum is not None:
+            signal.signal(signum, signal.SIG_DFL)
+
+    os.execvpe(argv[0], argv, env)
+
+
 def run_command(
     cmd: Union[str, List[str]],
     dry_run: bool = False,
     check: bool = True,
     as_root: bool = False,
     preserve_env: Optional[Iterable[str]] = None,
+    replace_process: bool = False,
     **kwargs,
 ) -> subprocess.CompletedProcess:
     """Run a command, optionally elevated with ``sudo``.
@@ -220,9 +240,19 @@ def run_command(
     names go through ``--preserve-env`` so their values — possibly secrets —
     stay out of the world-readable /proc/<pid>/cmdline. Missing sudo fails
     clearly rather than running unprivileged.
+
+    ``replace_process`` is only for the final foreground application. It uses
+    ``exec`` so the Python CLI cannot also receive terminal signals or overwrite
+    the application's status. Do not use it for builds or the host Docker
+    launch, where the caller must continue for cleanup. A dry run only prints.
     """
     if preserve_env is not None and not as_root:
         raise ValueError("preserve_env requires as_root=True")
+    if replace_process:
+        if isinstance(cmd, str):
+            raise ValueError("replace_process requires an argv list, not a shell command string")
+        if kwargs.get("env") is None:
+            raise ValueError("replace_process requires an explicit environment")
 
     elevate = as_root and os.geteuid() != 0
     sudo_prefix: List[str] = []
@@ -284,6 +314,8 @@ def run_command(
         return subprocess.CompletedProcess(exec_cmd, 0)
 
     print(format_cmd(display_cmd))
+    if replace_process:
+        _replace_process(exec_cmd, kwargs["env"])
     try:
         return subprocess.run(exec_cmd, check=check, **kwargs)
     except subprocess.CalledProcessError as e:
