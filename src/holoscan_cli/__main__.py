@@ -204,7 +204,7 @@ def _dispatch_project_cli(argv: list[str]) -> bool:
     return True
 
 
-def main(argv: Optional[list[str]] = None):
+def _dispatch(argv: Optional[list[str]]) -> None:
     if argv is None:
         argv = sys.argv
     argv = list(argv)
@@ -222,6 +222,15 @@ def main(argv: Optional[list[str]] = None):
         from .version.version import execute_version_command
 
         execute_version_command(args)
+
+
+def main(argv: Optional[list[str]] = None):
+    try:
+        _dispatch(argv)
+    except KeyboardInterrupt:
+        # The CLI owns pre-launch work. After launch, exec removes this frame
+        # and the application retains control of its signal handling and status.
+        raise SystemExit(130) from None
 
 
 if __name__ == "__main__":

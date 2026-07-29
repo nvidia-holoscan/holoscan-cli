@@ -27,6 +27,7 @@ These pin two pieces of the container layer that were uncovered:
 
 from __future__ import annotations
 
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -556,7 +557,12 @@ def test_run_assembles_docker_command_without_ctk_for_custom_runtime(tmp_path, m
     monkeypatch.setenv("NGC_CLI_API_KEY", "secret")
     monkeypatch.setattr(container_core, "get_image_pythonpath", lambda img, dryrun: "/image/python")
     monkeypatch.setattr(container_core, "get_group_id", lambda group: {"video": 44}.get(group))
-    monkeypatch.setattr(container_core, "run_command", lambda cmd, **kwargs: calls.append(cmd))
+
+    def record_command(cmd, **kwargs):
+        calls.append(cmd)
+        return subprocess.CompletedProcess(cmd, 0)
+
+    monkeypatch.setattr(container_core, "run_command", record_command)
     monkeypatch.setattr(container_core, "check_nvidia_ctk", lambda: ctk_checks.append(True))
 
     c = _stub_container(

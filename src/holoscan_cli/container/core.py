@@ -653,7 +653,11 @@ class HoloscanContainer:
             try:
                 try:
                     with _ContainerTerminationHandler():
-                        run_command(cmd)
+                        result = run_command(cmd, check=False)
+                    if result.returncode:
+                        # Docker and the application already wrote their diagnostics.
+                        # Preserve the status without repeating the full launch command.
+                        sys.exit(result.returncode)
                     return
                 except _ContainerTerminationSignal as exc:
                     sig = exc.signum
