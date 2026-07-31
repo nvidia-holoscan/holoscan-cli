@@ -127,15 +127,16 @@ is `4.3.0rc1`, the PEP 440 spelling of SemVer's `4.3.0-rc.1`.
 
 | Dispatch `--ref` | `ga` | `rc` | Published version | Purpose |
 | --- | --- | --- | --- | --- |
-| `main` | – | – | `X.Y.Za0.devN` | dev snapshots of the next minor line |
+| `main` | – | – | `X.Y.Za0.devN` | development builds from `main` |
 | any feature branch | – | – | `X.Y.ZaNNN` (`NNN` = run id) | throwaway per-branch alphas |
 | `release/X.Y.0` | `false` | `N` | `X.Y.ZrcN` | release candidates |
 | `release/X.Y.0` | `false` | – | `X.Y.Zrc<distance>` | RC without an explicit number |
 | `release/X.Y.0` | `true` | – | `X.Y.Z` | official GA |
 
 All code contributions merge into `main`. A release branch starts at one
-reviewed `main` commit and receives selected cherry-picks from `main`. The first
-later commit on `main` receives the next minor `a0` tag.
+reviewed `main` commit and receives selected cherry-picks from `main`. After the
+branch is created, tag the first new `main` commit with the version that later
+`main` builds should use.
 
 Every dispatch publishes to **TestPyPI**. Non-GA dispatches auto-remove the
 temporary `vX.Y.Z` tag; a **GA** dispatch keeps the `vX.Y.Z` tag and is the one
@@ -174,9 +175,9 @@ formatted GitHub Release page.
 
    `origin/main` and `release/X.Y.0` now identify the same release commit.
    Subsequent contributions continue to merge into `main`.
-3. **Tag the next development line.** After the next reviewed PR merges into
-   `main`, tag the first main-only commit. This example follows a
-   `release/4.6.0` branch cut:
+3. **Set the version for later `main` builds.** After creating a release branch,
+   wait for the next reviewed commit to merge into `main`, then tag that commit.
+   This example starts 4.7 development after creating `release/4.6.0`:
 
    ```bash
    (
@@ -187,16 +188,17 @@ formatted GitHub Release page.
        "${branch_point}"..origin/main | sed -n '1p')
      git show --no-patch --oneline "${first_main_sha}"
      git tag -a v4.7.0a0 "${first_main_sha}" \
-       -m "main: 4.7.0 development anchor"
+       -m "start 4.7 development on main"
      git push origin v4.7.0a0
-     remote_anchor_sha=$(git ls-remote origin \
+     remote_tag_sha=$(git ls-remote origin \
        "refs/tags/v4.7.0a0^{}" | cut -f1)
-     test "${remote_anchor_sha}" = "${first_main_sha}"
+     test "${remote_tag_sha}" = "${first_main_sha}"
    )
    ```
 
-   Builds from this commit use `4.7.0a0`. Keep this tag fixed if the commit is
-   later cherry-picked into `release/4.6.0`.
+   The tagged commit builds as `4.7.0a0`; later `main` commits build as
+   `4.7.0a0.devN`. Keep this tag fixed if the commit is later cherry-picked into
+   `release/4.6.0`.
 4. **Cut RC1:**
 
    ```bash
