@@ -160,10 +160,16 @@ formatted GitHub Release page.
 2. **Create the release branch at that `main` commit:**
 
    ```bash
-   git fetch origin --tags --prune
-   git show --no-patch --oneline origin/main
-   git push origin origin/main:refs/heads/release/X.Y.0
-   git ls-remote origin refs/heads/release/X.Y.0
+   (
+     set -euo pipefail
+     git fetch origin --tags --prune
+     release_sha=$(git rev-parse --verify origin/main)
+     git show --no-patch --oneline "${release_sha}"
+     git push origin "${release_sha}:refs/heads/release/X.Y.0"
+     remote_release_sha=$(git ls-remote --refs origin \
+       refs/heads/release/X.Y.0 | cut -f1)
+     test "${remote_release_sha}" = "${release_sha}"
+   )
    ```
 
    `origin/main` and `release/X.Y.0` now identify the same release commit.
@@ -173,14 +179,20 @@ formatted GitHub Release page.
    `release/4.6.0` branch cut:
 
    ```bash
-   git fetch origin --tags --prune
-   branch_point=$(git merge-base origin/main origin/release/4.6.0)
-   first_main_sha=$(git rev-list --first-parent --reverse \
-     "${branch_point}"..origin/main | head -n 1)
-   git show --no-patch --oneline "${first_main_sha}"
-   git tag -a v4.7.0a0 "${first_main_sha}" \
-     -m "main: 4.7.0 development anchor"
-   git push origin v4.7.0a0
+   (
+     set -euo pipefail
+     git fetch origin --tags --prune
+     branch_point=$(git merge-base origin/main origin/release/4.6.0)
+     first_main_sha=$(git rev-list --first-parent --reverse \
+       "${branch_point}"..origin/main | sed -n '1p')
+     git show --no-patch --oneline "${first_main_sha}"
+     git tag -a v4.7.0a0 "${first_main_sha}" \
+       -m "main: 4.7.0 development anchor"
+     git push origin v4.7.0a0
+     remote_anchor_sha=$(git ls-remote origin \
+       "refs/tags/v4.7.0a0^{}" | cut -f1)
+     test "${remote_anchor_sha}" = "${first_main_sha}"
+   )
    ```
 
    Builds from this commit use `4.7.0a0`. Keep this tag fixed if the commit is
@@ -217,8 +229,9 @@ formatted GitHub Release page.
    ```
 
 7. **Iterate** if fixes are needed: merge the fix to `main`, cherry-pick the
-   merged commit onto `release/X.Y.0`, then dispatch with `-f rc=2`,
-   `-f rc=3`, … (bump each time).
+   single-parent fix commit onto `release/X.Y.0`, then dispatch with `-f rc=2`,
+   `-f rc=3`, … (bump each time). Do not pass a merge commit to plain
+   `git cherry-pick <sha>`.
 8. **Cut GA** once an RC is accepted:
 
    ```bash
@@ -231,12 +244,19 @@ formatted GitHub Release page.
    previous **GA** tag as the release-note baseline:
 
    ```bash
-   # Net source changes delivered since the previous GA.
-   git diff --stat vPREVIOUS.GA..vX.Y.Z
+   (
+     set -euo pipefail
+     git fetch origin --tags --prune
+     git rev-parse --verify "refs/tags/vPREVIOUS.GA^{commit}"
+     git rev-parse --verify "refs/tags/vX.Y.Z^{commit}"
 
-   # Commits without a patch-equivalent change in the previous GA.
-   git log --cherry-pick --right-only --no-merges --oneline \
-     vPREVIOUS.GA...vX.Y.Z
+     # Net source changes delivered since the previous GA.
+     git diff --stat vPREVIOUS.GA..vX.Y.Z
+
+     # Commits without a patch-equivalent change in the previous GA.
+     git log --cherry-pick --right-only --no-merges --oneline \
+       vPREVIOUS.GA...vX.Y.Z
+   )
    ```
 
    The tree diff shows the delivered source changes. The second command filters
