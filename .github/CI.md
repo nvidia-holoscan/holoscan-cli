@@ -177,7 +177,7 @@ formatted GitHub Release page.
    Subsequent contributions continue to merge into `main`.
 3. **Set the version for later `main` builds.** After creating a release branch,
    wait for the next reviewed commit to merge into `main`, then tag that commit.
-   This example starts 4.7 development after creating `release/4.6.0`:
+   This example starts 5.0 development after creating `release/4.6.0`:
 
    ```bash
    (
@@ -187,17 +187,17 @@ formatted GitHub Release page.
      first_main_sha=$(git rev-list --first-parent --reverse \
        "${branch_point}"..origin/main | sed -n '1p')
      git show --no-patch --oneline "${first_main_sha}"
-     git tag -a v4.7.0a0 "${first_main_sha}" \
-       -m "start 4.7 development on main"
-     git push origin v4.7.0a0
+     git tag -a v5.0.0a0 "${first_main_sha}" \
+       -m "start 5.0 development on main"
+     git push origin v5.0.0a0
      remote_tag_sha=$(git ls-remote origin \
-       "refs/tags/v4.7.0a0^{}" | cut -f1)
+       "refs/tags/v5.0.0a0^{}" | cut -f1)
      test "${remote_tag_sha}" = "${first_main_sha}"
    )
    ```
 
-   The tagged commit builds as `4.7.0a0`; later `main` commits build as
-   `4.7.0a0.devN`. Keep this tag fixed if the commit is later cherry-picked into
+   The tagged commit builds as `5.0.0a0`; later `main` commits build as
+   `5.0.0a0.devN`. Keep this tag fixed if the commit is later cherry-picked into
    `release/4.6.0`.
 4. **Cut RC1:**
 
