@@ -88,7 +88,7 @@ gitchangelog = "^3.0.4"
 
 [tool.poetry.group.test.dependencies]
 coverage= "^7.15.2"
-mypy= "^1.19.1"
+mypy= "^2.3.0"
 pre-commit = "^4.6.1"
 pytest-cov= "^7.0.0"
 pytest-mock= "^3.15.1"
