@@ -247,6 +247,16 @@ class TestMain:
                     main(["holoscan", "version"])
                     mock_execute.assert_called_once_with(mock_args)
 
+    @pytest.mark.parametrize("flag", ["-v", "--version"])
+    def test_main_version_flag_matches_version_command(self, flag, capsys):
+        """`-v`/`--version` are aliases: identical output to `holoscan version`."""
+        main(["holoscan", "version"])
+        expected = capsys.readouterr().out
+        assert "Version:" in expected
+
+        main(["holoscan", flag])
+        assert capsys.readouterr().out == expected
+
     @pytest.mark.parametrize(
         "argv,command",
         [(["holoscan", command], command) for command in REMOVED_COMMANDS],

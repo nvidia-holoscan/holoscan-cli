@@ -88,6 +88,16 @@ def parse_args(argv: Optional[list[str]] = None) -> argparse.Namespace:
         prog=program_name,
     )
 
+    # Top-level alias for the `version` subcommand. Declared on `parser` rather
+    # than `parent_parser` so it does not leak onto every subcommand.
+    parser.add_argument(
+        "-v",
+        "--version",
+        action="store_true",
+        dest="show_version",
+        help="display the holoscan-cli package version",
+    )
+
     subparser = parser.add_subparsers(dest="command")
 
     version_parser = subparser.add_parser(
@@ -112,7 +122,7 @@ def parse_args(argv: Optional[list[str]] = None) -> argparse.Namespace:
     args.argv = argv  # save argv for later use in runpy
 
     # Print help if no command is specified
-    if args.command is None:
+    if args.command is None and not args.show_version:
         parser.print_help()
         parser.exit()
 
@@ -218,7 +228,7 @@ def _dispatch(argv: Optional[list[str]]) -> None:
 
     set_up_logging(args.log_level)
 
-    if args.command == "version":
+    if args.command == "version" or args.show_version:
         from .version.version import execute_version_command
 
         execute_version_command(args)
