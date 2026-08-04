@@ -103,13 +103,12 @@ def register_install_parser(
         "example: --configure-args='-DCUSTOM_OPTION=ON' --configure-args='-Dtest=ON'",
     )
     parser.add_argument(
-        "--prefix",
-        dest="install_prefix",
-        type=Path,
-        default=None,
-        help="Install destination directory, forwarded to `cmake --install --prefix`. "
-        "Applied at install time, so the build tree's CMake cache is left untouched. "
-        "Without --local, the path is resolved inside the container.",
+        "--install-args",
+        action="append",
+        help="Additional arguments for `cmake --install`, applied at install time so the "
+        "build tree's CMake cache is left untouched "
+        "example: --install-args='--prefix /opt/holohub' --install-args=--strip. "
+        "When installation runs in a container, paths are resolved inside the container.",
     )
     parser.set_defaults(func=lambda args: handle_install(cli, args))
     return parser
@@ -184,8 +183,8 @@ def handle_install(cli, args: argparse.Namespace) -> None:
 
         # Install the project
         cmake_install_cmd = ["cmake", "--install", str(build_dir)]
-        if getattr(args, "install_prefix", None):
-            cmake_install_cmd += ["--prefix", str(args.install_prefix)]
+        for install_arg in getattr(args, "install_args", None) or []:
+            cmake_install_cmd += shlex.split(os.path.expandvars(install_arg))
         run_command(cmake_install_cmd, dry_run=args.dryrun, env=install_env)
         if not args.dryrun:
             print(f"{Color.green('Successfully installed')} {args.project}")
@@ -225,8 +224,8 @@ def handle_install(cli, args: argparse.Namespace) -> None:
         if getattr(args, "configure_args", None):
             for configure_arg in args.configure_args:
                 install_cmd += f" --configure-args={shlex.quote(configure_arg)}"
-        if getattr(args, "install_prefix", None):
-            install_cmd += f" --prefix {shlex.quote(str(args.install_prefix))}"
+        for install_arg in getattr(args, "install_args", None) or []:
+            install_cmd += f" --install-args={shlex.quote(install_arg)}"
 
         img = getattr(args, "img", None) or container.image_name
         docker_opts = build_args.get("docker_opts", "")
