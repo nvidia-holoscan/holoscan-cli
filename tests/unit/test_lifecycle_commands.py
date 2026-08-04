@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import shlex
 from argparse import Namespace
 
 from holoscan_cli.commands import build as build_cmd
@@ -143,6 +144,7 @@ def _project_args(**overrides):
             "uninstall": False,
             "build_dir": None,
             "site_dir": None,
+            "install_prefix": None,
         }
     )
     defaults.update(overrides)
@@ -491,6 +493,27 @@ def test_handle_install_local_installs_built_project(tmp_path, monkeypatch):
     assert calls == [["cmake", "--install", str(build_dir)]]
 
 
+def test_handle_install_local_forwards_prefix_at_install_time(tmp_path, monkeypatch):
+    """`--prefix` reaches `cmake --install` without touching the configure step."""
+    cli = RecordingCLI(tmp_path)
+    build_dir = tmp_path / "build" / "smoke_app"
+    install_dir = tmp_path / "opt" / "smoke_app"
+    calls = []
+    build_kwargs = {}
+
+    def record_build(*args, **kwargs):
+        build_kwargs.update(kwargs)
+        return build_dir, cli.project_data
+
+    monkeypatch.setattr(install_cmd, "build_project_locally", record_build)
+    monkeypatch.setattr(install_cmd, "run_command", lambda cmd, **kwargs: calls.append(cmd))
+
+    install_cmd.handle_install(cli, _project_args(local=True, install_prefix=install_dir))
+
+    assert calls == [["cmake", "--install", str(build_dir), "--prefix", str(install_dir)]]
+    assert build_kwargs["configure_args"] is None
+
+
 def test_handle_install_container_branch_passes_recursive_local_command(tmp_path, monkeypatch):
     cli = RecordingCLI(tmp_path)
     captured = {}
@@ -509,6 +532,7 @@ def test_handle_install_container_branch_passes_recursive_local_command(tmp_path
             with_operators="op_a",
             parallel="4",
             configure_args=["-DDEV=ON"],
+            install_prefix=tmp_path / "opt" / "smoke app",
             docker_opts="--ipc=host",
             verbose=True,
         ),
@@ -524,6 +548,7 @@ def test_handle_install_container_branch_passes_recursive_local_command(tmp_path
     assert '--build-with "op_a"' in command
     assert "--parallel 4" in command
     assert "--configure-args=-DDEV=ON" in command
+    assert f"--prefix {shlex.quote(str(tmp_path / 'opt' / 'smoke app'))}" in command
     assert cli.container.run_calls[0]["extra_args"] == ["-c", command]
 
 
