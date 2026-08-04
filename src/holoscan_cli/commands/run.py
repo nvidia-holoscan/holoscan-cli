@@ -204,6 +204,7 @@ def handle_run(cli, args: argparse.Namespace) -> None:
                 build_type=args.build_type,
                 with_operators=build_args.get("with_operators"),
                 dryrun=args.dryrun,
+                verbose=args.verbose,
                 pkg_generator=getattr(args, "pkg_generator", "DEB"),
                 parallel=getattr(args, "parallel", None),
                 configure_args=build_args.get("configure_args"),
