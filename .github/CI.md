@@ -127,11 +127,16 @@ is `4.3.0rc1`, the PEP 440 spelling of SemVer's `4.3.0-rc.1`.
 
 | Dispatch `--ref` | `ga` | `rc` | Published version | Purpose |
 | --- | --- | --- | --- | --- |
-| `main` | – | – | `X.Y.Z.devN` | dev snapshots of `main` |
+| `main` | – | – | `X.Y.Za0.devN` | development builds from `main` |
 | any feature branch | – | – | `X.Y.ZaNNN` (`NNN` = run id) | throwaway per-branch alphas |
 | `release/X.Y.0` | `false` | `N` | `X.Y.ZrcN` | release candidates |
 | `release/X.Y.0` | `false` | – | `X.Y.Zrc<distance>` | RC without an explicit number |
 | `release/X.Y.0` | `true` | – | `X.Y.Z` | official GA |
+
+All code contributions merge into `main`. A release branch starts at one
+reviewed `main` commit and receives selected cherry-picks from `main`. After the
+branch is created, tag the first new `main` commit with the version that later
+`main` builds should use.
 
 Every dispatch publishes to **TestPyPI**. Non-GA dispatches auto-remove the
 temporary `vX.Y.Z` tag; a **GA** dispatch keeps the `vX.Y.Z` tag and is the one
@@ -149,24 +154,52 @@ for package users. Keep RC traceability in annotated RC tags and the linked
 workflow, TestPyPI, and Kitmaker records. A Git tag alone does not create the
 formatted GitHub Release page.
 
-Release-candidate fixes follow the normal review path first: create a PR
-against `main`, wait for it to merge, cherry-pick the merged commit onto
-`release/X.Y.0`, and only then dispatch the next RC from the release branch.
-Do not direct-push unreviewed fixes to `release/X.Y.0`, and do not submit an RC
-workflow or Kitmaker release before the fix has merged to `main` and has been
-picked onto the release branch.
-
 ### Steps
 
-1. **Land everything on `main`** and confirm it is green.
-2. **Cut the release branch (once per minor line):**
+1. **Choose the release commit.** Merge every change planned for `X.Y` into
+   `main` and confirm its CI is green.
+2. **Create the release branch at that `main` commit:**
 
    ```bash
-   git push origin origin/main:refs/heads/release/X.Y.0
+   (
+     set -euo pipefail
+     git fetch origin --tags --prune
+     release_sha=$(git rev-parse --verify origin/main)
+     git show --no-patch --oneline "${release_sha}"
+     git push origin "${release_sha}:refs/heads/release/X.Y.0"
+     remote_release_sha=$(git ls-remote --refs origin \
+       refs/heads/release/X.Y.0 | cut -f1)
+     test "${remote_release_sha}" = "${release_sha}"
+   )
    ```
 
-   This branch is what flips the version scheme from `.dev` to `rc`.
-3. **Cut RC1:**
+   `origin/main` and `release/X.Y.0` now identify the same release commit.
+   Subsequent contributions continue to merge into `main`.
+3. **Set the version for later `main` builds.** After creating a release branch,
+   wait for the next reviewed commit to merge into `main`, then tag that commit.
+   This example starts 5.0 development after creating `release/4.6.0`:
+
+   ```bash
+   (
+     set -euo pipefail
+     git fetch origin --tags --prune
+     branch_point=$(git merge-base origin/main origin/release/4.6.0)
+     first_main_sha=$(git rev-list --first-parent --reverse \
+       "${branch_point}"..origin/main | sed -n '1p')
+     git show --no-patch --oneline "${first_main_sha}"
+     git tag -a v5.0.0a0 "${first_main_sha}" \
+       -m "start 5.0 development on main"
+     git push origin v5.0.0a0
+     remote_tag_sha=$(git ls-remote origin \
+       "refs/tags/v5.0.0a0^{}" | cut -f1)
+     test "${remote_tag_sha}" = "${first_main_sha}"
+   )
+   ```
+
+   The tagged commit builds as `5.0.0a0`; later `main` commits build as
+   `5.0.0a0.devN`. Keep this tag fixed if the commit is later cherry-picked into
+   `release/4.6.0`.
+4. **Cut RC1:**
 
    ```bash
    gh workflow run release.yaml --ref release/X.Y.0 \
@@ -176,7 +209,7 @@ picked onto the release branch.
    The run's `testpypi-installed smoke test` job installs the just-published
    wheel from TestPyPI and re-runs the smoke checks, so a green run means the
    RC is fetchable and passes the same checks CI runs on push.
-4. **Validate the RC** (e.g. against downstream HoloHub usage) in a throwaway venv:
+5. **Validate the RC** (e.g. against downstream HoloHub usage) in a throwaway venv:
 
    ```bash
    python3 -m venv /tmp/rc && . /tmp/rc/bin/activate
@@ -184,7 +217,7 @@ picked onto the release branch.
        --extra-index-url https://pypi.org/simple/ "holoscan-cli==X.Y.Zrc1"
    ```
 
-5. **Record the successful RC** after TestPyPI validation and the Kitmaker
+6. **Record the successful RC** after TestPyPI validation and the Kitmaker
    handoff. Point a permanent annotated RC tag at the exact release-branch
    commit; do not reuse or move it:
 
@@ -197,19 +230,39 @@ picked onto the release branch.
    git push origin vX.Y.ZrcN
    ```
 
-6. **Iterate** if fixes are needed: merge the fix to `main`, cherry-pick the
-   merged commit onto `release/X.Y.0`, then dispatch with `-f rc=2`,
-   `-f rc=3`, … (bump each time).
-7. **Cut GA** once an RC is accepted:
+7. **Iterate** if fixes are needed: merge the fix to `main`, cherry-pick the
+   single-parent fix commit onto `release/X.Y.0`, then dispatch with `-f rc=2`,
+   `-f rc=3`, … (bump each time). Do not pass a merge commit to plain
+   `git cherry-pick <sha>`.
+8. **Cut GA** once an RC is accepted:
 
    ```bash
    gh workflow run release.yaml --ref release/X.Y.0 \
      -f version=vX.Y.Z -f ga=true                 # → X.Y.Z, keeps the vX.Y.Z tag
    ```
 
-8. **Publish the cumulative GA changelog** only after the GA workflow,
+9. **Publish the cumulative GA changelog** only after the GA workflow,
    downstream validation, and Kitmaker promotion have succeeded. Use the
    previous **GA** tag as the release-note baseline:
+
+   ```bash
+   (
+     set -euo pipefail
+     git fetch origin --tags --prune
+     git rev-parse --verify "refs/tags/vPREVIOUS.GA^{commit}"
+     git rev-parse --verify "refs/tags/vX.Y.Z^{commit}"
+
+     # Net source changes delivered since the previous GA.
+     git diff --stat vPREVIOUS.GA..vX.Y.Z
+
+     # Commits without a patch-equivalent change in the previous GA.
+     git log --cherry-pick --right-only --no-merges --oneline \
+       vPREVIOUS.GA...vX.Y.Z
+   )
+   ```
+
+   The tree diff shows the delivered source changes. The second command filters
+   patch-equivalent backports from the commit list.
 
    ```bash
    gh release create vX.Y.Z \
@@ -220,6 +273,10 @@ picked onto the release branch.
      --generate-notes \
      --notes-start-tag vPREVIOUS.GA
    ```
+
+   GitHub generates notes from merged pull request associations. Add
+   cherry-picked fixes during review. `.github/release.yml` filters Dependabot
+   pull requests from future generated drafts.
 
    Review the draft before publishing it. Curate generated notes into
    user-facing **Highlights**, **Added**, **Changed**, **Fixed**, **Upgrade
@@ -233,21 +290,6 @@ picked onto the release branch.
    https://github.com/nvidia-holoscan/holoscan-cli/releases/tag/vX.Y.Z
    https://github.com/nvidia-holoscan/holoscan-cli/compare/vPREVIOUS.GA...vX.Y.Z
    ```
-
-### Worked example (4.3.0)
-
-```bash
-git push origin origin/main:refs/heads/release/4.3.0          # cut the branch
-gh workflow run release.yaml --ref release/4.3.0 \
-    -f version=v4.3.0 -f rc=1 -f ga=false                     # → 4.3.0rc1 (TestPyPI)
-# …validate, iterate -f rc=2 as needed… then:
-gh workflow run release.yaml --ref release/4.3.0 \
-    -f version=v4.3.0 -f ga=true                              # → 4.3.0 (GA)
-gh release create v4.3.0 \
-    --repo nvidia-holoscan/holoscan-cli \
-    --verify-tag --draft --title "holoscan-cli 4.3.0" \
-    --generate-notes --notes-start-tag v4.2.0                 # → cumulative GA changelog
-```
 
 ## Shared shell scripts
 
