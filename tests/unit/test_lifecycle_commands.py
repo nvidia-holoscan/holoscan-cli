@@ -314,6 +314,19 @@ def test_build_writes_external_operators_manifest_from_module_sites(tmp_path, mo
     assert "videomaster_source" in content
 
 
+def test_build_project_locally_verbose_prints_env_mapping(tmp_path, monkeypatch, capsys):
+    """`--verbose` surfaces the resolved env mapping on a non-dryrun local build."""
+    cli = RecordingCLI(tmp_path)
+    monkeypatch.setattr(build_cmd, "run_command", lambda cmd, **kwargs: None)
+    monkeypatch.setattr(build_cmd.shutil, "which", lambda name: None)
+
+    build_cmd.build_project_locally(
+        cli, "smoke_app", dryrun=False, verbose=True, extra_env={"DEMO_VAR": "on"}
+    )
+
+    assert "export DEMO_VAR=on" in capsys.readouterr().out
+
+
 def test_handle_build_container_branch_passes_recursive_local_command(tmp_path, monkeypatch):
     project = {
         "project_name": "smoke_app",

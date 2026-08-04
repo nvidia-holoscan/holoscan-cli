@@ -170,6 +170,7 @@ def handle_build(cli, args: argparse.Namespace) -> None:
             build_type=args.build_type,
             with_operators=build_args.get("with_operators"),
             dryrun=args.dryrun,
+            verbose=args.verbose,
             pkg_generator=getattr(args, "pkg_generator", "DEB"),
             parallel=getattr(args, "parallel", None),
             benchmark=getattr(args, "benchmark", False),
@@ -236,6 +237,7 @@ def build_project_locally(
     build_type: Optional[str] = None,
     with_operators: Optional[str] = None,
     dryrun: bool = False,
+    verbose: bool = False,
     pkg_generator: str = "DEB",
     parallel: Optional[str] = None,
     benchmark: bool = False,
@@ -276,7 +278,7 @@ def build_project_locally(
             prefix=cli.prefix,
             verbose=dryrun,
         )
-        update_env(build_env, extra_env, path_mapping, verbose=dryrun)
+        update_env(build_env, extra_env, path_mapping, verbose=(verbose or dryrun))
 
     # Write external_operators_manifest.cmake before cmake configure so that
     # CMakeLists.txt:include(…OPTIONAL) picks it up and FetchContent_MakeAvailable
