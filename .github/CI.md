@@ -38,7 +38,7 @@ surface is exercised before merge. Jobs run in this order:
 | `test` matrix                 | `poetry run pytest` on Python 3.10, 3.11, 3.12, and 3.13 (Ubuntu).         |
 | `HoloHub project integration` | Test current CLI against HoloHub's real project tree and wrapper suite.    |
 | `build wheel + sdist`         | `poetry build` + `twine check` + `assert_wheel_contents.sh`.               |
-| `installed artifact smoke`    | Test clean wheel and sdist installs, the `create` extra, uvx, and pipx.    |
+| `installed artifact smoke`    | Test clean installs, installed-wheel Module creation, uvx, and pipx.       |
 | `CPU CLI + Docker smoke test` | Installed-wheel source-project dry-runs plus a tiny CPU Docker build.      |
 
 The 3.12 `test` entry uploads coverage to Coveralls; the other matrix entries
@@ -76,6 +76,8 @@ Pipeline:
    RC dispatches do not leave stray refs.
 3. **`smoke-test`** — runs `scripts/smoke_test.sh` against clean installs of
    both the wheel and sdist, and verifies the wheel's `create` extra resolves.
+   Normal push/PR CI also creates one Module from that installed wheel and
+   checks its exact CLI requirement and launcher-free scaffold.
 4. **`publish-test-pypi`** — runs for both GA and non-GA dispatches.
    Publishes via PyPA's trusted-publisher action
    (`pypa/gh-action-pypi-publish@release/v1`), no API token. Trust is
@@ -265,10 +267,13 @@ each pattern in two lists:
   * `holoscan_cli/metadata/*.schema.json`
   * `holoscan_cli/setup_scripts/*`
   * `holoscan_cli/testing/`
+  * the packaged Module template, including `requirements-cli.txt`,
+    `.dockerignore`, and the retained local wheelhouse
 * **forbidden** — paths that must NOT be present (regressions from past
   cleanups):
   * `holoscan_cli/cmake/` (moved to HoloHub in commit `6aeb611`)
   * `holoscan_cli/testing/test_all_applications/` (decoupled in `2d2f44a`)
+  * a generated Module-root `holohub` launcher
 
 The same script runs in both pipelines so a wheel that passes
 `main.yaml` will pass `release.yaml`.

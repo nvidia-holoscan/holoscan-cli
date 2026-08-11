@@ -1,0 +1,48 @@
+# syntax=docker/dockerfile:1
+
+# SPDX-FileCopyrightText: Copyright (c) {% now 'utc', '%Y' %} {{ cookiecutter.full_name }}{% if cookiecutter.affiliation %} / {{ cookiecutter.affiliation }}{% endif %}. All rights reserved.
+# SPDX-License-Identifier: {{ cookiecutter._license }}
+#
+# Development container for {{ cookiecutter.project_name }}.
+#
+# Extends the Holoscan SDK image with the build tools needed to configure,
+# compile, and test the module from a live source mount. No source is copied
+# into the image; the project tree is bind-mounted by the holoscan-cli at
+# /workspace/{{ cookiecutter.module_slug }} when the container is launched.
+#
+# Build & run via the installed Holoscan CLI:
+#   holoscan run-container
+#
+# Manual build (without the CLI):
+#   docker build -t holoscan-{{ cookiecutter.module_slug.replace('_', '-') }} .
+
+ARG BASE_IMAGE=nvcr.io/nvidia/clara-holoscan/holoscan:v{{ cookiecutter.holoscan_version }}-cuda13-dgpu
+FROM ${BASE_IMAGE}
+
+ARG DEBIAN_FRONTEND=noninteractive
+ARG PIP_EXTRA_INDEX_URL
+
+# Install the Module's exact CLI requirement. The optional local wheelhouse is
+# bind-mounted only for this step, so unpublished development wheels do not
+# become image-layer contents. Published versions resolve from the configured
+# package index when the wheelhouse is empty.
+COPY requirements-cli.txt /tmp/requirements-cli.txt
+RUN --mount=type=bind,source=.holoscan-cli-wheelhouse,target=/tmp/holoscan-cli-wheelhouse,readonly \
+    python3 -m pip install --no-cache-dir \
+        --find-links=/tmp/holoscan-cli-wheelhouse \
+        -r /tmp/requirements-cli.txt \
+    && command -v holoscan \
+    && holoscan version \
+    && python3 -c 'from importlib.metadata import version; from pathlib import Path; lines = [line.strip() for line in Path("/tmp/requirements-cli.txt").read_text().splitlines() if line.strip() and not line.lstrip().startswith("#")]; expected = lines[0].split("==", 1)[1]; actual = version("holoscan-cli"); assert actual == expected, f"installed {actual}, expected {expected}"'
+
+# TODO: add module-specific runtime / build dependencies below.
+{% if cookiecutter.language == "cpp" %}RUN apt-get update \
+    && apt-get install --no-install-recommends -y \
+        libgtest-dev \
+        clang-format \
+        pybind11-dev \
+    && rm -rf /var/lib/apt/lists/*
+{% endif %}
+# Python tooling: pytest-timeout for tests, build + scikit-build-core for
+# `holoscan package --pkg-generator WHEEL` (drives `python -m build`).
+RUN pip install --no-cache-dir pytest-timeout build scikit-build-core

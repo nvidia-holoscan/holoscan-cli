@@ -26,6 +26,10 @@ required=(
   'holoscan_cli/setup_scripts/.+'
   'holoscan_cli/setup_scripts/requirements\.template\.txt$'
   'holoscan_cli/testing/'
+  'holoscan_cli/templates/module/cookiecutter\.json$'
+  'holoscan_cli/templates/module/.+/requirements-cli\.txt$'
+  'holoscan_cli/templates/module/.+/\.dockerignore$'
+  'holoscan_cli/templates/module/.+/\.holoscan-cli-wheelhouse/\.gitignore$'
 )
 for pattern in "${required[@]}"; do
   if ! echo "$listing" | grep -qE "$pattern"; then
@@ -37,6 +41,7 @@ done
 forbidden=(
   'holoscan_cli/cmake/'
   'holoscan_cli/testing/test_all_applications/'
+  'holoscan_cli/templates/module/.+/holohub$'
 )
 for pattern in "${forbidden[@]}"; do
   if echo "$listing" | grep -qE "$pattern"; then

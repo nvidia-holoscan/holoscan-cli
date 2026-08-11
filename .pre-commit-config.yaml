@@ -15,6 +15,11 @@
 
 # HoloHub-derived lint baseline for the consolidated Holoscan CLI.
 # Run `pre-commit autoupdate` to refresh to latest compatible versions.
+#
+# The cookiecutter output tree contains Jinja in source filenames and file
+# bodies, so raw Python/JSON/YAML linters cannot parse it. Generated Python and
+# metadata are exercised by tests/unit/test_create_module.py instead.
+exclude: '^src/holoscan_cli/templates/module/\{\{cookiecutter\.module_repo_name\}\}/'
 
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks

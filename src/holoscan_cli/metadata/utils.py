@@ -116,10 +116,17 @@ def iter_metadata_paths(
         )
 
     for repo_path in repo_paths:
-        for root, _, files in os.walk(repo_path):
-            if "metadata.json" not in files:
-                continue
-            file_path = os.path.join(root, "metadata.json")
+        path = Path(repo_path)
+        if path.is_file():
+            candidates = [str(path)] if path.name == "metadata.json" else []
+        else:
+            candidates = [
+                os.path.join(root, "metadata.json")
+                for root, _, files in os.walk(path)
+                if "metadata.json" in files
+            ]
+
+        for file_path in candidates:
             if excludes and _matches_segment(file_path, excludes):
                 continue
 

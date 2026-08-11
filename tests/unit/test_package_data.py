@@ -72,6 +72,24 @@ REQUIRED_SETUP_SCRIPTS = {
     "requirements.template.txt",
 }
 
+REQUIRED_MODULE_TEMPLATE_FILES = {
+    "cookiecutter.json",
+    "hooks/post_gen_project.py",
+    "{{cookiecutter.module_repo_name}}/requirements-cli.txt",
+    "{{cookiecutter.module_repo_name}}/.dockerignore",
+    "{{cookiecutter.module_repo_name}}/.holoscan-cli-wheelhouse/.gitignore",
+    "{{cookiecutter.module_repo_name}}/Dockerfile",
+    "{{cookiecutter.module_repo_name}}/cmake/HoloHubConfigHelpers.cmake",
+    "{{cookiecutter.module_repo_name}}/cmake/holohub_configure_deb.cmake",
+    "{{cookiecutter.module_repo_name}}/cmake/Config.cmake.in",
+    "{{cookiecutter.module_repo_name}}/cmake/pybind11_add_holohub_module.cmake",
+    "{{cookiecutter.module_repo_name}}/cmake/pybind11/__init__.py",
+    "{{cookiecutter.module_repo_name}}/cmake/pydoc/macros.hpp",
+    ("{{cookiecutter.module_repo_name}}/.github/workflows/scripts/" "check_copyright.py"),
+    "{{cookiecutter.module_repo_name}}/.github/workflows/scripts/gitutils.py",
+    ("{{cookiecutter.module_repo_name}}/.github/workflows/scripts/" "validate_metadata.py"),
+}
+
 
 PYPROJECT = Path(__file__).resolve().parents[2] / "pyproject.toml"
 README = Path(__file__).resolve().parents[2] / "README.md"
@@ -130,6 +148,17 @@ def test_setup_scripts_are_packaged():
     }
     missing = REQUIRED_SETUP_SCRIPTS - files
     assert not missing, f"missing bundled setup scripts: {missing}"
+
+
+def test_standalone_module_template_assets_are_packaged():
+    """The default creator must not reach back into a HoloHub checkout."""
+    template = importlib.resources.files("holoscan_cli.templates").joinpath("module")
+    missing = [
+        relative
+        for relative in sorted(REQUIRED_MODULE_TEMPLATE_FILES)
+        if not template.joinpath(relative).is_file()
+    ]
+    assert not missing, f"missing bundled Module template assets: {missing}"
 
 
 def test_bundled_template_script_uses_bundled_requirements(tmp_path):
@@ -294,6 +323,7 @@ def test_pyproject_create_extra_bundles_validator_deps():
         "jsonschema",
         "referencing",
         "cookiecutter",
+        "packaging",
     }, create_specs
 
     jsonschema_spec = next(spec for spec in create_specs if spec.startswith("jsonschema"))

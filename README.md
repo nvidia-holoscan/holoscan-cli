@@ -23,7 +23,14 @@ Per-repo wrappers install this package and delegate to `holoscan`, layering on t
 | [HoloHub](https://github.com/nvidia-holoscan/holohub) | `./holohub` | source-project metadata search paths, container/workspace names |
 | [I4H Workflows](https://github.com/isaac-for-healthcare/i4h-workflows) | `./i4h` | RTI DDS license auto-download + mount, TTY serial device passthrough |
 
-Common env vars: `HOLOSCAN_CLI_ROOT` (repo root), `HOLOSCAN_CLI_SEARCH_PATH` (subdirs to scan for `metadata.json`), `HOLOSCAN_CLI_PATH_PREFIX` (placeholder prefix in metadata templates), `HOLOSCAN_CLI_REPO_PREFIX` (container image name prefix). The legacy `HOLOHUB_*` spelling is no longer honored since holoscan v4.3.0 — set the `HOLOSCAN_CLI_*` names directly. `holoscan env-info` lists every env var the CLI reads in the current shell.
+Common env vars: `HOLOSCAN_CLI_ROOT` (repo root), `HOLOSCAN_CLI_SEARCH_PATH`
+(subdirs to scan for `metadata.json`), `HOLOSCAN_CLI_CREATE_TEMPLATE` (a
+wrapper-selected default overridden by `create --template`),
+`HOLOSCAN_CLI_PATH_PREFIX` (placeholder prefix in metadata templates), and
+`HOLOSCAN_CLI_REPO_PREFIX` (container image name prefix). The legacy
+`HOLOHUB_*` spelling is no longer honored since holoscan v4.3.0 — set the
+`HOLOSCAN_CLI_*` names directly. `holoscan env-info` lists every env var the CLI
+reads in the current shell.
 
 ## JSON output
 
@@ -50,6 +57,7 @@ src/holoscan_cli/
   setup_scripts/      bundled bash scripts backing `setup --scripts` and
                       `build-container --extra-scripts`
   metadata/           project metadata JSON schemas
+  templates/module/   self-contained standalone Module cookiecutter
   testing/            CTest helpers shipped in the wheel
 ```
 
@@ -62,6 +70,32 @@ A platform supported by the [NVIDIA Holoscan SDK](https://docs.nvidia.com/holosc
 ```bash
 pip install holoscan-cli
 holoscan --help
+```
+
+To scaffold a standalone Holoscan Module, install the optional creation
+dependencies and run `create` from the directory that should contain the new
+repository:
+
+```bash
+pip install 'holoscan-cli[create]'
+holoscan create my-sensor
+```
+
+This creates `./holoscan-my-sensor` from the standard Module template bundled
+with the package. Use `--directory <path>` to select another output parent or
+`--template <path>` to use an explicit cookiecutter template. The generated
+repository contains an exact `requirements-cli.txt` contract and uses the
+environment's global `holoscan` command for build, run, test, install, and
+package operations. It does not contain a local launcher or require a HoloHub
+clone.
+
+An existing empty destination, or a cloned repository containing only `.git`,
+can also be populated without overwriting Git state. Because `--directory`
+names the output parent, run this from inside a pre-cloned
+`holoscan-my-sensor` repository:
+
+```bash
+holoscan create "My Sensor" --directory ..
 ```
 
 For transient use without keeping an installed environment, package-name based

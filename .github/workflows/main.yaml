@@ -249,7 +249,24 @@ jobs:
           wheel=$(find dist -name 'holoscan_cli-*.whl' | head -n1)
           /tmp/holoscan-cli-smoke/bin/pip install "${wheel}[create]"
           /tmp/holoscan-cli-smoke/bin/python -c \
-            'import cookiecutter, jsonschema, referencing'
+            'import cookiecutter, jsonschema, packaging, referencing'
+          create_root=$(mktemp -d)
+          (
+            cd "$create_root"
+            /tmp/holoscan-cli-smoke/bin/holoscan create "Artifact Smoke" --interactive false
+          )
+          module_root="$create_root/holoscan-artifact-smoke"
+          installed_version=$(/tmp/holoscan-cli-smoke/bin/python -c \
+            'from importlib.metadata import version; print(version("holoscan-cli"))')
+          test -f "$module_root/metadata.json"
+          /tmp/holoscan-cli-smoke/bin/python -c \
+            'import json,sys; data=json.load(open(sys.argv[1])); assert "module" in data' \
+            "$module_root/metadata.json"
+          grep -Fx "holoscan-cli==$installed_version" "$module_root/requirements-cli.txt"
+          test ! -e "$module_root/holohub"
+          test ! -e "$module_root/holoscan"
+          test -f "$module_root/CMakeLists.txt"
+          test -f "$module_root/applications/artifact_smoke_pipeline/python/metadata.json"
 
       - name: Install sdist in clean venv
         run: |
