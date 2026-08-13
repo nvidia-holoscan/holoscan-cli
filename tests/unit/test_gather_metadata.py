@@ -25,10 +25,18 @@ def test_extract_project_name_from_language_subdirectory():
 def test_module_uses_declared_name_instead_of_mount_directory(tmp_path):
     mounted_root = tmp_path / "normalized_workspace"
     mounted_root.mkdir()
-    (mounted_root / "metadata.json").write_text(
-        json.dumps({"module": {"name": "holoscan-example-module"}}), encoding="utf-8"
+    cases = (
+        ("holoscan-example-module", "holoscan-example-module"),
+        ("  holoscan-example-module  ", "holoscan-example-module"),
+        ("   ", mounted_root.name),
+        (None, mounted_root.name),
     )
 
-    projects = gather_metadata([str(mounted_root)])
+    for declared_name, expected_name in cases:
+        (mounted_root / "metadata.json").write_text(
+            json.dumps({"module": {"name": declared_name}}), encoding="utf-8"
+        )
 
-    assert projects[0]["project_name"] == "holoscan-example-module"
+        projects = gather_metadata([str(mounted_root)])
+
+        assert projects[0]["project_name"] == expected_name
