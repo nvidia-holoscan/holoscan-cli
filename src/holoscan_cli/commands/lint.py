@@ -136,8 +136,18 @@ def _install_lint_deps(cli, dry_run: bool, env: dict) -> None:
     pip_install_cmd = [sys.executable, "-m", "pip", "install"]
     if not _running_in_virtual_env():
         pip_install_cmd.append("--user")
-    lint_requirements = cli.HOLOHUB_ROOT / "utilities" / "requirements.lint.txt"
-    if lint_requirements.exists():
+    lint_requirements = next(
+        (
+            candidate
+            for candidate in (
+                cli.HOLOHUB_ROOT / "requirements-lint.txt",
+                cli.HOLOHUB_ROOT / "utilities" / "requirements.lint.txt",
+            )
+            if candidate.exists()
+        ),
+        None,
+    )
+    if lint_requirements is not None:
         pip_install_cmd.extend(["-r", str(lint_requirements)])
     else:
         pip_install_cmd.append("pre-commit")
@@ -168,6 +178,9 @@ def handle_lint(cli, args: argparse.Namespace) -> None:
     can intercept this subcommand to route to their own tooling.
     """
     env = os.environ.copy()
+    # System-language hooks must be able to use the same environment and
+    # installed package that dispatched lint, including without a wrapper.
+    env.setdefault("HOLOSCAN_CLI_PYTHON_BIN", sys.executable)
     if not _running_in_virtual_env():
         local_bin_path = Path.home() / ".local" / "bin"
         if str(local_bin_path) not in env.get("PATH", ""):

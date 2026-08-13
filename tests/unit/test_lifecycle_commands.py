@@ -565,6 +565,7 @@ def test_handle_test_container_adds_coverage_build_args_and_ctest_options(tmp_pa
     ctest_command = run_call["extra_args"][1]
     assert run_call["docker_opts"] == "--entrypoint=bash"
     assert run_call["as_root"] is True
+    assert run_call["local_sdk_root"] is None
     assert "-DAPP=smoke_app" in ctest_command
     assert "-DTAG=image" in ctest_command
     assert (
@@ -576,6 +577,28 @@ def test_handle_test_container_adds_coverage_build_args_and_ctest_options(tmp_pa
     # `--ctest-options` must propagate verbatim into the ctest invocation
     # (pre-consolidation `test_holohub_test_ctest_options`).
     assert "-DCASE=smoke" in ctest_command
+
+
+def test_handle_test_forwards_explicit_local_sdk_root(tmp_path):
+    cli = RecordingCLI(tmp_path)
+    sdk_root = tmp_path / "sdk"
+    args = _container_args(
+        coverage=False,
+        clear_cache=False,
+        no_xvfb=True,
+        site_name=None,
+        cdash_url=None,
+        platform_name=None,
+        cmake_options=None,
+        ctest_options=None,
+        ctest_script=None,
+        build_name_suffix=None,
+        local_sdk_root=str(sdk_root),
+    )
+
+    test_cmd.handle_test(cli, args)
+
+    assert cli.container.run_calls[0]["local_sdk_root"] == str(sdk_root)
 
 
 def test_handle_test_local_runs_ctest_in_repo_with_environment(tmp_path, monkeypatch):

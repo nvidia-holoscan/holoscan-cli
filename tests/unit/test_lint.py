@@ -73,6 +73,7 @@ def test_lint_dryrun_uses_pre_commit_all_files(tmp_path, monkeypatch):
             "env": calls[0]["env"],
         }
     ]
+    assert calls[0]["env"]["HOLOSCAN_CLI_PYTHON_BIN"] == sys.executable
 
 
 def test_lint_dryrun_limits_to_git_tracked_path(tmp_path, monkeypatch):
@@ -117,6 +118,29 @@ def test_lint_dryrun_limits_to_git_tracked_path(tmp_path, monkeypatch):
     ]
 
 
+def test_lint_preserves_explicit_python_for_system_hooks(tmp_path, monkeypatch):
+    root = tmp_path / "repo"
+    root.mkdir()
+    (root / ".pre-commit-config.yaml").write_text("repos: []\n")
+    lint_cli = _lint_cli(root, monkeypatch)
+    calls = []
+    monkeypatch.setenv("HOLOSCAN_CLI_PYTHON_BIN", "/opt/holoscan/bin/python")
+    monkeypatch.setattr(
+        commands_lint,
+        "run_command",
+        lambda cmd, check=False, dry_run=False, env=None: (
+            calls.append(env) or SimpleNamespace(returncode=0)
+        ),
+    )
+
+    args = argparse.Namespace(path=".", fix=False, install_dependencies=False, dryrun=True)
+    with pytest.raises(SystemExit) as exc_info:
+        commands_lint.handle_lint(lint_cli, args)
+
+    assert exc_info.value.code == 0
+    assert calls[0]["HOLOSCAN_CLI_PYTHON_BIN"] == "/opt/holoscan/bin/python"
+
+
 def test_install_lint_deps_falls_back_to_pre_commit_package(tmp_path, monkeypatch):
     root = tmp_path / "repo"
     root.mkdir()
@@ -137,6 +161,34 @@ def test_install_lint_deps_falls_back_to_pre_commit_package(tmp_path, monkeypatc
     assert calls[0]["dry_run"] is True
     assert calls[1]["cmd"] == [sys.executable, "-m", "pre_commit", "install-hooks"]
     assert calls[1]["dry_run"] is True
+
+
+def test_install_lint_deps_prefers_root_requirements_file(tmp_path, monkeypatch):
+    root = tmp_path / "repo"
+    root.mkdir()
+    requirements = root / "requirements-lint.txt"
+    requirements.write_text("pre-commit==4.6.2\n", encoding="utf-8")
+    (root / ".pre-commit-config.yaml").write_text("repos: []\n")
+    lint_cli = _lint_cli(root, monkeypatch)
+    calls = []
+
+    monkeypatch.setattr(
+        commands_lint,
+        "run_command",
+        lambda cmd, dry_run=False, env=None: (calls.append(cmd) or SimpleNamespace(returncode=0)),
+    )
+    monkeypatch.setattr(commands_lint, "_running_in_virtual_env", lambda: True)
+
+    commands_lint._install_lint_deps(lint_cli, dry_run=True, env={})
+
+    assert calls[0] == [
+        sys.executable,
+        "-m",
+        "pip",
+        "install",
+        "-r",
+        str(requirements),
+    ]
 
 
 def test_lint_dryrun_with_fix_still_runs_pre_commit_all_files(tmp_path, monkeypatch):

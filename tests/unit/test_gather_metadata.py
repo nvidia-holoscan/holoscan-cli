@@ -13,8 +13,22 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from holoscan_cli.metadata.gather_metadata import extract_project_name
+import json
+
+from holoscan_cli.metadata.gather_metadata import extract_project_name, gather_metadata
 
 
 def test_extract_project_name_from_language_subdirectory():
     assert extract_project_name("applications/smoke_app/python/metadata.json") == "smoke_app"
+
+
+def test_module_uses_declared_name_instead_of_mount_directory(tmp_path):
+    mounted_root = tmp_path / "normalized_workspace"
+    mounted_root.mkdir()
+    (mounted_root / "metadata.json").write_text(
+        json.dumps({"module": {"name": "holoscan-example-module"}}), encoding="utf-8"
+    )
+
+    projects = gather_metadata([str(mounted_root)])
+
+    assert projects[0]["project_name"] == "holoscan-example-module"

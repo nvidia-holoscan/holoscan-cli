@@ -90,6 +90,13 @@ def gather_metadata(repo_paths: list[str], exclude_paths: list[str] | None = Non
                     data["metadata"] = data.pop(schema_type)
 
                     project_name = extract_project_name(file_path)
+                    if schema_type == "module":
+                        declared_name = data["metadata"].get("name")
+                        if isinstance(declared_name, str) and declared_name.strip():
+                            # A Module may be checked out or mounted under a normalized
+                            # workspace path. Its declared identity must not change with
+                            # that directory name.
+                            project_name = declared_name.strip()
                     source_folder = Path(file_path).parent
                     data["project_name"] = project_name
                     data["source_folder"] = str(source_folder)
