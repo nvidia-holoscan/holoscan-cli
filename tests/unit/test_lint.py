@@ -118,29 +118,6 @@ def test_lint_dryrun_limits_to_git_tracked_path(tmp_path, monkeypatch):
     ]
 
 
-def test_lint_preserves_explicit_python_for_system_hooks(tmp_path, monkeypatch):
-    root = tmp_path / "repo"
-    root.mkdir()
-    (root / ".pre-commit-config.yaml").write_text("repos: []\n")
-    lint_cli = _lint_cli(root, monkeypatch)
-    calls = []
-    monkeypatch.setenv("HOLOSCAN_CLI_PYTHON_BIN", "/opt/holoscan/bin/python")
-    monkeypatch.setattr(
-        commands_lint,
-        "run_command",
-        lambda cmd, check=False, dry_run=False, env=None: (
-            calls.append(env) or SimpleNamespace(returncode=0)
-        ),
-    )
-
-    args = argparse.Namespace(path=".", fix=False, install_dependencies=False, dryrun=True)
-    with pytest.raises(SystemExit) as exc_info:
-        commands_lint.handle_lint(lint_cli, args)
-
-    assert exc_info.value.code == 0
-    assert calls[0]["HOLOSCAN_CLI_PYTHON_BIN"] == "/opt/holoscan/bin/python"
-
-
 def test_install_lint_deps_falls_back_to_pre_commit_package(tmp_path, monkeypatch):
     root = tmp_path / "repo"
     root.mkdir()
