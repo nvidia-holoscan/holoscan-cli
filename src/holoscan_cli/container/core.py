@@ -1000,10 +1000,7 @@ class HoloscanContainer:
 
     def get_local_sdk_options(self, local_sdk_root: Optional[Union[str, Path]]) -> List[str]:
         """Get Holoscan SDK-related options"""
-        # Precedence: the explicit command option outranks the environment. Both
-        # are validated here, at the point of use, so a valid --local-sdk-root
-        # overrides an invalid HOLOSCAN_SDK_ROOT and an invalid option is
-        # rejected instead of being mounted into the container.
+        # --local-sdk-root outranks HOLOSCAN_SDK_ROOT. Validate whichever wins.
         if local_sdk_root is None:
             env_root = os.environ.get("HOLOSCAN_SDK_ROOT")
             if not env_root:

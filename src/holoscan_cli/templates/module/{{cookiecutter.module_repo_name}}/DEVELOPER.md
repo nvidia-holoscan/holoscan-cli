@@ -57,17 +57,12 @@ it never creates or repairs a virtual environment for you.
 | `holoscan test` | Run CTest (C++ unit tests) and pytest |
 | `holoscan install --dev` | Install a `.pth` hook so `import holoscan.{{ cookiecutter.module_slug }}` works in any shell |
 
-To upgrade, edit the exact pin in `requirements-cli.txt`, reinstall it in your selected
-environment, and rebuild the development image. For a release candidate, use NVIDIA's package
-index as shown in the comments generated in that file and pass the corresponding Docker build
-argument:
+To upgrade, edit the pin in `requirements-cli.txt`, reinstall it, and rebuild the image. A
+pre-release needs NVIDIA's index:
 
 ```bash
 python -m pip install --extra-index-url https://pypi.nvidia.com -r requirements-cli.txt
 ```
-
-Both the host environment and the image install the pin from a package index, so a published
-version needs no further configuration.
 
 If a container reports a version mismatch, rebuild it. Runtime commands deliberately never
 pip-install into a running container.

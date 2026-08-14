@@ -21,9 +21,8 @@ FROM ${BASE_IMAGE}
 
 ARG DEBIAN_FRONTEND=noninteractive
 
-# Install the Module's exact CLI requirement. holoscan-cli has no runtime
-# dependencies on Python 3.11+, so installing it into the image's interpreter
-# adds nothing else.
+# Install the exact CLI pin. holoscan-cli has no runtime dependencies on
+# Python 3.11+, so this adds nothing else to the image.
 COPY requirements-cli.txt /tmp/requirements-cli.txt
 RUN python3 -m pip install --no-cache-dir \
         -r /tmp/requirements-cli.txt \
@@ -37,9 +36,7 @@ RUN python3 -m pip install --no-cache-dir \
         pybind11-dev \
     && rm -rf /var/lib/apt/lists/*
 {% endif %}
-# pytest-timeout for tests, build + scikit-build-core for
-# `holoscan package --pkg-generator WHEEL`. These must live in the same
-# interpreter the CLI runs on, because build and package configure CMake with
-# -DPython3_EXECUTABLE=<that interpreter> and the wheel build shells out to it.
+# Test and wheel-build tooling. Must be in the same interpreter the CLI runs
+# on: build and package pass it to CMake as Python3_EXECUTABLE.
 RUN python3 -m pip install --no-cache-dir \
         pytest-timeout build scikit-build-core

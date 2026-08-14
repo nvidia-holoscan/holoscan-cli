@@ -604,11 +604,8 @@ def _resolve_project_profile(
     sdk_source = None
     configured_cuda = resolved.get("default_cuda_version")
     cuda_for_sdk = configured_cuda if isinstance(configured_cuda, str) else None
-    # An invalid HOLOSCAN_SDK_ROOT is reported, not raised. Discovery runs before
-    # the command parser, so raising here would defeat the documented precedence
-    # by rejecting the environment before --local-sdk-root can override it, and
-    # would fail commands that never need an SDK. Commands that do need one
-    # validate at the point of use and fail closed there.
+    # Report an invalid HOLOSCAN_SDK_ROOT instead of raising: this runs before the
+    # parser, so --local-sdk-root must still be able to override it.
     env_root = environ.get("HOLOSCAN_SDK_ROOT")
     env_error = None
     if env_root:
@@ -627,8 +624,8 @@ def _resolve_project_profile(
             else:
                 sdk_source = "HOLOSCAN_SDK_ROOT"
     if env_error:
-        # Do not fall back to committed hints: an explicit override that cannot be
-        # honored must not silently resolve a different tree.
+        # An explicit override that cannot be honored must not silently resolve a
+        # different tree, so do not fall back to committed hints.
         resolved["warnings"].append(
             f"{env_error} Pass --local-sdk-root to override it for a single command."
         )
@@ -880,11 +877,9 @@ def discover_project_context(
     env_root = env.get("HOLOSCAN_CLI_ROOT")
     if env_root:
         root = _resolve_explicit_root(env_root, original_cwd)
-        # Apply the same recognition check as --project-root. Accepting any
-        # existing directory would silently produce an empty project whose
-        # requirements-cli.txt and [tool.holoscan] are never read, bypassing the
-        # Module contract. The environment form warns and falls back to cwd
-        # rather than failing, because unlike the command option it is ambient.
+        # Same recognition check as --project-root, or an arbitrary directory
+        # yields an empty project that skips the Module contract. This form warns
+        # and falls back rather than failing, because it is ambient.
         if not root.exists() or not root.is_dir():
             warnings = (f"Ignoring invalid HOLOSCAN_CLI_ROOT={env_root!r}; discovering from cwd.",)
         else:

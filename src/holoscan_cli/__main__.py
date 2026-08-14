@@ -298,10 +298,8 @@ def _dispatch(argv: Optional[list[str]]) -> None:
     set_up_logging(args.log_level)
 
     if args.command == "version" or args.show_version:
-        # `--version` answers "which CLI is this?" and must never depend on the
-        # project: an unreadable config or a schema newer than this CLI would
-        # otherwise make the question unanswerable. `version` still reports the
-        # project, but a resolution failure is data in the report, not an exit.
+        # --version must not depend on the project. `version` reports it, but a
+        # resolution failure is a field in the report rather than an exit.
         context = None
         if not args.show_version:
             try:

@@ -63,15 +63,9 @@ def _running_in_virtual_env() -> bool:
 def _pre_commit_command(path: Optional[str] = None) -> Optional[List[str]]:
     """Return the command that runs pre-commit, or None when unavailable.
 
-    The active interpreter's module wins so a project-pinned pre-commit in the
-    same environment is used. An executable on *path* is the fallback: `uvx`/`uv
-    tool` environments cannot import a separately installed pre-commit and have
-    no pip to install one, so probing only the interpreter would report a
-    perfectly usable pre-commit as missing.
-
-    *path* must be the PATH the child process will run with, not this process's
-    own; ``handle_lint`` prepends ``~/.local/bin`` for non-virtualenv installs,
-    and a pipx- or ``--user``-installed pre-commit lives only there.
+    Prefers the active interpreter, then an executable on *path*. The fallback
+    matters for uvx and pipx installs, which are on PATH but not importable.
+    Pass the PATH the child will use, not this process's own.
     """
     executable = shutil.which("pre-commit", path=path)
     for cmd in ([sys.executable, "-m", "pre_commit"], *([[executable]] if executable else [])):
