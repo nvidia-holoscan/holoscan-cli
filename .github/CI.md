@@ -267,8 +267,8 @@ each pattern in two lists:
   * `holoscan_cli/metadata/*.schema.json`
   * `holoscan_cli/setup_scripts/*`
   * `holoscan_cli/testing/`
-  * the packaged Module template, including `requirements-cli.txt`,
-    `.dockerignore`, and the retained local wheelhouse
+  * the packaged Module template, including `requirements-cli.txt`
+    and `.dockerignore`
 * **forbidden** — paths that must NOT be present (regressions from past
   cleanups):
   * `holoscan_cli/cmake/` (moved to HoloHub in commit `6aeb611`)

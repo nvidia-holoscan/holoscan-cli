@@ -23,9 +23,8 @@ jobs:
         run: ruff check .
       - name: Validate metadata.json against the Holoscan CLI schema
         run: |
-          pip install --find-links=.holoscan-cli-wheelhouse -r requirements-cli.txt
-          pip install --find-links=.holoscan-cli-wheelhouse \
-            'holoscan-cli[create]' -c requirements-cli.txt
+          pip install -r requirements-cli.txt
+          pip install 'holoscan-cli[create]' -c requirements-cli.txt
           python .github/workflows/scripts/validate_metadata.py
 {% if cookiecutter.language == 'cpp' %}
       - name: Install clang-format

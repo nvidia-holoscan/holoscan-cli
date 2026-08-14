@@ -30,15 +30,12 @@ RUN apt-get update \
     && apt-get install --no-install-recommends -y python3-venv \
     && rm -rf /var/lib/apt/lists/*
 
-# Install the Module's exact CLI requirement. The optional local wheelhouse is
-# bind-mounted only for this step, so unpublished development wheels do not
-# become image-layer contents. Published versions resolve from the configured
-# package index when the wheelhouse is empty.
+# Install the Module's exact CLI requirement from the configured package index.
+# PIP_INDEX_URL and PIP_EXTRA_INDEX_URL above are honored by pip, so an
+# unpublished build can be resolved by pointing them at a local index.
 COPY requirements-cli.txt /tmp/requirements-cli.txt
-RUN --mount=type=bind,source=.holoscan-cli-wheelhouse,target=/tmp/holoscan-cli-wheelhouse,readonly \
-    python3 -m venv /opt/holoscan-cli \
+RUN python3 -m venv /opt/holoscan-cli \
     && /opt/holoscan-cli/bin/python -m pip install --no-cache-dir \
-        --find-links=/tmp/holoscan-cli-wheelhouse \
         -r /tmp/requirements-cli.txt \
     && ln -s /opt/holoscan-cli/bin/holoscan /usr/local/bin/holoscan \
     && command -v holoscan \

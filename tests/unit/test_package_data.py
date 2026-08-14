@@ -78,7 +78,6 @@ REQUIRED_MODULE_TEMPLATE_FILES = {
     "{{cookiecutter.module_repo_name}}/requirements-cli.txt",
     "{{cookiecutter.module_repo_name}}/pyproject.toml",
     "{{cookiecutter.module_repo_name}}/.dockerignore",
-    "{{cookiecutter.module_repo_name}}/.holoscan-cli-wheelhouse/.gitignore",
     "{{cookiecutter.module_repo_name}}/Dockerfile",
     "{{cookiecutter.module_repo_name}}/cmake/HoloHubConfigHelpers.cmake",
     "{{cookiecutter.module_repo_name}}/cmake/holohub_configure_deb.cmake",

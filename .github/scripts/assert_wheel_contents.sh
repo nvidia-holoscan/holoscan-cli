@@ -29,7 +29,6 @@ required=(
   'holoscan_cli/templates/module/cookiecutter\.json$'
   'holoscan_cli/templates/module/.+/requirements-cli\.txt$'
   'holoscan_cli/templates/module/.+/\.dockerignore$'
-  'holoscan_cli/templates/module/.+/\.holoscan-cli-wheelhouse/\.gitignore$'
 )
 for pattern in "${required[@]}"; do
   if ! echo "$listing" | grep -qE "$pattern"; then

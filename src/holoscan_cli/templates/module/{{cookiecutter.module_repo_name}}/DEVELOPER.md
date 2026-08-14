@@ -12,7 +12,6 @@ distributing this Holoscan Module.
 ```text
 {{ cookiecutter.module_repo_name }}/
 ├── requirements-cli.txt            # Exact holoscan-cli version contract
-├── .holoscan-cli-wheelhouse/       # Ignored local source for unpublished wheels
 ├── Dockerfile                      # Development container image
 ├── CMakeLists.txt                  # Root CMake — orchestrates operators/applications/tests
 ├── pyproject.toml                  # Python packaging metadata (scikit-build-core)
@@ -68,11 +67,14 @@ python -m pip install --extra-index-url https://pypi.nvidia.com -r requirements-
 holoscan build-container --build-args="--build-arg PIP_EXTRA_INDEX_URL=https://pypi.nvidia.com"
 ```
 
-For an unpublished development CLI, put the one pre-built wheel matching the exact pin in
-`.holoscan-cli-wheelhouse/`, install with
-`python -m pip install --find-links=.holoscan-cli-wheelhouse -r requirements-cli.txt`, and build
-the image normally. Reuse the same wheel bytes on host and in the image; do not rebuild a Git
-checkout independently in each environment.
+Both the host environment and the image install the pin from a package index. To use an
+unpublished build, serve it from a local index and point pip at it in both places, so the same
+artifact is used everywhere:
+
+```bash
+python -m pip install --index-url http://<host>:<port>/simple -r requirements-cli.txt
+holoscan build-container --build-args="--build-arg PIP_INDEX_URL=http://<host>:<port>/simple"
+```
 
 If a container reports a version mismatch, rebuild it. Runtime commands deliberately never
 pip-install into a running container.

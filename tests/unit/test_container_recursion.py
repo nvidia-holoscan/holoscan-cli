@@ -135,22 +135,6 @@ def test_environment_args_forward_sccache_canonical_name_only(monkeypatch):
     assert all(not a.startswith("HOLOHUB_") for a in args)
 
 
-def test_local_source_build_context_args_empty_when_unset(monkeypatch):
-    monkeypatch.delenv("HOLOSCAN_CLI_SOURCE", raising=False)
-    assert project_container.HoloscanContainer.local_source_build_context_args() == []
-
-
-def test_local_source_build_context_args_emits_named_context(monkeypatch):
-    monkeypatch.setenv("HOLOSCAN_CLI_SOURCE", "/tmp/cli-src")
-
-    args = project_container.HoloscanContainer.local_source_build_context_args()
-
-    assert args == [
-        "--build-context",
-        "holoscan-cli-src=/tmp/cli-src",
-    ]
-
-
 def test_local_sdk_mount_can_be_declared_read_only(tmp_path, monkeypatch):
     sdk = tmp_path / "sdk"
     cmake = sdk / "lib" / "cmake" / "holoscan"

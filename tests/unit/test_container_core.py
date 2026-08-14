@@ -421,7 +421,6 @@ def test_build_dryrun_emits_base_and_extra_script_layers(tmp_path, monkeypatch):
 
     calls = []
     monkeypatch.setenv("HOLOSCAN_CLI_SETUP_SCRIPTS_DIR", str(setup_dir))
-    monkeypatch.setenv("HOLOSCAN_CLI_SOURCE", "/tmp/cli-src")
     monkeypatch.setattr(container_core, "get_host_gpu", lambda: "dgpu")
     monkeypatch.setattr(container_core, "get_compute_capacity", lambda: "90")
     monkeypatch.setattr(container_core, "get_default_cuda_version", lambda: "13")
@@ -453,8 +452,6 @@ def test_build_dryrun_emits_base_and_extra_script_layers(tmp_path, monkeypatch):
     assert "BASE_IMAGE=nvcr.io/x/holoscan:v4.2.0-cuda13" in first
     assert "GPU_TYPE=dgpu" in first
     assert "COMPUTE_CAPACITY=90" in first
-    assert "--build-context" in first
-    assert "holoscan-cli-src=/tmp/cli-src" in first
     assert "--build-arg" in first
     assert "DEFAULT=1" in first
     assert "CUSTOM=1" in first

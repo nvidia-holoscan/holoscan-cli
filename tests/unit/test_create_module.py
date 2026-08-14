@@ -531,7 +531,6 @@ def test_packaged_template_generates_self_contained_python_module(
         "applications/my_mod_pipeline/python/my_mod_pipeline.py",
         "requirements-cli.txt",
         ".dockerignore",
-        ".holoscan-cli-wheelhouse/.gitignore",
     ]
     assert all((project / path).is_file() for path in expected)
     assert not (project / "holohub").exists()
@@ -557,12 +556,10 @@ def test_packaged_template_generates_self_contained_python_module(
     assert "python3-venv" in dockerfile
     assert "python3 -m venv /opt/holoscan-cli" in dockerfile
     assert "/opt/holoscan-cli/bin/python -m pip install" in dockerfile
-    assert "source=.holoscan-cli-wheelhouse" in dockerfile
     assert "-r /tmp/requirements-cli.txt" in dockerfile
     assert "holohub" not in dockerfile
     dockerignore = (project / ".dockerignore").read_text(encoding="utf-8").splitlines()
     assert "requirements-cli.txt" not in dockerignore
-    assert ".holoscan-cli-wheelhouse" not in dockerignore
     app_metadata = (project / "applications/my_mod_pipeline/python/metadata.json").read_text(
         encoding="utf-8"
     )

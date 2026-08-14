@@ -105,22 +105,6 @@ class HoloscanContainer:
         "No DISPLAY or WAYLAND_DISPLAY set; skipping display forwarding."
     )
 
-    @staticmethod
-    def local_source_build_context_args() -> List[str]:
-        """Docker build --build-context args for a local holoscan-cli checkout.
-
-        Returns an empty list when ``HOLOSCAN_CLI_SOURCE`` is unset. When set,
-        exposes the checkout as a named ``holoscan-cli-src`` build context so
-        downstream Dockerfiles can mount it (``RUN --mount=from=holoscan-cli-src
-        ...``) and pip-install the working tree instead of pulling from PyPI or
-        git. Used during prototype validation to exercise an in-progress branch
-        end-to-end without publishing it first.
-        """
-        source = os.environ.get("HOLOSCAN_CLI_SOURCE")
-        if not source:
-            return []
-        return ["--build-context", f"holoscan-cli-src={source}"]
-
     @classmethod
     def _format_image_template(cls, template: str, **values: Optional[str]) -> str:
         """Render an image-name template, failing closed on bad configuration.
@@ -505,8 +489,6 @@ class HoloscanContainer:
 
         if no_cache:
             cmd.append("--no-cache")
-
-        cmd.extend(self.local_source_build_context_args())
 
         full_build_args = " ".join(
             filter(None, [HoloscanContainer.DEFAULT_DOCKER_BUILD_ARGS, build_args])
