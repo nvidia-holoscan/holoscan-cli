@@ -608,3 +608,63 @@ def test_handle_test_local_runs_ctest_in_repo_with_environment(tmp_path, monkeyp
     assert "-S local.ctest" in command[2]
     assert kwargs["dry_run"] is True
     assert str(cli.HOLOHUB_ROOT) in kwargs["env"]["PYTHONPATH"]
+
+
+def test_build_project_locally_configure_only_skips_the_compile(tmp_path, monkeypatch):
+    cli = RecordingCLI(tmp_path)
+    calls = []
+    monkeypatch.setattr(build_cmd, "run_command", lambda cmd, **kwargs: calls.append(cmd))
+    monkeypatch.setattr(build_cmd.shutil, "which", lambda name: None)
+
+    build_dir, _ = build_cmd.build_project_locally(
+        cli,
+        "smoke_app",
+        dryrun=True,
+        configure_only=True,
+    )
+
+    assert len(calls) == 1, f"expected only the configure step, got {calls}"
+    assert calls[0][0] == "cmake"
+    assert "--build" not in calls[0]
+    assert build_dir == tmp_path / "build" / "smoke_app"
+
+
+def test_build_project_locally_configure_only_still_restores_benchmark_patch(tmp_path, monkeypatch):
+    """The patch is applied before configure, so stopping early must not leave it behind."""
+    cli = RecordingCLI(tmp_path)
+    calls = []
+    monkeypatch.setattr(build_cmd, "run_command", lambda cmd, **kwargs: calls.append(cmd))
+    monkeypatch.setattr(build_cmd.shutil, "which", lambda name: None)
+
+    build_cmd.build_project_locally(
+        cli,
+        "smoke_app",
+        dryrun=True,
+        benchmark=True,
+        configure_only=True,
+    )
+
+    rendered = [" ".join(str(part) for part in cmd) for cmd in calls]
+    assert any("patch_application.sh" in cmd for cmd in rendered)
+    assert any("restore_application.sh" in cmd for cmd in rendered)
+    assert not any("--build" in cmd for cmd in rendered)
+
+
+def test_make_local_build_command_forwards_configure_only():
+    args = Namespace(
+        project="smoke_app",
+        mode=None,
+        build_type=None,
+        with_operators=None,
+        pkg_generator=None,
+        parallel=None,
+        verbose=False,
+        configure_only=True,
+        benchmark=False,
+        configure_args=None,
+    )
+
+    command = build_cmd.make_local_build_command("holoscan", args, None, None)
+
+    assert "--configure-only" in command
+    assert command.startswith("holoscan build smoke_app --local")
