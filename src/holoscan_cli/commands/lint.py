@@ -60,16 +60,20 @@ def _running_in_virtual_env() -> bool:
     return sys.prefix != getattr(sys, "base_prefix", sys.prefix) or hasattr(sys, "real_prefix")
 
 
-def _pre_commit_command() -> Optional[List[str]]:
+def _pre_commit_command(path: Optional[str] = None) -> Optional[List[str]]:
     """Return the command that runs pre-commit, or None when unavailable.
 
     The active interpreter's module wins so a project-pinned pre-commit in the
-    same environment is used. An executable on PATH is the fallback: `uvx`/`uv
+    same environment is used. An executable on *path* is the fallback: `uvx`/`uv
     tool` environments cannot import a separately installed pre-commit and have
     no pip to install one, so probing only the interpreter would report a
     perfectly usable pre-commit as missing.
+
+    *path* must be the PATH the child process will run with, not this process's
+    own; ``handle_lint`` prepends ``~/.local/bin`` for non-virtualenv installs,
+    and a pipx- or ``--user``-installed pre-commit lives only there.
     """
-    executable = shutil.which("pre-commit")
+    executable = shutil.which("pre-commit", path=path)
     for cmd in ([sys.executable, "-m", "pre_commit"], *([[executable]] if executable else [])):
         try:
             result = subprocess.run(
@@ -190,7 +194,7 @@ def _install_lint_deps(cli, dry_run: bool, env: dict) -> None:
         warn("No `.pre-commit-config.yaml` found; skipping pre-commit hook prefetch.")
         return
 
-    pre_commit_cmd = _pre_commit_command() or [sys.executable, "-m", "pre_commit"]
+    pre_commit_cmd = _pre_commit_command(env.get("PATH")) or [sys.executable, "-m", "pre_commit"]
     run_command(
         [*pre_commit_cmd, "install-hooks"],
         dry_run=dry_run,
@@ -243,13 +247,13 @@ def handle_lint(cli, args: argparse.Namespace) -> None:
 
     # Resolve in both modes so --dryrun reports the command that would really
     # run; only a real run may install.
-    resolved = _pre_commit_command()
+    resolved = _pre_commit_command(env.get("PATH"))
     if not args.dryrun:
         _check_pre_commit_cache_writable(env)
         if resolved is None:
             info("pre-commit is not installed; installing lint dependencies.")
             _install_lint_deps(cli, False, env=env)
-            resolved = _pre_commit_command()
+            resolved = _pre_commit_command(env.get("PATH"))
             if resolved is None:
                 fatal(
                     "pre-commit was installed but is still not available. "

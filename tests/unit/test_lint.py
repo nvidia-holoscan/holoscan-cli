@@ -30,7 +30,7 @@ def _lint_cli(root, monkeypatch):
     # test machine happens to have a `pre-commit` executable on PATH. Tests that
     # exercise resolution itself override this after calling the helper.
     monkeypatch.setattr(
-        commands_lint, "_pre_commit_command", lambda: [sys.executable, "-m", "pre_commit"]
+        commands_lint, "_pre_commit_command", lambda *_: [sys.executable, "-m", "pre_commit"]
     )
     return object.__new__(project_cli.HoloscanCLI)
 
