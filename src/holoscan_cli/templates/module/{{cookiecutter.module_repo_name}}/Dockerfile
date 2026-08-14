@@ -50,6 +50,11 @@ RUN python3 -m venv /opt/holoscan-cli \
         pybind11-dev \
     && rm -rf /var/lib/apt/lists/*
 {% endif %}
-# Python tooling: pytest-timeout for tests, build + scikit-build-core for
-# `holoscan package --pkg-generator WHEEL` (drives `python -m build`).
-RUN pip install --no-cache-dir pytest-timeout build scikit-build-core
+# Python tooling goes into the CLI environment, not the system interpreter.
+# `holoscan build` and `holoscan package` configure CMake with
+# -DPython3_EXECUTABLE=<the CLI's python>, and `--pkg-generator WHEEL` runs
+# `<that python> -m build`, so both the test runner and the wheel frontend are
+# resolved from /opt/holoscan-cli. Installing them with the system pip would
+# leave them invisible to every command that uses them.
+RUN /opt/holoscan-cli/bin/python -m pip install --no-cache-dir \
+        pytest-timeout build scikit-build-core
