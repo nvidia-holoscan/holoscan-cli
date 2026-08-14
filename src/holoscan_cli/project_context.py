@@ -880,18 +880,29 @@ def discover_project_context(
     env_root = env.get("HOLOSCAN_CLI_ROOT")
     if env_root:
         root = _resolve_explicit_root(env_root, original_cwd)
-        if root.exists() and root.is_dir():
+        # Apply the same recognition check as --project-root. Accepting any
+        # existing directory would silently produce an empty project whose
+        # requirements-cli.txt and [tool.holoscan] are never read, bypassing the
+        # Module contract. The environment form warns and falls back to cwd
+        # rather than failing, because unlike the command option it is ambient.
+        if not root.exists() or not root.is_dir():
+            warnings = (f"Ignoring invalid HOLOSCAN_CLI_ROOT={env_root!r}; discovering from cwd.",)
+        else:
             descriptor = _read_module_metadata(root, strict=load_module_contract)
-            return _build_context(
-                root,
-                kind="module" if descriptor is not None else "source",
-                discovery="environment",
-                descriptor=descriptor,
-                running_version=running_version,
-                load_module_contract=load_module_contract,
-                environ=env,
+            if _matches_existing_root(root) or descriptor is not None:
+                return _build_context(
+                    root,
+                    kind="module" if descriptor is not None else "source",
+                    discovery="environment",
+                    descriptor=descriptor,
+                    running_version=running_version,
+                    load_module_contract=load_module_contract,
+                    environ=env,
+                )
+            warnings = (
+                f"Ignoring HOLOSCAN_CLI_ROOT={env_root!r}: not a recognized Holoscan "
+                "source-project or Module root; discovering from cwd.",
             )
-        warnings = (f"Ignoring invalid HOLOSCAN_CLI_ROOT={env_root!r}; discovering from cwd.",)
 
     module_fallback: Optional[tuple[Path, dict]] = None
     for candidate in (original_cwd, *original_cwd.parents):
