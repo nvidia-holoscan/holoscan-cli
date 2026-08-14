@@ -15,10 +15,9 @@
 
 """Lightweight source-project discovery and standalone Module contracts.
 
-This module deliberately uses only the Python standard library.  It is safe to
-import from :mod:`holoscan_cli.__main__` before the project CLI and container
-classes are imported; those classes still read several defaults at class-body
-execution time.
+This module is safe to import from :mod:`holoscan_cli.__main__` before the
+project CLI and container classes.  Python 3.11+ uses :mod:`tomllib`; Python
+3.10 uses the small conditional ``tomli`` runtime dependency.
 """
 
 from __future__ import annotations
@@ -26,6 +25,7 @@ from __future__ import annotations
 import importlib.metadata
 import json
 import os
+import platform
 import re
 import shutil
 import sys
@@ -33,10 +33,18 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Mapping, Optional
 
+try:
+    import tomllib
+except ModuleNotFoundError:  # pragma: no cover - exercised on Python 3.10
+    import tomli as tomllib  # type: ignore[no-redef]
+
 PACKAGE_NAME = "holoscan-cli"
 REQUIREMENTS_FILENAME = "requirements-cli.txt"
 MODULE_METADATA_FILENAME = "metadata.json"
+PYPROJECT_FILENAME = "pyproject.toml"
 MAX_REQUIREMENTS_BYTES = 64 * 1024
+MAX_PYPROJECT_BYTES = 1024 * 1024
+HOLOSCAN_CONFIG_SCHEMA_VERSION = 1
 
 SENTINEL_FILES = ("holohub", "isaac_os", "i4h", "CMakeLists.txt", "Dockerfile")
 METADATA_DIRS = (
@@ -53,6 +61,12 @@ SEARCH_DIRS = tuple(name for name in METADATA_DIRS if name != "subgraphs")
 
 _VERSION_RE = re.compile(r"[0-9A-Za-z](?:[0-9A-Za-z._+!-]{0,126}[0-9A-Za-z])?")
 _PYTHON_SEGMENT_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
+_REPO_PREFIX_RE = re.compile(r"[a-z0-9](?:[a-z0-9_]{0,126}[a-z0-9])?")
+_CONTAINER_PREFIX_RE = re.compile(r"[a-z0-9](?:[a-z0-9_.-]{0,126}[a-z0-9])?")
+_WORKSPACE_NAME_RE = re.compile(r"[A-Za-z0-9](?:[A-Za-z0-9_.-]{0,126}[A-Za-z0-9])?")
+_IMAGE_REFERENCE_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._/:@+-]{0,254}")
+_SUPPORTED_ARCHITECTURES = {"x86_64", "aarch64"}
+_TRUE_ENV_VALUES = {"1", "true", "yes", "on"}
 
 
 class ProjectContextError(ValueError):
@@ -76,7 +90,6 @@ class ProjectContext:
     required_version: Optional[str] = None
     requirement_error: Optional[str] = None
     running_version: Optional[str] = None
-    legacy_launcher: bool = False
     repo_prefix: Optional[str] = None
     container_prefix: Optional[str] = None
     workspace_name: Optional[str] = None
@@ -84,6 +97,17 @@ class ProjectContext:
     base_sdk_version: Optional[str] = None
     metadata_search_paths: tuple[Path, ...] = ()
     dockerfile: Optional[Path] = None
+    project_config_path: Optional[Path] = None
+    project_config_schema_version: Optional[int] = None
+    target_arch: Optional[str] = None
+    target_arch_source: Optional[str] = None
+    base_image: Optional[str] = None
+    default_cuda_version: Optional[str] = None
+    sdk_root: Optional[Path] = None
+    sdk_root_source: Optional[str] = None
+    sdk_mount_read_only: bool = False
+    ctest_script: Optional[str] = None
+    build_type: Optional[str] = None
     warnings: tuple[str, ...] = ()
 
     @property
@@ -92,7 +116,7 @@ class ProjectContext:
 
     @property
     def is_standalone_module(self) -> bool:
-        return self.is_module and not self.legacy_launcher
+        return self.is_module
 
     @property
     def version_match(self) -> Optional[bool]:
@@ -119,16 +143,28 @@ class ProjectContext:
             "HOLOSCAN_CLI_WORKSPACE_NAME": self.workspace_name,
             "HOLOSCAN_CLI_HOSTNAME_PREFIX": self.hostname_prefix,
             "HOLOSCAN_CLI_BASE_SDK_VERSION": self.base_sdk_version,
+            "HOLOSCAN_CLI_DEFAULT_DOCKERFILE": str(self.dockerfile) if self.dockerfile else None,
+            "HOLOSCAN_CLI_BASE_IMAGE": self.base_image,
+            "HOLOSCAN_CLI_BASE_IMAGE_FORMAT": "{base_image}" if self.base_image else None,
+            "HOLOSCAN_CLI_DEFAULT_CUDA_VERSION": self.default_cuda_version,
+            "HOLOSCAN_CLI_DEFAULT_HSDK_DIR": str(self.sdk_root) if self.sdk_root else None,
+            "HOLOSCAN_SDK_ROOT": str(self.sdk_root) if self.sdk_root else None,
+            "holoscan_ROOT": str(self.sdk_root) if self.sdk_root else None,
+            "HOLOSCAN_CLI_CTEST_SCRIPT": self.ctest_script,
+            "CMAKE_BUILD_TYPE": self.build_type,
+            "HOLOSCAN_CLI_TARGET_ARCH": self.target_arch,
+            "HOLOSCAN_CLI_SDK_MOUNT_READ_ONLY": "1" if self.sdk_mount_read_only else None,
         }
         values.update({key: value for key, value in optional_values.items() if value})
         return values
 
     def diagnostics(self) -> dict:
         """Return serializable project-profile and version-contract details."""
-        data = {
+        data: dict[str, object] = {
             "kind": self.kind,
             "root": str(self.root),
             "discovery": self.discovery,
+            "warnings": list(self.warnings),
         }
         if not self.is_module:
             return data
@@ -140,7 +176,6 @@ class ProjectContext:
                 "running_version": self.running_version,
                 "version_match": self.version_match,
                 "requirement_error": self.requirement_error,
-                "legacy_launcher": self.legacy_launcher,
                 "repo_prefix": self.repo_prefix,
                 "container_prefix": self.container_prefix,
                 "workspace_name": self.workspace_name,
@@ -148,6 +183,19 @@ class ProjectContext:
                 "base_sdk_version": self.base_sdk_version,
                 "metadata_search_paths": [str(path) for path in self.metadata_search_paths],
                 "dockerfile": str(self.dockerfile) if self.dockerfile else None,
+                "project_config": (
+                    str(self.project_config_path) if self.project_config_path else None
+                ),
+                "project_config_schema_version": self.project_config_schema_version,
+                "target_arch": self.target_arch,
+                "target_arch_source": self.target_arch_source,
+                "base_image": self.base_image,
+                "default_cuda_version": self.default_cuda_version,
+                "sdk_root": str(self.sdk_root) if self.sdk_root else None,
+                "sdk_root_source": self.sdk_root_source,
+                "sdk_mount_read_only": self.sdk_mount_read_only,
+                "ctest_script": self.ctest_script,
+                "build_type": self.build_type,
             }
         )
         return data
@@ -219,6 +267,7 @@ def _matches_existing_root(candidate: Path) -> bool:
 
 
 def _read_module_metadata(root: Path, *, strict: bool) -> Optional[dict]:
+    """Read the root Module descriptor from ecosystem ``metadata.json``."""
     metadata_path = root / MODULE_METADATA_FILENAME
     if not metadata_path.is_file():
         return None
@@ -235,6 +284,349 @@ def _read_module_metadata(root: Path, *, strict: bool) -> Optional[dict]:
             raise ProjectContextError(f"Module metadata at {metadata_path} must contain an object.")
         return None
     return raw["module"]
+
+
+def _normalized_arch(value: str) -> str:
+    machine = value.strip().lower()
+    if machine in {"x86_64", "amd64"}:
+        return "x86_64"
+    if machine in {"aarch64", "arm64"}:
+        return "aarch64"
+    return machine
+
+
+def _resolve_target_arch(environ: Mapping[str, str]) -> tuple[str, str]:
+    configured = environ.get("HOLOSCAN_CLI_TARGET_ARCH")
+    if configured:
+        arch = _normalized_arch(configured)
+        if arch not in _SUPPORTED_ARCHITECTURES:
+            raise ProjectContextError(
+                "HOLOSCAN_CLI_TARGET_ARCH must be x86_64/amd64 or aarch64/arm64; "
+                f"got {configured!r}."
+            )
+        return arch, "HOLOSCAN_CLI_TARGET_ARCH"
+    return _normalized_arch(platform.machine()), "host"
+
+
+def _validate_object_keys(
+    value: object, *, path: str, allowed: set[str], source_path: Path
+) -> dict:
+    if not isinstance(value, dict):
+        raise ProjectContextError(f"{source_path}: {path} must be a table.")
+    unknown = sorted(set(value) - allowed)
+    if unknown:
+        raise ProjectContextError(
+            f"{source_path}: {path} contains unknown field(s): {', '.join(unknown)}."
+        )
+    return value
+
+
+def _relative_project_path(value: object, *, path: str, source_path: Path) -> str:
+    if not isinstance(value, str) or not value.strip():
+        raise ProjectContextError(f"{source_path}: {path} must be a non-empty string.")
+    candidate = Path(value.strip())
+    if candidate.is_absolute() or value.strip().startswith("~") or ".." in candidate.parts:
+        raise ProjectContextError(
+            f"{source_path}: {path} must stay within the project and be relative."
+        )
+    return candidate.as_posix()
+
+
+def _read_holoscan_project_config(root: Path) -> tuple[Optional[Path], dict]:
+    """Read and strictly validate the versioned ``[tool.holoscan]`` table."""
+    config_path = root / PYPROJECT_FILENAME
+    if not config_path.is_file():
+        return None, {}
+    try:
+        size = config_path.stat().st_size
+    except OSError as exc:
+        raise ProjectContextError(f"Could not read {config_path}: {exc}") from exc
+    if size > MAX_PYPROJECT_BYTES:
+        raise ProjectContextError(
+            f"{config_path} is too large ({size} bytes); limit is {MAX_PYPROJECT_BYTES} bytes."
+        )
+    try:
+        document = tomllib.loads(config_path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, tomllib.TOMLDecodeError) as exc:
+        raise ProjectContextError(f"Invalid TOML at {config_path}: {exc}") from exc
+
+    tool = document.get("tool", {})
+    if not isinstance(tool, dict):
+        raise ProjectContextError(f"{config_path}: tool must be a table.")
+    config = tool.get("holoscan")
+    if config is None:
+        return None, {}
+    config = _validate_object_keys(
+        config,
+        path="tool.holoscan",
+        allowed={
+            "schema-version",
+            "repo-prefix",
+            "container-prefix",
+            "workspace-name",
+            "hostname-prefix",
+            "search-path",
+            "build-type",
+            "ctest-script",
+            "cuda",
+            "sdk",
+        },
+        source_path=config_path,
+    )
+    schema_version = config.get("schema-version")
+    if isinstance(schema_version, bool) or not isinstance(schema_version, int):
+        raise ProjectContextError(
+            f"{config_path}: tool.holoscan.schema-version must be the integer "
+            f"{HOLOSCAN_CONFIG_SCHEMA_VERSION}."
+        )
+    if schema_version != HOLOSCAN_CONFIG_SCHEMA_VERSION:
+        raise ProjectContextError(
+            f"{config_path}: unsupported tool.holoscan schema-version {schema_version}; "
+            f"this CLI supports {HOLOSCAN_CONFIG_SCHEMA_VERSION}."
+        )
+
+    sdk = _validate_object_keys(
+        config.get("sdk", {}),
+        path="tool.holoscan.sdk",
+        allowed={
+            "version",
+            "search",
+            "allow-parent-search",
+            "mount-read-only",
+            "base-images",
+        },
+        source_path=config_path,
+    )
+    if "base-images" in sdk:
+        _validate_object_keys(
+            sdk["base-images"],
+            path="tool.holoscan.sdk.base-images",
+            allowed=_SUPPORTED_ARCHITECTURES,
+            source_path=config_path,
+        )
+    return config_path, config
+
+
+def _validated_name(
+    value: object,
+    *,
+    path: str,
+    source_path: Path,
+    pattern: re.Pattern[str],
+) -> str:
+    if not isinstance(value, str) or not pattern.fullmatch(value.strip()):
+        raise ProjectContextError(f"{source_path}: {path} has an invalid value: {value!r}.")
+    return value.strip()
+
+
+def _resolve_metadata_search_paths(root: Path, config: dict, config_path: Path) -> tuple[Path, ...]:
+    configured = config.get("search-path")
+    if configured is None:
+        return (root / MODULE_METADATA_FILENAME, *(root / name for name in SEARCH_DIRS))
+    if not isinstance(configured, list) or not configured:
+        raise ProjectContextError(
+            f"{config_path}: tool.holoscan.search-path must be a non-empty array of paths."
+        )
+    paths: list[Path] = []
+    for index, value in enumerate(configured):
+        relative = _relative_project_path(
+            value,
+            path=f"tool.holoscan.search-path[{index}]",
+            source_path=config_path,
+        )
+        candidate = (root / relative).resolve()
+        try:
+            candidate.relative_to(root.resolve())
+        except ValueError as exc:  # protects against a symlink escaping the project
+            raise ProjectContextError(
+                f"{config_path}: tool.holoscan.search-path[{index}] resolves outside the project."
+            ) from exc
+        paths.append(candidate)
+    return tuple(paths)
+
+
+def _is_sdk_installation(path: Path) -> bool:
+    cmake_dir = path / "lib" / "cmake" / "holoscan"
+    return path.is_dir() and (
+        (cmake_dir / "holoscan-config.cmake").is_file()
+        or (cmake_dir / "HoloscanConfig.cmake").is_file()
+    )
+
+
+def _resolve_sdk_installation(path: Path, arch: str, cuda: Optional[str] = None) -> Optional[Path]:
+    """Resolve a direct install or a stable SDK root without shell expansion."""
+    try:
+        resolved = path.expanduser().resolve()
+    except OSError:
+        return None
+    if _is_sdk_installation(resolved):
+        return resolved
+    candidates = [resolved / f"install-{arch}"]
+    if cuda:
+        # Older SDK build layouts included the selected CUDA line. Prefer the
+        # canonical current layout, but accept the matching reviewed profile
+        # without asking the user to reconstruct its name with uname.
+        candidates.extend(
+            [
+                resolved / f"install-cu{cuda}-{arch}",
+                resolved / f"install-cuda{cuda}-{arch}",
+            ]
+        )
+    return next((candidate for candidate in candidates if _is_sdk_installation(candidate)), None)
+
+
+def _resolve_project_profile(
+    root: Path,
+    config: dict,
+    config_path: Optional[Path],
+    *,
+    environ: Mapping[str, str],
+) -> dict:
+    """Resolve static project policy and machine-local SDK selection."""
+    config_source = config_path or root / PYPROJECT_FILENAME
+    arch, arch_source = _resolve_target_arch(environ)
+    resolved: dict[str, object] = {
+        "target_arch": arch,
+        "target_arch_source": arch_source,
+        "warnings": [],
+    }
+    build_type = config.get("build-type")
+    if build_type is not None:
+        if build_type not in {"Debug", "Release", "RelWithDebInfo"}:
+            raise ProjectContextError(
+                f"{config_source}: tool.holoscan.build-type must be Debug, Release, "
+                "or RelWithDebInfo."
+            )
+        resolved["build_type"] = build_type
+
+    cuda = config.get("cuda")
+    if cuda is not None:
+        if isinstance(cuda, bool) or not isinstance(cuda, int) or not 1 <= cuda <= 99:
+            raise ProjectContextError(
+                f"{config_source}: tool.holoscan.cuda must be an integer major version."
+            )
+        resolved["default_cuda_version"] = str(cuda)
+
+    ctest_script = config.get("ctest-script")
+    if ctest_script is not None:
+        relative_script = _relative_project_path(
+            ctest_script,
+            path="tool.holoscan.ctest-script",
+            source_path=config_source,
+        )
+        if not (root / relative_script).is_file():
+            raise ProjectContextError(
+                f"{config_source}: tool.holoscan.ctest-script does not exist: {relative_script}."
+            )
+        resolved["ctest_script"] = relative_script
+
+    sdk = config.get("sdk", {})
+    base_images = sdk.get("base-images")
+    if base_images is not None:
+        if arch not in base_images:
+            raise ProjectContextError(
+                f"{config_source}: tool.holoscan.sdk.base-images has no entry for {arch!r}."
+            )
+        base_image = base_images[arch]
+        if not isinstance(base_image, str) or not _IMAGE_REFERENCE_RE.fullmatch(base_image.strip()):
+            raise ProjectContextError(
+                f"{config_source}: tool.holoscan.sdk.base-images.{arch} must be a "
+                "valid image reference without whitespace."
+            )
+        resolved["base_image"] = base_image.strip()
+
+    sdk_version = sdk.get("version")
+    if sdk_version is not None:
+        if not isinstance(sdk_version, str) or not _VERSION_RE.fullmatch(sdk_version.strip()):
+            raise ProjectContextError(
+                f"{config_source}: tool.holoscan.sdk.version must be an exact version."
+            )
+        resolved["sdk_version"] = sdk_version.strip()
+
+    mount_read_only = sdk.get("mount-read-only", False)
+    if not isinstance(mount_read_only, bool):
+        raise ProjectContextError(
+            f"{config_source}: tool.holoscan.sdk.mount-read-only must be a boolean."
+        )
+    resolved["sdk_mount_read_only"] = mount_read_only
+
+    allow_parent_search = sdk.get("allow-parent-search", False)
+    if not isinstance(allow_parent_search, bool):
+        raise ProjectContextError(
+            f"{config_source}: tool.holoscan.sdk.allow-parent-search must be a boolean."
+        )
+    candidates = sdk.get("search", [])
+    if not isinstance(candidates, list) or not all(
+        isinstance(candidate, str) and candidate.strip() for candidate in candidates
+    ):
+        raise ProjectContextError(
+            f"{config_source}: tool.holoscan.sdk.search must be an array of non-empty strings."
+        )
+
+    configured_candidates: list[tuple[Path, str]] = []
+    for index, raw_candidate in enumerate(candidates):
+        candidate = raw_candidate.strip()
+        rendered = candidate.replace("{arch}", arch)
+        if "{" in rendered or "}" in rendered:
+            raise ProjectContextError(
+                f"{config_source}: tool.holoscan.sdk.search[{index}] uses an unsupported "
+                "placeholder; only {{arch}} is allowed."
+            )
+        candidate_path = Path(rendered)
+        if candidate_path.is_absolute() or rendered.startswith("~"):
+            raise ProjectContextError(
+                f"{config_source}: tool.holoscan.sdk.search[{index}] must be relative; "
+                "use HOLOSCAN_SDK_ROOT for a machine-local absolute path."
+            )
+        candidate_path = (root / candidate_path).resolve()
+        boundary = root.parent.resolve() if allow_parent_search else root.resolve()
+        try:
+            candidate_path.relative_to(boundary)
+        except ValueError as exc:
+            capability = " with allow-parent-search = true" if not allow_parent_search else ""
+            raise ProjectContextError(
+                f"{config_source}: tool.holoscan.sdk.search[{index}] resolves outside its "
+                f"allowed boundary{capability}."
+            ) from exc
+        configured_candidates.append(
+            (candidate_path, f"{config_source}:tool.holoscan.sdk.search[{index}]")
+        )
+
+    if environ.get("HOLOSCAN_CLI_BUILD_LOCAL", "").strip().lower() in _TRUE_ENV_VALUES:
+        # Container recursion mounts a caller-selected SDK at this stable path.
+        # Resolve it before repository hints, which describe host-side layouts.
+        configured_candidates.insert(
+            0,
+            (Path("/workspace/holoscan-sdk"), "container:/workspace/holoscan-sdk"),
+        )
+
+    sdk_root = None
+    sdk_source = None
+    configured_cuda = resolved.get("default_cuda_version")
+    cuda_for_sdk = configured_cuda if isinstance(configured_cuda, str) else None
+    env_root = environ.get("HOLOSCAN_SDK_ROOT")
+    if env_root:
+        env_path = Path(env_root)
+        if not env_path.is_absolute():
+            raise ProjectContextError(
+                "HOLOSCAN_SDK_ROOT must be an absolute path to an SDK installation or "
+                f"its parent; got {env_root!r}."
+            )
+        sdk_root = _resolve_sdk_installation(env_path, arch, cuda_for_sdk)
+        if sdk_root is None:
+            raise ProjectContextError(
+                f"HOLOSCAN_SDK_ROOT={env_root!r} is not a valid SDK installation for {arch}."
+            )
+        sdk_source = "HOLOSCAN_SDK_ROOT"
+    if sdk_root is None:
+        for candidate_path, candidate_source in configured_candidates:
+            sdk_root = _resolve_sdk_installation(candidate_path, arch, cuda_for_sdk)
+            if sdk_root is not None:
+                sdk_source = candidate_source
+                break
+    resolved["sdk_root"] = sdk_root
+    resolved["sdk_root_source"] = sdk_source
+    return resolved
 
 
 def _module_identity(module: dict, metadata_path: Path) -> tuple[str, str, Optional[str]]:
@@ -296,14 +688,16 @@ def _build_context(
     *,
     kind: str,
     discovery: str,
-    module: Optional[dict] = None,
+    descriptor: Optional[dict] = None,
     warnings: tuple[str, ...] = (),
     running_version: Optional[str] = None,
     load_module_contract: bool = True,
+    environ: Optional[Mapping[str, str]] = None,
 ) -> ProjectContext:
-    if kind != "module" or module is None:
+    if kind != "module" or descriptor is None:
         return ProjectContext(root=root, kind=kind, discovery=discovery, warnings=warnings)
 
+    module = descriptor
     metadata_path = root / MODULE_METADATA_FILENAME
     if not load_module_contract:
         return ProjectContext(
@@ -314,28 +708,86 @@ def _build_context(
             module_metadata=module,
             warnings=warnings,
         )
-    repo_prefix, container_prefix, sdk_version = _module_identity(module, metadata_path)
+    derived_repo_prefix, derived_container_prefix, metadata_sdk_version = _module_identity(
+        module, metadata_path
+    )
+    config_path, config = _read_holoscan_project_config(root)
+    profile = _resolve_project_profile(
+        root,
+        config,
+        config_path,
+        environ=os.environ if environ is None else environ,
+    )
+    profile_warnings = tuple(profile.pop("warnings", []))
+
+    repo_prefix = derived_repo_prefix
+    container_prefix = derived_container_prefix
+    workspace_name = repo_prefix
+    hostname_prefix = container_prefix
+    if config_path is not None:
+        if "repo-prefix" in config:
+            repo_prefix = _validated_name(
+                config["repo-prefix"],
+                path="tool.holoscan.repo-prefix",
+                source_path=config_path,
+                pattern=_REPO_PREFIX_RE,
+            )
+        if "container-prefix" in config:
+            container_prefix = _validated_name(
+                config["container-prefix"],
+                path="tool.holoscan.container-prefix",
+                source_path=config_path,
+                pattern=_CONTAINER_PREFIX_RE,
+            )
+        workspace_name = config.get("workspace-name", repo_prefix)
+        workspace_name = _validated_name(
+            workspace_name,
+            path="tool.holoscan.workspace-name",
+            source_path=config_path,
+            pattern=_WORKSPACE_NAME_RE,
+        )
+        hostname_prefix = config.get("hostname-prefix", container_prefix)
+        hostname_prefix = _validated_name(
+            hostname_prefix,
+            path="tool.holoscan.hostname-prefix",
+            source_path=config_path,
+            pattern=_CONTAINER_PREFIX_RE,
+        )
+
     requirements_path = root / REQUIREMENTS_FILENAME
     required_version = None
     requirement_error = None
-    legacy_launcher = any((root / name).is_file() for name in ("holohub", "holoscan"))
     if requirements_path.is_file():
         try:
             required_version = parse_cli_requirement(requirements_path)
         except ProjectContextError as exc:
             requirement_error = str(exc)
-    elif not legacy_launcher:
+    else:
         requirement_error = (
             f"Standalone Module {root} is missing {REQUIREMENTS_FILENAME}. "
             "Restore the generated file or recreate the Module."
         )
 
-    search_paths = (metadata_path, *(root / name for name in SEARCH_DIRS))
+    search_paths = (
+        _resolve_metadata_search_paths(root, config, config_path)
+        if config_path is not None
+        else (metadata_path, *(root / name for name in SEARCH_DIRS))
+    )
     dockerfile_value = module.get("dockerfile")
     dockerfile = None
     if isinstance(dockerfile_value, str) and dockerfile_value.strip():
-        candidate = Path(dockerfile_value).expanduser()
-        dockerfile = candidate if candidate.is_absolute() else root / candidate
+        relative_dockerfile = _relative_project_path(
+            dockerfile_value,
+            path="module.dockerfile",
+            source_path=metadata_path,
+        )
+        dockerfile = (root / relative_dockerfile).resolve()
+        try:
+            dockerfile.relative_to(root.resolve())
+        except ValueError as exc:
+            raise ProjectContextError(
+                f"{metadata_path}: module.dockerfile resolves outside the project."
+            ) from exc
     elif (root / "Dockerfile").is_file():
         dockerfile = root / "Dockerfile"
 
@@ -349,15 +801,25 @@ def _build_context(
         required_version=required_version,
         requirement_error=requirement_error,
         running_version=running_version or get_running_cli_version(),
-        legacy_launcher=legacy_launcher,
         repo_prefix=repo_prefix,
         container_prefix=container_prefix,
-        workspace_name=repo_prefix,
-        hostname_prefix=container_prefix,
-        base_sdk_version=sdk_version,
+        workspace_name=workspace_name,
+        hostname_prefix=hostname_prefix,
+        base_sdk_version=profile.get("sdk_version", metadata_sdk_version),
         metadata_search_paths=tuple(search_paths),
         dockerfile=dockerfile,
-        warnings=warnings,
+        project_config_path=config_path,
+        project_config_schema_version=(config.get("schema-version") if config else None),
+        target_arch=profile.get("target_arch"),
+        target_arch_source=profile.get("target_arch_source"),
+        base_image=profile.get("base_image"),
+        default_cuda_version=profile.get("default_cuda_version"),
+        sdk_root=profile.get("sdk_root"),
+        sdk_root_source=profile.get("sdk_root_source"),
+        sdk_mount_read_only=bool(profile.get("sdk_mount_read_only", False)),
+        ctest_script=profile.get("ctest_script"),
+        build_type=profile.get("build_type"),
+        warnings=(*warnings, *profile_warnings),
     )
 
 
@@ -386,62 +848,68 @@ def discover_project_context(
         if not root.exists() or not root.is_dir():
             raise ProjectContextError(f"--project-root {root} does not name an existing directory.")
         existing_match = _matches_existing_root(root)
-        module = _read_module_metadata(root, strict=load_module_contract)
-        if not existing_match and module is None:
+        descriptor = _read_module_metadata(root, strict=load_module_contract)
+        if not existing_match and descriptor is None:
             raise ProjectContextError(
                 f"--project-root {root} is not a recognized Holoscan source-project or Module root."
             )
         return _build_context(
             root,
-            kind="module" if module is not None else "source",
+            kind="module" if descriptor is not None else "source",
             discovery="project-root",
-            module=module,
+            descriptor=descriptor,
             running_version=running_version,
             load_module_contract=load_module_contract,
+            environ=env,
         )
 
     env_root = env.get("HOLOSCAN_CLI_ROOT")
     if env_root:
         root = _resolve_explicit_root(env_root, original_cwd)
         if root.exists() and root.is_dir():
-            module = _read_module_metadata(root, strict=load_module_contract)
+            descriptor = _read_module_metadata(root, strict=load_module_contract)
             return _build_context(
                 root,
-                kind="module" if module is not None else "source",
+                kind="module" if descriptor is not None else "source",
                 discovery="environment",
-                module=module,
+                descriptor=descriptor,
                 running_version=running_version,
                 load_module_contract=load_module_contract,
+                environ=env,
             )
         warnings = (f"Ignoring invalid HOLOSCAN_CLI_ROOT={env_root!r}; discovering from cwd.",)
 
     module_fallback: Optional[tuple[Path, dict]] = None
     for candidate in (original_cwd, *original_cwd.parents):
         existing_match = _matches_existing_root(candidate)
-        module = _read_module_metadata(candidate, strict=existing_match and load_module_contract)
+        descriptor = _read_module_metadata(
+            candidate, strict=existing_match and load_module_contract
+        )
         if existing_match:
             return _build_context(
                 candidate,
-                kind="module" if module is not None else "source",
+                kind="module" if descriptor is not None else "source",
                 discovery="ancestor",
-                module=module,
+                descriptor=descriptor,
                 warnings=warnings,
                 running_version=running_version,
                 load_module_contract=load_module_contract,
+                environ=env,
             )
-        if module is not None and module_fallback is None:
-            module_fallback = (candidate, module)
+        if descriptor is not None and module_fallback is None:
+            module_fallback = (candidate, descriptor)
 
     if module_fallback is not None:
-        root, module = module_fallback
+        root, descriptor = module_fallback
         return _build_context(
             root,
             kind="module",
             discovery="module-fallback",
-            module=module,
+            descriptor=descriptor,
             warnings=warnings,
             running_version=running_version,
             load_module_contract=load_module_contract,
+            environ=env,
         )
     return _build_context(original_cwd, kind="cwd", discovery="cwd", warnings=warnings)
 

@@ -600,7 +600,7 @@ class HoloscanContainer:
         if explicit_cidfile:
             cidfile = Path(explicit_cidfile)
         else:
-            internal_cidfile = Path(tempfile.gettempdir()) / f"holohub-container-{os.getpid()}.cid"
+            internal_cidfile = Path(tempfile.gettempdir()) / f"holoscan-container-{os.getpid()}.cid"
             cidfile = internal_cidfile
 
         cmd = [self.DOCKER_EXE, "run"]
@@ -818,6 +818,8 @@ class HoloscanContainer:
             "HOLOSCAN_CLI_PATH_PREFIX",
             "HOLOSCAN_CLI_SEARCH_PATH",
             "HOLOSCAN_CLI_CTEST_SCRIPT",
+            "HOLOSCAN_CLI_TARGET_ARCH",
+            "HOLOSCAN_CLI_SDK_MOUNT_READ_ONLY",
         ):
             value = os.environ.get(new_name)
             if value:
@@ -1039,9 +1041,11 @@ class HoloscanContainer:
             lib_path = "/workspace/holoscan-sdk/lib"
         else:
             lib_path = f"/workspace/holoscan-sdk/{build_dir}/lib"
+        _, mount_read_only = get_env_bool("HOLOSCAN_CLI_SDK_MOUNT_READ_ONLY", default=False)
+        mount_suffix = ":ro" if mount_read_only else ""
         return [
             "-v",
-            f"{local_sdk_root}:/workspace/holoscan-sdk",
+            f"{local_sdk_root}:/workspace/holoscan-sdk{mount_suffix}",
             "-e",
             f"HOLOSCAN_LIB_PATH={lib_path}",
             "-e",

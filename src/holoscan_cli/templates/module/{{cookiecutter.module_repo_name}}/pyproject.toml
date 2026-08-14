@@ -20,6 +20,12 @@ requires-python = ">=3.10"
 # wheel cannot guarantee binary compatibility across CUDA variants (cu12/cu13).
 # Document the install command in the README.
 
+[dependency-groups]
+dev = ["holoscan-cli=={{ cookiecutter._holoscan_cli_version }}"]
+
+[tool.holoscan]
+schema-version = 1
+
 [tool.scikit-build]
 cmake.version = ">=3.24"
 # Build only what the wheel needs: turn off test and app subprojects, and

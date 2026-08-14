@@ -20,7 +20,15 @@ ARG BASE_IMAGE=nvcr.io/nvidia/clara-holoscan/holoscan:v{{ cookiecutter.holoscan_
 FROM ${BASE_IMAGE}
 
 ARG DEBIAN_FRONTEND=noninteractive
+ARG PIP_INDEX_URL
 ARG PIP_EXTRA_INDEX_URL
+ARG PIP_NO_INDEX
+
+# Holoscan SDK images may provide Python and pip without the distro venv
+# package, so make the isolation prerequisite explicit.
+RUN apt-get update \
+    && apt-get install --no-install-recommends -y python3-venv \
+    && rm -rf /var/lib/apt/lists/*
 
 # Install the Module's exact CLI requirement. The optional local wheelhouse is
 # bind-mounted only for this step, so unpublished development wheels do not
@@ -28,12 +36,14 @@ ARG PIP_EXTRA_INDEX_URL
 # package index when the wheelhouse is empty.
 COPY requirements-cli.txt /tmp/requirements-cli.txt
 RUN --mount=type=bind,source=.holoscan-cli-wheelhouse,target=/tmp/holoscan-cli-wheelhouse,readonly \
-    python3 -m pip install --no-cache-dir \
+    python3 -m venv /opt/holoscan-cli \
+    && /opt/holoscan-cli/bin/python -m pip install --no-cache-dir \
         --find-links=/tmp/holoscan-cli-wheelhouse \
         -r /tmp/requirements-cli.txt \
+    && ln -s /opt/holoscan-cli/bin/holoscan /usr/local/bin/holoscan \
     && command -v holoscan \
-    && holoscan version \
-    && python3 -c 'from importlib.metadata import version; from pathlib import Path; lines = [line.strip() for line in Path("/tmp/requirements-cli.txt").read_text().splitlines() if line.strip() and not line.lstrip().startswith("#")]; expected = lines[0].split("==", 1)[1]; actual = version("holoscan-cli"); assert actual == expected, f"installed {actual}, expected {expected}"'
+    && /opt/holoscan-cli/bin/python -c 'from importlib.metadata import version; from pathlib import Path; lines = [line.strip() for line in Path("/tmp/requirements-cli.txt").read_text().splitlines() if line.strip() and not line.lstrip().startswith("#")]; expected = lines[0].split("==", 1)[1]; actual = version("holoscan-cli"); assert actual == expected, f"installed {actual}, expected {expected}"' \
+    && holoscan version
 
 # TODO: add module-specific runtime / build dependencies below.
 {% if cookiecutter.language == "cpp" %}RUN apt-get update \

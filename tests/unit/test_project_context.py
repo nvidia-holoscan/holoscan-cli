@@ -29,6 +29,7 @@ def _write_module(
     required_version: str | None = None,
     full_layout: bool = True,
     launcher: str | None = None,
+    pyproject: str | None = None,
 ) -> Path:
     root.mkdir(parents=True)
     metadata = {
@@ -40,6 +41,8 @@ def _write_module(
         }
     }
     (root / "metadata.json").write_text(json.dumps(metadata), encoding="utf-8")
+    if pyproject is not None:
+        (root / "pyproject.toml").write_text(pyproject, encoding="utf-8")
     if full_layout:
         (root / "applications").mkdir()
         (root / "Dockerfile").write_text("FROM scratch\n", encoding="utf-8")
@@ -55,6 +58,13 @@ def _write_module(
 def _subprocess_env() -> dict[str, str]:
     source = Path(__file__).resolve().parents[2] / "src"
     return {**os.environ, "PYTHONPATH": str(source)}
+
+
+def _track_absent_env(monkeypatch, names) -> None:
+    """Let monkeypatch restore keys that production activation sets directly."""
+    for name in names:
+        monkeypatch.setenv(name, "__pytest_restore_absent__")
+        os.environ.pop(name)
 
 
 def test_requirement_parser_accepts_comments_and_one_exact_pin(tmp_path):
@@ -144,19 +154,9 @@ def test_invalid_explicit_project_root_is_specific(tmp_path):
 def test_module_profile_sets_defaults_but_preserves_explicit_environment(tmp_path, monkeypatch):
     root = _write_module(tmp_path / "module", required_version=get_running_cli_version())
     context = discover_project_context(cwd=root, environ={})
-    monkeypatch.delenv("HOLOSCAN_CLI_ROOT", raising=False)
+    _track_absent_env(monkeypatch, context.profile_environment())
     monkeypatch.setenv("HOLOSCAN_CLI_DATA_DIR", "/explicit/data")
-    for name in (
-        "HOLOSCAN_CLI_BUILD_PARENT_DIR",
-        "HOLOSCAN_CLI_SEARCH_PATH",
-        "HOLOSCAN_CLI_REPO_PREFIX",
-        "HOLOSCAN_CLI_CONTAINER_PREFIX",
-        "HOLOSCAN_CLI_WORKSPACE_NAME",
-        "HOLOSCAN_CLI_HOSTNAME_PREFIX",
-        "HOLOSCAN_CLI_BASE_SDK_VERSION",
-        "HOLOSCAN_CLI_PATH_PREFIX",
-    ):
-        monkeypatch.delenv(name, raising=False)
+    monkeypatch.delenv("HOLOSCAN_CLI_PATH_PREFIX", raising=False)
 
     activate_project_context(context)
 
@@ -167,6 +167,249 @@ def test_module_profile_sets_defaults_but_preserves_explicit_environment(tmp_pat
     assert os.environ["HOLOSCAN_CLI_CONTAINER_PREFIX"] == "my-sensor"
     assert os.environ["HOLOSCAN_CLI_SEARCH_PATH"].startswith("metadata.json,applications")
     assert "HOLOSCAN_CLI_PATH_PREFIX" not in os.environ
+
+
+def test_pyproject_config_replaces_wrapper_defaults(tmp_path, monkeypatch):
+    root = _write_module(
+        tmp_path / "module",
+        required_version=get_running_cli_version(),
+        pyproject="""
+[tool.holoscan]
+schema-version = 1
+repo-prefix = "holoscan_5_0_ea_samples"
+container-prefix = "holoscan-5-0-ea-samples"
+workspace-name = "holoscan-5-0-ea-samples"
+hostname-prefix = "holoscan-5-0-ea-samples"
+search-path = ["."]
+build-type = "Release"
+ctest-script = "cmake/project.ctest"
+cuda = 13
+
+[tool.holoscan.sdk]
+version = "5.0.0"
+search = ["../sdk/install-{arch}"]
+allow-parent-search = true
+mount-read-only = true
+
+[tool.holoscan.sdk.base-images]
+x86_64 = "sdk-build-x86_64:fixed"
+aarch64 = "sdk-build-aarch64:fixed"
+""",
+    )
+    (root / "cmake").mkdir()
+    (root / "cmake" / "project.ctest").write_text("# test\n", encoding="utf-8")
+    sdk = root.parent / "sdk" / "install-aarch64"
+    cmake_dir = sdk / "lib" / "cmake" / "holoscan"
+    cmake_dir.mkdir(parents=True)
+    (cmake_dir / "holoscan-config.cmake").write_text("# config\n", encoding="utf-8")
+    monkeypatch.setattr("holoscan_cli.project_context.platform.machine", lambda: "arm64")
+
+    context = discover_project_context(cwd=root, environ={})
+
+    assert context.project_config_path == root / "pyproject.toml"
+    assert context.project_config_schema_version == 1
+    assert context.target_arch == "aarch64"
+    assert context.target_arch_source == "host"
+    assert context.repo_prefix == "holoscan_5_0_ea_samples"
+    assert context.container_prefix == "holoscan-5-0-ea-samples"
+    assert context.workspace_name == "holoscan-5-0-ea-samples"
+    assert context.base_sdk_version == "5.0.0"
+    assert context.base_image == "sdk-build-aarch64:fixed"
+    assert context.default_cuda_version == "13"
+    assert context.sdk_root == sdk.resolve()
+    assert context.sdk_root_source.endswith("tool.holoscan.sdk.search[0]")
+    assert context.sdk_mount_read_only
+    assert context.ctest_script == "cmake/project.ctest"
+    assert context.build_type == "Release"
+
+    _track_absent_env(monkeypatch, context.profile_environment())
+    activate_project_context(context)
+
+    assert os.environ["HOLOSCAN_CLI_BASE_IMAGE"] == "sdk-build-aarch64:fixed"
+    assert os.environ["HOLOSCAN_CLI_BASE_IMAGE_FORMAT"] == "{base_image}"
+    assert os.environ["HOLOSCAN_CLI_DEFAULT_CUDA_VERSION"] == "13"
+    assert os.environ["HOLOSCAN_CLI_DEFAULT_HSDK_DIR"] == str(sdk.resolve())
+    assert os.environ["HOLOSCAN_SDK_ROOT"] == str(sdk.resolve())
+    assert os.environ["holoscan_ROOT"] == str(sdk.resolve())
+    assert os.environ["HOLOSCAN_CLI_CTEST_SCRIPT"] == "cmake/project.ctest"
+    assert os.environ["CMAKE_BUILD_TYPE"] == "Release"
+    assert os.environ["HOLOSCAN_CLI_TARGET_ARCH"] == "aarch64"
+    assert os.environ["HOLOSCAN_CLI_SDK_MOUNT_READ_ONLY"] == "1"
+
+
+def test_unknown_pyproject_config_field_fails_closed(tmp_path):
+    root = _write_module(
+        tmp_path / "module",
+        required_version=get_running_cli_version(),
+        pyproject="""
+[tool.holoscan]
+schema-version = 1
+cdua = 13
+""",
+    )
+
+    with pytest.raises(ProjectContextError, match="unknown field.*cdua"):
+        discover_project_context(cwd=root, environ={})
+
+
+def test_pyproject_config_requires_supported_schema_version(tmp_path):
+    root = _write_module(
+        tmp_path / "module",
+        required_version=get_running_cli_version(),
+        pyproject="""
+[tool.holoscan]
+schema-version = 999
+""",
+    )
+
+    with pytest.raises(ProjectContextError, match="unsupported.*schema-version 999"):
+        discover_project_context(cwd=root, environ={})
+
+
+def test_invalid_explicit_sdk_root_fails_instead_of_falling_back(tmp_path):
+    root = _write_module(
+        tmp_path / "module",
+        required_version=get_running_cli_version(),
+        pyproject="""
+[tool.holoscan]
+schema-version = 1
+
+[tool.holoscan.sdk]
+search = ["../sdk/install-{arch}"]
+allow-parent-search = true
+""",
+    )
+    sdk = root.parent / "sdk" / "install-x86_64" / "lib" / "cmake" / "holoscan"
+    sdk.mkdir(parents=True)
+    (sdk / "holoscan-config.cmake").write_text("# config\n", encoding="utf-8")
+
+    with pytest.raises(ProjectContextError, match="HOLOSCAN_SDK_ROOT.*not a valid"):
+        discover_project_context(
+            cwd=root,
+            environ={"HOLOSCAN_SDK_ROOT": str(root.parent / "missing")},
+        )
+
+
+def test_explicit_sdk_parent_selects_arch_and_configured_cuda_without_shell(tmp_path):
+    root = _write_module(
+        tmp_path / "module",
+        required_version=get_running_cli_version(),
+        pyproject="""
+[tool.holoscan]
+schema-version = 1
+cuda = 13
+""",
+    )
+    sdk_root = tmp_path / "sdk"
+    sdk = sdk_root / "install-cu13-x86_64"
+    cmake_dir = sdk / "lib" / "cmake" / "holoscan"
+    cmake_dir.mkdir(parents=True)
+    (cmake_dir / "holoscan-config.cmake").write_text("# config\n", encoding="utf-8")
+
+    context = discover_project_context(
+        cwd=root,
+        environ={"HOLOSCAN_SDK_ROOT": str(sdk_root)},
+    )
+
+    assert context.sdk_root == sdk.resolve()
+    assert context.sdk_root_source == "HOLOSCAN_SDK_ROOT"
+
+
+def test_committed_sdk_search_rejects_absolute_and_unbounded_paths(tmp_path):
+    absolute = _write_module(
+        tmp_path / "absolute",
+        required_version=get_running_cli_version(),
+        pyproject="""
+[tool.holoscan]
+schema-version = 1
+
+[tool.holoscan.sdk]
+search = ["/opt/nvidia/holoscan"]
+""",
+    )
+    with pytest.raises(ProjectContextError, match="must be relative"):
+        discover_project_context(cwd=absolute, environ={})
+
+    unbounded = _write_module(
+        tmp_path / "nested" / "unbounded",
+        required_version=get_running_cli_version(),
+        pyproject="""
+[tool.holoscan]
+schema-version = 1
+
+[tool.holoscan.sdk]
+search = ["../../sdk"]
+allow-parent-search = true
+""",
+    )
+    with pytest.raises(ProjectContextError, match="outside its allowed boundary"):
+        discover_project_context(cwd=unbounded, environ={})
+
+
+def test_target_arch_environment_selects_an_explicit_image_profile(tmp_path):
+    root = _write_module(
+        tmp_path / "module",
+        required_version=get_running_cli_version(),
+        pyproject="""
+[tool.holoscan]
+schema-version = 1
+
+[tool.holoscan.sdk.base-images]
+x86_64 = "sdk-build-x86_64:fixed"
+aarch64 = "sdk-build-aarch64:fixed"
+""",
+    )
+
+    context = discover_project_context(
+        cwd=root,
+        environ={"HOLOSCAN_CLI_TARGET_ARCH": "arm64"},
+    )
+
+    assert context.target_arch == "aarch64"
+    assert context.target_arch_source == "HOLOSCAN_CLI_TARGET_ARCH"
+    assert context.base_image == "sdk-build-aarch64:fixed"
+
+
+def test_project_config_rejects_image_reference_with_shell_whitespace(tmp_path):
+    root = _write_module(
+        tmp_path / "module",
+        required_version=get_running_cli_version(),
+        pyproject="""
+[tool.holoscan]
+schema-version = 1
+
+[tool.holoscan.sdk.base-images]
+x86_64 = "sdk-build-x86_64:fixed --pull"
+aarch64 = "sdk-build-aarch64:fixed"
+""",
+    )
+
+    with pytest.raises(ProjectContextError, match="image reference without whitespace"):
+        discover_project_context(cwd=root, environ={})
+
+
+def test_container_recursion_resolves_the_stable_sdk_mount(tmp_path, monkeypatch):
+    root = _write_module(
+        tmp_path / "module",
+        required_version=get_running_cli_version(),
+        pyproject="""
+[tool.holoscan]
+schema-version = 1
+""",
+    )
+    mounted_sdk = Path("/workspace/holoscan-sdk")
+    monkeypatch.setattr(
+        "holoscan_cli.project_context._resolve_sdk_installation",
+        lambda path, _arch, _cuda=None: mounted_sdk if path == mounted_sdk else None,
+    )
+
+    context = discover_project_context(
+        cwd=root,
+        environ={"HOLOSCAN_CLI_BUILD_LOCAL": "1"},
+    )
+
+    assert context.sdk_root == mounted_sdk
+    assert context.sdk_root_source == "container:/workspace/holoscan-sdk"
 
 
 def test_host_requirement_mismatch_has_install_guidance(tmp_path):
@@ -206,15 +449,15 @@ def test_container_guidance_uses_cli_recursion_marker(monkeypatch):
     assert not _is_container()
 
 
-def test_legacy_module_launcher_remains_unlocked(tmp_path):
+def test_launcher_file_does_not_disable_module_contract(tmp_path):
     root = _write_module(tmp_path / "module", launcher="holohub")
     context = discover_project_context(cwd=root, environ={}, running_version="1.0.0")
 
-    enforce_project_requirement(context)
+    with pytest.raises(ProjectVersionError, match="missing requirements-cli.txt"):
+        enforce_project_requirement(context)
 
     assert context.is_module
-    assert context.legacy_launcher
-    assert not context.is_standalone_module
+    assert context.is_standalone_module
 
 
 def test_main_and_registry_imports_preserve_profile_barrier():
@@ -303,6 +546,7 @@ def test_version_reports_mismatch_without_blocking(tmp_path):
 
     assert payload["required_version"] == "999.0.0"
     assert payload["version_match"] is False
+    assert payload["project"]["target_arch_source"] == "host"
 
 
 def test_project_root_equals_form_works_for_native_version(tmp_path):
@@ -397,7 +641,7 @@ def test_lifecycle_command_fails_before_work_on_version_mismatch(tmp_path):
     assert '"projects"' not in proc.stdout
 
 
-def test_create_ignores_enclosing_module_requirement(tmp_path):
+def test_create_ignores_enclosing_requirement_before_source_version_validation(tmp_path):
     root = _write_module(tmp_path / "module", required_version="999.0.0")
     child_output = tmp_path / "children"
 
@@ -420,7 +664,7 @@ def test_create_ignores_enclosing_module_requirement(tmp_path):
         cwd=root,
     )
 
-    assert proc.returncode == 0
-    assert "Would create project folder" in proc.stdout
-    assert "requires holoscan-cli" not in proc.stderr
+    assert proc.returncode == 1
+    assert "cannot generate an installable Module contract" in proc.stderr
+    assert "requires holoscan-cli==999.0.0" not in proc.stderr
     assert not child_output.exists()

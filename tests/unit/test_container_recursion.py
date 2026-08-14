@@ -45,7 +45,13 @@ def _make_container() -> project_container.HoloscanContainer:
 
 def _delenv_wrapper_vars(monkeypatch) -> None:
     """Clear the canonical HOLOSCAN_CLI_* wrapper vars."""
-    for suffix in ("PATH_PREFIX", "SEARCH_PATH", "CTEST_SCRIPT"):
+    for suffix in (
+        "PATH_PREFIX",
+        "SEARCH_PATH",
+        "CTEST_SCRIPT",
+        "TARGET_ARCH",
+        "SDK_MOUNT_READ_ONLY",
+    ):
         monkeypatch.delenv(f"HOLOSCAN_CLI_{suffix}", raising=False)
 
 
@@ -85,6 +91,17 @@ def test_environment_args_forward_ctest_script(monkeypatch):
 
     assert "HOLOSCAN_CLI_CTEST_SCRIPT=cmake/isaac_os.container.ctest" in args
     assert "HOLOHUB_CTEST_SCRIPT=cmake/isaac_os.container.ctest" not in args
+
+
+def test_environment_args_forward_target_and_sdk_mount_policy(monkeypatch):
+    _delenv_wrapper_vars(monkeypatch)
+    monkeypatch.setenv("HOLOSCAN_CLI_TARGET_ARCH", "aarch64")
+    monkeypatch.setenv("HOLOSCAN_CLI_SDK_MOUNT_READ_ONLY", "1")
+
+    args = _make_container().get_environment_args()
+
+    assert "HOLOSCAN_CLI_TARGET_ARCH=aarch64" in args
+    assert "HOLOSCAN_CLI_SDK_MOUNT_READ_ONLY=1" in args
 
 
 def test_environment_args_omits_unset_wrapper_vars(monkeypatch):
@@ -132,6 +149,31 @@ def test_local_source_build_context_args_emits_named_context(monkeypatch):
         "--build-context",
         "holoscan-cli-src=/tmp/cli-src",
     ]
+
+
+def test_local_sdk_mount_can_be_declared_read_only(tmp_path, monkeypatch):
+    sdk = tmp_path / "sdk"
+    cmake = sdk / "lib" / "cmake" / "holoscan"
+    cmake.mkdir(parents=True)
+    (cmake / "holoscan-config.cmake").write_text("# config\n", encoding="utf-8")
+    monkeypatch.setenv("HOLOSCAN_CLI_SDK_MOUNT_READ_ONLY", "1")
+
+    args = _make_container().get_local_sdk_options(sdk)
+
+    assert f"{sdk}:/workspace/holoscan-sdk:ro" in args
+
+
+def test_local_sdk_mount_remains_writable_without_policy(tmp_path, monkeypatch):
+    sdk = tmp_path / "sdk"
+    cmake = sdk / "lib" / "cmake" / "holoscan"
+    cmake.mkdir(parents=True)
+    (cmake / "holoscan-config.cmake").write_text("# config\n", encoding="utf-8")
+    monkeypatch.delenv("HOLOSCAN_CLI_SDK_MOUNT_READ_ONLY", raising=False)
+
+    args = _make_container().get_local_sdk_options(sdk)
+
+    assert f"{sdk}:/workspace/holoscan-sdk" in args
+    assert f"{sdk}:/workspace/holoscan-sdk:ro" not in args
 
 
 def _bare_cli() -> project_cli.HoloscanCLI:

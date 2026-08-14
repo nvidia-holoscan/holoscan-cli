@@ -45,9 +45,10 @@ python3 -m venv .venv
 python -m pip install -r requirements-cli.txt
 ```
 
-The global `holoscan` command discovers this Module from its metadata and applies the Module's
-build, data, SDK, image, and workspace defaults. It refuses lifecycle work when the environment
-contains a different CLI version; it never creates or repairs a virtual environment for you.
+The global `holoscan` command discovers this Module from its metadata. Static CLI policy belongs
+in the versioned `[tool.holoscan]` table in `pyproject.toml`; unspecified values use metadata-derived
+or CLI defaults. The CLI refuses lifecycle work when the environment contains a different version;
+it never creates or repairs a virtual environment for you.
 
 | Command | What it does |
 | --- | --- |
@@ -111,7 +112,8 @@ pytest tests/python/ -v
 ## `pyproject.toml`
 
 `pyproject.toml` configures [scikit-build-core](https://scikit-build-core.readthedocs.io/) for
-wheel packaging. Key fields to update before publishing:
+wheel packaging, records an optional PEP 735 development dependency group, and contains the
+schema-versioned static Holoscan CLI policy. Key fields to update before publishing:
 
 | Field | Purpose |
 | --- | --- |
@@ -119,6 +121,8 @@ wheel packaging. Key fields to update before publishing:
 | `[project].version` | Sync with `metadata.json:module.version` |
 | `[project].description` | Short description shown on PyPI |
 | `[project].authors` | Your name / organisation |
+| `[dependency-groups].dev` | Exact CLI convenience pin; keep synchronized with `requirements-cli.txt` |
+| `[tool.holoscan]` | Typed static CLI policy; do not put credentials, absolute machine paths, or executable hooks here |
 | `[tool.scikit-build].cmake.args` | Extra CMake flags passed during `pip install` |
 
 Build a wheel:

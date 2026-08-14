@@ -33,7 +33,7 @@ def get_package_version() -> str:
 
 def collect_version_info(context: ProjectContext | None = None) -> dict:
     """Return the version fields shared by the prose and JSON renderers."""
-    info = {
+    info: dict[str, object] = {
         "package": PACKAGE_NAME,
         "version": get_package_version(),
         "executable": str(Path(sys.argv[0]).resolve()),
@@ -47,6 +47,7 @@ def collect_version_info(context: ProjectContext | None = None) -> dict:
                 "requirements_file": str(context.requirements_path),
                 "required_version": context.required_version,
                 "version_match": context.version_match,
+                "project": context.diagnostics(),
             }
         )
         if context.requirement_error:
@@ -67,5 +68,16 @@ def execute_version_command(args: Namespace):
         print(f"Project:     {info['project_root']}")
         print(f"Requirement: {info.get('required_version') or '(invalid or missing)'}")
         print(f"Version match: {info.get('version_match')}")
+        project = info.get("project", {})
+        if project.get("project_config"):
+            print(f"Configuration: {project['project_config']}")
+            print(f"Config schema: {project['project_config_schema_version']}")
+        if project.get("target_arch"):
+            print(
+                f"Target:      {project['target_arch']} "
+                f"(from {project.get('target_arch_source')})"
+            )
+        if project.get("sdk_root"):
+            print(f"SDK root:    {project['sdk_root']} (from {project.get('sdk_root_source')})")
         if info.get("requirement_error"):
             print(f"Requirement error: {info['requirement_error']}")

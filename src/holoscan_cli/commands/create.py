@@ -38,6 +38,7 @@ from holoscan_cli.utils.io import Color, fatal
 
 LEGACY_MODULE_TEMPLATE = Path("modules/template")
 CREATE_TEMPLATE_ENV = "HOLOSCAN_CLI_CREATE_TEMPLATE"
+LOCAL_SOURCE_VERSION = "0.0.0+local"
 
 
 @dataclass(frozen=True)
@@ -50,6 +51,18 @@ class _TargetState:
 
 class _MaterializationError(RuntimeError):
     """Staged output could not be copied without replacing an existing path."""
+
+
+def _scaffold_cli_version(*, is_module: bool) -> str:
+    """Return an installable version for a generated Module contract."""
+    if is_module and __version__ == LOCAL_SOURCE_VERSION:
+        fatal(
+            "holoscan create cannot generate an installable Module contract from an "
+            "uninstalled source tree (version 0.0.0+local). Build and install a wheel, or "
+            "install the checkout into an isolated environment with distribution metadata, "
+            "then retry."
+        )
+    return __version__
 
 
 def register_create_parser(cli, subparsers) -> argparse.ArgumentParser:
@@ -487,14 +500,17 @@ def handle_create(cli, args: argparse.Namespace) -> None:
         template_dir = Path(template_dir)
         template_defaults = _template_context(template_dir)
         is_module = _is_module_template(template_defaults)
+        scaffold_cli_version = _scaffold_cli_version(is_module=is_module)
 
         context = {
             "project_name": args.project,
             "project_slug": _project_slug(args.project),
             "language": args.language.lower() if args.language else None,
             "year": datetime.datetime.now().year,
-            "_holoscan_cli_version": __version__,
-            "_holoscan_cli_prerelease": _is_prerelease(__version__) if is_module else False,
+            "_holoscan_cli_version": scaffold_cli_version,
+            "_holoscan_cli_prerelease": (
+                _is_prerelease(scaffold_cli_version) if is_module else False
+            ),
         }
         if HoloscanContainer.BASE_SDK_VERSION:
             context["holoscan_version"] = HoloscanContainer.BASE_SDK_VERSION

@@ -35,6 +35,13 @@ def fake_cli(tmp_path):
     return SimpleNamespace(HOLOHUB_ROOT=tmp_path, script_name="holoscan")
 
 
+@pytest.fixture(autouse=True)
+def installed_cli_metadata(monkeypatch):
+    """Creation tests model an installed candidate rather than a PYTHONPATH checkout."""
+    if create.__version__ == create.LOCAL_SOURCE_VERSION:
+        monkeypatch.setattr(create, "__version__", "5.0.0a9")
+
+
 def _write_template(root: Path, relative: str, *, module: bool) -> Path:
     template = root / relative
     template.mkdir(parents=True)
@@ -76,6 +83,18 @@ def test_default_uses_packaged_module_template_and_current_directory(
     output = capsys.readouterr().out
     assert "Template: packaged Module template" in output
     assert f"Directory: {tmp_path / 'holoscan-my-mod'}" in output
+
+
+def test_module_create_rejects_uninstallable_source_only_version(
+    fake_cli, tmp_path, capsys, monkeypatch
+):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(create, "__version__", create.LOCAL_SOURCE_VERSION)
+
+    with pytest.raises(SystemExit):
+        create.handle_create(fake_cli, _make_args())
+
+    assert "cannot generate an installable Module contract" in capsys.readouterr().err
 
 
 def test_missing_legacy_module_template_resolves_to_packaged_alias(fake_cli, tmp_path, capsys):
@@ -523,13 +542,21 @@ def test_packaged_template_generates_self_contained_python_module(
         if line and not line.startswith("#")
     ]
     assert active_requirements == [f"holoscan-cli=={create.__version__}"]
+    pyproject = (project / "pyproject.toml").read_text(encoding="utf-8")
+    assert f'dev = ["holoscan-cli=={create.__version__}"]' in pyproject
+    assert "[tool.holoscan]\nschema-version = 1" in pyproject
     assert not any(
         "./holohub" in path.read_text(encoding="utf-8", errors="ignore")
         for path in project.rglob("*")
         if path.is_file()
     )
     dockerfile = (project / "Dockerfile").read_text(encoding="utf-8")
+    assert "ARG PIP_INDEX_URL" in dockerfile
     assert "ARG PIP_EXTRA_INDEX_URL" in dockerfile
+    assert "ARG PIP_NO_INDEX" in dockerfile
+    assert "python3-venv" in dockerfile
+    assert "python3 -m venv /opt/holoscan-cli" in dockerfile
+    assert "/opt/holoscan-cli/bin/python -m pip install" in dockerfile
     assert "source=.holoscan-cli-wheelhouse" in dockerfile
     assert "-r /tmp/requirements-cli.txt" in dockerfile
     assert "holohub" not in dockerfile

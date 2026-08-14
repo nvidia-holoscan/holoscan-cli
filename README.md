@@ -114,6 +114,52 @@ uvx --from holoscan-cli holoscan --help
 pipx run --spec holoscan-cli holoscan --help
 ```
 
+`uvx` and `pipx run` are optional front ends, not project requirements. A
+standard `python -m venv` plus `python -m pip install -r requirements-cli.txt`
+remains the portable path. Both transient tools use their configured Python
+package indexes; neither makes an offline or trusted installation automatic.
+
+### Static project configuration
+
+Standalone Modules may put static CLI policy in a versioned
+`[tool.holoscan]` table in `pyproject.toml`. `metadata.json` remains the
+Holoscan ecosystem descriptor; it should not accumulate installer policy,
+machine-local paths, credentials, or generic executable hooks.
+
+```toml
+[tool.holoscan]
+schema-version = 1
+repo-prefix = "my_module"
+container-prefix = "my-module"
+search-path = ["."]
+build-type = "Release"
+ctest-script = "cmake/container.ctest"
+cuda = 13
+
+[tool.holoscan.sdk]
+version = "5.0.0"
+search = ["../holoscan-sdk/install-{arch}"]
+allow-parent-search = true
+mount-read-only = true
+
+[tool.holoscan.sdk.base-images]
+x86_64 = "holoscan-sdk-build-x86_64:<reviewed-revision-or-digest>"
+aarch64 = "holoscan-sdk-build-aarch64:<reviewed-revision-or-digest>"
+```
+
+The table is strict and schema-versioned: misspelled or unsupported fields
+fail before lifecycle work. Metadata search paths and CTest scripts must stay
+inside the project. SDK search paths must be relative; the only template token
+is `{arch}`. `allow-parent-search` expands discovery only to the project's
+direct sibling tree, and absolute machine-local SDK locations must be supplied
+with `--local-sdk-root` or `HOLOSCAN_SDK_ROOT`. An invalid explicit SDK root is
+an error rather than a signal to silently select another installation.
+
+Resolution follows command option, typed environment override, committed
+`[tool.holoscan]` policy, metadata-derived default, then CLI default. Use a
+wrapper or separate application only for a genuinely new dynamic workflow;
+do not add a wrapper solely to bootstrap Python or export static defaults.
+
 ## Versioning
 
 `holoscan-cli` release versions are aligned with Holoscan SDK GA release

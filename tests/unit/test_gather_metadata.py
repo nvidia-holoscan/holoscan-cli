@@ -40,3 +40,9 @@ def test_module_uses_declared_name_instead_of_mount_directory(tmp_path):
         projects = gather_metadata([str(mounted_root)])
 
         assert projects[0]["project_name"] == expected_name
+
+        # A configured search path may name the descriptor file itself, not
+        # only the directory containing it.
+        projects = gather_metadata([str(mounted_root / "metadata.json")])
+
+        assert projects[0]["project_name"] == expected_name

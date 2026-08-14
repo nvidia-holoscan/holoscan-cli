@@ -640,6 +640,9 @@ def test_run_default_args_suppression_and_as_root_user_override(tmp_path, monkey
     suppressed, elevated = calls
     assert "default" not in suppressed and "--detach" not in suppressed
     assert "--network" in suppressed
+    internal_cidfile = container_core.get_cli_arg_value(suppressed, "--cidfile")
+    assert internal_cidfile is not None
+    assert Path(internal_cidfile).name.startswith("holoscan-container-")
     image_index = elevated.index("custom:image")
     assert elevated[image_index - 2 : image_index] == ["--user", "0:0"]
 

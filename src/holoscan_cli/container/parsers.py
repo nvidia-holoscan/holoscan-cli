@@ -15,6 +15,7 @@
 # limitations under the License.
 
 import argparse
+import os
 
 from ..utils.io import warn
 
@@ -43,7 +44,11 @@ def get_build_argparse() -> argparse.ArgumentParser:
     parser.add_argument(
         "--cuda",
         type=str,
-        help="(Build container) CUDA version (e.g., 12, 13). Default: 12",
+        default=os.environ.get("HOLOSCAN_CLI_DEFAULT_CUDA_VERSION"),
+        help=(
+            "(Build container) CUDA version (e.g., 12, 13). "
+            "Defaults to project configuration, then host detection"
+        ),
     )
     parser.add_argument(
         "--build-args",

@@ -76,6 +76,7 @@ REQUIRED_MODULE_TEMPLATE_FILES = {
     "cookiecutter.json",
     "hooks/post_gen_project.py",
     "{{cookiecutter.module_repo_name}}/requirements-cli.txt",
+    "{{cookiecutter.module_repo_name}}/pyproject.toml",
     "{{cookiecutter.module_repo_name}}/.dockerignore",
     "{{cookiecutter.module_repo_name}}/.holoscan-cli-wheelhouse/.gitignore",
     "{{cookiecutter.module_repo_name}}/Dockerfile",
@@ -304,13 +305,10 @@ def _dep_names(specs: list[str]) -> set[str]:
     }
 
 
-def test_pyproject_has_no_runtime_dependencies():
-    """``pip install holoscan-cli`` must install with zero runtime deps.
-
-    Schema validation moved to the ``create`` extra; see
-    ``test_pyproject_create_extra_bundles_validator_deps``.
-    """
-    assert _pyproject()["project"]["dependencies"] == []
+def test_pyproject_has_only_python_310_toml_compatibility_dependency():
+    """Core stays dependency-free where ``tomllib`` is in the standard library."""
+    dependencies = _pyproject()["project"]["dependencies"]
+    assert dependencies == ["tomli>=2.0.1; python_version < '3.11'"]
 
 
 def test_pyproject_create_extra_bundles_validator_deps():
