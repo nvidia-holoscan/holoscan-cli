@@ -26,6 +26,12 @@ from holoscan_cli.utils import holohub as project_holohub
 
 def _lint_cli(root, monkeypatch):
     monkeypatch.setattr(project_cli.HoloscanCLI, "HOLOHUB_ROOT", root)
+    # Pin the resolved runner so assembled commands do not depend on whether the
+    # test machine happens to have a `pre-commit` executable on PATH. Tests that
+    # exercise resolution itself override this after calling the helper.
+    monkeypatch.setattr(
+        commands_lint, "_pre_commit_command", lambda: [sys.executable, "-m", "pre_commit"]
+    )
     return object.__new__(project_cli.HoloscanCLI)
 
 

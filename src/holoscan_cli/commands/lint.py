@@ -16,8 +16,10 @@
 """``holoscan lint`` — thin wrapper around ``pre-commit run`` for the project root."""
 
 import argparse
+import importlib.util
 import os
 import shlex
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -33,7 +35,11 @@ def register_lint_parser(cli, subparsers) -> argparse.ArgumentParser:
     """Register the ``lint`` subcommand."""
     parser = subparsers.add_parser("lint", help=help_for("lint"))
     parser.add_argument("path", nargs="?", default=".", help="Path to lint")
-    parser.add_argument("--fix", action="store_true", help="Fix linting issues")
+    parser.add_argument(
+        "--fix",
+        action="store_true",
+        help="No-op alias; pre-commit hooks already auto-fix where possible",
+    )
     parser.add_argument(
         "--install-dependencies",
         action="store_true",
@@ -54,15 +60,29 @@ def _running_in_virtual_env() -> bool:
     return sys.prefix != getattr(sys, "base_prefix", sys.prefix) or hasattr(sys, "real_prefix")
 
 
-def _pre_commit_available() -> bool:
-    """Return True when pre-commit is importable by the active Python."""
-    result = subprocess.run(
-        [sys.executable, "-m", "pre_commit", "--version"],
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-        check=False,
-    )
-    return result.returncode == 0
+def _pre_commit_command() -> Optional[List[str]]:
+    """Return the command that runs pre-commit, or None when unavailable.
+
+    The active interpreter's module wins so a project-pinned pre-commit in the
+    same environment is used. An executable on PATH is the fallback: `uvx`/`uv
+    tool` environments cannot import a separately installed pre-commit and have
+    no pip to install one, so probing only the interpreter would report a
+    perfectly usable pre-commit as missing.
+    """
+    executable = shutil.which("pre-commit")
+    for cmd in ([sys.executable, "-m", "pre_commit"], *([[executable]] if executable else [])):
+        try:
+            result = subprocess.run(
+                [*cmd, "--version"],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                check=False,
+            )
+        except OSError:
+            continue
+        if result.returncode == 0:
+            return cmd
+    return None
 
 
 def _resolve_lint_target(cli, path_arg: Optional[str]) -> Path:
@@ -133,6 +153,16 @@ def _install_lint_deps(cli, dry_run: bool, env: dict) -> None:
     if not dry_run:
         os.chdir(cli.HOLOHUB_ROOT)
 
+    if not dry_run and importlib.util.find_spec("pip") is None:
+        # `uvx`/`uv tool` environments ship no pip, so the install below cannot
+        # succeed there. Say so instead of failing with "No module named pip".
+        fatal(
+            f"`{sys.executable}` has no pip, so lint dependencies cannot be installed into it "
+            f"(uv tool environments are built without pip). Install pre-commit so it is on "
+            f"PATH (`uv tool install pre-commit`), or run this command from a virtual "
+            f"environment that has pip."
+        )
+
     pip_install_cmd = [sys.executable, "-m", "pip", "install"]
     if not _running_in_virtual_env():
         pip_install_cmd.append("--user")
@@ -160,8 +190,9 @@ def _install_lint_deps(cli, dry_run: bool, env: dict) -> None:
         warn("No `.pre-commit-config.yaml` found; skipping pre-commit hook prefetch.")
         return
 
+    pre_commit_cmd = _pre_commit_command() or [sys.executable, "-m", "pre_commit"]
     run_command(
-        [sys.executable, "-m", "pre_commit", "install-hooks"],
+        [*pre_commit_cmd, "install-hooks"],
         dry_run=dry_run,
         env=env,
     )
@@ -210,29 +241,28 @@ def handle_lint(cli, args: argparse.Namespace) -> None:
         )
         sys.exit(0)
 
+    # Resolve in both modes so --dryrun reports the command that would really
+    # run; only a real run may install.
+    resolved = _pre_commit_command()
     if not args.dryrun:
         _check_pre_commit_cache_writable(env)
-        if not _pre_commit_available():
+        if resolved is None:
             info("pre-commit is not installed; installing lint dependencies.")
             _install_lint_deps(cli, False, env=env)
-            if not _pre_commit_available():
+            resolved = _pre_commit_command()
+            if resolved is None:
                 fatal(
-                    "pre-commit was installed but is still not available on PATH. "
+                    "pre-commit was installed but is still not available. "
                     "Please check your Python environment."
                 )
+    pre_commit_cmd = resolved or [sys.executable, "-m", "pre_commit"]
 
     if args.fix:
         info(
             "`--fix` is a compatibility alias: pre-commit hooks already auto-fix " "where possible."
         )
 
-    cmd: List[str] = [
-        sys.executable,
-        "-m",
-        "pre_commit",
-        "run",
-        "--show-diff-on-failure",
-    ]
+    cmd: List[str] = [*pre_commit_cmd, "run", "--show-diff-on-failure"]
     target = _resolve_lint_target(cli, args.path)
     if target == cli.HOLOHUB_ROOT.resolve():
         cmd.append("--all-files")
