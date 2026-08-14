@@ -283,11 +283,17 @@ allow-parent-search = true
     sdk.mkdir(parents=True)
     (sdk / "holoscan-config.cmake").write_text("# config\n", encoding="utf-8")
 
-    with pytest.raises(ProjectContextError, match="HOLOSCAN_SDK_ROOT.*not a valid"):
-        discover_project_context(
-            cwd=root,
-            environ={"HOLOSCAN_SDK_ROOT": str(root.parent / "missing")},
-        )
+    context = discover_project_context(
+        cwd=root,
+        environ={"HOLOSCAN_SDK_ROOT": str(root.parent / "missing")},
+    )
+
+    # Discovery reports rather than raises: it runs before the command parser, so
+    # raising would reject the environment before --local-sdk-root could override
+    # it. The invalid override must still never resolve the sibling SDK instead.
+    assert context.sdk_root is None
+    assert context.sdk_root_source is None
+    assert any("HOLOSCAN_SDK_ROOT" in warning for warning in context.warnings)
 
 
 def test_explicit_sdk_parent_selects_arch_and_configured_cuda_without_shell(tmp_path):

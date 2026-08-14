@@ -604,21 +604,35 @@ def _resolve_project_profile(
     sdk_source = None
     configured_cuda = resolved.get("default_cuda_version")
     cuda_for_sdk = configured_cuda if isinstance(configured_cuda, str) else None
+    # An invalid HOLOSCAN_SDK_ROOT is reported, not raised. Discovery runs before
+    # the command parser, so raising here would defeat the documented precedence
+    # by rejecting the environment before --local-sdk-root can override it, and
+    # would fail commands that never need an SDK. Commands that do need one
+    # validate at the point of use and fail closed there.
     env_root = environ.get("HOLOSCAN_SDK_ROOT")
+    env_error = None
     if env_root:
         env_path = Path(env_root)
         if not env_path.is_absolute():
-            raise ProjectContextError(
+            env_error = (
                 "HOLOSCAN_SDK_ROOT must be an absolute path to an SDK installation or "
                 f"its parent; got {env_root!r}."
             )
-        sdk_root = _resolve_sdk_installation(env_path, arch, cuda_for_sdk)
-        if sdk_root is None:
-            raise ProjectContextError(
-                f"HOLOSCAN_SDK_ROOT={env_root!r} is not a valid SDK installation for {arch}."
-            )
-        sdk_source = "HOLOSCAN_SDK_ROOT"
-    if sdk_root is None:
+        else:
+            sdk_root = _resolve_sdk_installation(env_path, arch, cuda_for_sdk)
+            if sdk_root is None:
+                env_error = (
+                    f"HOLOSCAN_SDK_ROOT={env_root!r} is not a valid SDK installation for {arch}."
+                )
+            else:
+                sdk_source = "HOLOSCAN_SDK_ROOT"
+    if env_error:
+        # Do not fall back to committed hints: an explicit override that cannot be
+        # honored must not silently resolve a different tree.
+        resolved["warnings"].append(
+            f"{env_error} Pass --local-sdk-root to override it for a single command."
+        )
+    elif sdk_root is None:
         for candidate_path, candidate_source in configured_candidates:
             sdk_root = _resolve_sdk_installation(candidate_path, arch, cuda_for_sdk)
             if sdk_root is not None:

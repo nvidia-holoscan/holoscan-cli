@@ -57,6 +57,9 @@ def collect_version_info(context: ProjectContext | None = None) -> dict:
 
 def execute_version_command(args: Namespace):
     info = collect_version_info(getattr(args, "project_context", None))
+    project_error = getattr(args, "project_error", None)
+    if project_error:
+        info["project_error"] = project_error
     if getattr(args, "json", False):
         print(json_dumps(info))
         return
@@ -81,3 +84,5 @@ def execute_version_command(args: Namespace):
             print(f"SDK root:    {project['sdk_root']} (from {project.get('sdk_root_source')})")
         if info.get("requirement_error"):
             print(f"Requirement error: {info['requirement_error']}")
+    if info.get("project_error"):
+        print(f"Project error: {info['project_error']}")

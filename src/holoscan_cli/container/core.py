@@ -1000,6 +1000,10 @@ class HoloscanContainer:
 
     def get_local_sdk_options(self, local_sdk_root: Optional[Union[str, Path]]) -> List[str]:
         """Get Holoscan SDK-related options"""
+        # Precedence: the explicit command option outranks the environment. Both
+        # are validated here, at the point of use, so a valid --local-sdk-root
+        # overrides an invalid HOLOSCAN_SDK_ROOT and an invalid option is
+        # rejected instead of being mounted into the container.
         if local_sdk_root is None:
             env_root = os.environ.get("HOLOSCAN_SDK_ROOT")
             if not env_root:
@@ -1008,16 +1012,20 @@ class HoloscanContainer:
                     "Please provide --local-sdk-root or set the HOLOSCAN_SDK_ROOT environment variable."
                 )
             local_sdk_root = Path(env_root)
+            sdk_source = f"HOLOSCAN_SDK_ROOT={env_root}"
         else:
             local_sdk_root = Path(local_sdk_root)
+            sdk_source = f"--local-sdk-root {local_sdk_root}"
         build_dir = find_hsdk_build_rel_dir(local_sdk_root)
-        if not Path(build_dir).is_absolute() and not is_valid_sdk_installation(
-            local_sdk_root / build_dir
-        ):
+        installation = (
+            local_sdk_root if Path(build_dir).is_absolute() else local_sdk_root / build_dir
+        )
+        if not is_valid_sdk_installation(installation):
             arch_gpu = get_arch_gpu_str()
-            info(
-                f"Valid SDK installation not found."
-                f" Looking for 'install-{arch_gpu}' or 'build-{arch_gpu}'."
+            fatal(
+                f"{sdk_source} does not contain a Holoscan SDK installation. "
+                f"Expected a directory with lib/cmake/holoscan, or one containing "
+                f"'install-{arch_gpu}' or 'build-{arch_gpu}'."
             )
         if Path(build_dir).is_absolute():
             lib_path = "/workspace/holoscan-sdk/lib"

@@ -298,10 +298,21 @@ def _dispatch(argv: Optional[list[str]]) -> None:
     set_up_logging(args.log_level)
 
     if args.command == "version" or args.show_version:
-        context = discover_project_context(explicit_root=project_root)
-        for warning in context.warnings:
-            print(f"Warning: {warning}", file=sys.stderr)
-        set_active_project_context(context)
+        # `--version` answers "which CLI is this?" and must never depend on the
+        # project: an unreadable config or a schema newer than this CLI would
+        # otherwise make the question unanswerable. `version` still reports the
+        # project, but a resolution failure is data in the report, not an exit.
+        context = None
+        if not args.show_version:
+            try:
+                context = discover_project_context(explicit_root=project_root)
+            except ProjectContextError as exc:
+                args.project_error = str(exc)
+                print(f"Warning: {exc}", file=sys.stderr)
+            else:
+                for warning in context.warnings:
+                    print(f"Warning: {warning}", file=sys.stderr)
+                set_active_project_context(context)
         args.project_context = context
         from .version.version import execute_version_command
 
