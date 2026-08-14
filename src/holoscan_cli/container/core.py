@@ -807,6 +807,13 @@ class HoloscanContainer:
             if value:
                 args.extend(["-e", f"{new_name}={value}"])
 
+        # Project-declared passthrough: forward only the names the project asked
+        # for, and only when they are set on the host.
+        for name in os.environ.get("HOLOSCAN_CLI_FORWARD_ENV", "").split(","):
+            name = name.strip()
+            if name and name in os.environ:
+                args.extend(["-e", f"{name}={os.environ[name]}"])
+
         # Pass adequate variables for SCCACHE
         _, enable_sccache = get_env_bool("HOLOSCAN_CLI_ENABLE_SCCACHE", default=False)
         sccache_keys = [k for k in os.environ if k.startswith("SCCACHE_")]

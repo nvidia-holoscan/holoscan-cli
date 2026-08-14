@@ -674,3 +674,45 @@ def test_create_ignores_enclosing_requirement_before_source_version_validation(t
     assert "cannot generate an installable Module contract" in proc.stderr
     assert "requires holoscan-cli==999.0.0" not in proc.stderr
     assert not child_output.exists()
+
+
+def test_schema_version_is_optional(tmp_path):
+    root = _write_module(
+        tmp_path / "module",
+        required_version=get_running_cli_version(),
+        pyproject='[tool.holoscan]\nbuild-type = "Debug"\n',
+    )
+
+    context = discover_project_context(cwd=root, environ={})
+
+    assert context.build_type == "Debug"
+
+
+def test_docker_args_and_forward_env_reach_the_environment(tmp_path):
+    root = _write_module(
+        tmp_path / "module",
+        required_version=get_running_cli_version(),
+        pyproject="""
+[tool.holoscan]
+docker-build-args = ["--secret", "id=token,env=TOKEN"]
+docker-run-args = ["--privileged", "--pid=host"]
+forward-env = ["IS_CI_BUILD"]
+""",
+    )
+
+    values = discover_project_context(cwd=root, environ={}).profile_environment()
+
+    assert values["HOLOSCAN_CLI_DEFAULT_DOCKER_BUILD_ARGS"] == "--secret id=token,env=TOKEN"
+    assert values["HOLOSCAN_CLI_DEFAULT_DOCKER_RUN_ARGS"] == "--privileged --pid=host"
+    assert values["HOLOSCAN_CLI_FORWARD_ENV"] == "IS_CI_BUILD"
+
+
+def test_forward_env_rejects_non_identifiers(tmp_path):
+    root = _write_module(
+        tmp_path / "module",
+        required_version=get_running_cli_version(),
+        pyproject='[tool.holoscan]\nforward-env = ["NOT AN IDENTIFIER"]\n',
+    )
+
+    with pytest.raises(ProjectContextError, match="forward-env"):
+        discover_project_context(cwd=root, environ={})

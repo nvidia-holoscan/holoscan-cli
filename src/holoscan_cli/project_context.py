@@ -27,6 +27,7 @@ import json
 import os
 import platform
 import re
+import shlex
 import shutil
 import sys
 from dataclasses import dataclass
@@ -66,6 +67,7 @@ _CONTAINER_PREFIX_RE = re.compile(r"[a-z0-9](?:[a-z0-9_.-]{0,126}[a-z0-9])?")
 _WORKSPACE_NAME_RE = re.compile(r"[A-Za-z0-9](?:[A-Za-z0-9_.-]{0,126}[A-Za-z0-9])?")
 _IMAGE_REFERENCE_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._/:@+-]{0,254}")
 _SUPPORTED_ARCHITECTURES = {"x86_64", "aarch64"}
+_ENV_NAME_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
 _TRUE_ENV_VALUES = {"1", "true", "yes", "on"}
 
 
@@ -108,6 +110,9 @@ class ProjectContext:
     sdk_mount_read_only: bool = False
     ctest_script: Optional[str] = None
     build_type: Optional[str] = None
+    docker_build_args: Optional[str] = None
+    docker_run_args: Optional[str] = None
+    forward_env: Optional[str] = None
     warnings: tuple[str, ...] = ()
 
     @property
@@ -154,6 +159,9 @@ class ProjectContext:
             "CMAKE_BUILD_TYPE": self.build_type,
             "HOLOSCAN_CLI_TARGET_ARCH": self.target_arch,
             "HOLOSCAN_CLI_SDK_MOUNT_READ_ONLY": "1" if self.sdk_mount_read_only else None,
+            "HOLOSCAN_CLI_DEFAULT_DOCKER_BUILD_ARGS": self.docker_build_args,
+            "HOLOSCAN_CLI_DEFAULT_DOCKER_RUN_ARGS": self.docker_run_args,
+            "HOLOSCAN_CLI_FORWARD_ENV": self.forward_env,
         }
         values.update({key: value for key, value in optional_values.items() if value})
         return values
@@ -196,6 +204,9 @@ class ProjectContext:
                 "sdk_mount_read_only": self.sdk_mount_read_only,
                 "ctest_script": self.ctest_script,
                 "build_type": self.build_type,
+                "docker_build_args": self.docker_build_args,
+                "docker_run_args": self.docker_run_args,
+                "forward_env": self.forward_env,
             }
         )
         return data
@@ -369,11 +380,16 @@ def _read_holoscan_project_config(root: Path) -> tuple[Optional[Path], dict]:
             "build-type",
             "ctest-script",
             "cuda",
+            "docker-build-args",
+            "docker-run-args",
+            "forward-env",
             "sdk",
         },
         source_path=config_path,
     )
-    schema_version = config.get("schema-version")
+    # Optional: omitting it means the current schema. Declare it only to pin a
+    # version, which lets an older CLI reject a newer schema by name.
+    schema_version = config.get("schema-version", HOLOSCAN_CONFIG_SCHEMA_VERSION)
     if isinstance(schema_version, bool) or not isinstance(schema_version, int):
         raise ProjectContextError(
             f"{config_path}: tool.holoscan.schema-version must be the integer "
@@ -519,6 +535,32 @@ def _resolve_project_profile(
                 f"{config_source}: tool.holoscan.ctest-script does not exist: {relative_script}."
             )
         resolved["ctest_script"] = relative_script
+
+    for key, env_name in (
+        ("docker-build-args", "docker_build_args"),
+        ("docker-run-args", "docker_run_args"),
+    ):
+        values = config.get(key)
+        if values is None:
+            continue
+        if not isinstance(values, list) or not all(
+            isinstance(value, str) and value.strip() for value in values
+        ):
+            raise ProjectContextError(
+                f"{config_source}: tool.holoscan.{key} must be an array of non-empty strings."
+            )
+        resolved[env_name] = shlex.join(value.strip() for value in values)
+
+    forward_env = config.get("forward-env")
+    if forward_env is not None:
+        if not isinstance(forward_env, list) or not all(
+            isinstance(name, str) and _ENV_NAME_RE.fullmatch(name) for name in forward_env
+        ):
+            raise ProjectContextError(
+                f"{config_source}: tool.holoscan.forward-env must be an array of "
+                "environment variable names."
+            )
+        resolved["forward_env"] = ",".join(forward_env)
 
     sdk = config.get("sdk", {})
     base_images = sdk.get("base-images")
@@ -830,6 +872,9 @@ def _build_context(
         sdk_mount_read_only=bool(profile.get("sdk_mount_read_only", False)),
         ctest_script=profile.get("ctest_script"),
         build_type=profile.get("build_type"),
+        docker_build_args=profile.get("docker_build_args"),
+        docker_run_args=profile.get("docker_run_args"),
+        forward_env=profile.get("forward_env"),
         warnings=(*warnings, *profile_warnings),
     )
 
