@@ -550,9 +550,6 @@ def test_packaged_template_generates_self_contained_python_module(
         if path.is_file()
     )
     dockerfile = (project / "Dockerfile").read_text(encoding="utf-8")
-    assert "ARG PIP_INDEX_URL" in dockerfile
-    assert "ARG PIP_EXTRA_INDEX_URL" in dockerfile
-    assert "ARG PIP_NO_INDEX" in dockerfile
     # The CLI installs into the image interpreter, so the console script and the
     # Python that build/package hand to CMake are the same one.
     assert "python3 -m pip install" in dockerfile
@@ -595,7 +592,6 @@ def test_generated_requirement_pins_runtime_and_hints_for_prereleases(
     active = [line for line in requirement.splitlines() if line and not line.startswith("#")]
     assert active == [f"holoscan-cli=={version}"]
     assert ("--extra-index-url https://pypi.nvidia.com" in requirement) is expects_index_hint
-    assert ("PIP_EXTRA_INDEX_URL=https://pypi.nvidia.com" in requirement) is expects_index_hint
 
 
 def test_packaged_template_generates_self_contained_cpp_module(fake_cli, tmp_path, monkeypatch):

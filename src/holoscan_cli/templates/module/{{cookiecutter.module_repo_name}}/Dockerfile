@@ -20,15 +20,10 @@ ARG BASE_IMAGE=nvcr.io/nvidia/clara-holoscan/holoscan:v{{ cookiecutter.holoscan_
 FROM ${BASE_IMAGE}
 
 ARG DEBIAN_FRONTEND=noninteractive
-ARG PIP_INDEX_URL
-ARG PIP_EXTRA_INDEX_URL
-ARG PIP_NO_INDEX
 
-# Install the Module's exact CLI requirement from the configured package index.
-# PIP_INDEX_URL and PIP_EXTRA_INDEX_URL above are honored by pip, so an
-# unpublished build can be resolved by pointing them at a local index.
-# holoscan-cli has no runtime dependencies on Python 3.11+, so installing it
-# into the image's interpreter adds nothing else.
+# Install the Module's exact CLI requirement. holoscan-cli has no runtime
+# dependencies on Python 3.11+, so installing it into the image's interpreter
+# adds nothing else.
 COPY requirements-cli.txt /tmp/requirements-cli.txt
 RUN python3 -m pip install --no-cache-dir \
         -r /tmp/requirements-cli.txt \

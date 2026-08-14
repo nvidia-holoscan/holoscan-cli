@@ -64,17 +64,10 @@ argument:
 
 ```bash
 python -m pip install --extra-index-url https://pypi.nvidia.com -r requirements-cli.txt
-holoscan build-container --build-args="--build-arg PIP_EXTRA_INDEX_URL=https://pypi.nvidia.com"
 ```
 
-Both the host environment and the image install the pin from a package index. To use an
-unpublished build, serve it from a local index and point pip at it in both places, so the same
-artifact is used everywhere:
-
-```bash
-python -m pip install --index-url http://<host>:<port>/simple -r requirements-cli.txt
-holoscan build-container --build-args="--build-arg PIP_INDEX_URL=http://<host>:<port>/simple"
-```
+Both the host environment and the image install the pin from a package index, so a published
+version needs no further configuration.
 
 If a container reports a version mismatch, rebuild it. Runtime commands deliberately never
 pip-install into a running container.
