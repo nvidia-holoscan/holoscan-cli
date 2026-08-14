@@ -24,22 +24,14 @@ ARG PIP_INDEX_URL
 ARG PIP_EXTRA_INDEX_URL
 ARG PIP_NO_INDEX
 
-# Holoscan SDK images may provide Python and pip without the distro venv
-# package, so make the isolation prerequisite explicit.
-RUN apt-get update \
-    && apt-get install --no-install-recommends -y python3-venv \
-    && rm -rf /var/lib/apt/lists/*
-
 # Install the Module's exact CLI requirement from the configured package index.
 # PIP_INDEX_URL and PIP_EXTRA_INDEX_URL above are honored by pip, so an
 # unpublished build can be resolved by pointing them at a local index.
+# holoscan-cli has no runtime dependencies on Python 3.11+, so installing it
+# into the image's interpreter adds nothing else.
 COPY requirements-cli.txt /tmp/requirements-cli.txt
-RUN python3 -m venv /opt/holoscan-cli \
-    && /opt/holoscan-cli/bin/python -m pip install --no-cache-dir \
+RUN python3 -m pip install --no-cache-dir \
         -r /tmp/requirements-cli.txt \
-    && ln -s /opt/holoscan-cli/bin/holoscan /usr/local/bin/holoscan \
-    && command -v holoscan \
-    && /opt/holoscan-cli/bin/python -c 'from importlib.metadata import version; from pathlib import Path; lines = [line.strip() for line in Path("/tmp/requirements-cli.txt").read_text().splitlines() if line.strip() and not line.lstrip().startswith("#")]; expected = lines[0].split("==", 1)[1]; actual = version("holoscan-cli"); assert actual == expected, f"installed {actual}, expected {expected}"' \
     && holoscan version
 
 # TODO: add module-specific runtime / build dependencies below.
@@ -50,11 +42,9 @@ RUN python3 -m venv /opt/holoscan-cli \
         pybind11-dev \
     && rm -rf /var/lib/apt/lists/*
 {% endif %}
-# Python tooling goes into the CLI environment, not the system interpreter.
-# `holoscan build` and `holoscan package` configure CMake with
-# -DPython3_EXECUTABLE=<the CLI's python>, and `--pkg-generator WHEEL` runs
-# `<that python> -m build`, so both the test runner and the wheel frontend are
-# resolved from /opt/holoscan-cli. Installing them with the system pip would
-# leave them invisible to every command that uses them.
-RUN /opt/holoscan-cli/bin/python -m pip install --no-cache-dir \
+# pytest-timeout for tests, build + scikit-build-core for
+# `holoscan package --pkg-generator WHEEL`. These must live in the same
+# interpreter the CLI runs on, because build and package configure CMake with
+# -DPython3_EXECUTABLE=<that interpreter> and the wheel build shells out to it.
+RUN python3 -m pip install --no-cache-dir \
         pytest-timeout build scikit-build-core

@@ -553,10 +553,11 @@ def test_packaged_template_generates_self_contained_python_module(
     assert "ARG PIP_INDEX_URL" in dockerfile
     assert "ARG PIP_EXTRA_INDEX_URL" in dockerfile
     assert "ARG PIP_NO_INDEX" in dockerfile
-    assert "python3-venv" in dockerfile
-    assert "python3 -m venv /opt/holoscan-cli" in dockerfile
-    assert "/opt/holoscan-cli/bin/python -m pip install" in dockerfile
+    # The CLI installs into the image interpreter, so the console script and the
+    # Python that build/package hand to CMake are the same one.
+    assert "python3 -m pip install" in dockerfile
     assert "-r /tmp/requirements-cli.txt" in dockerfile
+    assert "/opt/holoscan-cli" not in dockerfile
     assert "holohub" not in dockerfile
     dockerignore = (project / ".dockerignore").read_text(encoding="utf-8").splitlines()
     assert "requirements-cli.txt" not in dockerignore
