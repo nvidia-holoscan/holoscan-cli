@@ -26,6 +26,12 @@ from holoscan_cli.utils import holohub as project_holohub
 
 def _lint_cli(root, monkeypatch):
     monkeypatch.setattr(project_cli.HoloscanCLI, "HOLOHUB_ROOT", root)
+    # Pin the resolved runner so assembled commands do not depend on whether the
+    # test machine happens to have a `pre-commit` executable on PATH. Tests that
+    # exercise resolution itself override this after calling the helper.
+    monkeypatch.setattr(
+        commands_lint, "_pre_commit_command", lambda *_: [sys.executable, "-m", "pre_commit"]
+    )
     return object.__new__(project_cli.HoloscanCLI)
 
 
@@ -54,25 +60,35 @@ def test_lint_dryrun_uses_pre_commit_all_files(tmp_path, monkeypatch):
     monkeypatch.setattr(commands_lint, "run_command", fake_run_command)
 
     args = argparse.Namespace(path=".", fix=False, install_dependencies=False, dryrun=True)
-    with pytest.raises(SystemExit) as exc_info:
-        commands_lint.handle_lint(lint_cli, args)
+    for configured_python, expected_python in (
+        (None, sys.executable),
+        ("/opt/holoscan/bin/python", "/opt/holoscan/bin/python"),
+    ):
+        calls.clear()
+        monkeypatch.delenv("HOLOSCAN_CLI_PYTHON_BIN", raising=False)
+        if configured_python is not None:
+            monkeypatch.setenv("HOLOSCAN_CLI_PYTHON_BIN", configured_python)
 
-    assert exc_info.value.code == 0
-    assert calls == [
-        {
-            "cmd": [
-                sys.executable,
-                "-m",
-                "pre_commit",
-                "run",
-                "--show-diff-on-failure",
-                "--all-files",
-            ],
-            "check": False,
-            "dry_run": True,
-            "env": calls[0]["env"],
-        }
-    ]
+        with pytest.raises(SystemExit) as exc_info:
+            commands_lint.handle_lint(lint_cli, args)
+
+        assert exc_info.value.code == 0
+        assert calls == [
+            {
+                "cmd": [
+                    sys.executable,
+                    "-m",
+                    "pre_commit",
+                    "run",
+                    "--show-diff-on-failure",
+                    "--all-files",
+                ],
+                "check": False,
+                "dry_run": True,
+                "env": calls[0]["env"],
+            }
+        ]
+        assert calls[0]["env"]["HOLOSCAN_CLI_PYTHON_BIN"] == expected_python
 
 
 def test_lint_dryrun_limits_to_git_tracked_path(tmp_path, monkeypatch):
@@ -137,6 +153,50 @@ def test_install_lint_deps_falls_back_to_pre_commit_package(tmp_path, monkeypatc
     assert calls[0]["dry_run"] is True
     assert calls[1]["cmd"] == [sys.executable, "-m", "pre_commit", "install-hooks"]
     assert calls[1]["dry_run"] is True
+
+
+def test_install_lint_deps_prefers_root_requirements_file(tmp_path, monkeypatch):
+    root = tmp_path / "repo"
+    root.mkdir()
+    requirements = root / "requirements-lint.txt"
+    requirements.write_text("pre-commit==4.6.2\n", encoding="utf-8")
+    legacy_requirements = root / "utilities" / "requirements.lint.txt"
+    legacy_requirements.parent.mkdir()
+    legacy_requirements.write_text("pre-commit==3.8.0\n", encoding="utf-8")
+    (root / ".pre-commit-config.yaml").write_text("repos: []\n")
+    lint_cli = _lint_cli(root, monkeypatch)
+    calls = []
+
+    monkeypatch.setattr(
+        commands_lint,
+        "run_command",
+        lambda cmd, dry_run=False, env=None: (calls.append(cmd) or SimpleNamespace(returncode=0)),
+    )
+    monkeypatch.setattr(commands_lint, "_running_in_virtual_env", lambda: True)
+
+    commands_lint._install_lint_deps(lint_cli, dry_run=True, env={})
+
+    assert calls[0] == [
+        sys.executable,
+        "-m",
+        "pip",
+        "install",
+        "-r",
+        str(requirements),
+    ]
+
+    requirements.unlink()
+    calls.clear()
+    commands_lint._install_lint_deps(lint_cli, dry_run=True, env={})
+
+    assert calls[0] == [
+        sys.executable,
+        "-m",
+        "pip",
+        "install",
+        "-r",
+        str(legacy_requirements),
+    ]
 
 
 def test_lint_dryrun_with_fix_still_runs_pre_commit_all_files(tmp_path, monkeypatch):

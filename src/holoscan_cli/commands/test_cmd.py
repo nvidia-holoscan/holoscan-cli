@@ -64,6 +64,10 @@ def register_test_parser(cli, subparsers, *, container_build) -> argparse.Argume
     parser.add_argument("--no-xvfb", action="store_true", help="Do not use xvfb")
     parser.add_argument("--ctest-script", help="CTest script")
     parser.add_argument(
+        "--local-sdk-root",
+        help="Path to a Holoscan SDK installation or parent used by the test container",
+    )
+    parser.add_argument(
         "--coverage",
         action="store_true",
         help="Enable code coverage in CTest (adds coverage compile flags and runs ctest_coverage)",
@@ -235,6 +239,7 @@ def handle_test(cli, args: argparse.Namespace) -> None:
 
     container.run(
         img=getattr(args, "img", None),
+        local_sdk_root=getattr(args, "local_sdk_root", None),
         use_tini=True,
         docker_opts="--entrypoint=bash",
         as_root=getattr(args, "coverage", False),

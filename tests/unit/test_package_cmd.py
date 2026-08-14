@@ -197,7 +197,7 @@ def test_resolve_module_project_respects_explicit_project(tmp_path, monkeypatch)
     module_dir = tmp_path / "external-module"
     module_dir.mkdir()
     (module_dir / "metadata.json").write_text(
-        json.dumps({"module": {"name": "holoscan-smoke", "language": ["Python"]}}),
+        json.dumps({"module": {"name": "  holoscan-smoke  ", "language": ["Python"]}}),
         encoding="utf-8",
     )
     requested_module = {
@@ -221,10 +221,19 @@ def test_resolve_module_project_respects_explicit_project(tmp_path, monkeypatch)
         "project_type": "module",
         "project_name": "holoscan-smoke",
         "source_folder": str(module_dir),
-        "metadata": {"name": "holoscan-smoke", "language": ["Python"]},
+        "metadata": {"name": "  holoscan-smoke  ", "language": ["Python"]},
     }
     assert matching_project == cwd_project
     assert explicit_project == requested_module
+
+    (module_dir / "metadata.json").write_text(
+        json.dumps({"module": {"name": "   ", "language": ["Python"]}}), encoding="utf-8"
+    )
+    fallback_project = package_cmd._resolve_module_project(
+        cli, project_arg=module_dir.name, language=None
+    )
+
+    assert fallback_project["project_name"] == module_dir.name
 
 
 def test_resolve_module_project_falls_back_to_source_tree_when_cwd_metadata_invalid(

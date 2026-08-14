@@ -79,6 +79,14 @@ def normalize_language(language: str | None, *, strict: bool = False) -> str:
     return normalized
 
 
+def resolve_module_name(metadata: dict, fallback: str) -> str:
+    """Return a trimmed declared Module name, or ``fallback`` when invalid."""
+    declared_name = metadata.get("name")
+    if isinstance(declared_name, str) and declared_name.strip():
+        return declared_name.strip()
+    return fallback
+
+
 def list_normalized_languages(language, *, strict: bool = False) -> list[str]:
     """Return a list of normalized language tags from a single value or sequence."""
     if isinstance(language, str) or language is None:

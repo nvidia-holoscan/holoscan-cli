@@ -554,6 +554,7 @@ def test_handle_test_container_adds_coverage_build_args_and_ctest_options(tmp_pa
         ctest_script=None,
         build_name_suffix=None,
         language="python",
+        local_sdk_root=str(tmp_path / "sdk"),
     )
 
     test_cmd.handle_test(cli, args)
@@ -565,6 +566,7 @@ def test_handle_test_container_adds_coverage_build_args_and_ctest_options(tmp_pa
     ctest_command = run_call["extra_args"][1]
     assert run_call["docker_opts"] == "--entrypoint=bash"
     assert run_call["as_root"] is True
+    assert run_call["local_sdk_root"] == str(tmp_path / "sdk")
     assert "-DAPP=smoke_app" in ctest_command
     assert "-DTAG=image" in ctest_command
     assert (

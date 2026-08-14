@@ -111,6 +111,12 @@ def test_package_accepts_no_docker_build_flag(cli):
     assert args.no_docker_build is False
 
 
+def test_test_accepts_local_sdk_root(cli, tmp_path):
+    args = cli.parser.parse_args(["test", "fixture", "--local-sdk-root", str(tmp_path / "sdk")])
+
+    assert args.local_sdk_root == str(tmp_path / "sdk")
+
+
 def _subparser_help_strings(parser):
     """Return ``{command_name: help}`` recorded on the parser's subparsers action.
 

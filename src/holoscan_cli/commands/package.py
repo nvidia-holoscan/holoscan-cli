@@ -27,6 +27,7 @@ from pathlib import Path
 from typing import Optional
 
 from holoscan_cli.commands.registry import help_for
+from holoscan_cli.metadata.utils import resolve_module_name
 from holoscan_cli.utils.docker import get_entrypoint_command_args
 from holoscan_cli.utils.holohub import (
     check_skip_builds,
@@ -95,7 +96,7 @@ def _resolve_module_project(cli, project_arg: Optional[str], language: Optional[
             data = None
         if isinstance(data, dict) and "module" in data:
             module = data["module"]
-            module_name = module.get("name", cwd.name)
+            module_name = resolve_module_name(module, cwd.name)
             if project_arg is None or _normalize_module_name(project_arg) in {
                 _normalize_module_name(module_name),
                 _normalize_module_name(cwd.name),

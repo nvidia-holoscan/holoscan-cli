@@ -93,6 +93,13 @@ REQUIRED_MODULE_TEMPLATE_FILES = {
 
 PYPROJECT = Path(__file__).resolve().parents[2] / "pyproject.toml"
 README = Path(__file__).resolve().parents[2] / "README.md"
+SETUP_TEMPLATE_REQUIREMENTS = (
+    Path(__file__).resolve().parents[2]
+    / "src"
+    / "holoscan_cli"
+    / "setup_scripts"
+    / "requirements.template.txt"
+)
 
 
 def _pyproject() -> dict:
@@ -330,4 +337,33 @@ def test_pyproject_create_extra_bundles_validator_deps():
     assert ">=4.18" in jsonschema_spec, (
         "metadata_validator uses Draft202012Validator(registry=...), which requires "
         f"jsonschema>=4.18; got {jsonschema_spec!r}"
+    )
+
+
+def test_setup_template_requirements_match_the_create_extra():
+    """``holoscan setup template`` must install exactly the ``create`` extra.
+
+    The wheel ships ``setup_scripts/requirements.template.txt`` and
+    ``setup_scripts/template.sh`` pip-installs it, so it is a second
+    declaration of the dependency set that ``[project.optional-dependencies]``
+    already owns. Without this check the two silently diverge -- notably the
+    ``jsonschema<5.0`` cap, which only the extra carried.
+    """
+
+    def normalized(spec: str) -> str:
+        # Poetry renders extras as "jsonschema (>=4.18,<5.0)"; a requirements
+        # file writes "jsonschema>=4.18,<5.0". Compare them on equal terms.
+        return spec.replace(" ", "").replace("(", "").replace(")", "")
+
+    shipped = {
+        normalized(line)
+        for line in SETUP_TEMPLATE_REQUIREMENTS.read_text(encoding="utf-8").splitlines()
+        if line.strip() and not line.lstrip().startswith("#")
+    }
+    declared = {
+        normalized(spec) for spec in _pyproject()["project"]["optional-dependencies"]["create"]
+    }
+    assert shipped == declared, (
+        f"{SETUP_TEMPLATE_REQUIREMENTS.name} and the `create` extra disagree; "
+        f"only in file: {sorted(shipped - declared)}, only in extra: {sorted(declared - shipped)}"
     )
