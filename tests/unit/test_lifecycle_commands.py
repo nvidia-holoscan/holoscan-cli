@@ -763,6 +763,7 @@ def test_handle_test_container_adds_coverage_build_args_and_ctest_options(tmp_pa
     build_call = cli.container.build_calls[0]
     assert "--build-arg COVERAGE=ON" in build_call["build_args"]
     assert "coverage" in build_call["extra_scripts"]
+    assert "xvfb" not in build_call["extra_scripts"]
     run_call = cli.container.run_calls[0]
     ctest_command = run_call["extra_args"][1]
     assert run_call["docker_opts"] == "--entrypoint=bash"
@@ -779,6 +780,78 @@ def test_handle_test_container_adds_coverage_build_args_and_ctest_options(tmp_pa
     # `--ctest-options` must propagate verbatim into the ctest invocation
     # (pre-consolidation `test_holohub_test_ctest_options`).
     assert "-DCASE=smoke" in ctest_command
+    assert "command -v xvfb-run" not in ctest_command
+    assert "xvfb-run -a" not in ctest_command
+
+
+def test_handle_test_container_adds_xvfb_setup_layer_by_default(tmp_path):
+    cli = RecordingCLI(tmp_path)
+    args = _container_args(
+        coverage=False,
+        clear_cache=False,
+        no_xvfb=False,
+        site_name=None,
+        cdash_url=None,
+        platform_name=None,
+        cmake_options=None,
+        ctest_options=None,
+        ctest_script=None,
+        build_name_suffix=None,
+    )
+
+    test_cmd.handle_test(cli, args)
+
+    assert cli.container.build_calls[0]["extra_scripts"] == ["xvfb"]
+    ctest_command = cli.container.run_calls[0]["extra_args"][1]
+    assert "command -v xvfb-run" in ctest_command
+    assert "omitting --no-docker-build" in ctest_command
+    assert "xvfb-run -a ctest" in ctest_command
+
+
+def test_handle_test_container_does_not_duplicate_explicit_xvfb_setup_layer(tmp_path):
+    cli = RecordingCLI(tmp_path)
+    args = _container_args(
+        coverage=False,
+        clear_cache=False,
+        no_xvfb=False,
+        site_name=None,
+        cdash_url=None,
+        platform_name=None,
+        cmake_options=None,
+        ctest_options=None,
+        ctest_script=None,
+        build_name_suffix=None,
+        extra_scripts=["xvfb"],
+    )
+
+    test_cmd.handle_test(cli, args)
+
+    assert cli.container.build_calls[0]["extra_scripts"] == ["xvfb"]
+
+
+def test_handle_test_skipped_container_build_has_actionable_xvfb_guard(tmp_path):
+    cli = RecordingCLI(tmp_path)
+    args = _container_args(
+        coverage=False,
+        clear_cache=False,
+        no_xvfb=False,
+        no_docker_build=True,
+        site_name=None,
+        cdash_url=None,
+        platform_name=None,
+        cmake_options=None,
+        ctest_options=None,
+        ctest_script=None,
+        build_name_suffix=None,
+    )
+
+    test_cmd.handle_test(cli, args)
+
+    assert cli.container.build_calls == []
+    ctest_command = cli.container.run_calls[0]["extra_args"][1]
+    assert "xvfb-run is unavailable" in ctest_command
+    assert "omitting --no-docker-build" in ctest_command
+    assert "exit 127" in ctest_command
 
 
 def test_handle_test_forwards_explicit_local_sdk_root(tmp_path):
@@ -826,6 +899,7 @@ def test_handle_test_local_runs_ctest_in_repo_with_environment(tmp_path, monkeyp
 
     command, kwargs = calls[0]
     assert command[0:2] == ["bash", "-c"]
+    assert "command -v xvfb-run" in command[2]
     assert "xvfb-run -a ctest" in command[2]
     assert "-DTAG=manual" in command[2]
     assert "-S local.ctest" in command[2]

@@ -45,7 +45,7 @@
 #   --platform-name NAME    Sets PLATFORM_NAME portion of the CTest build name
 #   --cmake-options OPT     Append cmake configure flags (may be passed multiple times)
 #   --ctest-options OPT     Append raw ctest arguments (may be passed multiple times)
-#   --no-xvfb               Disable xvfb-run wrapper (enabled by default for GUI apps)
+#   --no-xvfb               Disable the default xvfb-run wrapper
 #   --coverage              Build with coverage instrumentation and run ctest_coverage
 #   --build-name-suffix TAG Override the auto-detected TAG used by CTest
 

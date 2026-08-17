@@ -77,7 +77,11 @@ def register_test_parser(
         help="CTest options, "
         "example: --ctest-options='-DGPU_TYPE=rtx4090' --ctest-options='-DDEBUG_MODE=ON'",
     )
-    parser.add_argument("--no-xvfb", action="store_true", help="Do not use xvfb")
+    parser.add_argument(
+        "--no-xvfb",
+        action="store_true",
+        help="Run without the default Xvfb wrapper; use only for tests that do not need a display",
+    )
     parser.add_argument("--ctest-script", help="CTest script")
     parser.add_argument(
         "--coverage",
@@ -169,6 +173,12 @@ def handle_test(cli, args: argparse.Namespace) -> None:
         build_args = args.build_args or ""
         extra_scripts = (getattr(args, "extra_scripts", None) or []).copy()
 
+        # Container tests use xvfb-run by default, so prepare the image with
+        # the matching bundled setup layer. Keep --no-xvfb as the opt-out and
+        # avoid adding the layer twice when the caller already requested it.
+        if not args.no_xvfb and "xvfb" not in extra_scripts:
+            extra_scripts.append("xvfb")
+
         # Configure coverage if enabled
         if getattr(args, "coverage", False):
             # Add COVERAGE build argument
@@ -188,8 +198,6 @@ def handle_test(cli, args: argparse.Namespace) -> None:
             extra_scripts=extra_scripts,
             include_default_build_args=not getattr(args, "replace_build_args", False),
         )
-    xvfb = "" if args.no_xvfb else "xvfb-run -a"
-
     # TAG is used in CTest scripts by default
     if getattr(args, "build_name_suffix", None):
         tag = args.build_name_suffix
@@ -199,7 +207,16 @@ def handle_test(cli, args: argparse.Namespace) -> None:
         run_image = container.resolve_run_image(getattr(args, "img", None))
         tag = run_image.split(":")[-1]
 
-    ctest_cmd = f"{xvfb} ctest "
+    if args.no_xvfb:
+        ctest_cmd = "ctest "
+    else:
+        ctest_cmd = (
+            "command -v xvfb-run >/dev/null 2>&1 || "
+            "{ echo 'holoscan test: xvfb-run is unavailable. Rebuild the test image by "
+            "omitting --no-docker-build, install Xvfb, or pass --no-xvfb only when the "
+            "tests do not need a display.' >&2; exit 127; }; "
+            "xvfb-run -a ctest "
+        )
     if args.project:
         project_metadata = container.project_metadata or {}
         project_name = project_metadata.get("project_name", args.project)
