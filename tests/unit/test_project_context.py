@@ -12,14 +12,18 @@ from pathlib import Path
 import pytest
 
 from holoscan_cli.project_context import (
+    PROJECT_CONTEXT_CUDA_SOURCE,
+    ProjectContext,
     ProjectContextError,
     ProjectVersionError,
     _is_container,
     activate_project_context,
+    activated_environment_source,
     discover_project_context,
     enforce_project_requirement,
     get_running_cli_version,
     parse_cli_requirement,
+    set_active_project_context,
 )
 
 
@@ -216,6 +220,7 @@ aarch64 = "sdk-build-aarch64:fixed"
     assert context.base_sdk_version == "5.0.0"
     assert context.base_image == "sdk-build-aarch64:fixed"
     assert context.default_cuda_version == "13"
+    assert context.default_cuda_version_source.endswith("tool.holoscan.cuda")
     assert context.sdk_root == sdk.resolve()
     assert context.sdk_root_source.endswith("tool.holoscan.sdk.search[0]")
     assert context.sdk_mount_read_only
@@ -296,6 +301,29 @@ allow-parent-search = true
     assert any("HOLOSCAN_SDK_ROOT" in warning for warning in context.warnings)
 
 
+def test_invalid_cli_sdk_root_is_attributed_to_the_cli_without_self_override_advice(tmp_path):
+    root = _write_module(
+        tmp_path / "module",
+        required_version=get_running_cli_version(),
+        pyproject="""
+[tool.holoscan]
+schema-version = 1
+""",
+    )
+
+    context = discover_project_context(
+        cwd=root,
+        environ={
+            "HOLOSCAN_SDK_ROOT": str(tmp_path / "missing"),
+            "_HOLOSCAN_CLI_PROJECT_CONTEXT_SDK_ROOT_SOURCE": "--local-sdk-root",
+        },
+    )
+
+    warning = " ".join(context.warnings)
+    assert "--local-sdk-root" in warning
+    assert "Pass --local-sdk-root" not in warning
+
+
 def test_explicit_sdk_parent_selects_arch_and_configured_cuda_without_shell(tmp_path):
     root = _write_module(
         tmp_path / "module",
@@ -319,6 +347,72 @@ cuda = 13
 
     assert context.sdk_root == sdk.resolve()
     assert context.sdk_root_source == "HOLOSCAN_SDK_ROOT"
+
+
+def test_environment_cuda_overrides_pyproject_for_sdk_selection(tmp_path):
+    root = _write_module(
+        tmp_path / "module",
+        required_version=get_running_cli_version(),
+        pyproject="""
+[tool.holoscan]
+schema-version = 1
+cuda = 13
+""",
+    )
+    sdk_root = tmp_path / "sdk"
+    for cuda in ("12", "13"):
+        cmake_dir = sdk_root / f"install-cu{cuda}-x86_64" / "lib" / "cmake" / "holoscan"
+        cmake_dir.mkdir(parents=True)
+        (cmake_dir / "holoscan-config.cmake").write_text("# config\n", encoding="utf-8")
+
+    context = discover_project_context(
+        cwd=root,
+        environ={
+            "HOLOSCAN_SDK_ROOT": str(sdk_root),
+            "HOLOSCAN_CLI_DEFAULT_CUDA_VERSION": "12",
+        },
+    )
+
+    assert context.default_cuda_version == "12"
+    assert context.default_cuda_version_source == "HOLOSCAN_CLI_DEFAULT_CUDA_VERSION"
+    assert context.sdk_root == (sdk_root / "install-cu12-x86_64").resolve()
+
+
+def test_invalid_early_cli_cuda_keeps_command_line_attribution(tmp_path):
+    root = _write_module(
+        tmp_path / "module",
+        required_version=get_running_cli_version(),
+    )
+
+    with pytest.raises(ProjectContextError, match=r"--cuda must be an integer major"):
+        discover_project_context(
+            cwd=root,
+            environ={
+                "HOLOSCAN_CLI_DEFAULT_CUDA_VERSION": "not-a-major",
+                PROJECT_CONTEXT_CUDA_SOURCE: "--cuda",
+            },
+        )
+
+
+def test_missing_committed_sdk_search_warns_and_continues_without_mount(tmp_path):
+    root = _write_module(
+        tmp_path / "module",
+        required_version=get_running_cli_version(),
+        pyproject="""
+[tool.holoscan]
+schema-version = 1
+cuda = 13
+
+[tool.holoscan.sdk]
+search = ["missing/install-{arch}"]
+""",
+    )
+
+    context = discover_project_context(cwd=root, environ={})
+
+    assert context.sdk_root is None
+    assert any("tool.holoscan.sdk.search" in warning for warning in context.warnings)
+    assert any("x86_64 and CUDA 13" in warning for warning in context.warnings)
 
 
 def test_committed_sdk_search_rejects_absolute_and_unbounded_paths(tmp_path):
@@ -374,6 +468,29 @@ aarch64 = "sdk-build-aarch64:fixed"
     assert context.target_arch == "aarch64"
     assert context.target_arch_source == "HOLOSCAN_CLI_TARGET_ARCH"
     assert context.base_image == "sdk-build-aarch64:fixed"
+
+
+def test_cross_arch_profile_warns_that_sdk_lookup_uses_the_target(tmp_path, monkeypatch):
+    root = _write_module(
+        tmp_path / "module",
+        required_version=get_running_cli_version(),
+        pyproject="""
+[tool.holoscan]
+schema-version = 1
+
+[tool.holoscan.sdk.base-images]
+x86_64 = "sdk-build-x86_64:fixed"
+aarch64 = "sdk-build-aarch64:fixed"
+""",
+    )
+    monkeypatch.setattr("holoscan_cli.project_context.platform.machine", lambda: "x86_64")
+
+    context = discover_project_context(
+        cwd=root,
+        environ={"HOLOSCAN_CLI_TARGET_ARCH": "aarch64"},
+    )
+
+    assert any("host is x86_64" in warning for warning in context.warnings)
 
 
 def test_project_config_rejects_image_reference_with_shell_whitespace(tmp_path):
@@ -707,11 +824,62 @@ forward-env = ["IS_CI_BUILD"]
     assert values["HOLOSCAN_CLI_FORWARD_ENV"] == "IS_CI_BUILD"
 
 
-def test_forward_env_rejects_non_identifiers(tmp_path):
+def test_environment_base_image_does_not_inherit_project_exact_format(tmp_path, monkeypatch):
+    context = ProjectContext(
+        root=tmp_path,
+        kind="module",
+        discovery="test",
+        base_image="project.example/base:reviewed",
+        base_sdk_version="5.0.0",
+    )
+    monkeypatch.setenv("HOLOSCAN_CLI_BASE_IMAGE", "environment.example/base")
+    monkeypatch.delenv("HOLOSCAN_CLI_BASE_IMAGE_FORMAT", raising=False)
+
+    activate_project_context(context)
+
+    assert os.environ["HOLOSCAN_CLI_BASE_IMAGE"] == "environment.example/base"
+    assert "HOLOSCAN_CLI_BASE_IMAGE_FORMAT" not in os.environ
+    set_active_project_context(None)
+
+
+def test_reactivating_project_context_removes_only_prior_injected_values(tmp_path, monkeypatch):
+    first = ProjectContext(
+        root=tmp_path / "first",
+        kind="module",
+        discovery="test",
+        docker_build_args="--build-arg LAYER=first",
+    )
+    second = ProjectContext(
+        root=tmp_path / "second",
+        kind="module",
+        discovery="test",
+        docker_build_args="--build-arg LAYER=second",
+    )
+    env_name = "HOLOSCAN_CLI_DEFAULT_DOCKER_BUILD_ARGS"
+    _track_absent_env(
+        monkeypatch, set(first.profile_environment()) | set(second.profile_environment())
+    )
+
+    activate_project_context(first)
+    assert os.environ[env_name] == "--build-arg LAYER=first"
+
+    activate_project_context(second)
+    assert os.environ[env_name] == "--build-arg LAYER=second"
+
+    # A post-activation process override becomes real environment and is not
+    # erased when the active context is cleared.
+    os.environ[env_name] = "--build-arg LAYER=explicit"
+    assert activated_environment_source(env_name) == "environment"
+    set_active_project_context(None)
+    assert os.environ[env_name] == "--build-arg LAYER=explicit"
+
+
+@pytest.mark.parametrize("name", ["NOT AN IDENTIFIER", "HOME"])
+def test_forward_env_rejects_non_identifiers(tmp_path, name):
     root = _write_module(
         tmp_path / "module",
         required_version=get_running_cli_version(),
-        pyproject='[tool.holoscan]\nforward-env = ["NOT AN IDENTIFIER"]\n',
+        pyproject=f'[tool.holoscan]\nforward-env = ["{name}"]\n',
     )
 
     with pytest.raises(ProjectContextError, match="forward-env"):

@@ -106,15 +106,104 @@ def test_package_accepts_no_docker_build_flag(cli):
     container-first commands (holohub#1596)."""
     args = cli.parser.parse_args(["package", "fixture", "--no-docker-build"])
     assert args.no_docker_build is True
-    # Default stays False so check_skip_builds doesn't skip unexpectedly.
+    # None preserves the distinction between an omitted flag and an explicit
+    # --docker-build override of HOLOSCAN_CLI_ALWAYS_BUILD.
     args = cli.parser.parse_args(["package", "fixture"])
+    assert args.no_docker_build is None
+
+
+def test_layered_boolean_and_collection_options_preserve_cli_provenance(cli):
+    args = cli.parser.parse_args(
+        [
+            "run",
+            "fixture",
+            "--container",
+            "--docker-build",
+            "--local-build",
+            "--replace-build-args",
+            "--replace-docker-opts",
+            "--replace-configure-args",
+            "--replace-forward-env",
+            "--forward-env",
+            "TOKEN",
+        ]
+    )
+
+    assert args.local is False
     assert args.no_docker_build is False
+    assert args.no_local_build is False
+    assert args.replace_build_args is True
+    assert args.replace_docker_opts == ""
+    assert args.replace_configure_args is True
+    assert args.replace_forward_env is True
+    assert args.forward_env == ["TOKEN"]
+
+
+def test_docker_opts_support_repeated_additions_and_atomic_replacement(cli):
+    args = cli.parser.parse_args(
+        [
+            "run",
+            "fixture",
+            "--docker-opts=--env FIRST=1",
+            "--docker-opts=--network=host",
+            "--replace-docker-opts=--env BASE=1",
+        ]
+    )
+
+    assert args.docker_opts == ["--env FIRST=1", "--network=host"]
+    assert args.replace_docker_opts == "--env BASE=1"
+
+
+def test_empty_additive_docker_opts_does_not_request_replacement(cli):
+    args = cli.parser.parse_args(["run", "fixture", "--docker-opts="])
+
+    assert args.docker_opts == [""]
+    assert args.replace_docker_opts is None
+
+
+@pytest.mark.parametrize(
+    "command",
+    ["build-container", "run-container", "build", "run", "install", "package", "test"],
+)
+def test_additive_layer_suppression_flags_are_available_to_lifecycle_commands(cli, command):
+    args = cli.parser.parse_args(
+        [
+            command,
+            "fixture",
+            "--no-project-config",
+            "--no-mode-config",
+            "--no-inherited-config",
+        ]
+    )
+
+    assert args.no_project_config is True
+    assert args.no_mode_config is True
+    assert args.no_inherited_config is True
 
 
 def test_test_accepts_local_sdk_root(cli, tmp_path):
     args = cli.parser.parse_args(["test", "fixture", "--local-sdk-root", str(tmp_path / "sdk")])
 
     assert args.local_sdk_root == str(tmp_path / "sdk")
+
+
+@pytest.mark.parametrize("value", ["", "   "])
+def test_local_sdk_root_rejects_empty_values(cli, value):
+    with pytest.raises(SystemExit):
+        cli.parser.parse_args(["test", "fixture", "--local-sdk-root", value])
+
+
+@pytest.mark.parametrize("value", ["0", "100", "12.2", "cuda13"])
+def test_cuda_requires_an_integer_major_version(cli, value):
+    with pytest.raises(SystemExit):
+        cli.parser.parse_args(["build-container", "fixture", "--cuda", value])
+
+
+@pytest.mark.parametrize("option", ["--base-img", "--img"])
+@pytest.mark.parametrize("value", ["", "registry.example/image bad"])
+def test_image_options_reject_empty_or_whitespace_values(cli, option, value):
+    with pytest.raises(SystemExit):
+        cli.parser.parse_args(["build-container", "fixture", option, value])
 
 
 def _subparser_help_strings(parser):
@@ -182,13 +271,13 @@ def test_holohub_container_alias_was_removed():
         ["--run-args", "--local"],
         ["--build-args", "--no-cache"],
         ["--docker-opts", "--memory=4g"],
+        ["--replace-docker-opts", "--network=none"],
         ["--configure-args", "-DDEBUG=ON"],
     ],
 )
 def test_dash_prefix_hint_triggered_on_dash_value_args(ambiguous_args):
-    """When a ``--run-args`` / ``--build-args`` / ``--docker-opts`` /
-    ``--configure-args`` value starts with a dash, the CLI must surface
-    the equals-format tip. Pre-consolidation
+    """When a shell-fragment option value starts with a dash, surface the
+    equals-format tip. Pre-consolidation
     `test_cli_ambiguous_dash_prefixed_arguments`."""
     cli = object.__new__(project_cli.HoloscanCLI)
 

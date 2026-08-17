@@ -33,8 +33,8 @@ import re
 from pathlib import Path
 from typing import Mapping, Optional, Tuple
 
-from holoscan_cli.project_context import discover_project_context
-from holoscan_cli.utils.io import format_cmd, info, run_info_command, warn
+from holoscan_cli.project_context import activated_environment_source, discover_project_context
+from holoscan_cli.utils.io import fatal, format_cmd, info, run_info_command, warn
 from holoscan_cli.utils.text import _slugify, get_env_bool, is_env_flag_true
 
 DEFAULT_GIT_REF = "latest"
@@ -60,25 +60,32 @@ BUILD_TYPES = {
 
 
 def check_skip_builds(args) -> Tuple[bool, bool]:
-    """Checking skip build flags and printing info messages"""
-    holohub_always_build, always_build = get_env_bool("HOLOSCAN_CLI_ALWAYS_BUILD", default=True)
-    skip_builds = not always_build
-    skip_docker_build = skip_builds or getattr(args, "no_docker_build", False)
-    skip_local_build = skip_builds or getattr(args, "no_local_build", False)
-    if skip_builds:
-        info(f"Skipping build due to HOLOSCAN_CLI_ALWAYS_BUILD={holohub_always_build}")
-    else:
-        if getattr(args, "no_local_build", False):
-            info("Skipping local build due to --no-local-build")
-        if getattr(args, "no_docker_build", False):
-            info("Skipping container build due to --no-docker-build")
+    """Resolve independent tri-state CLI skip choices over the environment."""
+    always_build_value, always_build = get_env_bool("HOLOSCAN_CLI_ALWAYS_BUILD", default=True)
+    environment_skip = not always_build
+    docker_choice = getattr(args, "no_docker_build", None)
+    local_choice = getattr(args, "no_local_build", None)
+    skip_docker_build = environment_skip if docker_choice is None else bool(docker_choice)
+    skip_local_build = environment_skip if local_choice is None else bool(local_choice)
+
+    if environment_skip and docker_choice is None and local_choice is None:
+        info(f"Skipping build due to HOLOSCAN_CLI_ALWAYS_BUILD={always_build_value}")
+    if local_choice is True:
+        info("Skipping local build due to --no-local-build")
+    if docker_choice is True:
+        info("Skipping container build due to --no-docker-build")
     return skip_docker_build, skip_local_build
 
 
 def is_env_request_local_build(*mode_envs: Mapping[str, str]) -> bool:
-    """Return whether local execution was selected by the environment."""
-    environments = (os.environ, *mode_envs)
-    return any(is_env_flag_true(env.get("HOLOSCAN_CLI_BUILD_LOCAL")) for env in environments)
+    """Resolve process and mode-local execution settings by precedence."""
+    key = "HOLOSCAN_CLI_BUILD_LOCAL"
+    if key in os.environ:
+        return is_env_flag_true(os.environ[key])
+    for mode_env in reversed(mode_envs):
+        if key in mode_env:
+            return is_env_flag_true(mode_env[key])
+    return False
 
 
 def _get_holohub_root() -> Path:
@@ -162,12 +169,21 @@ def determine_project_prefix(project_type: str) -> str:
     return PROJECT_PREFIXES["default"]
 
 
-def get_buildtype_str(build_type: Optional[str]) -> str:
-    """Get CMake build type string"""
-    if not build_type:
-        return os.environ.get("CMAKE_BUILD_TYPE", BUILD_TYPES["default"])
-    build_type_str = build_type.lower().strip()
-    return BUILD_TYPES.get(build_type_str, BUILD_TYPES["default"])
+def get_buildtype_str(
+    build_type: Optional[str], environ: Optional[Mapping[str, str]] = None
+) -> str:
+    """Resolve and validate a supported CMake build type."""
+    source = os.environ if environ is None else environ
+    value = build_type if build_type is not None else source.get("CMAKE_BUILD_TYPE")
+    if value is None:
+        return BUILD_TYPES["default"]
+    normalized = value.strip().lower()
+    if normalized not in BUILD_TYPES:
+        fatal(
+            f"Unsupported build type {value!r}; expected debug, release, rel-debug, "
+            "or RelWithDebInfo."
+        )
+    return BUILD_TYPES[normalized]
 
 
 @functools.lru_cache(maxsize=32)
@@ -306,6 +322,8 @@ def update_env(
     new_env: dict[str, str],
     path_mapping: dict[str, str] | None = None,
     verbose: bool = False,
+    overwrite: bool = True,
+    project_defaults_are_lower: bool = False,
 ) -> None:
     """
     Update the environment variable with the new value from the new environment dictionary.
@@ -321,15 +339,33 @@ def update_env(
     - "value:<VAR>:value2" - prepend and append to existing variable VAR
     - "value" - replace existing variable
 
+    Set ``overwrite=False`` when ``env`` already contains the higher-precedence
+    process environment. Static mode values then act as defaults, while a
+    self-referential value such as ``value:<VAR>`` remains an explicit
+    composition with the inherited value.
+
     """
     # Default to empty dictionaries if not provided
     path_mapping = path_mapping or {}
 
-    # Update the environment variables
+    # Update the environment variables. When applying repository mode defaults
+    # to a copy of the process environment, preserve explicit host values. A
+    # self-reference such as ``value:<PATH>`` is an intentional composition and
+    # therefore still updates the value while retaining the higher layer.
     for key, value in new_env.items():
+        if not overwrite and key in env and f"<{key}>" not in value:
+            if not project_defaults_are_lower:
+                continue
+            # Project activation temporarily bridges root defaults through
+            # os.environ. A selected metadata mode is a more-specific project
+            # layer and may replace those values, but never a real process env.
+            if activated_environment_source(key) != "project":
+                continue
         env[key] = replace_placeholders(value, path_mapping, env)
         if verbose:
-            print(format_cmd(f"    export {key}={env[key]}", is_dryrun=False))
+            # Mode environments can contain credentials or endpoint tokens.
+            # Show which name was configured without copying its value to logs.
+            print(format_cmd(f"    export {key}=<configured>", is_dryrun=False))
 
 
 # ---- git helpers (tag container images with the source-project state) -------

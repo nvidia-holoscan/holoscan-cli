@@ -21,8 +21,19 @@ import shlex
 import shutil
 from pathlib import Path
 
-from holoscan_cli.commands.build import build_project_locally, make_local_build_command
+from holoscan_cli.commands.build import (
+    build_project_locally,
+    make_local_build_command,
+    resolve_effective_build_type,
+    resolve_local_sdk_dir,
+)
 from holoscan_cli.commands.registry import help_for
+from holoscan_cli.configuration import (
+    append_config_vector_flags,
+    apply_container_cli_overrides,
+    report_effective_configuration,
+    resolve_cli_docker_opts,
+)
 from holoscan_cli.metadata.utils import normalize_language
 from holoscan_cli.utils.docker import get_entrypoint_command_args
 from holoscan_cli.utils.holohub import (
@@ -90,7 +101,12 @@ def register_run_parser(
     )
     parser.add_argument("project", help="Project to run")
     parser.add_argument("mode", nargs="?", help="Mode to run (optional)")
-    parser.add_argument("--local", action="store_true", help="Run locally instead of in container")
+    location = parser.add_mutually_exclusive_group()
+    location.add_argument("--local", dest="local", action="store_true", help="Run locally")
+    location.add_argument(
+        "--container", dest="local", action="store_false", help="Run in a container"
+    )
+    parser.set_defaults(local=None)
     parser.add_argument("--verbose", action="store_true", help="Print extra output")
     parser.add_argument(
         "--dryrun", action="store_true", help="Print commands without executing them"
@@ -100,8 +116,10 @@ def register_run_parser(
     )
     parser.add_argument(
         "--build-type",
-        help="Build type (debug, release, rel-debug). "
-        "If not specified, uses CMAKE_BUILD_TYPE environment variable or defaults to 'release'",
+        help=(
+            "Build type (debug, release, rel-debug). Precedence: this option, "
+            "CMAKE_BUILD_TYPE, selected mode, pyproject.toml, then release"
+        ),
     )
     parser.add_argument(
         "--run-args",
@@ -111,7 +129,10 @@ def register_run_parser(
     parser.add_argument(
         "--build-with",
         dest="with_operators",
-        help="Optional operators that should be built, separated by semicolons (;)",
+        help=(
+            "Complete operator selection, separated by semicolons (;). Replaces the "
+            "selected mode's build.depends; use --build-with= to clear it"
+        ),
     )
     parser.add_argument(
         "--parallel", help="Number of parallel build jobs (e.g. --parallel $(($(nproc)-1)))"
@@ -119,13 +140,38 @@ def register_run_parser(
     parser.add_argument(
         "--pkg-generator", default="DEB", help="Package generator for cpack (default: DEB)"
     )
-    parser.add_argument(
+    local_build = parser.add_mutually_exclusive_group()
+    local_build.add_argument(
         "--no-local-build",
+        dest="no_local_build",
         action="store_true",
         help="Skip building and just run the application",
     )
+    local_build.add_argument(
+        "--local-build",
+        dest="no_local_build",
+        action="store_false",
+        help="Build locally even when HOLOSCAN_CLI_ALWAYS_BUILD disables it",
+    )
+    parser.set_defaults(no_local_build=None)
+    docker_build = parser.add_mutually_exclusive_group()
+    docker_build.add_argument(
+        "--no-docker-build",
+        dest="no_docker_build",
+        action="store_true",
+        help="Skip building the container",
+    )
+    docker_build.add_argument(
+        "--docker-build",
+        dest="no_docker_build",
+        action="store_false",
+        help="Build the container even when HOLOSCAN_CLI_ALWAYS_BUILD disables it",
+    )
+    parser.set_defaults(no_docker_build=None)
     parser.add_argument(
-        "--no-docker-build", action="store_true", help="Skip building the container"
+        "--replace-configure-args",
+        action="store_true",
+        help="Ignore CMake configure arguments from the selected mode; use only --configure-args",
     )
     parser.add_argument(
         "--configure-args",
@@ -165,6 +211,7 @@ def handle_run(cli, args: argparse.Namespace) -> None:
     # Get mode-specific build environment variables
     build_mode_env = mode_config.get("env", {}).copy()
     update_env(build_mode_env, mode_config.get("build", {}).get("env", {}))
+    effective_build_type = resolve_effective_build_type(args.build_type, build_mode_env)
 
     # Get mode-specific run environment variables
     run_mode_env = mode_config.get("env", {}).copy()
@@ -174,7 +221,14 @@ def handle_run(cli, args: argparse.Namespace) -> None:
     skip_docker_build, skip_local_build = check_skip_builds(args)
 
     # Check if local mode is requested
-    is_local_mode = args.local or is_env_request_local_build(build_mode_env, run_mode_env)
+    is_local_mode = (
+        args.local
+        if args.local is not None
+        else is_env_request_local_build(build_mode_env, run_mode_env)
+    )
+    location_mode_environment = (
+        run_mode_env if "HOLOSCAN_CLI_BUILD_LOCAL" in run_mode_env else build_mode_env
+    )
 
     # Apply mode-specific build configuration for build process
     build_args = cli.get_effective_build_config(args, mode_config)
@@ -183,7 +237,18 @@ def handle_run(cli, args: argparse.Namespace) -> None:
     run_args = cli.get_effective_run_config(args, mode_config)
 
     if is_local_mode:
-        if args.docker_opts:
+        report_effective_configuration(
+            args,
+            mode_name=mode_name,
+            mode_config=mode_config,
+            location_mode_environment=location_mode_environment,
+            effective_build_type=effective_build_type,
+            is_local_mode=True,
+            default_sdk_root=cli.DEFAULT_SDK_DIR,
+            include_configure=True,
+        )
+        cli_docker_opts, _replace_docker_opts = resolve_cli_docker_opts(args)
+        if cli_docker_opts:
             fatal(
                 "Container arguments were provided with `--docker-opts` but a non-containerized build was requested."
             )
@@ -209,6 +274,7 @@ def handle_run(cli, args: argparse.Namespace) -> None:
                 parallel=getattr(args, "parallel", None),
                 configure_args=build_args.get("configure_args"),
                 extra_env=build_mode_env,
+                local_sdk_root=getattr(args, "local_sdk_root", None),
             )
 
         # Build path mapping
@@ -223,15 +289,33 @@ def handle_run(cli, args: argparse.Namespace) -> None:
 
         # Set up run environment variables
         run_env = os.environ.copy()
+        sdk_environment = os.environ.copy()
+        update_env(
+            sdk_environment,
+            build_mode_env,
+            overwrite=False,
+            project_defaults_are_lower=True,
+        )
+        sdk_dir = resolve_local_sdk_dir(
+            cli, getattr(args, "local_sdk_root", None), environ=sdk_environment
+        )
         run_env["PYTHONPATH"] = (
-            f"{run_env.get('PYTHONPATH', '')}:{cli.DEFAULT_SDK_DIR}/python/lib:{build_dir}/python/lib:{cli.HOLOHUB_ROOT}"
+            f"{run_env.get('PYTHONPATH', '')}:{sdk_dir}/python/lib:"
+            f"{build_dir}/python/lib:{cli.HOLOHUB_ROOT}"
         )
         run_env["HOLOSCAN_CLI_DATA_PATH"] = str(cli.DEFAULT_DATA_DIR)
         run_env["HOLOSCAN_INPUT_PATH"] = run_env.get(
             "HOLOSCAN_INPUT_PATH", str(cli.DEFAULT_DATA_DIR)
         )
         # Apply mode environment variables (mode.run.env takes precedence over run.env)
-        update_env(run_env, run_mode_env, path_mapping, verbose=(args.verbose or args.dryrun))
+        update_env(
+            run_env,
+            run_mode_env,
+            path_mapping,
+            verbose=(args.verbose or args.dryrun),
+            overwrite=False,
+            project_defaults_are_lower=True,
+        )
 
         # Process command template using the path mapping and environment variables
         cmd = replace_placeholders(run_config["command"], path_mapping)
@@ -337,8 +421,22 @@ def handle_run(cli, args: argparse.Namespace) -> None:
             project_name=args.project,
             language=args.language if hasattr(args, "language") else None,
         )
+        apply_container_cli_overrides(args, container)
         container.dryrun = args.dryrun
         container.verbose = args.verbose
+        report_effective_configuration(
+            args,
+            mode_name=mode_name,
+            mode_config=mode_config,
+            location_mode_environment=location_mode_environment,
+            effective_build_type=effective_build_type,
+            is_local_mode=False,
+            default_sdk_root=cli.DEFAULT_SDK_DIR,
+            container=container,
+            include_build=not skip_docker_build,
+            include_run=True,
+            include_configure=True,
+        )
         if not skip_docker_build:
             container.build(
                 docker_file=args.docker_file,
@@ -346,75 +444,91 @@ def handle_run(cli, args: argparse.Namespace) -> None:
                 img=args.img,
                 no_cache=args.no_cache,
                 build_args=build_args.get("build_args"),
+                mode_build_args=build_args.get("mode_build_args"),
                 cuda_version=getattr(args, "cuda", None),
                 extra_scripts=getattr(args, "extra_scripts", []),
+                include_default_build_args=build_args.get("include_default_build_args", True),
             )
-        else:
-            if hasattr(args, "cuda") and args.cuda is not None:
-                container.cuda_version = args.cuda
-
-        run_cmd = f"{in_container_cli_command()} run {args.project}"
+        run_tokens = [*shlex.split(in_container_cli_command()), "run", str(args.project)]
         # Only add mode name if it was explicitly requested by user (not implicitly resolved)
         if mode_name and getattr(args, "mode", None) is not None:
-            run_cmd += f" {mode_name}"
+            run_tokens.append(str(mode_name))
         if language:
-            run_cmd += f" --language {language}"
-        run_cmd += " --local"
+            run_tokens.extend(["--language", str(language)])
+        run_tokens.append("--local")
         if args.verbose:
-            run_cmd += " --verbose"
-        if args.build_type:
-            run_cmd += f" --build-type {args.build_type}"
+            run_tokens.append("--verbose")
+        run_tokens.extend(["--build-type", effective_build_type])
         if getattr(args, "pkg_generator", None) and args.pkg_generator != "DEB":
-            run_cmd += f" --pkg-generator {args.pkg_generator}"
+            run_tokens.extend(["--pkg-generator", str(args.pkg_generator)])
         if args.nsys_profile:
-            run_cmd += " --nsys-profile"
+            run_tokens.append("--nsys-profile")
         if skip_local_build:
-            run_cmd += " --no-local-build"
-        if hasattr(args, "with_operators") and args.with_operators:
-            run_cmd += f' --build-with "{args.with_operators}"'
+            run_tokens.append("--no-local-build")
+        if getattr(args, "with_operators", None) is not None:
+            run_tokens.append(f"--build-with={args.with_operators}")
         if hasattr(args, "run_args") and args.run_args:
-            run_cmd += f" --run-args={shlex.quote(args.run_args)}"
-        if getattr(args, "parallel", None):
-            run_cmd += f" --parallel {args.parallel}"
+            run_tokens.append(f"--run-args={args.run_args}")
+        if getattr(args, "parallel", None) is not None:
+            run_tokens.extend(["--parallel", str(args.parallel)])
+        append_config_vector_flags(run_tokens, args)
+        if getattr(args, "replace_configure_args", False):
+            run_tokens.append("--replace-configure-args")
         if getattr(args, "configure_args", None):
             for configure_arg in args.configure_args:
-                run_cmd += f" --configure-args={shlex.quote(configure_arg)}"
+                run_tokens.append(f"--configure-args={configure_arg}")
+        run_cmd = shlex.join(run_tokens)
 
-        img = getattr(args, "img", None) or container.image_name
-        docker_opts = build_args.get("docker_opts", "")
+        img = container.resolve_run_image(getattr(args, "img", None))
+        docker_opts = run_args.get("docker_opts", build_args.get("docker_opts", ""))
+        mode_docker_opts = run_args.get("mode_docker_opts", build_args.get("mode_docker_opts"))
+        include_default_run_args = run_args.get(
+            "include_default_run_args", build_args.get("include_default_run_args", True)
+        )
+        effective_docker_opts = container.compose_run_args(
+            mode_docker_opts=mode_docker_opts,
+            docker_opts=docker_opts,
+            include_default_run_args=include_default_run_args,
+        )
         as_root = getattr(args, "as_root", False)
         if as_root and not skip_local_build:
             build_cmd = make_local_build_command(
-                in_container_cli_command(), args, mode_name, language
+                in_container_cli_command(),
+                args,
+                mode_name,
+                language,
+                effective_build_type,
             )
-            builder_docker_opts = _transient_builder_docker_opts(
-                " ".join(filter(None, [container.DEFAULT_DOCKER_RUN_ARGS, docker_opts]))
-            )
+            builder_docker_opts = _transient_builder_docker_opts(effective_docker_opts)
             builder_opts_extra, builder_extra_args = get_entrypoint_command_args(
                 img, build_cmd, builder_docker_opts, dry_run=args.dryrun
             )
             if builder_opts_extra:
                 builder_docker_opts = f"{builder_docker_opts} {builder_opts_extra}".strip()
             container.run(
-                img=getattr(args, "img", None),
+                img=img,
                 local_sdk_root=getattr(args, "local_sdk_root", None),
                 enable_x11=getattr(args, "enable_x11", True),
                 ssh_x11=getattr(args, "ssh_x11", False),
                 as_root=False,
                 docker_opts=builder_docker_opts,
                 include_default_run_args=False,
+                forward_env=getattr(args, "forward_env", None),
+                include_default_forward_env=not getattr(args, "replace_forward_env", False),
                 add_volumes=getattr(args, "add_volume", None),
                 extra_args=builder_extra_args,
             )
-            run_cmd += " --no-local-build"
+            run_tokens.append("--no-local-build")
+            run_cmd = shlex.join(run_tokens)
 
+        app_docker_opts = effective_docker_opts
         docker_opts_extra, extra_args = get_entrypoint_command_args(
-            img, run_cmd, docker_opts, dry_run=args.dryrun
+            img, run_cmd, app_docker_opts, dry_run=args.dryrun
         )
         if docker_opts_extra:
-            docker_opts = f"{docker_opts} {docker_opts_extra}".strip()
+            app_docker_opts = f"{app_docker_opts} {docker_opts_extra}".strip()
         container.run(
-            img=getattr(args, "img", None),
+            img=img,
             local_sdk_root=getattr(args, "local_sdk_root", None),
             enable_x11=getattr(args, "enable_x11", True),
             ssh_x11=getattr(args, "ssh_x11", False),
@@ -425,7 +539,10 @@ def handle_run(cli, args: argparse.Namespace) -> None:
             nsys_profile=getattr(args, "nsys_profile", False),
             nsys_location=getattr(args, "nsys_location", ""),
             as_root=as_root,
-            docker_opts=docker_opts,
+            docker_opts=app_docker_opts,
+            include_default_run_args=False,
+            forward_env=getattr(args, "forward_env", None),
+            include_default_forward_env=not getattr(args, "replace_forward_env", False),
             add_volumes=getattr(args, "add_volume", None),
             enable_mps=getattr(args, "mps", False),
             extra_args=extra_args,

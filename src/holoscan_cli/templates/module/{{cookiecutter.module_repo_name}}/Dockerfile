@@ -16,7 +16,7 @@
 # Manual build (without the CLI):
 #   docker build -t holoscan-{{ cookiecutter.module_slug.replace('_', '-') }} .
 
-ARG BASE_IMAGE=nvcr.io/nvidia/clara-holoscan/holoscan:v{{ cookiecutter.holoscan_version }}-cuda13-dgpu
+ARG BASE_IMAGE=nvcr.io/nvidia/clara-holoscan/holoscan:v{{ cookiecutter.holoscan_version }}-cuda13
 FROM ${BASE_IMAGE}
 
 ARG DEBIAN_FRONTEND=noninteractive

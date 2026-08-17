@@ -15,6 +15,9 @@ The CLI presents a single command surface for the source-project development lif
 - **Workspace:** `lint`, `setup`, `clear-cache`, `create`
 
 Run `holoscan <command> --help` for per-command flags.
+Global controls must appear before the command: `--project-root PATH` selects a
+source tree, `--log-level LEVEL` changes logging, and `--version` prints the CLI
+version.
 
 Per-repo wrappers install this package and delegate to `holoscan`, layering on their own configuration via `HOLOSCAN_CLI_*` environment variables:
 
@@ -27,10 +30,12 @@ Common env vars: `HOLOSCAN_CLI_ROOT` (repo root), `HOLOSCAN_CLI_SEARCH_PATH`
 (subdirs to scan for `metadata.json`), `HOLOSCAN_CLI_CREATE_TEMPLATE` (a
 wrapper-selected default overridden by `create --template`),
 `HOLOSCAN_CLI_PATH_PREFIX` (placeholder prefix in metadata templates), and
-`HOLOSCAN_CLI_REPO_PREFIX` (container image name prefix). The legacy
+`HOLOSCAN_CLI_REPO_PREFIX` (source-tree identity; standalone image names use
+`HOLOSCAN_CLI_CONTAINER_PREFIX`). The legacy
 `HOLOHUB_*` spelling is no longer honored since holoscan v4.3.0 — set the
-`HOLOSCAN_CLI_*` names directly. `holoscan env-info` lists every env var the CLI
-reads in the current shell.
+`HOLOSCAN_CLI_*` names directly. `holoscan env-info` reports a classified
+diagnostic subset of the current shell and active project; it is not an
+exhaustive inventory of every variable read by every subprocess.
 
 ## JSON output
 
@@ -49,14 +54,16 @@ removal or rename bumps `schema_version`.
 
 ```text
 src/holoscan_cli/
-  cli.py              top-level argparse + dispatch (HoloscanCLI)
+  __main__.py         native options, project discovery, and dispatch
+  cli.py              source-project argparse and command selection
+  configuration.py    safe effective-configuration reporting
   commands/           one file per subcommand + a central registry
   container/          HoloscanContainer + docker arg helpers + parser builders
-  utils/              io.py, text.py, sdk.py, docker.py, host_setup.py,
-                      env_info.py, holohub.py
+  utils/              process, Docker, SDK, host setup, dependency, JSON,
+                      manifest, and text helpers
   setup_scripts/      bundled bash scripts backing `setup --scripts` and
                       `build-container --extra-scripts`
-  metadata/           project metadata JSON schemas
+  metadata/           project discovery, validation, utilities, and JSON schemas
   templates/module/   self-contained standalone Module cookiecutter
   testing/            CTest helpers shipped in the wheel
 ```
@@ -121,6 +128,9 @@ package indexes; neither makes an offline or trusted installation automatic.
 
 ### Static project configuration
 
+For a short task-oriented introduction, see the
+[configuration guide](https://github.com/nvidia-holoscan/holoscan-cli/blob/main/CONFIGURATION.md).
+
 Standalone Modules may put static CLI policy in a versioned
 `[tool.holoscan]` table in `pyproject.toml`. `metadata.json` remains the
 Holoscan ecosystem descriptor; it should not accumulate installer policy,
@@ -135,6 +145,9 @@ search-path = ["."]
 build-type = "Release"
 ctest-script = "cmake/container.ctest"
 cuda = 13
+docker-build-args = ["--secret", "id=gitlab_token,env=GITLAB_ACCESS_TOKEN"]
+docker-run-args = ["--pid=host", "--ulimit", "rtprio=10"]
+forward-env = ["IS_CI_BUILD", "SCCACHE_MEMCACHED_ENDPOINT"]
 
 [tool.holoscan.sdk]
 version = "5.0.0"
@@ -143,8 +156,8 @@ allow-parent-search = true
 mount-read-only = true
 
 [tool.holoscan.sdk.base-images]
-x86_64 = "holoscan-sdk-build-x86_64:<reviewed-revision-or-digest>"
-aarch64 = "holoscan-sdk-build-aarch64:<reviewed-revision-or-digest>"
+x86_64 = "registry.example.com/holoscan/sdk-build-x86_64:reviewed-2026-08"
+aarch64 = "registry.example.com/holoscan/sdk-build-aarch64:reviewed-2026-08"
 ```
 
 The table is strict and schema-versioned: misspelled or unsupported fields
@@ -154,11 +167,51 @@ is `{arch}`. `allow-parent-search` expands discovery only to the project's
 direct sibling tree, and absolute machine-local SDK locations must be supplied
 with `--local-sdk-root` or `HOLOSCAN_SDK_ROOT`. An invalid explicit SDK root is
 an error rather than a signal to silently select another installation.
+A successful `sdk.search` activates that installation for local builds and
+container mounts, and places its Python package before the image copy.
+`mount-read-only` controls the mount. The CLI validates the selected local SDK
+layout, but does not infer SDK/CUDA compatibility from an arbitrary image name.
 
-Resolution follows command option, typed environment override, committed
-`[tool.holoscan]` policy, metadata-derived default, then CLI default. Use a
+Resolution follows command option, typed environment override, selected
+metadata mode, root `[tool.holoscan]` policy, then CLI default. Use a
 wrapper or separate application only for a genuinely new dynamic workflow;
 do not add a wrapper solely to bootstrap Python or export static defaults.
+
+Scalar settings use strict precedence: command line, environment, project,
+then CLI default. Repository mode values are project defaults and stay below
+the real process environment. Layered Boolean controls provide both directions,
+for example `--local` / `--container` and `--no-docker-build` /
+`--docker-build`.
+
+The Docker argument arrays are deliberately additive because `--build-args`
+and `--docker-opts` are documented as extra options. They are composed from
+project-wide defaults, the selected metadata mode, real environment additions,
+and finally CLI additions. `--docker-opts` is repeatable. Use
+`--replace-docker-opts='...'` to replace every inherited Docker-run fragment in
+one operation, or bare `--replace-docker-opts` to clear them. An empty
+`--docker-opts="$EXTRA_OPTS"` remains an additive no-op and never clears lower
+layers. `--replace-build-args`, `--replace-configure-args`, and
+`--replace-forward-env` provide the corresponding resets for the other
+additive surfaces.
+
+For a broader escape hatch, `--no-project-config`, `--no-mode-config`, and
+`--no-inherited-config` suppress additive vectors from those layers. They do
+not disable scalar project settings, mode commands/environments, SDK or image
+selection, or CLI-generated invariants. Frequently overridden typed values
+such as `--base-img` and `--cuda` are reserved and cannot be defeated by a raw
+lower-precedence `--build-arg` with the same key. `--build-with` is a complete
+operator selection rather than an addition: it replaces mode `build.depends`,
+and `--build-with=` clears it.
+
+`forward-env` contains names only. Docker inherits their host values without
+putting secrets in its argv or dry-run output. Add names with repeated
+`--forward-env NAME`, or combine it with `--replace-forward-env` to discard the
+environment/project allowlist for one invocation. CLI-owned container invariants
+such as `HOME` and `HOLOSCAN_CLI_BUILD_LOCAL` cannot be forwarded.
+`hostname-prefix` is reserved for a future hostname policy and currently has
+no runtime effect. Use `--verbose` on lifecycle commands to see effective
+values and their sources without echoing opaque Docker/CMake option values or
+mode-environment values.
 
 ## Versioning
 
@@ -182,8 +235,8 @@ with `FROM ${BASE_IMAGE}`, using any of the methods below:
    holoscan build-container my_app --base-img nvcr.io/nvidia/clara-holoscan/holoscan:v4.4.0-cuda13
    ```
 
-2. Set the `HOLOSCAN_CLI_BASE_IMAGE` environment variable to a fully qualified
-   image path:
+2. Set `HOLOSCAN_CLI_BASE_IMAGE` to an exact tagged or digested image. It is
+   used without adding another tag:
 
    ```bash
    export HOLOSCAN_CLI_BASE_IMAGE=nvcr.io/nvidia/clara-holoscan/holoscan:v4.4.0-cuda13
@@ -205,6 +258,13 @@ with `FROM ${BASE_IMAGE}`, using any of the methods below:
 
 If none of these is configured, the CLI asks for a base image instead of
 inferring one from its own package version.
+
+Advanced wrappers can set `HOLOSCAN_CLI_BASE_IMAGE_FORMAT` with
+`{base_image}`, `{sdk_version}`, and `{cuda_tag}`, or
+`HOLOSCAN_CLI_DEFAULT_IMAGE_FORMAT` with `{container_prefix}`,
+`{sdk_version}`, and `{cuda_tag}`. An explicit base-image format controls
+composition; without one, tagged images and digests are exact while an
+untagged environment repository uses the SDK/CUDA-derived tag.
 
 ## Build from source
 

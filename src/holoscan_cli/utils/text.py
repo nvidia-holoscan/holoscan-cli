@@ -22,9 +22,10 @@ without side effects beyond reading os.environ or the filesystem.
 
 import os
 import re
+import shlex
 import time
 from pathlib import Path
-from typing import List, Optional, Tuple
+from typing import List, Mapping, Optional, Tuple
 
 # ---- version parsing ---------------------------------------------------------
 
@@ -94,9 +95,11 @@ def get_env_bool(
     env_var_name: str,
     default: bool = True,
     false_values: Tuple[str, ...] = _FALSE_ENV_VALUES,
+    environ: Optional[Mapping[str, str]] = None,
 ) -> Tuple[str, bool]:
     """Check environment variable as boolean flag"""
-    env_value = os.environ.get(env_var_name, str(default).lower())
+    source = os.environ if environ is None else environ
+    env_value = source.get(env_var_name, str(default).lower())
     is_true = env_value.lower() not in false_values
     return env_value, is_true
 
@@ -126,11 +129,30 @@ def get_cli_arg_value(args: List[str], flag: str) -> Optional[str]:
 def normalize_args_str(args):
     """Convert arguments to string format, handling both string and array inputs"""
     if isinstance(args, str):
-        return os.path.expandvars(args)
+        # Parse first, then expand each token independently. Expanding the raw
+        # string first lets whitespace or quotes inside an environment value
+        # reshape the command and can accidentally expose additional options.
+        return shlex.join(os.path.expandvars(arg) for arg in shlex.split(args))
     elif isinstance(args, list):
         expanded_args = [os.path.expandvars(arg) for arg in args]
-        return " ".join(expanded_args)
+        return shlex.join(expanded_args)
     return ""
+
+
+def merge_args_str(*values) -> str:
+    """Compose shell-style argument values without losing token boundaries.
+
+    Each value may use the metadata string form or token-array form accepted by
+    :func:`normalize_args_str`. Values are ordered from lower to higher
+    precedence, so tools with last-option-wins behavior naturally honor the
+    later layer.
+    """
+    tokens = []
+    for value in values:
+        normalized = normalize_args_str(value)
+        if normalized:
+            tokens.extend(shlex.split(normalized))
+    return shlex.join(tokens)
 
 
 # ---- filesystem stats + reporting --------------------------------------------

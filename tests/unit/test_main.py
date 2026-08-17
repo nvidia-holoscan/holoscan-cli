@@ -20,7 +20,17 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from holoscan_cli.__main__ import REMOVED_COMMANDS, main, parse_args, set_up_logging
+from holoscan_cli.__main__ import (
+    REMOVED_COMMANDS,
+    _project_context_environ,
+    main,
+    parse_args,
+    set_up_logging,
+)
+from holoscan_cli.project_context import (
+    PROJECT_CONTEXT_CUDA_SOURCE,
+    PROJECT_CONTEXT_SDK_ROOT_SOURCE,
+)
 
 
 class TestParseArgs:
@@ -39,6 +49,28 @@ class TestParseArgs:
         args = parse_args(argv)
         assert args.command == "list"
         assert args.argv == argv
+
+    def test_project_context_first_pass_applies_cli_selectors_over_environment(
+        self, tmp_path, monkeypatch
+    ):
+        monkeypatch.setenv("HOLOSCAN_CLI_DEFAULT_CUDA_VERSION", "13")
+        monkeypatch.setenv("HOLOSCAN_SDK_ROOT", "/ambient/sdk")
+
+        environ = _project_context_environ(
+            [
+                "holoscan",
+                "build",
+                "fixture",
+                "--cuda=12",
+                "--local-sdk-root",
+                str(tmp_path / "sdk"),
+            ]
+        )
+
+        assert environ["HOLOSCAN_CLI_DEFAULT_CUDA_VERSION"] == "12"
+        assert environ["HOLOSCAN_SDK_ROOT"] == str((tmp_path / "sdk").resolve())
+        assert environ[PROJECT_CONTEXT_CUDA_SOURCE] == "--cuda"
+        assert environ[PROJECT_CONTEXT_SDK_ROOT_SOURCE] == "--local-sdk-root"
 
     @pytest.mark.parametrize(
         "argv",

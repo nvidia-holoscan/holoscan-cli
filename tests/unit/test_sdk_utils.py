@@ -158,6 +158,20 @@ def test_find_hsdk_build_rel_dir_prefers_install_then_build(tmp_path, monkeypatc
     assert sdk.find_hsdk_build_rel_dir(root / "missing") == "build-x86_64"
 
 
+def test_find_hsdk_build_rel_dir_explicit_parent_outranks_ambient_install(tmp_path, monkeypatch):
+    explicit_root = tmp_path / "explicit-sdk"
+    explicit_install = explicit_root / "install-x86_64"
+    ambient_install = tmp_path / "ambient-sdk"
+    for candidate in (explicit_install, ambient_install):
+        config_dir = candidate / "lib" / "cmake" / "holoscan"
+        config_dir.mkdir(parents=True)
+        (config_dir / "HoloscanConfig.cmake").write_text("# ok\n", encoding="utf-8")
+    monkeypatch.setenv("HOLOSCAN_SDK_ROOT", str(ambient_install))
+    monkeypatch.setattr(sdk, "get_arch_gpu_str", lambda: "x86_64")
+
+    assert sdk.find_hsdk_build_rel_dir(explicit_root) == "install-x86_64"
+
+
 def test_get_compute_capacity_from_nvidia_smi(monkeypatch):
     monkeypatch.setattr(sdk.shutil, "which", lambda name: "/usr/bin/nvidia-smi")
     monkeypatch.setattr(

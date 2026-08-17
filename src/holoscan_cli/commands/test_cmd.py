@@ -22,8 +22,15 @@ collection conventions) so the file's purpose is unambiguous.
 
 import argparse
 import os
+import shlex
 
+from holoscan_cli.commands.build import resolve_local_sdk_dir
 from holoscan_cli.commands.registry import help_for
+from holoscan_cli.configuration import (
+    apply_container_cli_overrides,
+    report_effective_configuration,
+    resolve_cli_docker_opts,
+)
 from holoscan_cli.metadata.utils import normalize_language
 from holoscan_cli.utils.holohub import (
     check_skip_builds,
@@ -33,11 +40,20 @@ from holoscan_cli.utils.holohub import (
 from holoscan_cli.utils.io import format_cmd, run_command
 
 
-def register_test_parser(cli, subparsers, *, container_build) -> argparse.ArgumentParser:
+def register_test_parser(
+    cli, subparsers, *, container_build, container_run
+) -> argparse.ArgumentParser:
     """Register the ``test`` subcommand."""
-    parser = subparsers.add_parser("test", help=help_for("test"), parents=[container_build])
+    parser = subparsers.add_parser(
+        "test", help=help_for("test"), parents=[container_build, container_run]
+    )
     parser.add_argument("project", nargs="?", help="Project to test")
-    parser.add_argument("--local", action="store_true", help="Test locally instead of in container")
+    location = parser.add_mutually_exclusive_group()
+    location.add_argument("--local", dest="local", action="store_true", help="Test locally")
+    location.add_argument(
+        "--container", dest="local", action="store_false", help="Test in a container"
+    )
+    parser.set_defaults(local=None)
     parser.add_argument("--verbose", action="store_true", help="Print extra output")
     parser.add_argument(
         "--dryrun", action="store_true", help="Print commands without executing them"
@@ -64,17 +80,24 @@ def register_test_parser(cli, subparsers, *, container_build) -> argparse.Argume
     parser.add_argument("--no-xvfb", action="store_true", help="Do not use xvfb")
     parser.add_argument("--ctest-script", help="CTest script")
     parser.add_argument(
-        "--local-sdk-root",
-        help="Path to a Holoscan SDK installation or parent used by the test container",
-    )
-    parser.add_argument(
         "--coverage",
         action="store_true",
         help="Enable code coverage in CTest (adds coverage compile flags and runs ctest_coverage)",
     )
-    parser.add_argument(
-        "--no-docker-build", action="store_true", help="Skip building the container"
+    docker_build = parser.add_mutually_exclusive_group()
+    docker_build.add_argument(
+        "--no-docker-build",
+        dest="no_docker_build",
+        action="store_true",
+        help="Skip building the container",
     )
+    docker_build.add_argument(
+        "--docker-build",
+        dest="no_docker_build",
+        action="store_false",
+        help="Build the container even when HOLOSCAN_CLI_ALWAYS_BUILD disables it",
+    )
+    parser.set_defaults(no_docker_build=None)
     parser.add_argument(
         "--build-name-suffix",
         help="Suffix to use for ctest build name (defaulting to the image tag)",
@@ -114,6 +137,7 @@ def handle_test(cli, args: argparse.Namespace) -> None:
     container = cli.make_project_container(
         project_name=args.project, language=args.language if hasattr(args, "language") else None
     )
+    apply_container_cli_overrides(args, container)
     if args.clear_cache:
         from argparse import Namespace
 
@@ -130,7 +154,16 @@ def handle_test(cli, args: argparse.Namespace) -> None:
     container.dryrun = args.dryrun
     container.verbose = args.verbose
 
-    is_local_mode = args.local or is_env_request_local_build()
+    is_local_mode = args.local if args.local is not None else is_env_request_local_build()
+
+    report_effective_configuration(
+        args,
+        is_local_mode=is_local_mode,
+        default_sdk_root=cli.DEFAULT_SDK_DIR,
+        container=container,
+        include_build=not is_local_mode and not skip_docker_build,
+        include_run=not is_local_mode,
+    )
 
     if not is_local_mode and not skip_docker_build:
         build_args = args.build_args or ""
@@ -153,11 +186,8 @@ def handle_test(cli, args: argparse.Namespace) -> None:
             build_args=build_args,
             cuda_version=getattr(args, "cuda", None),
             extra_scripts=extra_scripts,
+            include_default_build_args=not getattr(args, "replace_build_args", False),
         )
-    else:
-        if hasattr(args, "cuda") and args.cuda is not None:
-            container.cuda_version = args.cuda
-
     xvfb = "" if args.no_xvfb else "xvfb-run -a"
 
     # TAG is used in CTest scripts by default
@@ -166,12 +196,8 @@ def handle_test(cli, args: argparse.Namespace) -> None:
     elif is_local_mode:
         tag = "local"
     else:
-        image_name = (
-            (getattr(args, "img", None) or container.image_name)
-            if skip_docker_build
-            else (args.base_img or container.default_base_image())
-        )
-        tag = image_name.split(":")[-1]
+        run_image = container.resolve_run_image(getattr(args, "img", None))
+        tag = run_image.split(":")[-1]
 
     ctest_cmd = f"{xvfb} ctest "
     if args.project:
@@ -228,20 +254,33 @@ def handle_test(cli, args: argparse.Namespace) -> None:
             os.chdir(cli.HOLOHUB_ROOT)
 
         env = os.environ.copy()
-        env["PYTHONPATH"] = (
-            f"{env.get('PYTHONPATH', '')}:{cli.DEFAULT_SDK_DIR}/python/lib:{cli.HOLOHUB_ROOT}"
-        )
+        sdk_dir = resolve_local_sdk_dir(cli, getattr(args, "local_sdk_root", None))
+        env["PYTHONPATH"] = f"{env.get('PYTHONPATH', '')}:{sdk_dir}/python/lib:{cli.HOLOHUB_ROOT}"
         env["HOLOSCAN_CLI_DATA_PATH"] = str(cli.DEFAULT_DATA_DIR)
         env.setdefault("HOLOSCAN_INPUT_PATH", str(cli.DEFAULT_DATA_DIR))
 
         run_command(["bash", "-c", ctest_cmd], dry_run=args.dryrun, env=env)
         return
 
+    cli_docker_opts, replace_docker_opts = resolve_cli_docker_opts(args)
+    docker_opts = container.compose_run_args(
+        docker_opts=cli_docker_opts,
+        include_default_run_args=not replace_docker_opts,
+    )
+    docker_opts = shlex.join(shlex.split(docker_opts) + ["--entrypoint=bash"])
     container.run(
-        img=getattr(args, "img", None),
+        img=container.resolve_run_image(getattr(args, "img", None)),
         local_sdk_root=getattr(args, "local_sdk_root", None),
         use_tini=True,
-        docker_opts="--entrypoint=bash",
-        as_root=getattr(args, "coverage", False),
+        persistent=getattr(args, "persistent", False),
+        nsys_profile=getattr(args, "nsys_profile", False),
+        nsys_location=getattr(args, "nsys_location", ""),
+        docker_opts=docker_opts,
+        include_default_run_args=False,
+        forward_env=getattr(args, "forward_env", None),
+        include_default_forward_env=not getattr(args, "replace_forward_env", False),
+        as_root=getattr(args, "coverage", False) or getattr(args, "as_root", False),
+        add_volumes=getattr(args, "add_volume", None),
+        enable_mps=getattr(args, "mps", False),
         extra_args=["-c", ctest_cmd],
     )

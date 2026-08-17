@@ -45,9 +45,11 @@ python -m pip install -r requirements-cli.txt
 ```
 
 The global `holoscan` command discovers this Module from its metadata. Static CLI policy belongs
-in the versioned `[tool.holoscan]` table in `pyproject.toml`; unspecified values use metadata-derived
-or CLI defaults. The CLI refuses lifecycle work when the environment contains a different version;
-it never creates or repairs a virtual environment for you.
+in the versioned `[tool.holoscan]` table in `pyproject.toml`. For a setting available from several
+places, the order is command line, environment, selected metadata mode, root `pyproject.toml`, then
+the CLI default. Run a lifecycle command with `--verbose` to see which source won. The CLI refuses
+lifecycle work when the environment contains a different version; it never creates or repairs a
+virtual environment for you.
 
 | Command | What it does |
 | --- | --- |
@@ -114,6 +116,23 @@ schema-versioned static Holoscan CLI policy. Key fields to update before publish
 | `[dependency-groups].dev` | Exact CLI convenience pin; keep synchronized with `requirements-cli.txt` |
 | `[tool.holoscan]` | Typed static CLI policy; do not put credentials, absolute machine paths, or executable hooks here |
 | `[tool.scikit-build].cmake.args` | Extra CMake flags passed during `pip install` |
+
+Supported Holoscan keys are:
+
+| Table | Keys |
+| --- | --- |
+| `[tool.holoscan]` | `schema-version`, `repo-prefix`, `container-prefix`, `workspace-name`, `hostname-prefix` (reserved), `search-path`, `build-type`, `ctest-script`, `cuda`, `docker-build-args`, `docker-run-args`, `forward-env` |
+| `[tool.holoscan.sdk]` | `version`, `search`, `allow-parent-search`, `mount-read-only`, `base-images` |
+| `[tool.holoscan.sdk.base-images]` | `x86_64`, `aarch64` |
+
+Docker argument arrays, mode CMake options, and forwarded environment names accumulate.
+`--docker-opts` is repeatable; use `--replace-docker-opts='...'` to replace inherited run options
+or bare `--replace-docker-opts` to clear them. The other additive surfaces use
+`--replace-build-args`, `--replace-configure-args`, or `--replace-forward-env` with their normal
+addition option. `--no-project-config`, `--no-mode-config`, and `--no-inherited-config` suppress
+only additive vectors from those layers; scalar project settings and CLI-generated invariants stay
+active. A successful `sdk.search` selects that SDK for local builds and container mounts, so keep
+machine-specific absolute paths in `HOLOSCAN_SDK_ROOT` or pass `--local-sdk-root` instead.
 
 Build a wheel:
 

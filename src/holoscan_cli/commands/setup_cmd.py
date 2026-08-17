@@ -64,15 +64,19 @@ def register_setup_parser(cli, subparsers) -> argparse.ArgumentParser:
     parser.add_argument(
         "--list-scripts",
         action="store_true",
-        help="List all setup scripts found in the HOLOSCAN_CLI_SETUP_SCRIPTS_DIR directory. "
-        + "Run scripts directly or with `holoscan setup --scripts <script_name>`.",
+        help=(
+            "List setup scripts from HOLOSCAN_CLI_SETUP_SCRIPTS_DIR, project "
+            "utilities/setup, or the bundled fallback."
+        ),
     )
     parser.add_argument(
         "--scripts",
         action="append",
-        help="Named dependency installation scripts to run. Can be specified multiple times. "
-        + "Searches in the directory path specified by the HOLOSCAN_CLI_SETUP_SCRIPTS_DIR environment variable. "
-        + "Omit to install default recommended packages for Holoscan SDK development.",
+        help=(
+            "Named dependency scripts to run; repeat for several. Search order: "
+            "HOLOSCAN_CLI_SETUP_SCRIPTS_DIR, project utilities/setup, bundled scripts. "
+            "Omit to install the recommended SDK development packages."
+        ),
     )
     parser.set_defaults(func=lambda args: handle_setup(cli, args))
     return parser

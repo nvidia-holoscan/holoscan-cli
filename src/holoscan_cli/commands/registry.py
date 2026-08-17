@@ -286,7 +286,12 @@ def register_all(
         (package.register_package_parser, "package"),
     ):
         add(register_fn, name, container_build=container_build, container_run=container_run)
-    add(test_cmd.register_test_parser, "test", container_build=container_build)
+    add(
+        test_cmd.register_test_parser,
+        "test",
+        container_build=container_build,
+        container_run=container_run,
+    )
 
     # Discovery / info commands (all six live in commands/info.py).
     for register_fn, name in (

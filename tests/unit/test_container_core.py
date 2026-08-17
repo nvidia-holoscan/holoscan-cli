@@ -27,13 +27,17 @@ These pin two pieces of the container layer that were uncovered:
 
 from __future__ import annotations
 
+import shlex
 import subprocess
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
+from holoscan_cli.configuration import ConfigVectorLayers
 from holoscan_cli.container import core as container_core
 from holoscan_cli.container.core import HoloscanContainer
+from holoscan_cli.project_context import ProjectContext, set_active_project_context
 
 # ---- helpers ----------------------------------------------------------------
 
@@ -141,6 +145,64 @@ def test_default_base_image_uses_explicit_base_image_without_sdk_version(tmp_pat
     c = _stub_container(tmp_path, project_metadata=None)
 
     assert c.default_base_image() == "example.com/base:tag"
+
+
+def test_tagged_environment_base_image_is_exact_even_with_sdk_version(tmp_path, monkeypatch):
+    monkeypatch.setattr(HoloscanContainer, "BASE_SDK_VERSION", "5.0.0", raising=False)
+    monkeypatch.setattr(HoloscanContainer, "BASE_IMAGE_FORMAT", None, raising=False)
+    monkeypatch.setattr(
+        HoloscanContainer, "BASE_IMAGE_NAME", "example.com/base:reviewed", raising=False
+    )
+
+    assert _stub_container(tmp_path).default_base_image("13") == "example.com/base:reviewed"
+
+
+def test_untagged_environment_base_image_composes_with_sdk_version(tmp_path, monkeypatch):
+    monkeypatch.setattr(HoloscanContainer, "BASE_SDK_VERSION", "5.0.0", raising=False)
+    monkeypatch.setattr(HoloscanContainer, "BASE_IMAGE_FORMAT", None, raising=False)
+    monkeypatch.setattr(HoloscanContainer, "BASE_IMAGE_NAME", "example.com/base", raising=False)
+
+    assert _stub_container(tmp_path).default_base_image("13") == "example.com/base:v5.0.0-cuda13"
+
+
+@pytest.mark.parametrize("base_image", ["", "example.com/image bad"])
+def test_configured_base_image_rejects_empty_or_whitespace(tmp_path, monkeypatch, base_image):
+    monkeypatch.setattr(HoloscanContainer, "BASE_IMAGE_NAME", base_image, raising=False)
+
+    with pytest.raises(SystemExit):
+        _stub_container(tmp_path).default_base_image("13")
+
+
+def test_standalone_module_reuses_its_resolved_sdk_installation(tmp_path):
+    installation = tmp_path / "sdk" / "install-x86_64"
+    context = ProjectContext(
+        root=tmp_path,
+        kind="module",
+        discovery="test",
+        target_arch="x86_64",
+        sdk_root=installation,
+        sdk_root_source="tool.holoscan.sdk.search[0]",
+    )
+    set_active_project_context(context)
+    try:
+        assert _stub_container(tmp_path).resolve_local_sdk_root(tmp_path / "sdk") == installation
+    finally:
+        set_active_project_context(None)
+
+
+def test_standalone_module_rejects_an_unresolved_explicit_sdk_root(tmp_path):
+    context = ProjectContext(
+        root=tmp_path,
+        kind="module",
+        discovery="test",
+        target_arch="x86_64",
+    )
+    set_active_project_context(context)
+    try:
+        with pytest.raises(SystemExit):
+            _stub_container(tmp_path).resolve_local_sdk_root(tmp_path / "missing")
+    finally:
+        set_active_project_context(None)
 
 
 def test_default_base_image_does_not_probe_host_when_unconfigured(tmp_path, monkeypatch):
@@ -538,6 +600,37 @@ def test_build_dryrun_omits_base_sdk_version_when_not_configured(tmp_path, monke
     assert not any(arg.startswith("BASE_SDK_VERSION=") for arg in first)
 
 
+def test_build_display_hides_configured_raw_values_but_exec_argv_keeps_them(tmp_path, monkeypatch):
+    project_dir = tmp_path / "applications" / "my_app"
+    project_dir.mkdir(parents=True)
+    (project_dir / "Dockerfile").write_text("FROM scratch\n", encoding="utf-8")
+    calls = []
+    monkeypatch.setattr(container_core, "get_default_cuda_version", lambda: "13")
+    monkeypatch.setattr(container_core, "get_host_gpu", lambda: "dgpu")
+    monkeypatch.setattr(container_core, "get_compute_capacity", lambda: "90")
+    monkeypatch.setattr(
+        container_core,
+        "run_command",
+        lambda cmd, **kwargs: calls.append((cmd, kwargs)),
+    )
+    container = _stub_container(
+        tmp_path,
+        project_metadata={
+            "project_name": "my_app",
+            "source_folder": str(project_dir),
+            "metadata": {"language": "python"},
+        },
+    )
+    container.dryrun = True
+
+    container.build(build_args="--build-arg TOKEN=secret-value")
+
+    command, kwargs = calls[0]
+    assert "TOKEN=secret-value" in command
+    assert "TOKEN=secret-value" not in kwargs["display_override"]
+    assert any("configured Docker build option" in token for token in kwargs["display_override"])
+
+
 def test_run_assembles_docker_command_without_ctk_for_custom_runtime(tmp_path, monkeypatch):
     """A custom Docker runtime bypasses NVIDIA Container Toolkit validation."""
     project_dir = tmp_path / "applications" / "my_app"
@@ -743,6 +836,252 @@ def test_cuda_version_arg_lands_as_cuda_major_build_arg(tmp_path, monkeypatch):
     assert "CUDA_MAJOR=13" in cmd
 
 
+@pytest.mark.parametrize(
+    (
+        "project_field",
+        "compose_method",
+        "mode_kw",
+        "cli_kw",
+        "flag",
+    ),
+    [
+        (
+            "docker_build_args",
+            "compose_build_args",
+            "mode_build_args",
+            "build_args",
+            "--build-arg",
+        ),
+        (
+            "docker_run_args",
+            "compose_run_args",
+            "mode_docker_opts",
+            "docker_opts",
+            "--env",
+        ),
+    ],
+)
+def test_docker_args_compose_project_mode_environment_cli_order(
+    tmp_path,
+    monkeypatch,
+    project_field,
+    compose_method,
+    mode_kw,
+    cli_kw,
+    flag,
+):
+    context = SimpleNamespace(docker_build_args=None, docker_run_args=None)
+    setattr(context, project_field, f"{flag} LAYER=project")
+    monkeypatch.setattr(container_core, "get_active_project_context", lambda: context)
+    env_name = (
+        "HOLOSCAN_CLI_DEFAULT_DOCKER_BUILD_ARGS"
+        if project_field == "docker_build_args"
+        else "HOLOSCAN_CLI_DEFAULT_DOCKER_RUN_ARGS"
+    )
+    monkeypatch.setenv(env_name, f"{flag} LAYER=environment")
+    monkeypatch.setattr(container_core, "activated_environment_source", lambda _name: "environment")
+    container = _stub_container(tmp_path)
+
+    result = getattr(container, compose_method)(
+        **{
+            mode_kw: f"{flag} LAYER=mode",
+            cli_kw: f"{flag} LAYER=cli",
+        }
+    )
+    tokens = shlex.split(result)
+    values = [tokens[index + 1] for index, token in enumerate(tokens[:-1]) if token == flag]
+
+    assert values == [
+        "LAYER=project",
+        "LAYER=mode",
+        "LAYER=environment",
+        "LAYER=cli",
+    ]
+
+
+@pytest.mark.parametrize(
+    ("layers", "expected"),
+    [
+        (
+            ConfigVectorLayers(project=False),
+            ["LAYER=mode", "LAYER=environment", "LAYER=cli"],
+        ),
+        (
+            ConfigVectorLayers(mode=False),
+            ["LAYER=project", "LAYER=environment", "LAYER=cli"],
+        ),
+        (
+            ConfigVectorLayers(project=False, mode=False, environment=False),
+            ["LAYER=cli"],
+        ),
+    ],
+)
+def test_docker_run_args_honor_layer_scoped_suppression(tmp_path, monkeypatch, layers, expected):
+    context = SimpleNamespace(docker_run_args="--env LAYER=project")
+    monkeypatch.setattr(container_core, "get_active_project_context", lambda: context)
+    monkeypatch.setenv("HOLOSCAN_CLI_DEFAULT_DOCKER_RUN_ARGS", "--env LAYER=environment")
+    monkeypatch.setattr(container_core, "activated_environment_source", lambda _name: "environment")
+    container = _stub_container(tmp_path)
+    container.config_layers = layers
+
+    result = container.compose_run_args(
+        mode_docker_opts="--env LAYER=mode",
+        docker_opts="--env LAYER=cli",
+    )
+    tokens = shlex.split(result)
+    values = [tokens[index + 1] for index, token in enumerate(tokens[:-1]) if token == "--env"]
+
+    assert values == expected
+
+
+def test_forward_env_honors_project_and_environment_layer_suppression(tmp_path, monkeypatch):
+    context = SimpleNamespace(forward_env="PROJECT_TOKEN")
+    monkeypatch.setattr(container_core, "get_active_project_context", lambda: context)
+    monkeypatch.setenv("HOLOSCAN_CLI_FORWARD_ENV", "ENV_TOKEN")
+    monkeypatch.setattr(container_core, "activated_environment_source", lambda _name: "environment")
+    container = _stub_container(tmp_path)
+    container.config_layers = ConfigVectorLayers(project=False, environment=False)
+
+    assert container.compose_forward_env(forward_env=["CLI_TOKEN"]) == ["CLI_TOKEN"]
+
+
+@pytest.mark.parametrize(
+    ("project_field", "default_attr", "compose_method", "project_args"),
+    [
+        (
+            "docker_build_args",
+            "DEFAULT_DOCKER_BUILD_ARGS",
+            "compose_build_args",
+            "--build-arg PROJECT_ONLY=1",
+        ),
+        (
+            "docker_run_args",
+            "DEFAULT_DOCKER_RUN_ARGS",
+            "compose_run_args",
+            "--env PROJECT_ONLY=1",
+        ),
+    ],
+)
+def test_active_project_does_not_reuse_import_time_project_default(
+    tmp_path,
+    monkeypatch,
+    project_field,
+    default_attr,
+    compose_method,
+    project_args,
+):
+    context = SimpleNamespace(docker_build_args=None, docker_run_args=None)
+    setattr(context, project_field, project_args)
+    monkeypatch.setattr(container_core, "get_active_project_context", lambda: context)
+    monkeypatch.setattr(HoloscanContainer, default_attr, f"{project_args} STALE_IMPORT=1")
+
+    tokens = shlex.split(getattr(_stub_container(tmp_path), compose_method)())
+
+    assert tokens.count("PROJECT_ONLY=1") == 1
+    assert "STALE_IMPORT=1" not in tokens
+
+
+def test_reserved_raw_build_settings_fail_with_typed_guidance(tmp_path, monkeypatch, capsys):
+    project_dir = _stub_build_env(tmp_path, monkeypatch)
+    calls = []
+    monkeypatch.setattr(container_core, "run_command", lambda cmd, **kw: calls.append(cmd))
+    monkeypatch.setattr(container_core, "get_host_gpu", lambda: "detected")
+    monkeypatch.setattr(container_core, "get_compute_capacity", lambda: "1.0")
+    monkeypatch.setattr(
+        container_core.HoloscanContainer,
+        "DEFAULT_DOCKER_BUILD_ARGS",
+        (
+            "--build-arg BASE_IMAGE=lower:image --build-arg CUDA_MAJOR=12 "
+            "--build-arg GPU_TYPE=explicit --build-arg COMPUTE_CAPACITY=9.0 "
+            "--build-arg BASE_SDK_VERSION=explicit"
+        ),
+    )
+    c = _stub_container(
+        tmp_path,
+        project_metadata={
+            "project_name": "my_app",
+            "source_folder": str(project_dir),
+            "metadata": {"language": "python"},
+        },
+    )
+    c.dryrun = True
+
+    with pytest.raises(SystemExit):
+        c.build(base_img="cli:image", cuda_version="13")
+
+    assert calls == []
+    stderr = capsys.readouterr().err
+    assert "BASE_IMAGE" in stderr and "--base-img" in stderr
+    assert "CUDA_MAJOR" in stderr and "--cuda" in stderr
+    assert "BASE_SDK_VERSION" in stderr and "tool.holoscan.sdk.version" in stderr
+
+
+def test_detected_build_settings_can_still_be_overridden_raw(tmp_path, monkeypatch):
+    project_dir = _stub_build_env(tmp_path, monkeypatch)
+    calls = []
+    monkeypatch.setattr(container_core, "run_command", lambda cmd, **kw: calls.append(cmd))
+    monkeypatch.setattr(container_core, "get_host_gpu", lambda: "detected")
+    monkeypatch.setattr(container_core, "get_compute_capacity", lambda: "1.0")
+    monkeypatch.setattr(
+        container_core.HoloscanContainer,
+        "DEFAULT_DOCKER_BUILD_ARGS",
+        "--build-arg GPU_TYPE=explicit --build-arg COMPUTE_CAPACITY=9.0",
+    )
+    c = _stub_container(
+        tmp_path,
+        project_metadata={
+            "project_name": "my_app",
+            "source_folder": str(project_dir),
+            "metadata": {"language": "python"},
+        },
+    )
+    c.dryrun = True
+
+    c.build(base_img="cli:image", cuda_version="13")
+
+    values = [
+        calls[0][index + 1] for index, token in enumerate(calls[0][:-1]) if token == "--build-arg"
+    ]
+    assert values.index("GPU_TYPE=detected") < values.index("GPU_TYPE=explicit")
+    assert values.index("COMPUTE_CAPACITY=1.0") < values.index("COMPUTE_CAPACITY=9.0")
+
+
+def test_replacing_build_args_suppresses_environment_and_project_defaults(tmp_path, monkeypatch):
+    project_dir = _stub_build_env(tmp_path, monkeypatch)
+    calls = []
+    monkeypatch.setattr(container_core, "run_command", lambda cmd, **kw: calls.append(cmd))
+    monkeypatch.setattr(
+        container_core.HoloscanContainer,
+        "DEFAULT_DOCKER_BUILD_ARGS",
+        "--secret id=environment",
+    )
+    monkeypatch.setattr(
+        container_core,
+        "get_active_project_context",
+        lambda: SimpleNamespace(docker_build_args="--secret id=project"),
+    )
+    c = _stub_container(
+        tmp_path,
+        project_metadata={
+            "project_name": "my_app",
+            "source_folder": str(project_dir),
+            "metadata": {"language": "python"},
+        },
+    )
+    c.dryrun = True
+
+    c.build(
+        mode_build_args="--secret id=mode",
+        build_args="--secret id=cli",
+        include_default_build_args=False,
+    )
+
+    assert "id=cli" in calls[0]
+    assert "id=project" not in calls[0]
+    assert "id=mode" not in calls[0]
+    assert "id=environment" not in calls[0]
+
+
 # ---- run-args / volume forwarding -------------------------------------------
 
 
@@ -814,6 +1153,204 @@ def test_default_docker_run_args_env_propagates_to_docker_run(tmp_path, monkeypa
 
     cmd = calls[0]
     assert "TEST_ENV=123" in cmd
+
+
+def test_replacing_run_args_suppresses_environment_and_project_defaults(tmp_path, monkeypatch):
+    project_dir = _stub_run_env(tmp_path, monkeypatch)
+    calls = []
+    monkeypatch.setattr(container_core, "run_command", lambda cmd, **kw: calls.append(cmd))
+    monkeypatch.setattr(
+        container_core.HoloscanContainer,
+        "DEFAULT_DOCKER_RUN_ARGS",
+        "--privileged --pid=host",
+    )
+    monkeypatch.setattr(
+        container_core,
+        "get_active_project_context",
+        lambda: SimpleNamespace(docker_run_args="--network=project"),
+    )
+    c = _stub_container(
+        tmp_path,
+        project_metadata={
+            "project_name": "my_app",
+            "source_folder": str(project_dir),
+            "metadata": {"language": "python"},
+        },
+    )
+    c.dryrun = True
+
+    c.run(
+        img="custom:image",
+        mode_docker_opts="--network=mode",
+        docker_opts="--network=none",
+        include_default_run_args=False,
+    )
+
+    assert "--network=none" in calls[0]
+    assert "--privileged" not in calls[0]
+    assert "--pid=host" not in calls[0]
+    assert "--network=project" not in calls[0]
+    assert "--network=mode" not in calls[0]
+
+
+def test_typed_run_lifecycle_flags_follow_lower_raw_conflicts(tmp_path, monkeypatch):
+    project_dir = _stub_run_env(tmp_path, monkeypatch)
+    calls = []
+    monkeypatch.setattr(container_core, "run_command", lambda cmd, **kw: calls.append(cmd))
+    c = _stub_container(
+        tmp_path,
+        project_metadata={
+            "project_name": "my_app",
+            "source_folder": str(project_dir),
+            "metadata": {"language": "python"},
+        },
+    )
+    c.dryrun = True
+
+    c.run(
+        img="custom:image",
+        use_tini=True,
+        persistent=True,
+        docker_opts="--rm --init=false",
+        include_default_run_args=False,
+    )
+
+    cmd = calls[0]
+    assert cmd.index("--rm") < cmd.index("--rm=false")
+    assert cmd.index("--init=false") < cmd.index("--init")
+
+
+def test_run_display_hides_configured_raw_values_but_exec_argv_keeps_them(tmp_path, monkeypatch):
+    project_dir = _stub_run_env(tmp_path, monkeypatch)
+    calls = []
+    monkeypatch.setattr(
+        container_core,
+        "run_command",
+        lambda cmd, **kwargs: calls.append((cmd, kwargs)),
+    )
+    container = _stub_container(
+        tmp_path,
+        project_metadata={
+            "project_name": "my_app",
+            "source_folder": str(project_dir),
+            "metadata": {"language": "python"},
+        },
+    )
+    container.dryrun = True
+
+    container.run(
+        img="custom:image",
+        docker_opts="--env TOKEN=secret-value",
+        include_default_run_args=False,
+        extra_args=["-c", "holoscan build app --configure-args=-DAPI_TOKEN=cmake-secret"],
+    )
+
+    command, kwargs = calls[0]
+    assert "TOKEN=secret-value" in command
+    assert any("cmake-secret" in token for token in command)
+    assert "TOKEN=secret-value" not in kwargs["display_override"]
+    assert all("cmake-secret" not in token for token in kwargs["display_override"])
+    assert any("configured Docker run option" in token for token in kwargs["display_override"])
+    assert any("configured CMake option hidden" in token for token in kwargs["display_override"])
+
+
+def test_project_forward_env_uses_name_only_and_deduplicates(tmp_path, monkeypatch):
+    monkeypatch.setenv(
+        "HOLOSCAN_CLI_FORWARD_ENV",
+        "FORWARDED_SECRET,FORWARDED_SECRET",
+    )
+    monkeypatch.setenv("FORWARDED_SECRET", "do-not-print-me")
+    monkeypatch.setenv("HOLOSCAN_CLI_ENABLE_SCCACHE", "false")
+
+    args = _stub_container(tmp_path).get_environment_args()
+
+    assert args.count("FORWARDED_SECRET") == 1
+    assert args[args.index("FORWARDED_SECRET") - 1] == "-e"
+    assert all("do-not-print-me" not in arg for arg in args)
+
+
+def test_cli_forward_env_can_replace_project_allowlist(tmp_path, monkeypatch):
+    monkeypatch.setenv("HOLOSCAN_CLI_FORWARD_ENV", "PROJECT_TOKEN")
+    monkeypatch.setenv("PROJECT_TOKEN", "project-secret")
+    monkeypatch.setenv("CLI_TOKEN", "cli-secret")
+    monkeypatch.setenv("HOLOSCAN_CLI_ENABLE_SCCACHE", "false")
+
+    args = _stub_container(tmp_path).get_environment_args(
+        forward_env=["CLI_TOKEN"], include_default_forward_env=False
+    )
+
+    assert "CLI_TOKEN" in args
+    assert "PROJECT_TOKEN" not in args
+    assert all("secret" not in arg for arg in args)
+
+
+def test_forward_env_accumulates_project_environment_and_cli_names(tmp_path, monkeypatch):
+    monkeypatch.setattr(
+        container_core,
+        "get_active_project_context",
+        lambda: SimpleNamespace(forward_env="PROJECT_TOKEN,SHARED_TOKEN"),
+    )
+    monkeypatch.setattr(container_core, "activated_environment_source", lambda _name: None)
+    monkeypatch.setenv("HOLOSCAN_CLI_FORWARD_ENV", "ENV_TOKEN,SHARED_TOKEN")
+    for name in ("PROJECT_TOKEN", "ENV_TOKEN", "CLI_TOKEN", "SHARED_TOKEN"):
+        monkeypatch.setenv(name, "not-printed")
+    monkeypatch.setenv("HOLOSCAN_CLI_ENABLE_SCCACHE", "false")
+
+    args = _stub_container(tmp_path).get_environment_args(forward_env=["CLI_TOKEN"])
+    forwarded = [args[index + 1] for index, value in enumerate(args[:-1]) if value == "-e"]
+
+    assert forwarded.index("PROJECT_TOKEN") < forwarded.index("ENV_TOKEN")
+    assert forwarded.index("ENV_TOKEN") < forwarded.index("CLI_TOKEN")
+    assert forwarded.count("SHARED_TOKEN") == 1
+    assert all("not-printed" not in arg for arg in args)
+
+
+@pytest.mark.parametrize(
+    ("configured", "message"),
+    [
+        ("VALID_NAME,NOT-A-NAME", "invalid environment variable name: 'NOT-A-NAME'"),
+        ("HOME", "CLI-owned container environment invariant"),
+    ],
+)
+def test_project_forward_env_rejects_invalid_effective_name(
+    tmp_path, monkeypatch, capsys, configured, message
+):
+    monkeypatch.setenv("HOLOSCAN_CLI_FORWARD_ENV", configured)
+    monkeypatch.setenv("VALID_NAME", "value")
+    monkeypatch.setenv("HOME", "/host/home")
+
+    with pytest.raises(SystemExit):
+        _stub_container(tmp_path).get_environment_args()
+
+    assert message in capsys.readouterr().err
+
+
+def test_project_forward_env_deduplicates_enabled_sccache(tmp_path, monkeypatch):
+    monkeypatch.setenv("HOLOSCAN_CLI_FORWARD_ENV", "SCCACHE_BUCKET,SCCACHE_DIR,SCCACHE_BUCKET")
+    monkeypatch.setenv("HOLOSCAN_CLI_ENABLE_SCCACHE", "true")
+    monkeypatch.setenv("SCCACHE_BUCKET", "holoscan-cache")
+    monkeypatch.setenv("SCCACHE_DIR", "/host/sccache")
+
+    args = _stub_container(tmp_path).get_environment_args()
+
+    assert args.count("SCCACHE_BUCKET") == 1
+    assert "SCCACHE_DIR" not in args
+    assert args.count(f"SCCACHE_DIR={container_core.SCCACHE_CONTAINER_DIR}") == 1
+    assert all("/host/sccache" not in arg for arg in args)
+
+
+def test_project_forward_env_avoids_conflicting_sccache_warning(tmp_path, monkeypatch, capsys):
+    monkeypatch.setenv("HOLOSCAN_CLI_FORWARD_ENV", "SCCACHE_BUCKET")
+    monkeypatch.setenv("HOLOSCAN_CLI_ENABLE_SCCACHE", "false")
+    monkeypatch.setenv("SCCACHE_BUCKET", "holoscan-cache")
+    monkeypatch.setenv("SCCACHE_ENDPOINT", "cache.example.test")
+
+    args = _stub_container(tmp_path).get_environment_args()
+    stderr = capsys.readouterr().err
+
+    assert args.count("SCCACHE_BUCKET") == 1
+    assert "SCCACHE_ENDPOINT" in stderr
+    assert "SCCACHE_BUCKET" not in stderr
 
 
 @pytest.mark.parametrize("dryrun", [True, False])

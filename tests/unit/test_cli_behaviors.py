@@ -14,6 +14,8 @@ import pytest
 from holoscan_cli import cli as project_cli
 from holoscan_cli.commands import clear_cache as clear_cache_cmd
 from holoscan_cli.commands import run as run_cmd
+from holoscan_cli.utils import holohub as holohub_utils
+from holoscan_cli.utils.text import normalize_args_str
 
 FIXTURE_ROOT = Path(__file__).resolve().parent.parent / "fixtures" / "holohub_smoke"
 
@@ -125,6 +127,66 @@ def test_resolve_mode_requires_default_for_ambiguous_metadata():
         cli.resolve_mode(project_data)
 
 
+@pytest.mark.parametrize(
+    ("process_value", "mode_values", "expected"),
+    [
+        ("false", ["true", "true"], False),
+        ("true", ["false", "false"], True),
+        (None, ["true", "false"], False),
+        (None, ["false", "true"], True),
+    ],
+)
+def test_local_build_environment_uses_process_then_specific_mode_precedence(
+    monkeypatch, process_value, mode_values, expected
+):
+    if process_value is None:
+        monkeypatch.delenv("HOLOSCAN_CLI_BUILD_LOCAL", raising=False)
+    else:
+        monkeypatch.setenv("HOLOSCAN_CLI_BUILD_LOCAL", process_value)
+
+    mode_envs = [{"HOLOSCAN_CLI_BUILD_LOCAL": value} for value in mode_values]
+
+    assert holohub_utils.is_env_request_local_build(*mode_envs) is expected
+
+
+@pytest.mark.parametrize(
+    ("always_build", "docker_choice", "local_choice", "expected"),
+    [
+        ("false", None, None, (True, True)),
+        ("false", False, None, (False, True)),
+        ("true", True, None, (True, False)),
+        ("true", False, False, (False, False)),
+    ],
+)
+def test_skip_builds_uses_cli_tristate_over_environment(
+    monkeypatch, always_build, docker_choice, local_choice, expected
+):
+    monkeypatch.setenv("HOLOSCAN_CLI_ALWAYS_BUILD", always_build)
+    args = Namespace(no_docker_build=docker_choice, no_local_build=local_choice)
+
+    assert holohub_utils.check_skip_builds(args) == expected
+
+
+def test_mode_environment_is_a_default_but_self_references_compose():
+    env = {"STATIC": "host", "PATH": "/host/bin"}
+
+    holohub_utils.update_env(
+        env,
+        {
+            "STATIC": "mode",
+            "PATH": "/mode/bin:<PATH>",
+            "MODE_ONLY": "enabled",
+        },
+        overwrite=False,
+    )
+
+    assert env == {
+        "STATIC": "host",
+        "PATH": "/mode/bin:/host/bin",
+        "MODE_ONLY": "enabled",
+    }
+
+
 def test_effective_mode_config_applies_metadata_defaults():
     cli = object.__new__(project_cli.HoloscanCLI)
     args = Namespace(
@@ -152,19 +214,25 @@ def test_effective_mode_config_applies_metadata_defaults():
 
     assert build_config == {
         "with_operators": "op_a;op_b",
-        "docker_opts": "--ipc=host --network=host",
-        "build_args": "--build-arg MODE=dev",
+        "docker_opts": "",
+        "mode_docker_opts": "--ipc=host --network=host",
+        "build_args": "",
+        "mode_build_args": "--build-arg MODE=dev",
         "configure_args": ["-DMODE=dev", "-DENABLE_TESTS=ON"],
+        "include_default_build_args": True,
+        "include_default_run_args": True,
     }
     assert run_config == {
         "run_args": "",
-        "docker_opts": "--ipc=host --network=host",
+        "docker_opts": "",
+        "mode_docker_opts": "--ipc=host --network=host",
+        "include_default_run_args": True,
         "command": "python app.py",
         "workdir": ".",
     }
 
 
-def test_effective_mode_config_preserves_cli_overrides(capsys):
+def test_effective_mode_config_preserves_cli_and_mode_argument_sources(capsys):
     cli = object.__new__(project_cli.HoloscanCLI)
     args = Namespace(
         with_operators="cli_op",
@@ -192,16 +260,140 @@ def test_effective_mode_config_preserves_cli_overrides(capsys):
     assert build_config == {
         "with_operators": "cli_op",
         "docker_opts": "--cap-add SYS_PTRACE",
+        "mode_docker_opts": "--ipc=host",
         "build_args": "--build-arg CLI=1",
-        "configure_args": ["-DCLI=ON"],
+        "mode_build_args": "--build-arg MODE=1",
+        "configure_args": ["-DMODE=ON", "-DCLI=ON"],
+        "include_default_build_args": True,
+        "include_default_run_args": True,
     }
     assert run_config == {
         "run_args": "--frames 1",
         "docker_opts": "--cap-add SYS_PTRACE",
+        "mode_docker_opts": "--ipc=host",
+        "include_default_run_args": True,
         "command": "python app.py",
         "workdir": ".",
     }
     assert "overrides mode" in capsys.readouterr().err
+
+
+def test_effective_mode_config_explicit_replacement_clears_lower_argument_layers():
+    cli = object.__new__(project_cli.HoloscanCLI)
+    args = Namespace(
+        with_operators=None,
+        build_args="--build-arg CLI=1",
+        configure_args=None,
+        docker_opts="--network=none",
+        run_args=None,
+        replace_build_args=True,
+        replace_docker_opts=True,
+    )
+    mode_config = {
+        "build": {"docker_build_args": ["--target", "mode"]},
+        "run": {"docker_run_args": ["--privileged", "--pid=host"]},
+    }
+
+    build_config = cli.get_effective_build_config(args, mode_config)
+    run_config = cli.get_effective_run_config(args, mode_config)
+
+    assert build_config == {
+        "with_operators": None,
+        "docker_opts": "--network=none",
+        "mode_docker_opts": "",
+        "build_args": "--build-arg CLI=1",
+        "mode_build_args": "",
+        "configure_args": None,
+        "include_default_build_args": False,
+        "include_default_run_args": False,
+    }
+    assert run_config == {
+        "run_args": "",
+        "docker_opts": "--network=none",
+        "mode_docker_opts": "",
+        "include_default_run_args": False,
+    }
+
+
+def test_replace_configure_args_drops_mode_options_and_keeps_cli_values():
+    cli = object.__new__(project_cli.HoloscanCLI)
+    args = Namespace(
+        with_operators=None,
+        build_args=None,
+        configure_args=["-DCLI=ON"],
+        docker_opts=None,
+        replace_configure_args=True,
+    )
+
+    config = cli.get_effective_build_config(
+        args,
+        {"build": {"cmake_options": ["-DMODE=ON"]}},
+    )
+
+    assert config["configure_args"] == ["-DCLI=ON"]
+
+
+def test_no_mode_config_suppresses_only_additive_mode_vectors():
+    cli = object.__new__(project_cli.HoloscanCLI)
+    args = Namespace(
+        with_operators=None,
+        build_args=None,
+        configure_args=["-DCLI=ON"],
+        docker_opts=["--env CLI=1"],
+        replace_docker_opts=None,
+        run_args=None,
+        no_mode_config=True,
+    )
+    mode_config = {
+        "build": {
+            "docker_build_args": ["--target", "mode"],
+            "cmake_options": ["-DMODE=ON"],
+        },
+        "run": {
+            "command": "python app.py",
+            "workdir": ".",
+            "docker_run_args": ["--network=host"],
+        },
+    }
+
+    build_config = cli.get_effective_build_config(args, mode_config)
+    run_config = cli.get_effective_run_config(args, mode_config)
+
+    assert build_config["mode_build_args"] == ""
+    assert build_config["mode_docker_opts"] == ""
+    assert build_config["configure_args"] == ["-DCLI=ON"]
+    assert run_config["mode_docker_opts"] == ""
+    assert run_config["command"] == "python app.py"
+    assert run_config["workdir"] == "."
+
+
+def test_atomic_docker_opts_replacement_keeps_following_additions():
+    cli = object.__new__(project_cli.HoloscanCLI)
+    args = Namespace(
+        with_operators=None,
+        build_args=None,
+        configure_args=None,
+        docker_opts=["--read-only"],
+        replace_docker_opts="--network=none",
+        run_args=None,
+    )
+
+    config = cli.get_effective_run_config(
+        args,
+        {"run": {"docker_run_args": ["--privileged"]}},
+    )
+
+    assert config["docker_opts"] == "--network=none --read-only"
+    assert config["mode_docker_opts"] == ""
+    assert config["include_default_run_args"] is False
+
+
+def test_argument_normalization_cannot_reshape_tokens_from_environment(monkeypatch):
+    monkeypatch.setenv("TOKEN_VALUE", 'value with spaces "and quotes"')
+
+    assert normalize_args_str("--build-arg TOKEN=$TOKEN_VALUE") == (
+        "--build-arg 'TOKEN=value with spaces \"and quotes\"'"
+    )
 
 
 def test_run_preserves_container_command_after_separator(monkeypatch, tmp_path):

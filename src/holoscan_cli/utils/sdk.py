@@ -239,11 +239,12 @@ def find_hsdk_build_rel_dir(local_sdk_root: Optional[Union[str, Path]] = None) -
     https://github.com/nvidia-holoscan/holoscan-sdk/blob/9c5b3c3d4831f2e65ebda6b79ae9b1c5517c6a7c/run#L226-L228
 
     Search order:
-    1. Direct SDK installation directory
-    2. Environment variable `HOLOSCAN_SDK_ROOT` SDK root directory
-    3. Assuming the direct or env var is the src code root, searching for immediate subdirectories:
-        3.1 Install directory (prefer)
-        3.2 Build directory (fallback)
+    1. When ``local_sdk_root`` is provided, use only that direct installation
+       or its immediate install/build subdirectories.
+    2. Otherwise, use ``HOLOSCAN_SDK_ROOT`` as the direct installation or
+       parent to search.
+    3. Within a parent directory, prefer an install directory over a build
+       directory.
 
     Args:
         local_sdk_root: Path to SDK root directory, or direct SDK installation/build directory
@@ -253,8 +254,9 @@ def find_hsdk_build_rel_dir(local_sdk_root: Optional[Union[str, Path]] = None) -
     """
     search_paths = []
 
-    # Handle user-provided path
-    if local_sdk_root:
+    # An explicit argument is authoritative. Do not let an ambient SDK select a
+    # different installation while the caller later mounts local_sdk_root.
+    if local_sdk_root is not None:
         local_sdk_root = Path(local_sdk_root) if isinstance(local_sdk_root, str) else local_sdk_root
         if local_sdk_root.exists():
             # Check if this is a direct SDK installation directory
@@ -263,9 +265,7 @@ def find_hsdk_build_rel_dir(local_sdk_root: Optional[Union[str, Path]] = None) -
             else:
                 # Treat as SDK root directory to search
                 search_paths.append(local_sdk_root)
-
-    # Add environment variable path
-    if os.environ.get("HOLOSCAN_SDK_ROOT"):
+    elif os.environ.get("HOLOSCAN_SDK_ROOT"):
         env_path = Path(os.environ["HOLOSCAN_SDK_ROOT"])
         if env_path.exists():
             if is_valid_sdk_installation(env_path):

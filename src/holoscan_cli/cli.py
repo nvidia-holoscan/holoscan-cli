@@ -38,6 +38,7 @@ from typing import List, Optional
 
 import holoscan_cli.metadata.gather_metadata as metadata_util
 from holoscan_cli.commands import registry as commands_registry
+from holoscan_cli.configuration import get_config_vector_layers, resolve_cli_docker_opts
 from holoscan_cli.container import HoloscanContainer
 from holoscan_cli.container.parsers import get_build_argparse, get_run_argparse
 from holoscan_cli.metadata.utils import (
@@ -285,11 +286,17 @@ class HoloscanCLI:
         """
         Get effective build configuration combining CLI args and mode config.
         """
+        config_layers = get_config_vector_layers(args)
+        docker_opts, replace_docker_opts = resolve_cli_docker_opts(args)
         config = {
             "with_operators": getattr(args, "with_operators", None),
-            "docker_opts": getattr(args, "docker_opts", ""),
-            "build_args": getattr(args, "build_args", ""),
+            "docker_opts": docker_opts,
+            "mode_docker_opts": "",
+            "build_args": getattr(args, "build_args", None) or "",
+            "mode_build_args": "",
             "configure_args": getattr(args, "configure_args", None),
+            "include_default_build_args": not getattr(args, "replace_build_args", False),
+            "include_default_run_args": not replace_docker_opts,
         }
         if not mode_config:
             return config
@@ -299,7 +306,7 @@ class HoloscanCLI:
             build_config = mode_config["build"]
 
             if "depends" in build_config:
-                if config["with_operators"]:
+                if getattr(args, "with_operators", None) is not None:
                     mode_deps = [dep.strip() for dep in build_config["depends"] if dep.strip()]
                     msg = f"CLI args --build-with='{config['with_operators']}' "
                     msg += f"overrides mode depends: {', '.join(mode_deps)}"
@@ -309,40 +316,25 @@ class HoloscanCLI:
                     config["with_operators"] = ";".join(mode_deps) if mode_deps else ""
 
             if "docker_build_args" in build_config:
-                if config["build_args"]:
-                    mode_args = normalize_args_str(build_config["docker_build_args"])
-                    msg = f"CLI args --build-args='{config['build_args']}' "
-                    msg += f"overrides mode --build-args: {mode_args}"
-                    warn(msg)
-                else:
-                    config["build_args"] = normalize_args_str(build_config["docker_build_args"])
+                if config["include_default_build_args"] and config_layers.mode:
+                    config["mode_build_args"] = normalize_args_str(
+                        build_config["docker_build_args"]
+                    )
 
             if "cmake_options" in build_config:
-                if config["configure_args"]:
-                    mode_opts = (
-                        " ".join(build_config["cmake_options"])
-                        if isinstance(build_config["cmake_options"], list)
-                        else build_config["cmake_options"]
-                    )
-                    cli_opts = (
-                        " ".join(config["configure_args"])
-                        if isinstance(config["configure_args"], list)
-                        else config["configure_args"]
-                    )
-                    msg = f"CLI args --configure-args='{cli_opts}' "
-                    msg += f"overrides mode --configure-args: {mode_opts}"
-                    warn(msg)
-                else:
-                    config["configure_args"] = build_config["cmake_options"]
+                mode_options = (
+                    []
+                    if getattr(args, "replace_configure_args", False) or not config_layers.mode
+                    else list(build_config["cmake_options"])
+                )
+                cli_options = list(config["configure_args"] or [])
+                config["configure_args"] = mode_options + cli_options
 
         if "run" in mode_config and "docker_run_args" in mode_config["run"]:
-            if getattr(args, "docker_opts", ""):
-                mode_opts = normalize_args_str(mode_config["run"]["docker_run_args"])
-                msg = f"CLI args --docker-opts='{getattr(args, 'docker_opts', '')}' "
-                msg += f"overrides mode --docker-opts: {mode_opts}"
-                warn(msg)
-            else:
-                config["docker_opts"] = normalize_args_str(mode_config["run"]["docker_run_args"])
+            if config["include_default_run_args"] and config_layers.mode:
+                config["mode_docker_opts"] = normalize_args_str(
+                    mode_config["run"]["docker_run_args"]
+                )
 
         return config
 
@@ -352,9 +344,13 @@ class HoloscanCLI:
         mode_config: dict,
     ) -> dict:
         """Get effective run configuration combining CLI args and mode config without mutation"""
+        config_layers = get_config_vector_layers(args)
+        docker_opts, replace_docker_opts = resolve_cli_docker_opts(args)
         config = {
             "run_args": getattr(args, "run_args", "") or "",
-            "docker_opts": getattr(args, "docker_opts", ""),
+            "docker_opts": docker_opts,
+            "mode_docker_opts": "",
+            "include_default_run_args": not replace_docker_opts,
         }
 
         if mode_config and "run" in mode_config:
@@ -373,15 +369,8 @@ class HoloscanCLI:
                 warn(msg)
 
             if "docker_run_args" in run_config:
-                if getattr(args, "docker_opts", ""):
-                    mode_opts = normalize_args_str(run_config["docker_run_args"])
-                    msg = (
-                        f"CLI args --docker-opts='{getattr(args, 'docker_opts', '')}' "
-                        f"overrides mode --docker-opts: {mode_opts}"
-                    )
-                    warn(msg)
-                else:
-                    config["docker_opts"] = normalize_args_str(run_config["docker_run_args"])
+                if config["include_default_run_args"] and config_layers.mode:
+                    config["mode_docker_opts"] = normalize_args_str(run_config["docker_run_args"])
         return config
 
     def make_project_container(
@@ -416,7 +405,13 @@ class HoloscanCLI:
         """
         Check if the parsing error is likely due to dash-prefixed arguments
         """
-        DASH_VALUE_ARGS = ["--run-args", "--build-args", "--docker-opts", "--configure-args"]
+        DASH_VALUE_ARGS = [
+            "--run-args",
+            "--build-args",
+            "--docker-opts",
+            "--replace-docker-opts",
+            "--configure-args",
+        ]
         for i, arg in enumerate(cmd_args):
             if arg in DASH_VALUE_ARGS and "=" not in arg:
                 if i + 1 < len(cmd_args) and cmd_args[i + 1].startswith("-"):

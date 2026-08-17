@@ -104,9 +104,10 @@ def register_create_parser(cli, subparsers) -> argparse.ArgumentParser:
     parser.add_argument(
         "--context",
         action="append",
-        help='Additional context variables for cookiecutter in format key=value. \
-            Example: --context description=\'My project desc\' \
-                --context tags=[\\"tag1\\", \\"tag2\\"]',
+        help=(
+            "Additional cookiecutter context as key=value. Values are strings; repeat for "
+            "multiple keys, for example --context description='My project description'."
+        ),
     )
     parser.add_argument(
         "-i",

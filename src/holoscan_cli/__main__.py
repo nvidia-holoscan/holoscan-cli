@@ -23,6 +23,8 @@ from typing import Optional, Union
 
 from .commands.registry import project_command_help
 from .project_context import (
+    PROJECT_CONTEXT_CUDA_SOURCE,
+    PROJECT_CONTEXT_SDK_ROOT_SOURCE,
     ProjectContextError,
     ProjectVersionError,
     activate_project_context,
@@ -251,6 +253,55 @@ def _exit_if_removed_command(argv: list[str]) -> None:
     sys.exit(2)
 
 
+def _project_context_environ(project_argv: list[str]) -> dict[str, str]:
+    """Overlay early CLI selectors needed while resolving the project profile.
+
+    Full command parsing happens after project activation, but SDK discovery
+    depends on CUDA and the explicit SDK root. A small, data-only first pass
+    keeps CLI > environment precedence for those selectors without importing
+    the lifecycle parser early.
+    """
+    environ = dict(os.environ)
+    selectors = {
+        "--cuda": (
+            "HOLOSCAN_CLI_DEFAULT_CUDA_VERSION",
+            PROJECT_CONTEXT_CUDA_SOURCE,
+        ),
+        "--local-sdk-root": (
+            "HOLOSCAN_SDK_ROOT",
+            PROJECT_CONTEXT_SDK_ROOT_SOURCE,
+        ),
+    }
+    index = 2  # program + project subcommand
+    while index < len(project_argv):
+        token = project_argv[index]
+        if token == "--":
+            break
+        matched = False
+        for option, (env_name, source_name) in selectors.items():
+            if token == option and index + 1 < len(project_argv):
+                value = project_argv[index + 1]
+                if env_name == "HOLOSCAN_SDK_ROOT":
+                    value = str(Path(value).expanduser().resolve())
+                environ[env_name] = value
+                environ[source_name] = option
+                index += 2
+                matched = True
+                break
+            if token.startswith(f"{option}="):
+                value = token.split("=", 1)[1]
+                if env_name == "HOLOSCAN_SDK_ROOT":
+                    value = str(Path(value).expanduser().resolve())
+                environ[env_name] = value
+                environ[source_name] = option
+                index += 1
+                matched = True
+                break
+        if not matched:
+            index += 1
+    return environ
+
+
 def _dispatch_project_cli(argv: list[str]) -> bool:
     """Forward source-project commands to the ported project CLI."""
     command, project_argv, log_level, project_root = _project_dispatch_argv(argv)
@@ -262,7 +313,10 @@ def _dispatch_project_cli(argv: list[str]) -> bool:
         # an enclosing Module that merely happens to contain the current cwd.
         set_active_project_context(None)
     else:
-        context = discover_project_context(explicit_root=project_root)
+        context = discover_project_context(
+            explicit_root=project_root,
+            environ=_project_context_environ(project_argv),
+        )
         for warning in context.warnings:
             print(f"Warning: {warning}", file=sys.stderr)
         activate_project_context(context)

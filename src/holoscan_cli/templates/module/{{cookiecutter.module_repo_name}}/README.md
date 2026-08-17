@@ -87,7 +87,7 @@ int main() { holoscan::make_application<MyApp>()->run(); }
 | Requirement | Version |
 | --- | --- |
 | Holoscan SDK | ≥ {{ cookiecutter.holoscan_version }} |
-| CUDA Toolkit | 13.x (matches the Holoscan SDK CUDA pin; the dev `Dockerfile` uses `cuda13-dgpu`) |
+| CUDA Toolkit | 13.x (matches the Holoscan SDK CUDA pin; the dev `Dockerfile` uses `cuda13`) |
 | CMake | ≥ 3.24 |
 {%- if cookiecutter.language == 'cpp' %}
 | C++ compiler | C++17 (GCC 11+) |

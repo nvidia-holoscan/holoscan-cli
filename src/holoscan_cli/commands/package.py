@@ -21,12 +21,20 @@ import argparse
 import importlib.util
 import json
 import os
+import shlex
 import shutil
 import sys
 from pathlib import Path
 from typing import Optional
 
+from holoscan_cli.commands.build import resolve_local_sdk_dir
 from holoscan_cli.commands.registry import help_for
+from holoscan_cli.configuration import (
+    append_config_vector_flags,
+    apply_container_cli_overrides,
+    report_effective_configuration,
+    resolve_cli_docker_opts,
+)
 from holoscan_cli.metadata.utils import resolve_module_name
 from holoscan_cli.utils.docker import get_entrypoint_command_args
 from holoscan_cli.utils.holohub import (
@@ -51,15 +59,20 @@ def register_package_parser(
         default=None,
         help="Module name to package (default: read ./metadata.json from cwd)",
     )
-    parser.add_argument(
-        "--local", action="store_true", help="Run packaging locally instead of in container"
+    location = parser.add_mutually_exclusive_group()
+    location.add_argument("--local", dest="local", action="store_true", help="Package locally")
+    location.add_argument(
+        "--container", dest="local", action="store_false", help="Package in a container"
     )
+    parser.set_defaults(local=None)
     parser.add_argument(
         "--build-type",
         type=str,
         default=None,
-        choices=["debug", "release", "rel-debug"],
-        help="Build type (default: release)",
+        help=(
+            "Build type (debug, release, rel-debug). Precedence: this option, "
+            "CMAKE_BUILD_TYPE, standalone project configuration, then release"
+        ),
     )
     parser.add_argument(
         "--pkg-generator",
@@ -69,10 +82,25 @@ def register_package_parser(
         help="Comma-separated package generators: DEB, WHEEL (default: DEB)",
     )
     parser.add_argument("--language", choices=["cpp", "python"], default=None)
-    parser.add_argument("--verbose", action="store_true")
     parser.add_argument(
-        "--no-docker-build", action="store_true", help="Skip building the container"
+        "--parallel",
+        help="Number of parallel build jobs (default: CMAKE_BUILD_PARALLEL_LEVEL or CPU count)",
     )
+    parser.add_argument("--verbose", action="store_true")
+    docker_build = parser.add_mutually_exclusive_group()
+    docker_build.add_argument(
+        "--no-docker-build",
+        dest="no_docker_build",
+        action="store_true",
+        help="Skip building the container",
+    )
+    docker_build.add_argument(
+        "--docker-build",
+        dest="no_docker_build",
+        action="store_false",
+        help="Build the container even when HOLOSCAN_CLI_ALWAYS_BUILD disables it",
+    )
+    parser.set_defaults(no_docker_build=None)
     parser.add_argument("--dryrun", action="store_true", default=False)
     parser.set_defaults(func=lambda args: handle_package(cli, args))
     return parser
@@ -128,9 +156,16 @@ def handle_package(cli, args: argparse.Namespace) -> None:
     """Configure a Holoscan Module and build package artifacts."""
     from holoscan_cli.cli import in_container_cli_command
 
-    is_local_mode = args.local or is_env_request_local_build()
+    is_local_mode = args.local if args.local is not None else is_env_request_local_build()
+    effective_build_type = get_buildtype_str(getattr(args, "build_type", None))
 
     if is_local_mode:
+        report_effective_configuration(
+            args,
+            effective_build_type=effective_build_type,
+            is_local_mode=True,
+            default_sdk_root=cli.DEFAULT_SDK_DIR,
+        )
         project_data = _resolve_module_project(
             cli, args.project, language=getattr(args, "language", None)
         )
@@ -141,9 +176,19 @@ def handle_package(cli, args: argparse.Namespace) -> None:
         project_name=args.project,
         language=getattr(args, "language", None),
     )
+    apply_container_cli_overrides(args, container)
     container.dryrun = args.dryrun
     container.verbose = getattr(args, "verbose", False)
     skip_docker_build, _ = check_skip_builds(args)
+    report_effective_configuration(
+        args,
+        effective_build_type=effective_build_type,
+        is_local_mode=False,
+        default_sdk_root=cli.DEFAULT_SDK_DIR,
+        container=container,
+        include_build=not skip_docker_build,
+        include_run=True,
+    )
     if not skip_docker_build:
         container.build(
             docker_file=getattr(args, "docker_file", None),
@@ -153,28 +198,45 @@ def handle_package(cli, args: argparse.Namespace) -> None:
             cuda_version=getattr(args, "cuda", None),
             build_args=getattr(args, "build_args", ""),
             extra_scripts=getattr(args, "extra_scripts", []),
+            include_default_build_args=not getattr(args, "replace_build_args", False),
         )
-    elif getattr(args, "cuda", None) is not None:
-        container.cuda_version = args.cuda
-
-    build_cmd = f"{in_container_cli_command()} package"
+    build_tokens = [*shlex.split(in_container_cli_command()), "package"]
     if args.project:
-        build_cmd += f" {args.project}"
-    build_cmd += " --local"
-    if getattr(args, "build_type", None):
-        build_cmd += f" --build-type {args.build_type}"
+        build_tokens.append(str(args.project))
+    build_tokens.extend(
+        [
+            "--local",
+            "--build-type",
+            effective_build_type,
+        ]
+    )
+    requested_parallel = getattr(args, "parallel", None)
+    effective_parallel = (
+        requested_parallel
+        if requested_parallel is not None
+        else os.environ.get("CMAKE_BUILD_PARALLEL_LEVEL")
+    )
+    if effective_parallel is not None:
+        build_tokens.extend(["--parallel", str(effective_parallel)])
     if getattr(args, "pkg_generator", None):
-        build_cmd += f" --pkg-generator {args.pkg_generator}"
+        build_tokens.extend(["--pkg-generator", str(args.pkg_generator)])
     if getattr(args, "language", None):
-        build_cmd += f" --language {args.language}"
+        build_tokens.extend(["--language", str(args.language)])
     if args.dryrun:
-        build_cmd += " --dryrun"
+        build_tokens.append("--dryrun")
     if getattr(args, "verbose", False):
-        build_cmd += " --verbose"
+        build_tokens.append("--verbose")
+    append_config_vector_flags(build_tokens, args)
+    build_cmd = shlex.join(build_tokens)
 
-    docker_opts = (getattr(args, "docker_opts", None) or "").strip()
+    cli_docker_opts, replace_docker_opts = resolve_cli_docker_opts(args)
+    docker_opts = container.compose_run_args(
+        docker_opts=cli_docker_opts,
+        include_default_run_args=not replace_docker_opts,
+    )
+    run_image = container.resolve_run_image(getattr(args, "img", None))
     docker_opts_extra, extra_args = get_entrypoint_command_args(
-        getattr(args, "img", None) or container.image_name,
+        run_image,
         build_cmd,
         docker_opts,
         dry_run=args.dryrun,
@@ -182,7 +244,7 @@ def handle_package(cli, args: argparse.Namespace) -> None:
     if docker_opts_extra:
         docker_opts = (docker_opts + " " + docker_opts_extra).strip()
     container.run(
-        img=getattr(args, "img", None),
+        img=run_image,
         local_sdk_root=getattr(args, "local_sdk_root", None),
         enable_x11=getattr(args, "enable_x11", True),
         ssh_x11=getattr(args, "ssh_x11", False),
@@ -192,6 +254,9 @@ def handle_package(cli, args: argparse.Namespace) -> None:
         nsys_location=getattr(args, "nsys_location", ""),
         as_root=getattr(args, "as_root", False),
         docker_opts=docker_opts,
+        include_default_run_args=False,
+        forward_env=getattr(args, "forward_env", None),
+        include_default_forward_env=not getattr(args, "replace_forward_env", False),
         add_volumes=getattr(args, "add_volume", None),
         enable_mps=getattr(args, "mps", False),
         extra_args=extra_args,
@@ -203,6 +268,7 @@ def _package_locally(cli, args: argparse.Namespace, project_data: dict) -> None:
     generators = [g.strip().upper() for g in args.pkg_generator.split(",") if g.strip()]
     build_type = get_buildtype_str(getattr(args, "build_type", None))
     build_env = os.environ.copy()
+    sdk_dir = resolve_local_sdk_dir(cli, getattr(args, "local_sdk_root", None))
 
     source_folder = Path(project_data["source_folder"])
     project_name = project_data["project_name"]
@@ -225,7 +291,7 @@ def _package_locally(cli, args: argparse.Namespace, project_data: dict) -> None:
             f"-DPython3_EXECUTABLE={sys.executable}",
             f"-DPython3_ROOT_DIR={os.path.dirname(os.path.dirname(sys.executable))}",
             f"-DCMAKE_BUILD_TYPE={build_type}",
-            f"-DCMAKE_PREFIX_PATH={cli.DEFAULT_SDK_DIR}/lib",
+            f"-DCMAKE_PREFIX_PATH={sdk_dir}/lib",
             # BUILD_ALL=OFF keeps unrelated subprojects out of this package.
             # MODULE_<slug>=ON enters the module subdir for in-tree HoloHub
             # builds (modules/CMakeLists.txt gates add_holohub_module() on it);
@@ -242,6 +308,11 @@ def _package_locally(cli, args: argparse.Namespace, project_data: dict) -> None:
             cmake_args.extend(["-G", "Ninja"])
         run_command(cmake_args, dry_run=dryrun, env=build_env)
 
+        parallel_jobs = getattr(args, "parallel", None)
+        if parallel_jobs is None:
+            parallel_jobs = os.environ.get("CMAKE_BUILD_PARALLEL_LEVEL")
+        if parallel_jobs is None:
+            parallel_jobs = os.cpu_count()
         build_cmd = [
             "cmake",
             "--build",
@@ -249,7 +320,7 @@ def _package_locally(cli, args: argparse.Namespace, project_data: dict) -> None:
             "--config",
             build_type,
             "-j",
-            str(os.cpu_count()),
+            str(parallel_jobs),
         ]
         run_command(build_cmd, dry_run=dryrun, env=build_env)
 

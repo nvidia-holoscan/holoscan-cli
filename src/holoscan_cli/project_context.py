@@ -46,6 +46,8 @@ PYPROJECT_FILENAME = "pyproject.toml"
 MAX_REQUIREMENTS_BYTES = 64 * 1024
 MAX_PYPROJECT_BYTES = 1024 * 1024
 HOLOSCAN_CONFIG_SCHEMA_VERSION = 1
+PROJECT_CONTEXT_CUDA_SOURCE = "_HOLOSCAN_CLI_PROJECT_CONTEXT_CUDA_SOURCE"
+PROJECT_CONTEXT_SDK_ROOT_SOURCE = "_HOLOSCAN_CLI_PROJECT_CONTEXT_SDK_ROOT_SOURCE"
 
 SENTINEL_FILES = ("holohub", "isaac_os", "i4h", "CMakeLists.txt", "Dockerfile")
 METADATA_DIRS = (
@@ -69,6 +71,15 @@ _IMAGE_REFERENCE_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._/:@+-]{0,254}")
 _SUPPORTED_ARCHITECTURES = {"x86_64", "aarch64"}
 _ENV_NAME_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
 _TRUE_ENV_VALUES = {"1", "true", "yes", "on"}
+RESERVED_CONTAINER_ENV_NAMES = frozenset(
+    {
+        "NVIDIA_DRIVER_CAPABILITIES",
+        "NVIDIA_VISIBLE_DEVICES",
+        "HOME",
+        "CUPY_CACHE_DIR",
+        "HOLOSCAN_CLI_BUILD_LOCAL",
+    }
+)
 
 
 class ProjectContextError(ValueError):
@@ -105,6 +116,7 @@ class ProjectContext:
     target_arch_source: Optional[str] = None
     base_image: Optional[str] = None
     default_cuda_version: Optional[str] = None
+    default_cuda_version_source: Optional[str] = None
     sdk_root: Optional[Path] = None
     sdk_root_source: Optional[str] = None
     sdk_mount_read_only: bool = False
@@ -199,6 +211,7 @@ class ProjectContext:
                 "target_arch_source": self.target_arch_source,
                 "base_image": self.base_image,
                 "default_cuda_version": self.default_cuda_version,
+                "default_cuda_version_source": self.default_cuda_version_source,
                 "sdk_root": str(self.sdk_root) if self.sdk_root else None,
                 "sdk_root_source": self.sdk_root_source,
                 "sdk_mount_read_only": self.sdk_mount_read_only,
@@ -213,6 +226,7 @@ class ProjectContext:
 
 
 _ACTIVE_PROJECT_CONTEXT: Optional[ProjectContext] = None
+_PROJECT_DERIVED_ENVIRONMENT: dict[str, str] = {}
 
 
 def get_active_project_context() -> Optional[ProjectContext]:
@@ -222,8 +236,27 @@ def get_active_project_context() -> Optional[ProjectContext]:
 
 def set_active_project_context(context: Optional[ProjectContext]) -> None:
     """Set the process-local context used by version and env-info diagnostics."""
-    global _ACTIVE_PROJECT_CONTEXT
+    global _ACTIVE_PROJECT_CONTEXT, _PROJECT_DERIVED_ENVIRONMENT
+    # Remove values injected by the previous context, but never erase a value
+    # that application code changed afterwards; that change is now an explicit
+    # process-environment override.
+    for name, injected_value in _PROJECT_DERIVED_ENVIRONMENT.items():
+        if os.environ.get(name) == injected_value:
+            os.environ.pop(name, None)
+    _PROJECT_DERIVED_ENVIRONMENT.clear()
     _ACTIVE_PROJECT_CONTEXT = context
+
+
+def activated_environment_source(name: str) -> str:
+    """Classify a bridged environment value as project, environment, or default."""
+    if (
+        name in _PROJECT_DERIVED_ENVIRONMENT
+        and os.environ.get(name) == _PROJECT_DERIVED_ENVIRONMENT[name]
+    ):
+        return "project"
+    if name in os.environ:
+        return "environment"
+    return "default"
 
 
 def get_running_cli_version() -> str:
@@ -506,6 +539,12 @@ def _resolve_project_profile(
         "target_arch_source": arch_source,
         "warnings": [],
     }
+    host_arch = _normalized_arch(platform.machine())
+    if arch_source != "host" and host_arch in _SUPPORTED_ARCHITECTURES and arch != host_arch:
+        resolved["warnings"].append(
+            f"HOLOSCAN_CLI_TARGET_ARCH selects {arch}, but this host is {host_arch}. "
+            "Local SDK lookup and project base-image selection use the target architecture."
+        )
     build_type = config.get("build-type")
     if build_type is not None:
         if build_type not in {"Debug", "Release", "RelWithDebInfo"}:
@@ -522,6 +561,19 @@ def _resolve_project_profile(
                 f"{config_source}: tool.holoscan.cuda must be an integer major version."
             )
         resolved["default_cuda_version"] = str(cuda)
+        resolved["default_cuda_version_source"] = f"{config_source}:tool.holoscan.cuda"
+    env_cuda = environ.get("HOLOSCAN_CLI_DEFAULT_CUDA_VERSION")
+    if env_cuda is not None:
+        env_cuda = env_cuda.strip()
+        env_cuda_source = environ.get(
+            PROJECT_CONTEXT_CUDA_SOURCE, "HOLOSCAN_CLI_DEFAULT_CUDA_VERSION"
+        )
+        if not env_cuda.isdigit() or not 1 <= int(env_cuda) <= 99:
+            raise ProjectContextError(
+                f"{env_cuda_source} must be an integer major version from 1 to 99."
+            )
+        resolved["default_cuda_version"] = env_cuda
+        resolved["default_cuda_version_source"] = env_cuda_source
 
     ctest_script = config.get("ctest-script")
     if ctest_script is not None:
@@ -559,6 +611,13 @@ def _resolve_project_profile(
             raise ProjectContextError(
                 f"{config_source}: tool.holoscan.forward-env must be an array of "
                 "environment variable names."
+            )
+        reserved_names = sorted(set(forward_env) & RESERVED_CONTAINER_ENV_NAMES)
+        if reserved_names:
+            raise ProjectContextError(
+                f"{config_source}: tool.holoscan.forward-env contains CLI-owned container "
+                f"environment name(s): {', '.join(reserved_names)}. Remove them; the CLI "
+                "sets these values explicitly."
             )
         resolved["forward_env"] = ",".join(forward_env)
 
@@ -633,6 +692,7 @@ def _resolve_project_profile(
         configured_candidates.append(
             (candidate_path, f"{config_source}:tool.holoscan.sdk.search[{index}]")
         )
+    project_candidate_count = len(configured_candidates)
 
     if environ.get("HOLOSCAN_CLI_BUILD_LOCAL", "").strip().lower() in _TRUE_ENV_VALUES:
         # Container recursion mounts a caller-selected SDK at this stable path.
@@ -649,34 +709,48 @@ def _resolve_project_profile(
     # Report an invalid HOLOSCAN_SDK_ROOT instead of raising: this runs before the
     # parser, so --local-sdk-root must still be able to override it.
     env_root = environ.get("HOLOSCAN_SDK_ROOT")
+    env_root_source = environ.get(PROJECT_CONTEXT_SDK_ROOT_SOURCE, "HOLOSCAN_SDK_ROOT")
     env_error = None
     if env_root:
         env_path = Path(env_root)
         if not env_path.is_absolute():
             env_error = (
-                "HOLOSCAN_SDK_ROOT must be an absolute path to an SDK installation or "
+                f"{env_root_source} must name an absolute path to an SDK installation or "
                 f"its parent; got {env_root!r}."
             )
         else:
             sdk_root = _resolve_sdk_installation(env_path, arch, cuda_for_sdk)
             if sdk_root is None:
-                env_error = (
-                    f"HOLOSCAN_SDK_ROOT={env_root!r} is not a valid SDK installation for {arch}."
+                rendered_source = (
+                    f"--local-sdk-root {env_root!r}"
+                    if env_root_source == "--local-sdk-root"
+                    else f"HOLOSCAN_SDK_ROOT={env_root!r}"
                 )
+                env_error = f"{rendered_source} is not a valid SDK installation for {arch}."
             else:
-                sdk_source = "HOLOSCAN_SDK_ROOT"
+                sdk_source = env_root_source
     if env_error:
         # An explicit override that cannot be honored must not silently resolve a
         # different tree, so do not fall back to committed hints.
-        resolved["warnings"].append(
-            f"{env_error} Pass --local-sdk-root to override it for a single command."
+        guidance = (
+            ""
+            if env_root_source == "--local-sdk-root"
+            else " Pass --local-sdk-root to override it for a single command."
         )
+        resolved["warnings"].append(f"{env_error}{guidance}")
     elif sdk_root is None:
         for candidate_path, candidate_source in configured_candidates:
             sdk_root = _resolve_sdk_installation(candidate_path, arch, cuda_for_sdk)
             if sdk_root is not None:
                 sdk_source = candidate_source
                 break
+        if sdk_root is None and project_candidate_count:
+            cuda_note = f" and CUDA {cuda_for_sdk}" if cuda_for_sdk else ""
+            resolved["warnings"].append(
+                f"None of the {project_candidate_count} tool.holoscan.sdk.search "
+                f"candidate(s) contains a valid SDK installation for {arch}{cuda_note}; "
+                "continuing without a local SDK."
+            )
     resolved["sdk_root"] = sdk_root
     resolved["sdk_root_source"] = sdk_source
     return resolved
@@ -867,6 +941,7 @@ def _build_context(
         target_arch_source=profile.get("target_arch_source"),
         base_image=profile.get("base_image"),
         default_cuda_version=profile.get("default_cuda_version"),
+        default_cuda_version_source=profile.get("default_cuda_version_source"),
         sdk_root=profile.get("sdk_root"),
         sdk_root_source=profile.get("sdk_root_source"),
         sdk_mount_read_only=bool(profile.get("sdk_mount_read_only", False)),
@@ -981,14 +1056,22 @@ def discover_project_context(
 
 def activate_project_context(context: ProjectContext) -> None:
     """Apply bounded defaults before importing CLI/container class bodies."""
+    global _PROJECT_DERIVED_ENVIRONMENT
     set_active_project_context(context)
     values = context.profile_environment()
+    project_base_image_is_shadowed = "HOLOSCAN_CLI_BASE_IMAGE" in os.environ
     # Root selection follows CLI > environment > discovery precedence and must
     # replace an invalid environment value. Other explicit environment values
     # remain authoritative over Module-derived defaults.
     os.environ["HOLOSCAN_CLI_ROOT"] = values.pop("HOLOSCAN_CLI_ROOT")
     for key, value in values.items():
-        os.environ.setdefault(key, value)
+        if key == "HOLOSCAN_CLI_BASE_IMAGE_FORMAT" and project_base_image_is_shadowed:
+            # Base image + format are one semantic setting. Do not let a
+            # project-only exact-image format alter a higher environment image.
+            continue
+        if key not in os.environ:
+            os.environ[key] = value
+            _PROJECT_DERIVED_ENVIRONMENT[key] = value
 
 
 def _is_container() -> bool:
