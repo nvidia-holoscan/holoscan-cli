@@ -806,6 +806,7 @@ def test_handle_test_container_adds_xvfb_setup_layer_by_default(tmp_path):
     assert "command -v xvfb-run" in ctest_command
     assert "omitting --no-docker-build" in ctest_command
     assert "xvfb-run -a ctest" in ctest_command
+    assert '-DCTEST_SOURCE_DIRECTORY="$PWD"' in ctest_command
 
 
 def test_handle_test_container_does_not_duplicate_explicit_xvfb_setup_layer(tmp_path):
@@ -852,6 +853,7 @@ def test_handle_test_skipped_container_build_has_actionable_xvfb_guard(tmp_path)
     assert "xvfb-run is unavailable" in ctest_command
     assert "omitting --no-docker-build" in ctest_command
     assert "exit 127" in ctest_command
+    assert '-DCTEST_SOURCE_DIRECTORY="$PWD"' in ctest_command
 
 
 def test_handle_test_forwards_explicit_local_sdk_root(tmp_path):
@@ -901,6 +903,7 @@ def test_handle_test_local_runs_ctest_in_repo_with_environment(tmp_path, monkeyp
     assert command[0:2] == ["bash", "-c"]
     assert "command -v xvfb-run" in command[2]
     assert "xvfb-run -a ctest" in command[2]
+    assert '-DCTEST_SOURCE_DIRECTORY="$PWD"' in command[2]
     assert "-DTAG=manual" in command[2]
     assert "-S local.ctest" in command[2]
     assert kwargs["dry_run"] is True

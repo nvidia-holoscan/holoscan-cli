@@ -14,6 +14,7 @@
 # limitations under the License.
 
 import os
+from pathlib import Path
 from types import SimpleNamespace
 
 from holoscan_cli import cli as project_cli
@@ -194,3 +195,14 @@ def test_ctest_script_arg_container_defers_resolution_to_runtime():
     assert "from holoscan_cli.cli import HoloscanCLI" in rendered
     assert "HoloscanCLI.DEFAULT_CTEST_SCRIPT" in rendered
     assert "/host/" not in rendered, "must not bake host paths into the in-container command"
+
+
+def test_bundled_ctest_preserves_an_explicit_source_directory():
+    script = Path(project_cli.__file__).resolve().parent / "testing" / "container.ctest"
+    contents = script.read_text(encoding="utf-8")
+
+    assert "if(NOT CTEST_SOURCE_DIRECTORY)" in contents
+    assert (
+        'get_filename_component(CTEST_SOURCE_DIRECTORY "${CMAKE_CURRENT_LIST_DIR}/../.."'
+        in contents
+    )

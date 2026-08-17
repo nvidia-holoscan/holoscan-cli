@@ -217,6 +217,10 @@ def handle_test(cli, args: argparse.Namespace) -> None:
             "tests do not need a display.' >&2; exit 127; }; "
             "xvfb-run -a ctest "
         )
+    # The bundled CTest driver lives in the installed CLI, not in the source
+    # project. Pass the execution root explicitly so its location never makes
+    # CTest configure site-packages instead of the mounted project workspace.
+    ctest_cmd += '-DCTEST_SOURCE_DIRECTORY="$PWD" '
     if args.project:
         project_metadata = container.project_metadata or {}
         project_name = project_metadata.get("project_name", args.project)
