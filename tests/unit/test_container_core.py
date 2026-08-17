@@ -69,7 +69,7 @@ def _isolate_container_class_attrs(monkeypatch):
 
 
 def _stub_container(tmp_path, project_metadata=None, language=None):
-    """Build a HoloscanContainer that doesn't print 'No project provided'."""
+    """Build a HoloscanContainer without the repository-wide status message."""
     if project_metadata is None:
         project_metadata = {"metadata": {"language": "python"}}
     # Anchor HOLOHUB_ROOT (used for relative-path Dockerfile resolution) to
@@ -97,10 +97,14 @@ def test_get_project_name_sanitises(tmp_path, raw, expected, monkeypatch):
     assert c.get_project_name() == expected
 
 
-def test_get_project_name_empty_when_no_metadata(tmp_path):
+def test_get_project_name_empty_when_no_metadata(tmp_path, capsys):
     HoloscanContainer.HOLOHUB_ROOT = tmp_path  # type: ignore[assignment]
     c = HoloscanContainer(project_metadata=None)
     assert c.get_project_name() == ""
+    assert (
+        "INFO: No project selected; using repository-wide container defaults"
+        in capsys.readouterr().out
+    )
 
 
 # ---- image_name / image_names ----------------------------------------------

@@ -157,6 +157,12 @@ def test_setup_scripts_are_packaged():
     assert not missing, f"missing bundled setup scripts: {missing}"
 
 
+def test_setup_layer_dockerfile_has_a_valid_default_base_image():
+    dockerfile = importlib.resources.files("holoscan_cli.setup_scripts").joinpath("Dockerfile.util")
+
+    assert "FROM ${BASE_IMAGE:-ubuntu:24.04} AS base" in dockerfile.read_text(encoding="utf-8")
+
+
 def test_standalone_module_template_assets_are_packaged():
     """The default creator must not reach back into a HoloHub checkout."""
     template = importlib.resources.files("holoscan_cli.templates").joinpath("module")

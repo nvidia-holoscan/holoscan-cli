@@ -529,7 +529,7 @@ class HoloscanContainer:
 
     def __init__(self, project_metadata: Optional[dict[str, Any]], language: Optional[str] = None):
         if not isinstance(project_metadata, dict):
-            print("No project provided, proceeding with default container")
+            info("No project selected; using repository-wide container defaults")
 
         self.project_metadata = project_metadata
         # Get first language from project metadata if not provided.
