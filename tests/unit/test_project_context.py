@@ -59,9 +59,12 @@ def _write_module(
     return root
 
 
-def _subprocess_env() -> dict[str, str]:
+def _subprocess_env(*, metadata_root: Path | None = None) -> dict[str, str]:
     source = Path(__file__).resolve().parents[2] / "src"
-    return {**os.environ, "PYTHONPATH": str(source)}
+    pythonpath = [source]
+    if metadata_root is not None:
+        pythonpath.insert(0, metadata_root)
+    return {**os.environ, "PYTHONPATH": os.pathsep.join(map(str, pythonpath))}
 
 
 def _track_absent_env(monkeypatch, names) -> None:
@@ -764,9 +767,16 @@ def test_lifecycle_command_fails_before_work_on_version_mismatch(tmp_path):
     assert '"projects"' not in proc.stdout
 
 
-def test_create_ignores_enclosing_requirement_before_source_version_validation(tmp_path):
+def test_create_ignores_enclosing_requirement(tmp_path):
     root = _write_module(tmp_path / "module", required_version="999.0.0")
     child_output = tmp_path / "children"
+    installed_version = "5.0.0a9"
+    dist_info = tmp_path / f"holoscan_cli-{installed_version}.dist-info"
+    dist_info.mkdir()
+    (dist_info / "METADATA").write_text(
+        f"Metadata-Version: 2.1\nName: holoscan-cli\nVersion: {installed_version}\n",
+        encoding="utf-8",
+    )
 
     proc = subprocess.run(
         [
@@ -783,12 +793,13 @@ def test_create_ignores_enclosing_requirement_before_source_version_validation(t
         ],
         capture_output=True,
         text=True,
-        env=_subprocess_env(),
+        env=_subprocess_env(metadata_root=tmp_path),
         cwd=root,
     )
 
-    assert proc.returncode == 1
-    assert "cannot generate an installable Module contract" in proc.stderr
+    assert proc.returncode == 0, proc.stderr
+    assert "Would create project folder" in proc.stdout
+    assert f"_holoscan_cli_version: {installed_version}" in proc.stdout
     assert "requires holoscan-cli==999.0.0" not in proc.stderr
     assert not child_output.exists()
 
