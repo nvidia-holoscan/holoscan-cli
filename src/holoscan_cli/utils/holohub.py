@@ -33,6 +33,7 @@ import re
 from pathlib import Path
 from typing import Mapping, Optional, Tuple
 
+from holoscan_cli.project_context import discover_project_context
 from holoscan_cli.utils.io import format_cmd, info, run_info_command, warn
 from holoscan_cli.utils.text import _slugify, get_env_bool, is_env_flag_true
 
@@ -88,38 +89,10 @@ def _get_holohub_root() -> Path:
     site-packages, root discovery must come from the wrapper environment or
     from the current working directory.
     """
-    env_root = os.environ.get("HOLOSCAN_CLI_ROOT")
-    if env_root:
-        env_path = Path(env_root).expanduser()
-        if env_path.exists() and env_path.is_dir():
-            return env_path
-        warn(
-            f"Environment variable HOLOSCAN_CLI_ROOT='{env_root}' is invalid. "
-            f"Falling back to default path: {Path(__file__).parent.parent.parent}"
-        )
-    cwd = Path.cwd().resolve()
-    sentinel_files = ("holohub", "isaac_os", "i4h", "CMakeLists.txt", "Dockerfile")
-    metadata_dirs = (
-        "applications",
-        "benchmarks",
-        "gxf_extensions",
-        "modules",
-        "operators",
-        "pkg",
-        "subgraphs",
-        "tutorials",
-    )
-    for candidate in (cwd, *cwd.parents):
-        if (candidate / "src" / "holoscan_cli").is_dir() and (
-            candidate / "pyproject.toml"
-        ).exists():
-            return candidate
-        if any((candidate / name).exists() for name in sentinel_files):
-            if any((candidate / name).is_dir() for name in metadata_dirs):
-                return candidate
-        if any((candidate / name / "metadata.json").exists() for name in metadata_dirs):
-            return candidate
-    return cwd
+    context = discover_project_context(load_module_contract=False)
+    for message in context.warnings:
+        warn(message)
+    return context.root
 
 
 HOLOHUB_ROOT = _get_holohub_root()
