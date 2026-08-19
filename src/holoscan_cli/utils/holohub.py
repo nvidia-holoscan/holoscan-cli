@@ -35,7 +35,7 @@ from typing import Mapping, Optional, Tuple
 
 from holoscan_cli.project_context import discover_project_context
 from holoscan_cli.utils.io import format_cmd, info, run_info_command, warn
-from holoscan_cli.utils.text import _slugify, get_env_bool, is_env_flag_true
+from holoscan_cli.utils.text import get_env_bool, is_env_flag_true, slugify
 
 DEFAULT_GIT_REF = "latest"
 
@@ -359,7 +359,7 @@ def get_current_branch_slug() -> str:
         )
         if not branch or branch in ["HEAD", "(no branch)"] or branch.startswith("(HEAD detached"):
             return DEFAULT_GIT_REF
-        return _slugify(branch) or DEFAULT_GIT_REF
+        return slugify(branch) or DEFAULT_GIT_REF
     except Exception:
         warn(f"Failed to get current branch, defaulting to {DEFAULT_GIT_REF}")
         return DEFAULT_GIT_REF

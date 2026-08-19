@@ -21,12 +21,9 @@ import importlib
 import importlib.resources
 import json
 import os
-import shutil
-import stat
 import subprocess
 import tempfile
-from contextlib import AbstractContextManager
-from dataclasses import dataclass
+from contextlib import nullcontext
 from pathlib import Path
 from typing import Optional, Union
 
@@ -34,36 +31,19 @@ from holoscan_cli import __version__
 from holoscan_cli.commands.registry import help_for
 from holoscan_cli.container import HoloscanContainer
 from holoscan_cli.metadata.utils import get_schema_path
+from holoscan_cli.utils.filesystem import (
+    DirectoryMaterializationError,
+    inspect_directory,
+    materialize_tree,
+)
 from holoscan_cli.utils.io import Color, fatal
+from holoscan_cli.utils.text import is_prerelease, parse_key_value_pairs, to_snake_case
 
 LEGACY_MODULE_TEMPLATE = Path("modules/template")
 CREATE_TEMPLATE_ENV = "HOLOSCAN_CLI_CREATE_TEMPLATE"
 LOCAL_SOURCE_VERSION = "0.0.0+local"
 RESERVED_CONTEXT_KEYS = {"_holoscan_cli_prerelease", "_holoscan_cli_version"}
-
-
-@dataclass(frozen=True)
-class _TargetState:
-    """Validated state of a prospective project destination."""
-
-    kind: str
-    git_identity: Optional[tuple[int, int, int, int, int]] = None
-
-
-class _MaterializationError(RuntimeError):
-    """Staged output could not be copied without replacing an existing path."""
-
-
-def _scaffold_cli_version(*, is_module: bool) -> str:
-    """Return an installable version for a generated Module contract."""
-    if is_module and __version__ == LOCAL_SOURCE_VERSION:
-        fatal(
-            "holoscan create cannot generate an installable Module contract from an "
-            "uninstalled source tree (version 0.0.0+local). Build and install a wheel, or "
-            "install the checkout into an isolated environment with distribution metadata, "
-            "then retry."
-        )
-    return __version__
+PRESERVED_DESTINATION_ENTRIES = {".git"}
 
 
 def register_create_parser(cli, subparsers) -> argparse.ArgumentParser:
@@ -128,246 +108,6 @@ def register_create_parser(cli, subparsers) -> argparse.ArgumentParser:
 # ---- private helpers ---------------------------------------------------------
 
 
-def _packaged_module_template() -> AbstractContextManager[Path]:
-    """Materialize the bundled Module template as a filesystem directory."""
-    template = importlib.resources.files("holoscan_cli.templates").joinpath("module")
-    return importlib.resources.as_file(template)
-
-
-def _resolve_explicit_template(cli, value: str) -> Path:
-    """Resolve a caller/wrapper-selected template against the project root."""
-    requested = Path(value).expanduser()
-    if not requested.is_absolute():
-        requested = Path(cli.HOLOHUB_ROOT) / requested
-    return requested.resolve()
-
-
-def _template_context(template_dir: Path) -> dict:
-    """Read the cookiecutter context used to classify a template."""
-    context_path = template_dir / "cookiecutter.json"
-    try:
-        with context_path.open("r", encoding="utf-8") as context_file:
-            context = json.load(context_file)
-    except FileNotFoundError:
-        fatal(f"Template directory {template_dir} is missing cookiecutter.json")
-    except json.JSONDecodeError as exc:
-        fatal(f"Template context {context_path} is not valid JSON: {exc}")
-    except OSError as exc:
-        fatal(f"Could not read template context {context_path}: {exc}")
-    if not isinstance(context, dict):
-        fatal(f"Template context {context_path} must contain a JSON object")
-    return context
-
-
-def _is_module_template(template_context: dict) -> bool:
-    """Identify Module templates by their public cookiecutter variables."""
-    return {"module_slug", "module_repo_name"}.issubset(template_context)
-
-
-def _parse_extra_context(values: Optional[list[str]]) -> dict[str, str]:
-    context: dict[str, str] = {}
-    for ctx_var in values or []:
-        try:
-            key, value = ctx_var.split("=", 1)
-        except ValueError:
-            fatal(f"Invalid context variable format: {ctx_var}. Expected key=value")
-        if not key:
-            fatal(f"Invalid context variable format: {ctx_var}. Expected a non-empty key")
-        if key in RESERVED_CONTEXT_KEYS:
-            fatal(
-                f"Cookiecutter context {key!r} is managed by holoscan create and cannot "
-                "be overridden."
-            )
-        context[key] = value
-    return context
-
-
-def _project_slug(project_name: str) -> str:
-    return project_name.lower().replace(" ", "_").replace("-", "_")
-
-
-def _output_folder(project: str, context: dict, is_module: bool) -> str:
-    """Predict cookiecutter's output folder for collision checks and dry runs."""
-    if not is_module:
-        return str(context.get("project_slug") or _project_slug(project))
-
-    if context.get("module_repo_name"):
-        return str(context["module_repo_name"])
-    module_slug = str(
-        context.get("module_slug") or _project_slug(str(context.get("project_name") or project))
-    )
-    return f"holoscan-{module_slug.replace('_', '-')}"
-
-
-def _intended_project_dir(output_dir: Path, output_folder: str) -> Path:
-    """Require cookiecutter's output to be one direct child of the parent."""
-    folder = Path(output_folder)
-    if (
-        not output_folder
-        or folder.is_absolute()
-        or len(folder.parts) != 1
-        or folder.name in {".", ".."}
-    ):
-        fatal(
-            f"Invalid generated project directory name {output_folder!r}. "
-            "Use a project name or context value that produces one directory name."
-        )
-    return output_dir / folder
-
-
-def _ensure_output_parent(output_dir: Path) -> None:
-    """Create the requested output parent or fail with a path-specific remedy."""
-    try:
-        output_dir.mkdir(parents=True, exist_ok=True)
-    except OSError as exc:
-        fatal(
-            f"Could not create project output directory {output_dir}: {exc}. "
-            "Choose a writable --directory or fix the blocking path and retry."
-        )
-    if not output_dir.is_dir():
-        fatal(
-            f"Project output path {output_dir} is not a directory. "
-            "Choose another --directory or remove the blocking file and retry."
-        )
-
-
-def _git_identity(path: Path) -> tuple[int, int, int, int, int]:
-    metadata = path.lstat()
-    return (
-        metadata.st_dev,
-        metadata.st_ino,
-        stat.S_IFMT(metadata.st_mode),
-        metadata.st_size,
-        metadata.st_mtime_ns,
-    )
-
-
-def _inspect_target(path: Path, *, fatal_on_reject: bool = True) -> _TargetState:
-    """Accept only missing, empty, or real ``.git``-only destinations."""
-
-    def reject(message: str) -> None:
-        if fatal_on_reject:
-            fatal(message)
-        raise _MaterializationError(message)
-
-    if path.is_symlink():
-        reject(
-            f"Project destination {path} is a symlink and will not be populated. "
-            "Choose a real empty directory or a missing destination."
-        )
-    if not path.exists():
-        return _TargetState("missing")
-    if not path.is_dir():
-        reject(
-            f"Project destination {path} is not a directory and will not be overwritten. "
-            "Choose another project name or --directory."
-        )
-
-    try:
-        entries = list(path.iterdir())
-    except OSError as exc:
-        reject(f"Could not inspect project destination {path}: {exc}")
-    if not entries:
-        return _TargetState("empty")
-    if len(entries) == 1 and entries[0].name == ".git":
-        git_path = entries[0]
-        if git_path.is_symlink() or not (git_path.is_dir() or git_path.is_file()):
-            reject(
-                f"Project destination {path} contains an unsafe .git entry and will not be "
-                "populated. Use a real Git directory or worktree pointer file."
-            )
-        return _TargetState("git-only", _git_identity(git_path))
-
-    reject(
-        f"Project directory {path} is non-empty and will not be overwritten. "
-        "Only an empty directory or a directory containing only .git can be populated."
-    )
-    raise AssertionError("fatal() returned unexpectedly")  # pragma: no cover
-
-
-def _remove_created_paths(paths: list[Path]) -> None:
-    """Best-effort rollback that never recursively deletes destination data."""
-    for path in reversed(paths):
-        try:
-            if path.is_symlink() or path.is_file():
-                path.unlink()
-            elif path.is_dir():
-                path.rmdir()
-        except OSError:
-            # A concurrent writer may have placed data in a directory we made.
-            # Leaving it intact is safer than recursively deleting it.
-            continue
-
-
-def _copy_staged_tree(source: Path, destination: Path, created: list[Path]) -> None:
-    """Copy one staged directory tree using no-replace filesystem operations."""
-    for source_path in sorted(source.iterdir(), key=lambda path: path.name):
-        destination_path = destination / source_path.name
-        try:
-            if source_path.is_symlink():
-                destination_path.symlink_to(os.readlink(source_path))
-                created.append(destination_path)
-            elif source_path.is_dir():
-                destination_path.mkdir()
-                created.append(destination_path)
-                _copy_staged_tree(source_path, destination_path, created)
-                shutil.copystat(source_path, destination_path, follow_symlinks=False)
-            elif source_path.is_file():
-                with (
-                    source_path.open("rb") as source_file,
-                    destination_path.open("xb") as destination_file,
-                ):
-                    created.append(destination_path)
-                    shutil.copyfileobj(source_file, destination_file)
-                shutil.copystat(source_path, destination_path, follow_symlinks=False)
-            else:
-                raise _MaterializationError(
-                    f"Generated project contains unsupported filesystem entry {source_path}."
-                )
-        except FileExistsError as exc:
-            raise _MaterializationError(
-                f"Destination path appeared while creating the project: {destination_path}. "
-                "Nothing was overwritten."
-            ) from exc
-        except OSError as exc:
-            raise _MaterializationError(
-                f"Could not materialize {destination_path} without overwrite: {exc}"
-            ) from exc
-
-
-def _materialize_staged_project(
-    staged_project: Path, destination: Path, initial_state: _TargetState
-) -> None:
-    """Populate a validated destination and roll back files created on failure."""
-    try:
-        current_state = _inspect_target(destination, fatal_on_reject=False)
-    except _MaterializationError as exc:
-        raise _MaterializationError(
-            f"Project destination {destination} changed during generation; nothing was "
-            "overwritten."
-        ) from exc
-    if current_state != initial_state:
-        raise _MaterializationError(
-            f"Project destination {destination} changed during generation; nothing was overwritten."
-        )
-
-    created: list[Path] = []
-    try:
-        if initial_state.kind == "missing":
-            try:
-                destination.mkdir()
-            except FileExistsError as exc:
-                raise _MaterializationError(
-                    f"Project destination {destination} appeared during generation; "
-                    "nothing was overwritten."
-                ) from exc
-            created.append(destination)
-        _copy_staged_tree(staged_project, destination, created)
-    except BaseException:
-        _remove_created_paths(created)
-        raise
-
-
 def _initialize_module_git(project_dir: Path) -> bool:
     """Initialize and stage a new Module without touching pre-existing Git state."""
     if (project_dir / ".git").exists() or (project_dir / ".git").is_symlink():
@@ -384,22 +124,6 @@ def _initialize_module_git(project_dir: Path) -> bool:
     except (OSError, subprocess.CalledProcessError):
         return False
     return True
-
-
-def _is_prerelease(version: str) -> bool:
-    """Classify the executing version while keeping ``packaging`` create-only."""
-    try:
-        packaging_version = importlib.import_module("packaging.version")
-    except ImportError:
-        fatal(
-            "Creating a Module requires the optional creation dependencies. "
-            "Install them with `pip install 'holoscan-cli[create]'`."
-        )
-    try:
-        return bool(packaging_version.Version(version).is_prerelease)
-    except packaging_version.InvalidVersion:
-        fatal(f"The executing holoscan-cli version is not valid: {version!r}")
-    raise AssertionError("fatal() returned unexpectedly")  # pragma: no cover
 
 
 def _run_cookiecutter(
@@ -514,7 +238,10 @@ def handle_create(cli, args: argparse.Namespace) -> None:
             use_packaged_template = True
 
     if selected_template:
-        explicit_template = _resolve_explicit_template(cli, selected_template)
+        explicit_template = Path(selected_template).expanduser()
+        if not explicit_template.is_absolute():
+            explicit_template = Path(cli.HOLOHUB_ROOT) / explicit_template
+        explicit_template = explicit_template.resolve()
         if Path(selected_template) == LEGACY_MODULE_TEMPLATE and not explicit_template.exists():
             use_packaged_template = True
         elif not explicit_template.is_dir():
@@ -523,28 +250,67 @@ def handle_create(cli, args: argparse.Namespace) -> None:
                 "Choose an existing --template path and retry."
             )
 
-    template_manager = (
-        _packaged_module_template() if use_packaged_template else _PathContext(explicit_template)
-    )
+    if use_packaged_template:
+        resource = importlib.resources.files("holoscan_cli.templates").joinpath("module")
+        template_manager = importlib.resources.as_file(resource)
+    else:
+        assert explicit_template is not None
+        template_manager = nullcontext(explicit_template)
+
     with template_manager as template_dir:
         template_dir = Path(template_dir)
-        template_defaults = _template_context(template_dir)
-        is_module = _is_module_template(template_defaults)
-        scaffold_cli_version = _scaffold_cli_version(is_module=is_module)
+        context_path = template_dir / "cookiecutter.json"
+        try:
+            template_defaults = json.loads(context_path.read_text(encoding="utf-8"))
+        except FileNotFoundError:
+            fatal(f"Template directory {template_dir} is missing cookiecutter.json")
+        except json.JSONDecodeError as exc:
+            fatal(f"Template context {context_path} is not valid JSON: {exc}")
+        except OSError as exc:
+            fatal(f"Could not read template context {context_path}: {exc}")
+        if not isinstance(template_defaults, dict):
+            fatal(f"Template context {context_path} must contain a JSON object")
 
+        is_module = {"module_slug", "module_repo_name"}.issubset(template_defaults)
+        if is_module and __version__ == LOCAL_SOURCE_VERSION:
+            fatal(
+                "holoscan create cannot generate an installable Module contract from an "
+                "uninstalled source tree (version 0.0.0+local). Build and install a wheel, or "
+                "install the checkout into an isolated environment with distribution metadata, "
+                "then retry."
+            )
+        try:
+            prerelease = is_prerelease(__version__) if is_module else False
+        except ImportError:
+            fatal(
+                "Creating a Module requires the optional creation dependencies. "
+                "Install them with `pip install 'holoscan-cli[create]'`."
+            )
+        except ValueError:
+            fatal(f"The executing holoscan-cli version is not valid: {__version__!r}")
+
+        project_slug = to_snake_case(args.project)
         context = {
             "project_name": args.project,
-            "project_slug": _project_slug(args.project),
+            "project_slug": project_slug,
             "language": args.language.lower() if args.language else None,
             "year": datetime.datetime.now().year,
-            "_holoscan_cli_version": scaffold_cli_version,
-            "_holoscan_cli_prerelease": (
-                _is_prerelease(scaffold_cli_version) if is_module else False
-            ),
+            "_holoscan_cli_version": __version__,
+            "_holoscan_cli_prerelease": prerelease,
         }
         if HoloscanContainer.BASE_SDK_VERSION:
             context["holoscan_version"] = HoloscanContainer.BASE_SDK_VERSION
-        context.update(_parse_extra_context(args.context))
+        try:
+            extra_context = parse_key_value_pairs(args.context)
+        except ValueError as exc:
+            fatal(f"Invalid context variable format: {exc}")
+        for key in extra_context:
+            if key in RESERVED_CONTEXT_KEYS:
+                fatal(
+                    f"Cookiecutter context {key!r} is managed by holoscan create and cannot "
+                    "be overridden."
+                )
+        context.update(extra_context)
 
         if args.directory is None:
             output_dir = (
@@ -555,9 +321,38 @@ def handle_create(cli, args: argparse.Namespace) -> None:
         else:
             output_dir = Path(args.directory).expanduser().resolve()
 
-        output_folder = _output_folder(args.project, context, is_module)
-        intended_dir = _intended_project_dir(output_dir, output_folder)
-        target_state = _inspect_target(intended_dir)
+        if not is_module:
+            output_folder = str(context.get("project_slug") or project_slug)
+        elif context.get("module_repo_name"):
+            output_folder = str(context["module_repo_name"])
+        else:
+            module_slug = str(
+                context.get("module_slug")
+                or to_snake_case(str(context.get("project_name") or args.project))
+            )
+            output_folder = f"holoscan-{module_slug.replace('_', '-')}"
+
+        folder = Path(output_folder)
+        if (
+            not output_folder
+            or folder.is_absolute()
+            or len(folder.parts) != 1
+            or folder.name in {".", ".."}
+        ):
+            fatal(
+                f"Invalid generated project directory name {output_folder!r}. "
+                "Use a project name or context value that produces one directory name."
+            )
+        intended_dir = output_dir / folder
+        try:
+            target_state = inspect_directory(
+                intended_dir, allowed_entries=PRESERVED_DESTINATION_ENTRIES
+            )
+        except DirectoryMaterializationError as exc:
+            fatal(
+                f"{exc} Choose a missing or empty destination, or one containing only a real .git "
+                "file or directory."
+            )
 
         if args.dryrun:
             print(Color.green("Would create project folder with these parameters (dryrun):"))
@@ -567,15 +362,28 @@ def handle_create(cli, args: argparse.Namespace) -> None:
             if target_state.kind == "missing":
                 print("Destination: would create a new project directory")
             else:
-                print(f"Destination: would populate an existing {target_state.kind} directory")
+                target_kind = ".git-only" if target_state.entries else target_state.kind
+                print(f"Destination: would populate an existing {target_kind} directory")
             for key, value in context.items():
                 print(f"  {key}: {value}")
             if not is_module and output_dir == Path(cli.HOLOHUB_ROOT) / "applications":
                 print(Color.green("Would modify `applications/CMakeLists.txt`: "))
-                print(f"    add_holohub_application({_project_slug(args.project)})")
+                print(f"    add_holohub_application({project_slug})")
             return
 
-        _ensure_output_parent(output_dir)
+        try:
+            output_dir.mkdir(parents=True, exist_ok=True)
+        except OSError as exc:
+            fatal(
+                f"Could not create project output directory {output_dir}: {exc}. "
+                "Choose a writable --directory or fix the blocking path and retry."
+            )
+        if not output_dir.is_dir():
+            fatal(
+                f"Project output path {output_dir} is not a directory. "
+                "Choose another --directory or remove the blocking file and retry."
+            )
+
         main_file_relative: Optional[Path] = None
         with tempfile.TemporaryDirectory(
             prefix=f".{output_folder}.holoscan-create-", dir=output_dir
@@ -610,8 +418,13 @@ def handle_create(cli, args: argparse.Namespace) -> None:
             validate_generated_metadata(cli, staged_metadata, schema_root)
 
             try:
-                _materialize_staged_project(staged_project, intended_dir, target_state)
-            except _MaterializationError as exc:
+                materialize_tree(
+                    staged_project,
+                    intended_dir,
+                    target_state,
+                    allowed_entries=PRESERVED_DESTINATION_ENTRIES,
+                )
+            except DirectoryMaterializationError as exc:
                 fatal(str(exc))
 
         project_dir = intended_dir
@@ -622,7 +435,7 @@ def handle_create(cli, args: argparse.Namespace) -> None:
             _add_to_cmakelists(cli, actual_slug)
 
         git_initialized = False
-        if is_module and target_state.kind != "git-only":
+        if is_module and not target_state.entries:
             git_initialized = _initialize_module_git(project_dir)
 
         msg_next = ""
@@ -653,18 +466,3 @@ def handle_create(cli, args: argparse.Namespace) -> None:
             print(
                 Color.green("Initialized a Git repository on branch main and staged the scaffold.")
             )
-
-
-class _PathContext(AbstractContextManager[Path]):
-    """Context-manager adapter for an existing template directory."""
-
-    def __init__(self, path: Optional[Path]):
-        if path is None:  # pragma: no cover - guarded by handle_create
-            raise ValueError("template path is required")
-        self.path = path
-
-    def __enter__(self) -> Path:
-        return self.path
-
-    def __exit__(self, exc_type, exc_value, traceback) -> None:
-        return None

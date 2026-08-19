@@ -14,6 +14,7 @@ from types import SimpleNamespace
 import pytest
 
 from holoscan_cli.commands import create
+from holoscan_cli.utils import filesystem
 
 
 def _make_args(**overrides) -> argparse.Namespace:
@@ -161,12 +162,25 @@ def test_explicit_template_overrides_wrapper_environment(fake_cli, tmp_path, cap
     assert str(tmp_path / "output" / "holoscan-my-mod") in output
 
 
-def test_template_classification_uses_cookiecutter_context_not_path(tmp_path):
+def test_template_classification_uses_cookiecutter_context_not_path(tmp_path, capsys):
     module_template = _write_template(tmp_path, "looks-like-an-application", module=True)
     app_template = _write_template(tmp_path, "modules/not-a-module", module=False)
+    cli = SimpleNamespace(HOLOHUB_ROOT=tmp_path, script_name="holoscan")
 
-    assert create._is_module_template(create._template_context(module_template))
-    assert not create._is_module_template(create._template_context(app_template))
+    create.handle_create(
+        cli,
+        _make_args(template=str(module_template), directory=tmp_path / "module-output"),
+    )
+    module_output = capsys.readouterr().out
+    create.handle_create(
+        cli,
+        _make_args(template=str(app_template), directory=tmp_path / "app-output"),
+    )
+    app_output = capsys.readouterr().out
+
+    # Module classification follows public cookiecutter variables, not path names.
+    assert str(tmp_path / "module-output" / "holoscan-my-mod") in module_output
+    assert str(tmp_path / "app-output" / "my_mod") in app_output
 
 
 def test_missing_explicit_template_is_fatal(fake_cli, tmp_path, capsys):
@@ -366,15 +380,15 @@ def test_git_symlink_destination_is_rejected(fake_cli, tmp_path, monkeypatch):
 def test_destination_change_during_generation_is_not_overwritten(tmp_path):
     destination = tmp_path / "project"
     destination.mkdir()
-    initial_state = create._inspect_target(destination)
+    initial_state = filesystem.inspect_directory(destination, allowed_entries={".git"})
     staged = tmp_path / "staged"
     staged.mkdir()
     (staged / "generated.txt").write_text("generated", encoding="utf-8")
     raced = destination / "raced.txt"
     raced.write_text("keep", encoding="utf-8")
 
-    with pytest.raises(create._MaterializationError, match="changed during generation"):
-        create._materialize_staged_project(staged, destination, initial_state)
+    with pytest.raises(filesystem.DirectoryMaterializationError, match="changed during generation"):
+        filesystem.materialize_tree(staged, destination, initial_state, allowed_entries={".git"})
 
     assert raced.read_text(encoding="utf-8") == "keep"
     assert not (destination / "generated.txt").exists()
@@ -383,13 +397,13 @@ def test_destination_change_during_generation_is_not_overwritten(tmp_path):
 def test_materialization_failure_rolls_back_only_created_paths(tmp_path, monkeypatch):
     destination = tmp_path / "project"
     destination.mkdir()
-    initial_state = create._inspect_target(destination)
+    initial_state = filesystem.inspect_directory(destination, allowed_entries={".git"})
     staged = tmp_path / "staged"
     staged.mkdir()
     (staged / "a.txt").write_text("a", encoding="utf-8")
     (staged / "b.txt").write_text("b", encoding="utf-8")
     calls = 0
-    real_copy = create.shutil.copyfileobj
+    real_copy = filesystem.shutil.copyfileobj
 
     def fail_second_copy(source, target):
         nonlocal calls
@@ -398,10 +412,10 @@ def test_materialization_failure_rolls_back_only_created_paths(tmp_path, monkeyp
             raise OSError("simulated copy failure")
         return real_copy(source, target)
 
-    monkeypatch.setattr(create.shutil, "copyfileobj", fail_second_copy)
+    monkeypatch.setattr(filesystem.shutil, "copyfileobj", fail_second_copy)
 
-    with pytest.raises(create._MaterializationError, match="simulated copy failure"):
-        create._materialize_staged_project(staged, destination, initial_state)
+    with pytest.raises(filesystem.DirectoryMaterializationError, match="simulated copy failure"):
+        filesystem.materialize_tree(staged, destination, initial_state, allowed_entries={".git"})
 
     assert list(destination.iterdir()) == []
 
@@ -434,7 +448,7 @@ def test_blocking_output_ancestor_has_actionable_error(fake_cli, tmp_path, capsy
     assert "Choose a writable --directory" in error
 
 
-def test_output_parent_permission_error_is_actionable(tmp_path, capsys, monkeypatch):
+def test_output_parent_permission_error_is_actionable(fake_cli, tmp_path, capsys, monkeypatch):
     output_parent = tmp_path / "denied" / "nested"
 
     def deny_mkdir(_path, *, parents, exist_ok):
@@ -445,7 +459,10 @@ def test_output_parent_permission_error_is_actionable(tmp_path, capsys, monkeypa
     monkeypatch.setattr(Path, "mkdir", deny_mkdir)
 
     with pytest.raises(SystemExit):
-        create._ensure_output_parent(output_parent)
+        create.handle_create(
+            fake_cli,
+            _make_args(dryrun=False, directory=output_parent),
+        )
 
     error = capsys.readouterr().err
     assert str(output_parent) in error

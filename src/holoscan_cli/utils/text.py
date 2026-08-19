@@ -23,6 +23,7 @@ without side effects beyond reading os.environ or the filesystem.
 import os
 import re
 import time
+from collections.abc import Iterable
 from pathlib import Path
 from typing import List, Optional, Tuple
 
@@ -43,15 +44,38 @@ def parse_semantic_version(version: str) -> Tuple[int, int, int]:
     return tuple(map(int, match.group(1).split(".")))
 
 
+def is_prerelease(version: str) -> bool:
+    """Return whether a PEP 440 version is a pre-release."""
+    from packaging.version import Version
+
+    return Version(version).is_prerelease
+
+
 # ---- string helpers ----------------------------------------------------------
 
 
-def _slugify(text: str, max_len: int = 63) -> str:
+def slugify(text: str, max_len: int = 63) -> str:
     """Make a branch slug: lowercase, non-alnum to '-', trim dashes, max length."""
     lowered = text.lower()
     replaced = re.sub(r"[^a-z0-9]+", "-", lowered)
     trimmed = replaced.strip("-")
     return trimmed[:max_len]
+
+
+def to_snake_case(text: str) -> str:
+    """Convert spaces and hyphens to a lowercase underscore-separated name."""
+    return re.sub(r"[ -]+", "_", text.lower())
+
+
+def parse_key_value_pairs(values: Optional[Iterable[str]]) -> dict[str, str]:
+    """Parse repeated ``key=value`` arguments without interpreting their values."""
+    result: dict[str, str] = {}
+    for item in values or ():
+        key, separator, value = item.partition("=")
+        if not separator or not key:
+            raise ValueError(f"{item!r}; expected key=value with a non-empty key")
+        result[key] = value
+    return result
 
 
 def levenshtein_distance(s1: str, s2: str) -> int:
