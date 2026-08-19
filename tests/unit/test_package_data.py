@@ -314,9 +314,9 @@ def test_pyproject_create_extra_bundles_validator_deps():
 
     The fatal in ``commands/create.py::validate_generated_metadata`` instructs
     users to install this extra when ``jsonschema`` / ``referencing`` are
-    missing, and ``commands/create.py::run_create`` does the same for
-    ``cookiecutter``, so the contract here is part of the user-facing install
-    story.
+    missing, while Module generation also needs ``cookiecutter`` and
+    ``packaging``. The dependency set is therefore part of the user-facing
+    install story.
     """
     extras = _pyproject()["project"].get("optional-dependencies", {})
     assert "create" in extras, sorted(extras)
@@ -326,6 +326,7 @@ def test_pyproject_create_extra_bundles_validator_deps():
         "jsonschema",
         "referencing",
         "cookiecutter",
+        "packaging",
     }, create_specs
 
     jsonschema_spec = next(spec for spec in create_specs if spec.startswith("jsonschema"))

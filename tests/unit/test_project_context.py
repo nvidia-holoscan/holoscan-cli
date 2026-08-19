@@ -462,6 +462,15 @@ def test_lifecycle_command_fails_before_work_on_version_mismatch(tmp_path):
 def test_create_ignores_enclosing_module_requirement(tmp_path):
     root = _write_module(tmp_path / "module", required_version="999.0.0")
     child_output = tmp_path / "children"
+    distribution_root = tmp_path / "installed-metadata"
+    dist_info = distribution_root / "holoscan_cli-5.0.0.dist-info"
+    dist_info.mkdir(parents=True)
+    (dist_info / "METADATA").write_text(
+        "Metadata-Version: 2.1\nName: holoscan-cli\nVersion: 5.0.0\n",
+        encoding="utf-8",
+    )
+    environment = _subprocess_env()
+    environment["PYTHONPATH"] = os.pathsep.join((str(distribution_root), environment["PYTHONPATH"]))
 
     proc = subprocess.run(
         [
@@ -478,7 +487,7 @@ def test_create_ignores_enclosing_module_requirement(tmp_path):
         ],
         capture_output=True,
         text=True,
-        env=_subprocess_env(),
+        env=environment,
         cwd=root,
     )
 
