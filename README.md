@@ -45,11 +45,13 @@ src/holoscan_cli/
   cli.py              top-level argparse + dispatch (HoloscanCLI)
   commands/           one file per subcommand + a central registry
   container/          HoloscanContainer + docker arg helpers + parser builders
+  cmake/              packaged CMake support copied into standalone Modules
   utils/              io.py, text.py, sdk.py, docker.py, host_setup.py,
                       env_info.py, holohub.py
   setup_scripts/      bundled bash scripts backing `setup --scripts` and
                       `build-container --extra-scripts`
   metadata/           project metadata JSON schemas
+  templates/module/   standalone Module cookiecutter
   testing/            CTest helpers shipped in the wheel
 ```
 

@@ -21,6 +21,7 @@ import importlib
 import importlib.resources
 import json
 import os
+import shutil
 import subprocess
 import tempfile
 from contextlib import nullcontext
@@ -215,6 +216,13 @@ def validate_generated_metadata(
     print(Color.green(f"Validated metadata.json against {schema_file}"))
 
 
+def copy_cmake_support(project_dir: Path) -> None:
+    """Vendor the CLI's packaged CMake support into a generated project."""
+    resource = importlib.resources.files("holoscan_cli").joinpath("cmake")
+    with importlib.resources.as_file(resource) as source:
+        shutil.copytree(source, project_dir / "cmake")
+
+
 # ---- handler -----------------------------------------------------------------
 
 
@@ -404,6 +412,12 @@ def handle_create(cli, args: argparse.Namespace) -> None:
                     f"Template generated an unexpected project directory: {staged_project} "
                     f"(expected {staging_root / output_folder})"
                 )
+
+            if use_packaged_template:
+                try:
+                    copy_cmake_support(staged_project)
+                except OSError as exc:
+                    fatal(f"Could not copy packaged CMake support into the Module: {exc}")
 
             staged_metadata = staged_project / "metadata.json"
             if is_module:

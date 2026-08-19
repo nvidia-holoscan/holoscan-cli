@@ -77,6 +77,7 @@ Documentation = "https://docs.nvidia.com/holoscan/sdk-user-guide/index.html"
 requires-poetry = ">=2.0"
 packages = [{ include = "holoscan_cli", from = "src" }]
 include = [
+    { path = "src/holoscan_cli/cmake/**/*", format = ["sdist", "wheel"] },
     { path = "src/holoscan_cli/metadata/*.schema.json", format = ["sdist", "wheel"] },
     { path = "src/holoscan_cli/setup_scripts/*", format = ["sdist", "wheel"] },
     { path = "src/holoscan_cli/templates/**/*", format = ["sdist", "wheel"] },
@@ -127,18 +128,20 @@ skip_glob = [
     "dist/*",
     ".cache/*",
     ".ruff_cache/*",
+    "src/holoscan_cli/cmake/**",
     "src/holoscan_cli/templates/module/**",
 ]
 
 [tool.black]
 line-length = 100
 target-version = ["py310", "py311", "py312", "py313"]
-force-exclude = 'src/holoscan_cli/templates/module/'
+force-exclude = 'src/holoscan_cli/(cmake|templates/module)/'
 extend-exclude = '''
 (
   ^\.cache/
   | ^build[^/]*/
   | ^dist/
+  | ^src/holoscan_cli/cmake/
   | ^src/holoscan_cli/templates/module/
   | tests/reports/
 )
@@ -153,6 +156,7 @@ exclude = [
   ".ruff_cache",
   "build*",
   "dist",
+  "src/holoscan_cli/cmake",
   "src/holoscan_cli/templates/module",
   "tests/reports",
 ]

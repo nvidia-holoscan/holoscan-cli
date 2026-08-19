@@ -22,6 +22,12 @@ listing=$(unzip -l "$wheel")
 required=(
   'holoscan_cli/logging\.json$'
   'holoscan_cli/py\.typed$'
+  'holoscan_cli/cmake/Config\.cmake\.in$'
+  'holoscan_cli/cmake/HoloHubConfigHelpers\.cmake$'
+  'holoscan_cli/cmake/holohub_configure_deb\.cmake$'
+  'holoscan_cli/cmake/pybind11_add_holohub_module\.cmake$'
+  'holoscan_cli/cmake/pybind11/__init__\.py$'
+  'holoscan_cli/cmake/pydoc/macros\.hpp$'
   'holoscan_cli/metadata/.+\.schema\.json$'
   'holoscan_cli/setup_scripts/.+'
   'holoscan_cli/setup_scripts/requirements\.template\.txt$'
@@ -30,7 +36,6 @@ required=(
   'holoscan_cli/templates/module/hooks/post_gen_project\.py$'
   'holoscan_cli/templates/module/.+/requirements-cli\.txt$'
   'holoscan_cli/templates/module/.+/\.dockerignore$'
-  'holoscan_cli/templates/module/.+/cmake/HoloHubConfigHelpers\.cmake$'
   'holoscan_cli/templates/module/.+/\.github/workflows/scripts/check_copyright\.py$'
   'holoscan_cli/testing/'
 )
@@ -42,7 +47,6 @@ for pattern in "${required[@]}"; do
 done
 
 forbidden=(
-  'holoscan_cli/cmake/'
   'holoscan_cli/testing/test_all_applications/'
   'holoscan_cli/templates/module/.+/holohub$'
 )

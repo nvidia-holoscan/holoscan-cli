@@ -18,7 +18,8 @@
 These prevent regressions where ``pyproject.toml`` accidentally drops the
 files an installed ``holoscan-cli`` wheel must ship: the ``py.typed``
 marker, the project metadata JSON schemas under ``holoscan_cli.metadata``,
-the logging configuration, and the CTest scripts under ``holoscan_cli.testing``.
+the logging configuration, CMake support copied into generated Modules, and
+the CTest scripts under ``holoscan_cli.testing``.
 The tests also pin the public ``holoscan`` console script entry point and the
 ``holoscan-cli`` package-name tool-runner alias.
 
@@ -72,6 +73,15 @@ REQUIRED_SETUP_SCRIPTS = {
     "requirements.template.txt",
 }
 
+REQUIRED_CMAKE_FILES = {
+    "Config.cmake.in",
+    "HoloHubConfigHelpers.cmake",
+    "holohub_configure_deb.cmake",
+    "pybind11_add_holohub_module.cmake",
+    "pybind11/__init__.py",
+    "pydoc/macros.hpp",
+}
+
 REQUIRED_MODULE_TEMPLATE_FILES = {
     "cookiecutter.json",
     "hooks/pre_gen_project.py",
@@ -81,7 +91,6 @@ REQUIRED_MODULE_TEMPLATE_FILES = {
     "{{cookiecutter.module_repo_name}}/Dockerfile",
     "{{cookiecutter.module_repo_name}}/CMakeLists.txt",
     "{{cookiecutter.module_repo_name}}/metadata.json",
-    "{{cookiecutter.module_repo_name}}/cmake/HoloHubConfigHelpers.cmake",
     "{{cookiecutter.module_repo_name}}/.github/workflows/scripts/check_copyright.py",
     "{{cookiecutter.module_repo_name}}/.github/workflows/ci.yml",
 }
@@ -153,6 +162,16 @@ def test_setup_scripts_are_packaged():
     assert not missing, f"missing bundled setup scripts: {missing}"
 
 
+def test_cmake_support_is_packaged():
+    cmake = importlib.resources.files("holoscan_cli").joinpath("cmake")
+    missing = [
+        relative
+        for relative in sorted(REQUIRED_CMAKE_FILES)
+        if not cmake.joinpath(relative).is_file()
+    ]
+    assert not missing, f"missing bundled CMake support: {missing}"
+
+
 def test_standalone_module_template_is_packaged():
     template = importlib.resources.files("holoscan_cli.templates").joinpath("module")
     missing = [
@@ -161,6 +180,7 @@ def test_standalone_module_template_is_packaged():
         if not template.joinpath(relative).is_file()
     ]
     assert not missing, f"missing bundled Module template assets: {missing}"
+    assert not template.joinpath("{{cookiecutter.module_repo_name}}/cmake").exists()
     assert not template.joinpath("{{cookiecutter.module_repo_name}}/holohub").exists()
 
 

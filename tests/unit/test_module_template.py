@@ -12,6 +12,8 @@ import pytest
 from cookiecutter.exceptions import FailedHookException
 from cookiecutter.main import cookiecutter
 
+from holoscan_cli.commands.create import copy_cmake_support
+
 try:
     import tomllib
 except ModuleNotFoundError:  # pragma: no cover - Python 3.10
@@ -19,6 +21,15 @@ except ModuleNotFoundError:  # pragma: no cover - Python 3.10
 
 
 TEMPLATE = Path(__file__).resolve().parents[2] / "src" / "holoscan_cli" / "templates" / "module"
+CMAKE_SUPPORT = TEMPLATE.parents[1] / "cmake"
+CMAKE_SUPPORT_FILES = (
+    "Config.cmake.in",
+    "HoloHubConfigHelpers.cmake",
+    "holohub_configure_deb.cmake",
+    "pybind11_add_holohub_module.cmake",
+    "pybind11/__init__.py",
+    "pydoc/macros.hpp",
+)
 
 
 def _render(tmp_path: Path, **context: object) -> Path:
@@ -39,7 +50,7 @@ def _render(tmp_path: Path, **context: object) -> Path:
         "_holoscan_cli_version": "5.0.0a10",
     }
     values.update(context)
-    return Path(
+    project = Path(
         cookiecutter(
             str(TEMPLATE),
             no_input=True,
@@ -48,6 +59,8 @@ def _render(tmp_path: Path, **context: object) -> Path:
             config_file=str(config_file),
         )
     )
+    copy_cmake_support(project)
+    return project
 
 
 @pytest.mark.parametrize("language", ["cpp", "python"])
@@ -66,12 +79,11 @@ def test_template_renders_a_self_contained_module(tmp_path: Path, language: str)
         ".dockerignore",
         ".github/workflows/scripts/check_copyright.py",
         ".github/workflows/scripts/gitutils.py",
-        "cmake/Config.cmake.in",
-        "cmake/HoloHubConfigHelpers.cmake",
-        "cmake/holohub_configure_deb.cmake",
-        "cmake/pybind11_add_holohub_module.cmake",
     ):
         assert (project / relative).is_file(), relative
+    for relative in CMAKE_SUPPORT_FILES:
+        generated = project / "cmake" / relative
+        assert generated.read_bytes() == (CMAKE_SUPPORT / relative).read_bytes()
 
     metadata = json.loads((project / "metadata.json").read_text(encoding="utf-8"))
     assert metadata["module"]["operator_names"] == ["MySensorOp"]
