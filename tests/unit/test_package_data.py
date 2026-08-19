@@ -72,6 +72,16 @@ REQUIRED_SETUP_SCRIPTS = {
     "requirements.template.txt",
 }
 
+REQUIRED_MODULE_TEMPLATE_FILES = {
+    "cookiecutter.json",
+    "hooks/post_gen_project.py",
+    "{{cookiecutter.module_repo_name}}/holohub",
+    "{{cookiecutter.module_repo_name}}/Dockerfile",
+    "{{cookiecutter.module_repo_name}}/CMakeLists.txt",
+    "{{cookiecutter.module_repo_name}}/metadata.json",
+    "{{cookiecutter.module_repo_name}}/.github/workflows/ci.yml",
+}
+
 
 PYPROJECT = Path(__file__).resolve().parents[2] / "pyproject.toml"
 README = Path(__file__).resolve().parents[2] / "README.md"
@@ -137,6 +147,17 @@ def test_setup_scripts_are_packaged():
     }
     missing = REQUIRED_SETUP_SCRIPTS - files
     assert not missing, f"missing bundled setup scripts: {missing}"
+
+
+def test_holohub_module_template_snapshot_is_packaged():
+    """The ownership snapshot must remain available as installed package data."""
+    template = importlib.resources.files("holoscan_cli.templates").joinpath("module")
+    missing = [
+        relative
+        for relative in sorted(REQUIRED_MODULE_TEMPLATE_FILES)
+        if not template.joinpath(relative).is_file()
+    ]
+    assert not missing, f"missing bundled Module template assets: {missing}"
 
 
 def test_bundled_template_script_uses_bundled_requirements(tmp_path):

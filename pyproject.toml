@@ -78,6 +78,7 @@ packages = [{ include = "holoscan_cli", from = "src" }]
 include = [
     { path = "src/holoscan_cli/metadata/*.schema.json", format = ["sdist", "wheel"] },
     { path = "src/holoscan_cli/setup_scripts/*", format = ["sdist", "wheel"] },
+    { path = "src/holoscan_cli/templates/**/*", format = ["sdist", "wheel"] },
     { path = "src/holoscan_cli/testing/**/*", format = ["sdist", "wheel"] },
 ]
 version = "0.0.0"
@@ -118,16 +119,24 @@ quiet-level = 3
 profile = "black"
 line_length = 100
 known_first_party = "holoscan_cli"
-skip_glob = ["build*/*", "dist/*", ".cache/*", ".ruff_cache/*"]
+skip_glob = [
+    "build*/*",
+    "dist/*",
+    ".cache/*",
+    ".ruff_cache/*",
+    "src/holoscan_cli/templates/module/**",
+]
 
 [tool.black]
 line-length = 100
 target-version = ["py310", "py311", "py312", "py313"]
+force-exclude = 'src/holoscan_cli/templates/module/'
 extend-exclude = '''
 (
   ^\.cache/
   | ^build[^/]*/
   | ^dist/
+  | ^src/holoscan_cli/templates/module/
   | tests/reports/
 )
 '''
@@ -141,6 +150,7 @@ exclude = [
   ".ruff_cache",
   "build*",
   "dist",
+  "src/holoscan_cli/templates/module",
   "tests/reports",
 ]
 

@@ -15,6 +15,11 @@
 
 # HoloHub-derived lint baseline for the consolidated Holoscan CLI.
 # Run `pre-commit autoupdate` to refresh to latest compatible versions.
+#
+# The imported cookiecutter output tree contains Jinja in source filenames and
+# file bodies. Keep the verbatim snapshot out of repository-level formatters;
+# generated output will be validated when the template is integrated.
+exclude: '^src/holoscan_cli/templates/module/\{\{cookiecutter\.module_repo_name\}\}/'
 
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
