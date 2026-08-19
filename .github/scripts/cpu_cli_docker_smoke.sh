@@ -43,6 +43,16 @@ run_fixture() {
     "$holoscan" "$@"
 }
 
+assert_file_contains() {
+  local needle=$1
+  local output=$2
+  if ! grep -Fq -- "$needle" "$output"; then
+    printf 'Expected command output to contain: %s\n' "$needle" >&2
+    cat "$output" >&2
+    return 1
+  fi
+}
+
 check_id=0
 assert_run_fixture_contains() {
   local needle=$1
@@ -50,7 +60,7 @@ assert_run_fixture_contains() {
   local output="$tmpdir/check-${check_id}.log"
   check_id=$((check_id + 1))
   run_fixture "$@" > "$output"
-  grep -q -- "$needle" "$output"
+  assert_file_contains "$needle" "$output"
 }
 
 echo "--- CPU CLI fixture checks"
@@ -78,10 +88,11 @@ assert_run_fixture_contains "BASE_IMAGE=$tiny_base" \
 run_fixture run-container --dryrun --no-docker-build --img "$image" \
   --docker-opts "--memory 128m" --add-volume "$tmpdir" -- echo hello \
   > "$tmpdir/run-container.log"
-grep -q -- "docker run" "$tmpdir/run-container.log"
-grep -q -- "--memory 128m" "$tmpdir/run-container.log"
-grep -q -- "$tmpdir" "$tmpdir/run-container.log"
-grep -q -- "echo hello" "$tmpdir/run-container.log"
+assert_file_contains "docker run" "$tmpdir/run-container.log"
+assert_file_contains \
+  "<2 configured Docker run option token(s) hidden>" "$tmpdir/run-container.log"
+assert_file_contains "$tmpdir" "$tmpdir/run-container.log"
+assert_file_contains "echo hello" "$tmpdir/run-container.log"
 
 echo "--- installed-wheel entrypoint helper checks"
 "$python" - <<'PY'
