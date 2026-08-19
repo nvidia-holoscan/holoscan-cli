@@ -10,21 +10,23 @@
 # into the image; the project tree is bind-mounted by the holoscan-cli at
 # /workspace/{{ cookiecutter.module_slug }} when the container is launched.
 #
-# Build & run via the holoscan-cli wrapper (recommended):
-#   ./holohub run-container
+# Build & run via the installed Holoscan CLI:
+#   holoscan run-container
 #
 # Manual build (without the CLI):
 #   docker build -t holoscan-{{ cookiecutter.module_slug.replace('_', '-') }} .
 
-ARG BASE_IMAGE=nvcr.io/nvidia/clara-holoscan/holoscan:v{{ cookiecutter.holoscan_version }}-cuda13-dgpu
+ARG BASE_IMAGE=nvcr.io/nvidia/clara-holoscan/holoscan:v{{ cookiecutter.holoscan_version }}-cuda13
 FROM ${BASE_IMAGE}
 
 ARG DEBIAN_FRONTEND=noninteractive
 
-# Install the wrapper-pinned holoscan-cli; copying only the wrapper keeps
-# this layer cached until the pin changes.
-COPY --chmod=755 holohub /tmp/scripts/
-RUN /tmp/scripts/holohub env-info
+# Install the exact CLI pin. holoscan-cli has no runtime dependencies on
+# Python 3.11+, so this adds nothing else to the image.
+COPY requirements-cli.txt /tmp/requirements-cli.txt
+RUN python3 -m pip install --no-cache-dir \
+        -r /tmp/requirements-cli.txt \
+    && holoscan version
 
 # TODO: add module-specific runtime / build dependencies below.
 {% if cookiecutter.language == "cpp" %}RUN apt-get update \
@@ -34,6 +36,7 @@ RUN /tmp/scripts/holohub env-info
         pybind11-dev \
     && rm -rf /var/lib/apt/lists/*
 {% endif %}
-# Python tooling: pytest-timeout for tests, build + scikit-build-core for
-# `./holohub package --pkg-generator WHEEL` (drives `python -m build`).
-RUN pip install --no-cache-dir pytest-timeout build scikit-build-core
+# Test and wheel-build tooling. Must be in the same interpreter the CLI runs
+# on: build and package pass it to CMake as Python3_EXECUTABLE.
+RUN python3 -m pip install --no-cache-dir \
+        'pytest>=8.2' pytest-timeout build scikit-build-core

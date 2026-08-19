@@ -5,7 +5,7 @@ This directory defines the Debian package for `{{ cookiecutter.module_repo_name 
 ## Usage
 
 ```bash
-./holohub package {{ cookiecutter.module_repo_name }} --pkg-generator DEB
+holoscan package {{ cookiecutter.module_repo_name }} --pkg-generator DEB
 ```
 
 ## metadata.json
@@ -14,10 +14,10 @@ This directory defines the Debian package for `{{ cookiecutter.module_repo_name 
 
 - **`package` key** — marks this directory as a HoloHub *package* project. The CLI
   discovers it via the recursive `HOLOSCAN_CLI_SEARCH_PATH` scan from the module root,
-  which makes it appear under the `PACKAGES` section of `./holohub list`.
+  which makes it appear under the `PACKAGES` section of `holoscan list`.
 - **`package.dockerfile`** — declares a Dockerfile path (relative to the module
   root) for this package-project record. When packaging this generated module
-  by name, `./holohub package` instead selects the root `module` record and its
+  by name, `holoscan package` instead selects the root `module` record and its
   `module.dockerfile`.
 
 Looking for Python packaging? Review the project [pyproject.toml](../../pyproject.toml)

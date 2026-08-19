@@ -23,7 +23,8 @@ jobs:
         run: ruff check .
       - name: Validate metadata.json against the Holoscan CLI schema
         run: |
-          pip install holoscan-cli
+          pip install -r requirements-cli.txt
+          pip install 'holoscan-cli[create]' -c requirements-cli.txt
           python .github/workflows/scripts/validate_metadata.py
 {% if cookiecutter.language == 'cpp' %}
       - name: Install clang-format
@@ -65,11 +66,14 @@ jobs:
     runs-on: [self-hosted, linux, x86_64, gpu]
 
     container:
-      image: nvcr.io/nvidia/clara-holoscan/holoscan:v{{ cookiecutter.holoscan_version }}-cuda13-dgpu
+      image: nvcr.io/nvidia/clara-holoscan/holoscan:v{{ cookiecutter.holoscan_version }}-cuda13
       options: --gpus all
 
     steps:
       - uses: actions/checkout@v4
+
+      - name: Install Python test dependencies
+        run: python -m pip install 'pytest>=8.2'
 
       - name: Configure
         run: |

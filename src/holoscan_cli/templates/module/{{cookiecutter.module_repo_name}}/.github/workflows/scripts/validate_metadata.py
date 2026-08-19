@@ -26,7 +26,18 @@ import os
 import sys
 from pathlib import Path
 
-_EXCLUDE_DIRS = {"build", "install", ".local", ".cache", "_CPack_Packages"}
+# .venv holds the installed holoscan-cli, whose wheel ships an unrendered
+# template; its metadata.json files are not valid instances of any schema.
+_EXCLUDE_DIRS = {
+    ".cache",
+    ".git",
+    ".local",
+    ".venv",
+    "_CPack_Packages",
+    "build",
+    "install",
+    "venv",
+}
 
 
 def iter_metadata_files(repo_root: Path):

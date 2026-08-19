@@ -13,11 +13,15 @@ A **Holoscan Module** — a self-contained, redistributable library that extends
 ## Quick Start
 
 ```bash
-# 1. Run the Python demo application
-./holohub run {{ cookiecutter.module_slug }}_pipeline --language python
+python3 -m venv .venv
+. .venv/bin/activate
+python -m pip install -r requirements-cli.txt
+
+# Run the Python demo application
+holoscan run {{ cookiecutter.module_slug }}_pipeline --language python
 {% if cookiecutter.language == 'cpp' %}
-# 2. Run the C++ demo application
-./holohub run {{ cookiecutter.module_slug }}_pipeline
+# Run the C++ demo application
+holoscan run {{ cookiecutter.module_slug }}_pipeline
 {% endif %}
 ```
 
@@ -78,12 +82,12 @@ int main() { holoscan::make_application<MyApp>()->run(); }
 {% endif -%}
 ---
 
-## Building from Source (without HoloHub CLI)
+## Building from Source (without Holoscan CLI)
 
 | Requirement | Version |
 | --- | --- |
 | Holoscan SDK | ≥ {{ cookiecutter.holoscan_version }} |
-| CUDA Toolkit | 13.x (matches the Holoscan SDK CUDA pin; the dev `Dockerfile` uses `cuda13-dgpu`) |
+| CUDA Toolkit | 13.x (matches the Holoscan SDK CUDA pin; the dev `Dockerfile` uses `cuda13`) |
 | CMake | ≥ 3.24 |
 {%- if cookiecutter.language == 'cpp' %}
 | C++ compiler | C++17 (GCC 11+) |
@@ -101,10 +105,10 @@ cmake --build build -j$(nproc)
 ## Testing
 
 ```bash
-./holohub test
+holoscan test
 ```
 
-Or, without the HoloHub CLI:
+Or, without the Holoscan CLI:
 
 {% if cookiecutter.language == 'cpp' %}
 

@@ -74,11 +74,15 @@ REQUIRED_SETUP_SCRIPTS = {
 
 REQUIRED_MODULE_TEMPLATE_FILES = {
     "cookiecutter.json",
+    "hooks/pre_gen_project.py",
     "hooks/post_gen_project.py",
-    "{{cookiecutter.module_repo_name}}/holohub",
+    "{{cookiecutter.module_repo_name}}/requirements-cli.txt",
+    "{{cookiecutter.module_repo_name}}/.dockerignore",
     "{{cookiecutter.module_repo_name}}/Dockerfile",
     "{{cookiecutter.module_repo_name}}/CMakeLists.txt",
     "{{cookiecutter.module_repo_name}}/metadata.json",
+    "{{cookiecutter.module_repo_name}}/cmake/HoloHubConfigHelpers.cmake",
+    "{{cookiecutter.module_repo_name}}/.github/workflows/scripts/check_copyright.py",
     "{{cookiecutter.module_repo_name}}/.github/workflows/ci.yml",
 }
 
@@ -149,8 +153,7 @@ def test_setup_scripts_are_packaged():
     assert not missing, f"missing bundled setup scripts: {missing}"
 
 
-def test_holohub_module_template_snapshot_is_packaged():
-    """The ownership snapshot must remain available as installed package data."""
+def test_standalone_module_template_is_packaged():
     template = importlib.resources.files("holoscan_cli.templates").joinpath("module")
     missing = [
         relative
@@ -158,6 +161,7 @@ def test_holohub_module_template_snapshot_is_packaged():
         if not template.joinpath(relative).is_file()
     ]
     assert not missing, f"missing bundled Module template assets: {missing}"
+    assert not template.joinpath("{{cookiecutter.module_repo_name}}/holohub").exists()
 
 
 def test_bundled_template_script_uses_bundled_requirements(tmp_path):
