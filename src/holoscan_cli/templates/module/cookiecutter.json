@@ -22,7 +22,7 @@
         "affiliation": "Author organization",
         "language": "Implementation language: 'cpp' (C++ with pybind11 Python bindings) or 'python' (pure Python)",
         "version": "Initial version",
-        "holoscan_version": "Minimum Holoscan SDK version required",
+        "holoscan_version": "Minimum Holoscan SDK version required (4.2.0 or later)",
         "description": "Short module description",
         "contact_email": "Maintainer contact email (used in Debian package metadata)"
     }

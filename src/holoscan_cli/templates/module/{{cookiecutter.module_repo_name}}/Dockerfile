@@ -21,8 +21,8 @@ FROM ${BASE_IMAGE}
 
 ARG DEBIAN_FRONTEND=noninteractive
 
-# Install the exact CLI pin. holoscan-cli has no runtime dependencies on
-# Python 3.11+, so this adds nothing else to the image.
+# Install the exact CLI pin. holoscan-cli has no runtime dependencies, so
+# this adds nothing else to the image.
 COPY requirements-cli.txt /tmp/requirements-cli.txt
 RUN python3 -m pip install --no-cache-dir \
         -r /tmp/requirements-cli.txt \

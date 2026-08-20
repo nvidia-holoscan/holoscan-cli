@@ -6,9 +6,9 @@
 #   - Fetches pybind11 at the version pinned to Holoscan SDK (so the same
 #     FetchContent_Declare entry is shared if this module is consumed as a
 #     dependency in HoloHub or another module).
-#   - Auto-links holoscan::core and holoscan::pybind11 (ABI-aligned with HSDK 3.3+).
+#   - Links holoscan::core and holoscan::pybind11 for SDK ABI compatibility.
 #   - Generates ${HOLOHUB_PYTHON_MODULE_OUT_DIR}/{{ cookiecutter.operator_slug }}/__init__.py
-#     with helpful import-error diagnostics for ABI mismatches.
+#     with optional custom type registration.
 include(pybind11_add_holohub_module)
 pybind11_add_holohub_module(
     CPP_CMAKE_TARGET   {{ cookiecutter.operator_slug }}

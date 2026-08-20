@@ -126,5 +126,19 @@ def test_cpp_export_declares_its_public_holoscan_dependency(tmp_path: Path):
 
     operator_cmake = (project / "operators/my_sensor_op/CMakeLists.txt").read_text(encoding="utf-8")
     package_config = (project / "cmake/Config.cmake.in").read_text(encoding="utf-8")
+    pybind_helper = (project / "cmake/pybind11_add_holohub_module.cmake").read_text(
+        encoding="utf-8"
+    )
+    python_initializer = (project / "cmake/pybind11/__init__.py.in").read_text(encoding="utf-8")
     assert "target_link_libraries(my_sensor_op PUBLIC holoscan::core)" in operator_cmake
     assert "find_dependency(holoscan REQUIRED COMPONENTS core)" in package_config
+    assert "if(TARGET holoscan::pybind11)" not in pybind_helper
+    assert "holoscan::pybind11" in pybind_helper
+    assert "Holoscan SDK <" not in python_initializer
+    compile(
+        python_initializer.replace("@MODULE_NAME@", "my_sensor_op").replace(
+            "@MODULE_CLASS_NAME@", "MySensorOp"
+        ),
+        "cmake/pybind11/__init__.py",
+        "exec",
+    )

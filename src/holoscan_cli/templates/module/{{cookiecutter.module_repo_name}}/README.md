@@ -90,10 +90,9 @@ int main() { holoscan::make_application<MyApp>()->run(); }
 | CUDA Toolkit | 13.x (matches the Holoscan SDK CUDA pin; the dev `Dockerfile` uses `cuda13`) |
 | CMake | ≥ 3.24 |
 {%- if cookiecutter.language == 'cpp' %}
-| C++ compiler | C++17 (GCC 11+) |
-| pybind11 | ≥ 2.11 |
+| C++ compiler | C++17-capable |
 {%- endif %}
-| Python | 3.10–3.13 |
+| Python | ≥ 3.10 |
 
 ```bash
 cmake -S . -B build -DBUILD_ALL=ON -D{{ cookiecutter.module_slug | upper }}_BUILD_TESTING=ON
