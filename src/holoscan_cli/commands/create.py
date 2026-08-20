@@ -24,7 +24,7 @@ import os
 import shutil
 import subprocess
 import tempfile
-from contextlib import nullcontext
+from contextlib import AbstractContextManager, nullcontext
 from pathlib import Path
 from typing import Optional, Union
 
@@ -223,47 +223,51 @@ def copy_cmake_support(project_dir: Path) -> None:
         shutil.copytree(source, project_dir / "cmake")
 
 
+def _packaged_module_template() -> AbstractContextManager[Path]:
+    """Extract the wheel's Module template to a real directory for the duration."""
+    resource = importlib.resources.files("holoscan_cli.templates").joinpath("module")
+    return importlib.resources.as_file(resource)
+
+
+def _select_template(cli, template: Optional[str]) -> tuple[AbstractContextManager[Path], bool]:
+    """Resolve the template directory and whether it is the packaged Module one.
+
+    An explicit ``--template`` wins, then ``HOLOSCAN_CLI_CREATE_TEMPLATE``, then
+    the current source project's application template, then the packaged Module
+    template. Relative paths resolve against the source-project root.
+    """
+    if template is not None and not str(template).strip():
+        fatal("--template requires a non-empty directory path.")
+
+    selected = template or os.environ.get(CREATE_TEMPLATE_ENV) or None
+    if selected is None:
+        source_template = Path(cli.HOLOHUB_ROOT) / "applications" / "template"
+        if source_template.is_dir():
+            return nullcontext(source_template.resolve()), False
+        return _packaged_module_template(), True
+
+    resolved = Path(selected).expanduser()
+    if not resolved.is_absolute():
+        resolved = Path(cli.HOLOHUB_ROOT) / resolved
+    resolved = resolved.resolve()
+    # The in-tree HoloHub Module template now ships in the wheel; keep the old
+    # path working for callers that still pass it.
+    if Path(selected) == LEGACY_MODULE_TEMPLATE and not resolved.exists():
+        return _packaged_module_template(), True
+    if not resolved.is_dir():
+        fatal(
+            f"Template directory {resolved} does not exist or is not a directory. "
+            "Choose an existing --template path and retry."
+        )
+    return nullcontext(resolved), False
+
+
 # ---- handler -----------------------------------------------------------------
 
 
 def handle_create(cli, args: argparse.Namespace) -> None:
     """Scaffold a project from the packaged or caller-selected template."""
-    if args.template is not None and not str(args.template).strip():
-        fatal("--template requires a non-empty directory path.")
-
-    selected_template = args.template
-    if selected_template is None:
-        selected_template = os.environ.get(CREATE_TEMPLATE_ENV) or None
-
-    explicit_template: Optional[Path] = None
-    use_packaged_template = False
-
-    if selected_template is None:
-        source_template = Path(cli.HOLOHUB_ROOT) / "applications" / "template"
-        if source_template.is_dir():
-            explicit_template = source_template.resolve()
-        else:
-            use_packaged_template = True
-
-    if selected_template:
-        explicit_template = Path(selected_template).expanduser()
-        if not explicit_template.is_absolute():
-            explicit_template = Path(cli.HOLOHUB_ROOT) / explicit_template
-        explicit_template = explicit_template.resolve()
-        if Path(selected_template) == LEGACY_MODULE_TEMPLATE and not explicit_template.exists():
-            use_packaged_template = True
-        elif not explicit_template.is_dir():
-            fatal(
-                f"Template directory {explicit_template} does not exist or is not a directory. "
-                "Choose an existing --template path and retry."
-            )
-
-    if use_packaged_template:
-        resource = importlib.resources.files("holoscan_cli.templates").joinpath("module")
-        template_manager = importlib.resources.as_file(resource)
-    else:
-        assert explicit_template is not None
-        template_manager = nullcontext(explicit_template)
+    template_manager, use_packaged_template = _select_template(cli, args.template)
 
     with template_manager as template_dir:
         template_dir = Path(template_dir)
@@ -320,14 +324,14 @@ def handle_create(cli, args: argparse.Namespace) -> None:
                 )
         context.update(extra_context)
 
+        applications_dir = (Path(cli.HOLOHUB_ROOT) / "applications").resolve()
         if args.directory is None:
-            output_dir = (
-                Path.cwd().resolve()
-                if is_module
-                else (Path(cli.HOLOHUB_ROOT) / "applications").resolve()
-            )
+            output_dir = Path.cwd().resolve() if is_module else applications_dir
         else:
             output_dir = Path(args.directory).expanduser().resolve()
+        # Applications registered in the source project's CMakeLists must be
+        # added there; Modules and out-of-tree destinations never are.
+        registers_application = not is_module and output_dir == applications_dir
 
         if not is_module:
             output_folder = str(context.get("project_slug") or project_slug)
@@ -374,7 +378,7 @@ def handle_create(cli, args: argparse.Namespace) -> None:
                 print(f"Destination: would populate an existing {target_kind} directory")
             for key, value in context.items():
                 print(f"  {key}: {value}")
-            if not is_module and output_dir == Path(cli.HOLOHUB_ROOT) / "applications":
+            if registers_application:
                 print(Color.green("Would modify `applications/CMakeLists.txt`: "))
                 print(f"    add_holohub_application({project_slug})")
             return
@@ -407,11 +411,24 @@ def handle_create(cli, args: argparse.Namespace) -> None:
 
             staged_project = Path(generated_path).resolve()
             actual_slug = staged_project.name
-            if staged_project.parent != staging_root or actual_slug != output_folder:
+            if staged_project.parent != staging_root:
                 fatal(
-                    f"Template generated an unexpected project directory: {staged_project} "
-                    f"(expected {staging_root / output_folder})"
+                    f"Template generated a project outside its staging directory: "
+                    f"{staged_project} (expected a direct child of {staging_root})"
                 )
+            if actual_slug != output_folder:
+                # Interactive prompts may rename the project, so honor the
+                # template's answer and re-check the destination it implies.
+                intended_dir = output_dir / actual_slug
+                try:
+                    target_state = inspect_directory(
+                        intended_dir, allowed_entries=PRESERVED_DESTINATION_ENTRIES
+                    )
+                except DirectoryMaterializationError as exc:
+                    fatal(
+                        f"{exc} Choose a missing or empty destination, or one containing only a "
+                        "real .git file or directory."
+                    )
 
             if use_packaged_template:
                 try:
@@ -445,14 +462,13 @@ def handle_create(cli, args: argparse.Namespace) -> None:
         metadata_path = project_dir / "metadata.json"
         main_file = project_dir / main_file_relative if main_file_relative is not None else None
 
-        if not is_module and output_dir == (Path(cli.HOLOHUB_ROOT) / "applications").resolve():
+        if registers_application:
             _add_to_cmakelists(cli, actual_slug)
 
         git_initialized = False
         if is_module and not target_state.entries:
             git_initialized = _initialize_module_git(project_dir)
 
-        msg_next = ""
         if is_module:
             msg_next = (
                 f"Possible next steps:\n"
@@ -461,7 +477,7 @@ def handle_create(cli, args: argparse.Namespace) -> None:
                 f"- Update project README\n"
                 f"- Build and test with: holoscan run-container\n"
             )
-        elif not is_module:
+        else:
             msg_next = (
                 f"Possible next steps:\n"
                 f"- Add operators to {main_file}\n"

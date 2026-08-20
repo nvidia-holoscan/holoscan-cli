@@ -68,7 +68,16 @@ REMOVED_COMMAND_FOOTER = (
 
 
 class DispatchUsageError(ValueError):
-    """A top-level option is missing, duplicated, or placed after a command."""
+    """A top-level option is invalid or misplaced."""
+
+
+# Top-level options consumed before the subcommand, mapped to the value each one
+# expects. Used for both parsing and the "requires a ..." usage errors.
+TOP_LEVEL_OPTIONS = {
+    "-l": "logging level",
+    "--log-level": "logging level",
+    "--project-root": "directory path",
+}
 
 
 def parse_args(argv: Optional[list[str]] = None) -> argparse.Namespace:
@@ -185,42 +194,31 @@ def _project_dispatch_argv(
     index = 1
 
     while index < len(argv):
-        arg = argv[index]
-        if arg in {"-l", "--log-level"}:
-            if index + 1 >= len(argv):
-                raise DispatchUsageError(f"{arg} requires a logging level.")
-            log_level = argv[index + 1].upper()
-            index += 2
-            continue
-        if arg.startswith("--log-level="):
-            log_level = arg.split("=", 1)[1].upper()
-            index += 1
-            continue
-        if arg == "--project-root":
-            if project_root is not None:
-                raise DispatchUsageError("--project-root may be specified only once.")
-            if index + 1 >= len(argv):
-                raise DispatchUsageError("--project-root requires a directory path.")
-            project_root = argv[index + 1]
-            if (
-                not project_root
-                or project_root.startswith("-")
-                or project_root in {*PROJECT_COMMANDS, "version"}
-            ):
-                raise DispatchUsageError("--project-root requires a non-empty directory path.")
-            index += 2
-            continue
-        if arg.startswith("--project-root="):
-            if project_root is not None:
-                raise DispatchUsageError("--project-root may be specified only once.")
-            project_root = arg.split("=", 1)[1]
-            if not project_root:
-                raise DispatchUsageError("--project-root requires a non-empty directory path.")
-            index += 1
-            continue
+        name, equals, inline_value = argv[index].partition("=")
+        if name not in TOP_LEVEL_OPTIONS:
+            project_argv.extend(argv[index:])
+            break
+        if equals:
+            value, index = inline_value, index + 1
+        elif index + 1 < len(argv):
+            value, index = argv[index + 1], index + 2
+        else:
+            raise DispatchUsageError(f"{name} requires a {TOP_LEVEL_OPTIONS[name]}.")
 
-        project_argv.extend(argv[index:])
-        break
+        if name == "--project-root":
+            if project_root is not None:
+                raise DispatchUsageError("--project-root may be specified only once.")
+            # A bare subcommand or another option here means the path was omitted.
+            if not value or value.startswith("-") or value in {*PROJECT_COMMANDS, "version"}:
+                raise DispatchUsageError("--project-root requires a non-empty directory path.")
+            project_root = value
+        else:
+            # argparse never sees this prefix form, so apply its choices here.
+            log_level = value.upper()
+            if log_level not in LOG_LEVELS:
+                raise DispatchUsageError(
+                    f"{name} must be one of {', '.join(LOG_LEVELS)}; got {value!r}."
+                )
 
     command = project_argv[1] if len(project_argv) > 1 else None
     for arg in project_argv[2:]:
@@ -233,15 +231,10 @@ def _project_dispatch_argv(
     return command, project_argv, log_level, project_root
 
 
-def _exit_if_removed_command(argv: list[str]) -> None:
-    """Print a removal note and exit 2 if argv's first non-flag token names a
-    removed subcommand. Runs before any parser so users typing the old name
-    see why it's gone instead of argparse's bare "invalid choice".
-    """
-    command, _, _, _ = _project_dispatch_argv(argv)
-    if command is None or command not in REMOVED_COMMANDS:
+def _exit_if_removed_command(program: str, command: Optional[str]) -> None:
+    """Explain a removed subcommand before argparse reports an invalid choice."""
+    if command not in REMOVED_COMMANDS:
         return
-    program = _program_name(argv)
     print(
         f"Error: '{program} {command}' was removed since holoscan v4.3.0 — "
         f"{REMOVED_COMMANDS[command]} is no longer shipped.\n"
@@ -251,9 +244,13 @@ def _exit_if_removed_command(argv: list[str]) -> None:
     sys.exit(2)
 
 
-def _dispatch_project_cli(argv: list[str]) -> bool:
+def _dispatch_project_cli(
+    command: Optional[str],
+    project_argv: list[str],
+    log_level: Optional[str],
+    project_root: Optional[str],
+) -> bool:
     """Forward source-project commands to the ported project CLI."""
-    command, project_argv, log_level, project_root = _project_dispatch_argv(argv)
     if command not in PROJECT_COMMANDS:
         return False
 
@@ -283,16 +280,16 @@ def _dispatch(argv: Optional[list[str]]) -> None:
         argv = sys.argv
     argv = list(argv)
 
-    command, native_argv, prefix_log_level, project_root = _project_dispatch_argv(argv)
+    command, native_argv, log_level, project_root = _project_dispatch_argv(argv)
 
-    _exit_if_removed_command(argv)
+    _exit_if_removed_command(_program_name(argv), command)
 
-    if _dispatch_project_cli(argv):
+    if _dispatch_project_cli(command, native_argv, log_level, project_root):
         return
 
     args = parse_args(native_argv)
-    if prefix_log_level is not None:
-        args.log_level = prefix_log_level
+    if log_level is not None:
+        args.log_level = log_level
     args.project_root = project_root
 
     set_up_logging(args.log_level)

@@ -26,7 +26,7 @@ required=(
   'holoscan_cli/cmake/HoloHubConfigHelpers\.cmake$'
   'holoscan_cli/cmake/holohub_configure_deb\.cmake$'
   'holoscan_cli/cmake/pybind11_add_holohub_module\.cmake$'
-  'holoscan_cli/cmake/pybind11/__init__\.py$'
+  'holoscan_cli/cmake/pybind11/__init__\.py\.in$'
   'holoscan_cli/cmake/pydoc/macros\.hpp$'
   'holoscan_cli/metadata/.+\.schema\.json$'
   'holoscan_cli/setup_scripts/.+'

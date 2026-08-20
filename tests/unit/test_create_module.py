@@ -67,10 +67,6 @@ def _assert_generated_sources_and_metadata(project: Path) -> None:
         assert is_valid, f"{metadata_path}: {message}"
 
     for source_path in project.rglob("*.py"):
-        relative = source_path.relative_to(project)
-        if relative.parts[:2] == ("cmake", "pybind11"):
-            # This helper is configured by CMake before becoming Python source.
-            continue
         compile(source_path.read_text(encoding="utf-8"), str(source_path), "exec")
 
 
@@ -256,10 +252,12 @@ def test_existing_project_is_not_overwritten(fake_cli, tmp_path, monkeypatch, ca
     assert str(project) in capsys.readouterr().err
 
 
-def _install_fake_generator(monkeypatch, *, filename: str = "generated.txt"):
+def _install_fake_generator(
+    monkeypatch, *, filename: str = "generated.txt", folder: str = "holoscan-my-mod"
+):
     def fake_generate(_cli, _template, *, interactive, context, output_dir):
         del interactive, context
-        project = output_dir / "holoscan-my-mod"
+        project = output_dir / folder
         project.mkdir()
         (project / filename).write_text("generated", encoding="utf-8")
         return str(project)
@@ -284,6 +282,34 @@ def test_existing_empty_project_directory_is_populated(fake_cli, tmp_path, monke
 
     assert (project / "generated.txt").read_text(encoding="utf-8") == "generated"
     assert initialized == [project]
+
+
+def test_interactive_rename_moves_the_destination(fake_cli, tmp_path, monkeypatch):
+    """Interactive prompts may rename the project after the destination was predicted."""
+    output_parent = tmp_path / "output"
+    _install_fake_generator(monkeypatch, folder="holoscan-renamed")
+    monkeypatch.setattr(create, "_initialize_module_git", lambda _path: False)
+
+    create.handle_create(fake_cli, _make_args(dryrun=False, directory=output_parent))
+
+    assert (output_parent / "holoscan-renamed" / "generated.txt").is_file()
+    assert not (output_parent / "holoscan-my-mod").exists()
+
+
+def test_renamed_destination_still_refuses_to_overwrite(fake_cli, tmp_path, monkeypatch, capsys):
+    output_parent = tmp_path / "output"
+    occupied = output_parent / "holoscan-renamed"
+    occupied.mkdir(parents=True)
+    marker = occupied / "keep.txt"
+    marker.write_text("keep", encoding="utf-8")
+    _install_fake_generator(monkeypatch, folder="holoscan-renamed")
+
+    with pytest.raises(SystemExit):
+        create.handle_create(fake_cli, _make_args(dryrun=False, directory=output_parent))
+
+    assert marker.read_text(encoding="utf-8") == "keep"
+    assert list(occupied.iterdir()) == [marker]
+    assert str(occupied) in capsys.readouterr().err
 
 
 def test_git_only_destination_is_populated_without_git_mutation(fake_cli, tmp_path, monkeypatch):
@@ -569,7 +595,7 @@ def test_packaged_template_generates_self_contained_python_module(
         "cmake/holohub_configure_deb.cmake",
         "cmake/Config.cmake.in",
         "cmake/pybind11_add_holohub_module.cmake",
-        "cmake/pybind11/__init__.py",
+        "cmake/pybind11/__init__.py.in",
         "cmake/pydoc/macros.hpp",
         ".github/workflows/scripts/check_copyright.py",
         ".github/workflows/scripts/gitutils.py",

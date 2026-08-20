@@ -134,7 +134,7 @@ function(pybind11_add_holohub_module)
     # custom target to ensure the module's __init__.py file is copied
     set(CMAKE_SUBMODULE_OUT_DIR ${_module_base_dir}/${MODULE_NAME})
     configure_file(
-        ${CMAKE_CURRENT_FUNCTION_LIST_DIR}/pybind11/__init__.py
+        ${CMAKE_CURRENT_FUNCTION_LIST_DIR}/pybind11/__init__.py.in
         ${_module_base_dir}/${MODULE_NAME}/__init__.py
     )
 

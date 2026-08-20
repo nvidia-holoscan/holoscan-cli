@@ -84,6 +84,8 @@ repos:
 
       - id: check-copyright
         name: check-copyright
+        # `holoscan lint` exports HOLOSCAN_CLI_PYTHON_BIN so the hook runs on the
+        # same interpreter as the CLI; plain `pre-commit run` falls back to python3.
         entry: bash -c 'exec "${HOLOSCAN_CLI_PYTHON_BIN:-python3}" .github/workflows/scripts/check_copyright.py "$@"' --
         args:
           - .

@@ -33,7 +33,7 @@ import re
 from pathlib import Path
 from typing import Mapping, Optional, Tuple
 
-from holoscan_cli.project_context import discover_project_context
+from holoscan_cli.project_context import SEARCH_DIRS, discover_project_context
 from holoscan_cli.utils.io import format_cmd, info, run_info_command, warn
 from holoscan_cli.utils.text import get_env_bool, is_env_flag_true, slugify
 
@@ -107,16 +107,7 @@ def get_component_search_paths(base_dir: Optional[Path] = None) -> tuple[Path, .
     """Return metadata search paths honoring HOLOSCAN_CLI_SEARCH_PATH overrides."""
     base_path = base_dir or HOLOHUB_ROOT
     tokens = os.environ.get("HOLOSCAN_CLI_SEARCH_PATH", "").split(",")
-    default_paths = (
-        "applications",
-        "benchmarks",
-        "gxf_extensions",
-        "modules",
-        "operators",
-        "pkg",
-        "tutorials",
-    )
-    paths = [token.strip() for token in tokens if token.strip()] or default_paths
+    paths = [token.strip() for token in tokens if token.strip()] or SEARCH_DIRS
     return tuple(
         (Path(token) if Path(token).is_absolute() else base_path / token) for token in paths
     )

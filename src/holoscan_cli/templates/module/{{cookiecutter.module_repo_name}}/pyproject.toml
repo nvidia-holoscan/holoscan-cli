@@ -43,15 +43,14 @@ wheel.packages = []
 [tool.ruff]
 line-length = 100
 target-version = "py310"
-# cmake/pybind11 is a scaffolded third-party helper; build*/, dist/ are
-# CMake/wheel outputs; .local/, .cache/, .cupy/ are dev-container HOME junk.
+# build*/, dist/ are CMake/wheel outputs; .local/, .cache/, .cupy/ are
+# dev-container HOME junk.
 exclude = [
     "build*",
     "dist",
     ".cache",
     ".local",
     ".cupy",
-    "cmake/pybind11",
 ]
 
 [tool.ruff.lint]

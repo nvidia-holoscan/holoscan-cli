@@ -17,7 +17,6 @@
 
 import os
 import shutil
-import stat
 from collections.abc import Collection
 from dataclasses import dataclass
 from pathlib import Path
@@ -29,10 +28,10 @@ class DirectoryMaterializationError(RuntimeError):
 
 @dataclass(frozen=True)
 class DirectorySnapshot:
-    """Identity of a missing, empty, or explicitly preserved directory."""
+    """Names found in a missing, empty, or explicitly preserved directory."""
 
     exists: bool
-    entries: tuple[tuple[str, tuple[int, int, int, int, int]], ...] = ()
+    entries: tuple[str, ...] = ()
 
     @property
     def kind(self) -> str:
@@ -62,26 +61,12 @@ def inspect_directory(path: Path, *, allowed_entries: Collection[str] = ()) -> D
             f"Destination {path} is not empty; existing entries: {names}."
         )
 
-    identities = []
     for entry in entries:
         if entry.is_symlink() or not (entry.is_dir() or entry.is_file()):
             raise DirectoryMaterializationError(
                 f"Preserved destination entry {entry} must be a real file or directory."
             )
-        metadata = entry.lstat()
-        identities.append(
-            (
-                entry.name,
-                (
-                    metadata.st_dev,
-                    metadata.st_ino,
-                    stat.S_IFMT(metadata.st_mode),
-                    metadata.st_size,
-                    metadata.st_mtime_ns,
-                ),
-            )
-        )
-    return DirectorySnapshot(exists=True, entries=tuple(identities))
+    return DirectorySnapshot(exists=True, entries=tuple(entry.name for entry in entries))
 
 
 def materialize_tree(

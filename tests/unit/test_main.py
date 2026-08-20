@@ -273,6 +273,22 @@ class TestMain:
         assert "Removed HAP/MAP commands are not available since holoscan v4.3.0" in err
         assert "holoscan-cli<=4.2.0 and holoscan<=4.2.0" in err
 
+    @pytest.mark.parametrize(
+        "argv",
+        [
+            ["holoscan", "-l", "BOGUS", "version"],
+            ["holoscan", "--log-level=bogus", "list"],
+        ],
+    )
+    def test_main_rejects_invalid_top_level_log_level(self, argv, capsys):
+        """The dispatcher strips this prefix form, so it owns argparse's choices check."""
+        with patch("holoscan_cli.cli.main") as mock_project_main:
+            with pytest.raises(SystemExit) as excinfo:
+                main(argv)
+        mock_project_main.assert_not_called()
+        assert excinfo.value.code == 2
+        assert "must be one of" in capsys.readouterr().err
+
     def test_main_with_log_level(self):
         mock_args = MagicMock()
         mock_args.command = "version"

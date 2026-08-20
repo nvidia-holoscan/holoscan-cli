@@ -36,7 +36,6 @@ from typing import Mapping, Optional
 PACKAGE_NAME = "holoscan-cli"
 REQUIREMENTS_FILENAME = "requirements-cli.txt"
 MODULE_METADATA_FILENAME = "metadata.json"
-MAX_REQUIREMENTS_BYTES = 64 * 1024
 
 SENTINEL_FILES = ("holohub", "isaac_os", "i4h", "CMakeLists.txt", "Dockerfile")
 METADATA_DIRS = (
@@ -49,6 +48,8 @@ METADATA_DIRS = (
     "subgraphs",
     "tutorials",
 )
+# Default HOLOSCAN_CLI_SEARCH_PATH entries. Subgraphs are recognized as a
+# project root marker but are not scanned for runnable components.
 SEARCH_DIRS = tuple(name for name in METADATA_DIRS if name != "subgraphs")
 
 _VERSION_RE = re.compile(r"[0-9A-Za-z](?:[0-9A-Za-z._+!-]{0,126}[0-9A-Za-z])?")
@@ -78,13 +79,15 @@ class ProjectContext:
     running_version: Optional[str] = None
     legacy_launcher: bool = False
     repo_prefix: Optional[str] = None
-    container_prefix: Optional[str] = None
-    workspace_name: Optional[str] = None
-    hostname_prefix: Optional[str] = None
     base_sdk_version: Optional[str] = None
     metadata_search_paths: tuple[Path, ...] = ()
     dockerfile: Optional[Path] = None
     warnings: tuple[str, ...] = ()
+
+    @property
+    def container_prefix(self) -> Optional[str]:
+        """Image/hostname form of the project identity; ``-`` is DNS-safe."""
+        return None if self.repo_prefix is None else self.repo_prefix.replace("_", "-")
 
     @property
     def is_module(self) -> bool:
@@ -113,11 +116,11 @@ class ProjectContext:
                 str(path.relative_to(self.root)) for path in self.metadata_search_paths
             ),
         }
+        # HoloscanContainer already derives its workspace name and hostname
+        # prefix from these two, so only these two need to be published.
         optional_values = {
             "HOLOSCAN_CLI_REPO_PREFIX": self.repo_prefix,
             "HOLOSCAN_CLI_CONTAINER_PREFIX": self.container_prefix,
-            "HOLOSCAN_CLI_WORKSPACE_NAME": self.workspace_name,
-            "HOLOSCAN_CLI_HOSTNAME_PREFIX": self.hostname_prefix,
             "HOLOSCAN_CLI_BASE_SDK_VERSION": self.base_sdk_version,
         }
         values.update({key: value for key, value in optional_values.items() if value})
@@ -143,8 +146,6 @@ class ProjectContext:
                 "legacy_launcher": self.legacy_launcher,
                 "repo_prefix": self.repo_prefix,
                 "container_prefix": self.container_prefix,
-                "workspace_name": self.workspace_name,
-                "hostname_prefix": self.hostname_prefix,
                 "base_sdk_version": self.base_sdk_version,
                 "metadata_search_paths": [str(path) for path in self.metadata_search_paths],
                 "dockerfile": str(self.dockerfile) if self.dockerfile else None,
@@ -177,14 +178,6 @@ def get_running_cli_version() -> str:
 
 def parse_cli_requirement(path: Path) -> str:
     """Parse the deliberately narrow standalone Module requirements contract."""
-    try:
-        size = path.stat().st_size
-    except OSError as exc:
-        raise ProjectContextError(f"Could not read {path}: {exc}") from exc
-    if size > MAX_REQUIREMENTS_BYTES:
-        raise ProjectContextError(
-            f"{path} is too large ({size} bytes); expected one exact {PACKAGE_NAME} requirement."
-        )
     try:
         lines = path.read_text(encoding="utf-8").splitlines()
     except (OSError, UnicodeError) as exc:
@@ -237,7 +230,7 @@ def _read_module_metadata(root: Path, *, strict: bool) -> Optional[dict]:
     return raw["module"]
 
 
-def _module_identity(module: dict, metadata_path: Path) -> tuple[str, str, Optional[str]]:
+def _module_identity(module: dict, metadata_path: Path) -> tuple[str, Optional[str]]:
     module_name = module.get("name")
     if not isinstance(module_name, str) or not module_name.strip():
         raise ProjectContextError(f"Module metadata at {metadata_path} has no valid module.name.")
@@ -288,7 +281,7 @@ def _module_identity(module: dict, metadata_path: Path) -> tuple[str, str, Optio
                     f"Module metadata at {metadata_path} has an invalid minimum SDK version."
                 )
             sdk_version = minimum.strip()
-    return repo_prefix, repo_prefix.replace("_", "-"), sdk_version
+    return repo_prefix, sdk_version
 
 
 def _build_context(
@@ -314,7 +307,7 @@ def _build_context(
             module_metadata=module,
             warnings=warnings,
         )
-    repo_prefix, container_prefix, sdk_version = _module_identity(module, metadata_path)
+    repo_prefix, sdk_version = _module_identity(module, metadata_path)
     requirements_path = root / REQUIREMENTS_FILENAME
     required_version = None
     requirement_error = None
@@ -351,9 +344,6 @@ def _build_context(
         running_version=running_version or get_running_cli_version(),
         legacy_launcher=legacy_launcher,
         repo_prefix=repo_prefix,
-        container_prefix=container_prefix,
-        workspace_name=repo_prefix,
-        hostname_prefix=container_prefix,
         base_sdk_version=sdk_version,
         metadata_search_paths=tuple(search_paths),
         dockerfile=dockerfile,
