@@ -44,13 +44,6 @@ def parse_semantic_version(version: str) -> Tuple[int, int, int]:
     return tuple(map(int, match.group(1).split(".")))
 
 
-def is_prerelease(version: str) -> bool:
-    """Return whether a PEP 440 version is a pre-release."""
-    from packaging.version import Version
-
-    return Version(version).is_prerelease
-
-
 # ---- string helpers ----------------------------------------------------------
 
 

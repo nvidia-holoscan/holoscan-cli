@@ -6,5 +6,6 @@
 # subdirectory with its own metadata.json so the Holoscan CLI can discover and
 # run them per language (e.g. `holoscan run {{ cookiecutter.module_slug }}_pipeline --language python`).
 add_subdirectory(python)
-{% if cookiecutter.language == 'cpp' %}add_subdirectory(cpp)
-{% endif %}
+{%- if cookiecutter.language == 'cpp' %}
+add_subdirectory(cpp)
+{%- endif %}

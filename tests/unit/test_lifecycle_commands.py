@@ -226,6 +226,7 @@ def test_build_project_locally_emits_application_cmake_and_build_commands(tmp_pa
     assert project_data is cli.project_data
     assert "-DAPP_smoke_app=ON" in cmake_args
     assert "-DCMAKE_BUILD_TYPE=Debug" in cmake_args
+    assert "-DCMAKE_PREFIX_PATH=/opt/nvidia/holoscan" in calls[0]
     assert '-DHOLOHUB_BUILD_OPERATORS="op_a;op_b"' in cmake_args
     assert "-DHOLOHUB_BUILD_PYTHON=ON" in cmake_args
     assert "-DHOLOHUB_BUILD_CPP=OFF" in cmake_args
@@ -562,6 +563,7 @@ def test_handle_test_container_adds_coverage_build_args_and_ctest_options(tmp_pa
     build_call = cli.container.build_calls[0]
     assert "--build-arg COVERAGE=ON" in build_call["build_args"]
     assert "coverage" in build_call["extra_scripts"]
+    assert "xvfb" not in build_call["extra_scripts"]
     run_call = cli.container.run_calls[0]
     ctest_command = run_call["extra_args"][1]
     assert run_call["docker_opts"] == "--entrypoint=bash"
@@ -578,6 +580,35 @@ def test_handle_test_container_adds_coverage_build_args_and_ctest_options(tmp_pa
     # `--ctest-options` must propagate verbatim into the ctest invocation
     # (pre-consolidation `test_holohub_test_ctest_options`).
     assert "-DCASE=smoke" in ctest_command
+    assert '-DCTEST_SOURCE_DIRECTORY="$PWD"' in ctest_command
+    assert "command -v xvfb-run" not in ctest_command
+    assert "xvfb-run" not in ctest_command
+
+
+def test_handle_test_container_detects_optional_xvfb(tmp_path):
+    cli = RecordingCLI(tmp_path)
+    args = _container_args(
+        coverage=False,
+        clear_cache=False,
+        no_xvfb=False,
+        site_name=None,
+        cdash_url=None,
+        platform_name=None,
+        cmake_options=None,
+        ctest_options=None,
+        ctest_script=None,
+        build_name_suffix=None,
+    )
+
+    test_cmd.handle_test(cli, args)
+
+    assert cli.container.build_calls[0]["extra_scripts"] == []
+    command = cli.container.run_calls[0]["extra_args"][1]
+    assert "command -v xvfb-run" in command
+    assert "xvfb_cmd='xvfb-run -a'" in command
+    assert "running tests without a virtual display" in command
+    assert "${xvfb_cmd} ctest" in command
+    assert '-DCTEST_SOURCE_DIRECTORY="$PWD"' in command
 
 
 def test_handle_test_local_runs_ctest_in_repo_with_environment(tmp_path, monkeypatch):
@@ -603,7 +634,9 @@ def test_handle_test_local_runs_ctest_in_repo_with_environment(tmp_path, monkeyp
 
     command, kwargs = calls[0]
     assert command[0:2] == ["bash", "-c"]
-    assert "xvfb-run -a ctest" in command[2]
+    assert "command -v xvfb-run" in command[2]
+    assert "${xvfb_cmd} ctest" in command[2]
+    assert '-DCTEST_SOURCE_DIRECTORY="$PWD"' in command[2]
     assert "-DTAG=manual" in command[2]
     assert "-S local.ctest" in command[2]
     assert kwargs["dry_run"] is True

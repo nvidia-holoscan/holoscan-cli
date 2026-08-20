@@ -35,33 +35,32 @@ distributing this Holoscan Module.
 
 ## Holoscan CLI environment and commands
 
-Create or activate the Python environment of your choice, then install the exact CLI version
-committed by this Module:
+Create the development environment with the exact CLI version committed by this Module:
 
 ```bash
-python3 -m venv .venv
-. .venv/bin/activate
-python -m pip install -r requirements-cli.txt
+uv sync
 ```
 
-The global `holoscan` command discovers this Module from its metadata and applies metadata-derived
-or CLI defaults. It refuses lifecycle work when the environment contains a different version; it
-never creates or repairs a virtual environment for you.
+The project config directs uv to NVIDIA's package index for `holoscan-cli` while leaving other
+dependencies on PyPI. The CLI discovers this Module from its metadata and refuses lifecycle work
+when the environment contains a different version.
 
 | Command | What it does |
 | --- | --- |
-| `holoscan run-container` | Build and start the development container |
-| `holoscan build {{ cookiecutter.module_slug }}_pipeline` | CMake configure + build inside the container |
-| `holoscan run {{ cookiecutter.module_slug }}_pipeline` | Run the example pipeline |
-| `holoscan test` | Run CTest (C++ unit tests) and pytest |
-| `holoscan install --dev` | Install a `.pth` hook so `import holoscan.{{ cookiecutter.module_slug }}` works in any shell |
+| `uv run holoscan run-container` | Build and start the development container |
+| `uv run holoscan build {{ cookiecutter.module_slug }}_pipeline` | CMake configure + build inside the container |
+| `uv run holoscan run {{ cookiecutter.module_slug }}_pipeline` | Run the example pipeline |
+| `uv run holoscan test` | Run CTest (C++ unit tests) and pytest |
+| `uv run holoscan install --dev` | Install a `.pth` hook so `import holoscan.{{ cookiecutter.module_slug }}` works in any shell |
 
-To upgrade, edit the pin in `requirements-cli.txt`, reinstall it, and rebuild the image. A
-pre-release needs NVIDIA's index:
+If uv is unavailable, use pip with NVIDIA's index:
 
 ```bash
 python -m pip install --extra-index-url https://pypi.nvidia.com -r requirements-cli.txt
 ```
+
+To upgrade, update the CLI pin in both `requirements-cli.txt` and `pyproject.toml`, run `uv sync`,
+and rebuild the image.
 
 If a container reports a version mismatch, rebuild it. Runtime commands deliberately never
 pip-install into a running container.
@@ -111,6 +110,7 @@ before publishing:
 | `[project].description` | Short description shown on PyPI |
 | `[project].authors` | Your name / organisation |
 | `[dependency-groups].dev` | Exact CLI convenience pin; keep synchronized with `requirements-cli.txt` |
+| `[tool.uv]` | NVIDIA index selection for the pinned `holoscan-cli` development dependency |
 | `[tool.scikit-build].cmake.args` | Extra CMake flags passed during `pip install` |
 
 Build a wheel:

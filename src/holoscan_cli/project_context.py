@@ -37,7 +37,6 @@ PACKAGE_NAME = "holoscan-cli"
 REQUIREMENTS_FILENAME = "requirements-cli.txt"
 MODULE_METADATA_FILENAME = "metadata.json"
 
-SENTINEL_FILES = ("holohub", "isaac_os", "i4h", "CMakeLists.txt", "Dockerfile")
 METADATA_DIRS = (
     "applications",
     "benchmarks",
@@ -137,8 +136,8 @@ class ProjectContext:
             return data
         data.update(
             {
-                "metadata": str(self.module_metadata_path),
-                "requirements": str(self.requirements_path),
+                "metadata": str(self.module_metadata_path) if self.module_metadata_path else None,
+                "requirements": str(self.requirements_path) if self.requirements_path else None,
                 "required_version": self.required_version,
                 "running_version": self.running_version,
                 "version_match": self.version_match,
@@ -201,14 +200,14 @@ def parse_cli_requirement(path: Path) -> str:
     return version
 
 
-def _matches_existing_root(candidate: Path) -> bool:
+def _is_source_root(candidate: Path) -> bool:
     if (candidate / "src" / "holoscan_cli").is_dir() and (candidate / "pyproject.toml").exists():
         return True
-    if any((candidate / name).exists() for name in SENTINEL_FILES) and any(
-        (candidate / name).is_dir() for name in METADATA_DIRS
-    ):
-        return True
-    return any((candidate / name / MODULE_METADATA_FILENAME).exists() for name in METADATA_DIRS)
+    return any(
+        (candidate / name / MODULE_METADATA_FILENAME).is_file()
+        or any((candidate / name).glob(f"*/{MODULE_METADATA_FILENAME}"))
+        for name in METADATA_DIRS
+    )
 
 
 def _read_module_metadata(root: Path, *, strict: bool) -> Optional[dict]:
@@ -375,12 +374,7 @@ def discover_project_context(
         root = _resolve_explicit_root(explicit_root, original_cwd)
         if not root.exists() or not root.is_dir():
             raise ProjectContextError(f"--project-root {root} does not name an existing directory.")
-        existing_match = _matches_existing_root(root)
         module = _read_module_metadata(root, strict=load_module_contract)
-        if not existing_match and module is None:
-            raise ProjectContextError(
-                f"--project-root {root} is not a recognized Holoscan source-project or Module root."
-            )
         return _build_context(
             root,
             kind="module" if module is not None else "source",
@@ -393,32 +387,24 @@ def discover_project_context(
     env_root = env.get("HOLOSCAN_CLI_ROOT")
     if env_root:
         root = _resolve_explicit_root(env_root, original_cwd)
-        # Apply the same recognition check as --project-root. The environment
-        # form warns and falls back because it is ambient rather than an
-        # explicit assertion made for this invocation.
         if not root.exists() or not root.is_dir():
             warnings = (f"Ignoring invalid HOLOSCAN_CLI_ROOT={env_root!r}; discovering from cwd.",)
         else:
             module = _read_module_metadata(root, strict=load_module_contract)
-            if _matches_existing_root(root) or module is not None:
-                return _build_context(
-                    root,
-                    kind="module" if module is not None else "source",
-                    discovery="environment",
-                    module=module,
-                    running_version=running_version,
-                    load_module_contract=load_module_contract,
-                )
-            warnings = (
-                f"Ignoring HOLOSCAN_CLI_ROOT={env_root!r}: not a recognized Holoscan "
-                "source-project or Module root; discovering from cwd.",
+            return _build_context(
+                root,
+                kind="module" if module is not None else "source",
+                discovery="environment",
+                module=module,
+                running_version=running_version,
+                load_module_contract=load_module_contract,
             )
 
     module_fallback: Optional[tuple[Path, dict]] = None
     for candidate in (original_cwd, *original_cwd.parents):
-        existing_match = _matches_existing_root(candidate)
-        module = _read_module_metadata(candidate, strict=existing_match and load_module_contract)
-        if existing_match:
+        source_root = _is_source_root(candidate)
+        module = _read_module_metadata(candidate, strict=source_root and load_module_contract)
+        if source_root:
             return _build_context(
                 candidate,
                 kind="module" if module is not None else "source",

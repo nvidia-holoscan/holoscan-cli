@@ -48,7 +48,7 @@ done
 
 forbidden=(
   'holoscan_cli/testing/test_all_applications/'
-  'holoscan_cli/templates/module/.+/holohub$'
+  'holoscan_cli/templates/module/.+/holohub(/|$)'
 )
 for pattern in "${forbidden[@]}"; do
   if echo "$listing" | grep -qE "$pattern"; then

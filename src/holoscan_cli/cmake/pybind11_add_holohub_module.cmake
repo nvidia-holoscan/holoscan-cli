@@ -85,6 +85,7 @@ function(pybind11_add_holohub_module)
     else()
         set(_module_base_dir ${HOLOHUB_PYTHON_MODULE_OUT_DIR})
     endif()
+    set(CMAKE_SUBMODULE_OUT_DIR ${_module_base_dir}/${MODULE_NAME})
 
     set(target_name ${MODULE_NAME}_python)
     pybind11_add_module(${target_name} MODULE ${MODULE_SOURCES})
@@ -105,11 +106,27 @@ function(pybind11_add_holohub_module)
     # Module that's been add_subdirectory()'d into another project (HoloHub
     # consuming an external module, etc.) — CMAKE_SOURCE_DIR would point at
     # the parent project's root, which is wrong for our rpath calculation.
+    if(NOT HOLOSCAN_INSTALL_LIB_DIR)
+        set(HOLOSCAN_INSTALL_LIB_DIR lib)
+    endif()
+    if(IS_ABSOLUTE "${HOLOSCAN_INSTALL_LIB_DIR}")
+        set(_install_lib_dir "${HOLOSCAN_INSTALL_LIB_DIR}")
+        set(_build_lib_dir "${HOLOSCAN_INSTALL_LIB_DIR}")
+    else()
+        set(_install_lib_dir "${PROJECT_SOURCE_DIR}/${HOLOSCAN_INSTALL_LIB_DIR}")
+        set(_build_lib_dir "${CMAKE_BINARY_DIR}/${HOLOSCAN_INSTALL_LIB_DIR}")
+    endif()
     file(RELATIVE_PATH install_lib_relative_path
-        ${CMAKE_CURRENT_LIST_DIR}
-        ${PROJECT_SOURCE_DIR}/${HOLOSCAN_INSTALL_LIB_DIR}
+        "${CMAKE_CURRENT_LIST_DIR}"
+        "${_install_lib_dir}"
     )
+    file(RELATIVE_PATH build_lib_relative_path
+        "${CMAKE_SUBMODULE_OUT_DIR}"
+        "${_build_lib_dir}"
+    )
+    set(_rpath "")
     list(APPEND _rpath
+        "\$ORIGIN/${build_lib_relative_path}" # in the build tree
         "\$ORIGIN/${install_lib_relative_path}" # in our install tree (same layout as src)
         "\$ORIGIN/../../lib" # in our python wheel (module at <ns>/<pkg>/_mod.so → lib/ is two levels up)
         "\$ORIGIN/../lib"    # legacy fallback for one-level-deep layouts
@@ -124,7 +141,6 @@ function(pybind11_add_holohub_module)
     file(MAKE_DIRECTORY ${_module_base_dir}/${MODULE_NAME})
 
     # custom target to ensure the module's __init__.py file is copied
-    set(CMAKE_SUBMODULE_OUT_DIR ${_module_base_dir}/${MODULE_NAME})
     configure_file(
         ${CMAKE_CURRENT_FUNCTION_LIST_DIR}/pybind11/__init__.py.in
         ${_module_base_dir}/${MODULE_NAME}/__init__.py

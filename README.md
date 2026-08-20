@@ -82,6 +82,14 @@ uvx --from holoscan-cli holoscan --help
 pipx run --spec holoscan-cli holoscan --help
 ```
 
+Creating a standalone Module needs the optional creation dependencies. NVIDIA's
+index is included so release candidates are available too:
+
+```bash
+uvx --index https://pypi.nvidia.com \
+  --from 'holoscan-cli[create]' holoscan create my-sensor
+```
+
 ## Versioning
 
 `holoscan-cli` release versions are aligned with Holoscan SDK GA release

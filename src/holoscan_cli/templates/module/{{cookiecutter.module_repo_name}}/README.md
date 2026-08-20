@@ -13,15 +13,13 @@ A **Holoscan Module** — a self-contained, redistributable library that extends
 ## Quick Start
 
 ```bash
-python3 -m venv .venv
-. .venv/bin/activate
-python -m pip install -r requirements-cli.txt
+uv sync
 
 # Run the Python demo application
-holoscan run {{ cookiecutter.module_slug }}_pipeline --language python
+uv run holoscan run {{ cookiecutter.module_slug }}_pipeline --language python
 {% if cookiecutter.language == 'cpp' %}
 # Run the C++ demo application
-holoscan run {{ cookiecutter.module_slug }}_pipeline
+uv run holoscan run {{ cookiecutter.module_slug }}_pipeline
 {% endif %}
 ```
 
@@ -104,20 +102,18 @@ cmake --build build -j$(nproc)
 ## Testing
 
 ```bash
-holoscan test
+uv run holoscan test
 ```
 
 Or, without the Holoscan CLI:
 
-{% if cookiecutter.language == 'cpp' %}
-
+{% if cookiecutter.language == 'cpp' -%}
 ```bash
 # C++ (GTest via CTest)
 ctest --test-dir build --output-on-failure -L unit
 ```
 
-{% endif %}
-
+{% endif -%}
 ```bash
 # Python (pytest)
 PYTHONPATH=build/python/lib${PYTHONPATH:+:$PYTHONPATH} {{ cookiecutter.module_slug | upper }}_BUILD_DIR=build pytest tests/python/ -v

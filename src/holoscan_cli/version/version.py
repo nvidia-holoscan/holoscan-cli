@@ -44,7 +44,9 @@ def collect_version_info(context: ProjectContext | None = None) -> dict:
         info.update(
             {
                 "project_root": str(context.root),
-                "requirements_file": str(context.requirements_path),
+                "requirements_file": (
+                    str(context.requirements_path) if context.requirements_path else None
+                ),
                 "required_version": context.required_version,
                 "version_match": context.version_match,
             }

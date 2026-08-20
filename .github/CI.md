@@ -270,6 +270,7 @@ each pattern in two lists:
 * **forbidden** — paths that must NOT be present (regressions from past
   cleanups):
   * `holoscan_cli/testing/test_all_applications/` (decoupled in `2d2f44a`)
+  * `holoscan_cli/templates/module/*/holohub` (standalone Modules ship no wrapper)
 
 The same script runs in both pipelines so a wheel that passes
 `main.yaml` will pass `release.yaml`.

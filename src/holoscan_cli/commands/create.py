@@ -38,12 +38,12 @@ from holoscan_cli.utils.filesystem import (
     materialize_tree,
 )
 from holoscan_cli.utils.io import Color, fatal
-from holoscan_cli.utils.text import is_prerelease, parse_key_value_pairs, to_snake_case
+from holoscan_cli.utils.text import parse_key_value_pairs, to_snake_case
 
 LEGACY_MODULE_TEMPLATE = Path("modules/template")
 CREATE_TEMPLATE_ENV = "HOLOSCAN_CLI_CREATE_TEMPLATE"
 LOCAL_SOURCE_VERSION = "0.0.0+local"
-RESERVED_CONTEXT_KEYS = {"_holoscan_cli_prerelease", "_holoscan_cli_version"}
+RESERVED_CONTEXT_KEYS = {"_holoscan_cli_version"}
 PRESERVED_DESTINATION_ENTRIES = {".git"}
 
 
@@ -161,7 +161,7 @@ def _run_cookiecutter(
             default_config=runtime_config,
         )
     except Exception as exc:
-        fatal(f"Failed to create project from template {template_dir} " f"in {output_dir}: {exc}")
+        fatal(f"Failed to create project from template {template_dir} in {output_dir}: {exc}")
         raise AssertionError("fatal() returned unexpectedly")  # pragma: no cover
 
 
@@ -220,7 +220,7 @@ def copy_cmake_support(project_dir: Path) -> None:
     """Vendor the CLI's packaged CMake support into a generated project."""
     resource = importlib.resources.files("holoscan_cli").joinpath("cmake")
     with importlib.resources.as_file(resource) as source:
-        shutil.copytree(source, project_dir / "cmake")
+        shutil.copytree(source, project_dir / "cmake", dirs_exist_ok=True)
 
 
 def _packaged_module_template() -> AbstractContextManager[Path]:
@@ -291,16 +291,6 @@ def handle_create(cli, args: argparse.Namespace) -> None:
                 "install the checkout into an isolated environment with distribution metadata, "
                 "then retry."
             )
-        try:
-            prerelease = is_prerelease(__version__) if is_module else False
-        except ImportError:
-            fatal(
-                "Creating a Module requires the optional creation dependencies. "
-                "Install them with `pip install 'holoscan-cli[create]'`."
-            )
-        except ValueError:
-            fatal(f"The executing holoscan-cli version is not valid: {__version__!r}")
-
         project_slug = to_snake_case(args.project)
         context = {
             "project_name": args.project,
@@ -308,7 +298,6 @@ def handle_create(cli, args: argparse.Namespace) -> None:
             "language": args.language.lower() if args.language else None,
             "year": datetime.datetime.now().year,
             "_holoscan_cli_version": __version__,
-            "_holoscan_cli_prerelease": prerelease,
         }
         if HoloscanContainer.BASE_SDK_VERSION:
             context["holoscan_version"] = HoloscanContainer.BASE_SDK_VERSION
@@ -430,7 +419,7 @@ def handle_create(cli, args: argparse.Namespace) -> None:
                         "real .git file or directory."
                     )
 
-            if use_packaged_template:
+            if is_module:
                 try:
                     copy_cmake_support(staged_project)
                 except OSError as exc:

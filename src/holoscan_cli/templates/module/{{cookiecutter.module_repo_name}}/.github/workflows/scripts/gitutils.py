@@ -26,14 +26,20 @@ def is_file_empty(f):
 
 def __git(*opts):
     """Runs a git command and returns its output"""
-    cmd = "git " + " ".join(list(opts))
-    ret = subprocess.check_output(cmd, shell=True)
+    ret = subprocess.check_output(["git", *opts], shell=False)
     return ret.decode("UTF-8").rstrip("\n")
 
 
 def __gitdiff(*opts):
     """Runs a git diff command with no pager set"""
     return __git("--no-pager", "diff", *opts)
+
+
+def _resolve_commit(ref):
+    """Resolve a caller-provided revision without treating it as a Git option."""
+    if not isinstance(ref, str) or not ref or ref.startswith("-") or "\0" in ref:
+        raise ValueError(f"Invalid Git revision: {ref!r}")
+    return __git("rev-parse", "--verify", "--end-of-options", f"{ref}^0")
 
 
 def branch():
@@ -97,16 +103,18 @@ def uncommitted_files():
     Returns a list of all changed files that are not yet committed. This
     means both untracked/unstaged as well as uncommitted files too.
     """
-    files = __git("status", "-u", "-s")
+    entries = __git("status", "--porcelain=v1", "-z", "--untracked-files=all").split("\0")
     ret = []
-    for f in files.splitlines():
-        f = f.strip(" ")
-        f = re.sub(r"\s+", " ", f)
-        tmp = f.split(" ", 1)
-        # only consider staged files or uncommitted files
-        # in other words, ignore untracked files
-        if tmp[0] == "M" or tmp[0] == "A":
-            ret.append(tmp[1])
+    index = 0
+    while index < len(entries):
+        entry = entries[index]
+        index += 1
+        if not entry:
+            continue
+        status, path = entry[:2], entry[3:]
+        ret.append(path)
+        if "R" in status or "C" in status:
+            index += 1  # porcelain -z adds the original rename/copy path next
     return ret
 
 
@@ -114,17 +122,28 @@ def changed_files_between(base_ref, new_ref):
     """
     Returns a list of files changed between base_ref and new_ref
     """
-    files = __gitdiff("--name-only", "--ignore-submodules", f"{base_ref}..{new_ref}")
+    base_commit = _resolve_commit(base_ref)
+    new_commit = _resolve_commit(new_ref)
+    files = __gitdiff("--name-only", "--ignore-submodules", f"{base_commit}..{new_commit}")
     return files.splitlines()
 
 
 def changes_in_file_between(file, b1, b2, filter=None):
     """Filters the changed lines to a file between the branches b1 and b2"""
-    current = branch()
-    __git("checkout", "--quiet", b1)
-    __git("checkout", "--quiet", b2)
-    diffs = __gitdiff("--ignore-submodules", "-w", "--minimal", "-U0", f"{b1}...{b2}", "--", file)
-    __git("checkout", "--quiet", current)
+    b1_commit = _resolve_commit(b1)
+    b2_commit = _resolve_commit(b2)
+    path = os.fspath(file)
+    if "\0" in path:
+        raise ValueError("Git paths cannot contain NUL bytes")
+    diffs = __gitdiff(
+        "--ignore-submodules",
+        "-w",
+        "--minimal",
+        "-U0",
+        f"{b1_commit}...{b2_commit}",
+        "--",
+        f":(literal){path}",
+    )
     return [line for line in diffs.splitlines() if (filter is None or filter(line))]
 
 

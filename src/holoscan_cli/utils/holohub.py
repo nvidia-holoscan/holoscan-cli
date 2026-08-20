@@ -95,17 +95,15 @@ def _get_holohub_root() -> Path:
     return context.root
 
 
-HOLOHUB_ROOT = _get_holohub_root()
-
-
+@functools.lru_cache(maxsize=1)
 def get_holohub_root() -> Path:
-    """Return the cached source-project repo root."""
-    return HOLOHUB_ROOT
+    """Discover and cache the source-project repo root on first use."""
+    return _get_holohub_root()
 
 
 def get_component_search_paths(base_dir: Optional[Path] = None) -> tuple[Path, ...]:
     """Return metadata search paths honoring HOLOSCAN_CLI_SEARCH_PATH overrides."""
-    base_path = base_dir or HOLOHUB_ROOT
+    base_path = base_dir or get_holohub_root()
     tokens = os.environ.get("HOLOSCAN_CLI_SEARCH_PATH", "").split(",")
     paths = [token.strip() for token in tokens if token.strip()] or SEARCH_DIRS
     return tuple(
@@ -130,7 +128,7 @@ def get_holohub_setup_scripts_dir() -> Path:
     if explicit:
         return Path(explicit).expanduser()
 
-    repo_dir = HOLOHUB_ROOT / "utilities" / "setup"
+    repo_dir = get_holohub_root() / "utilities" / "setup"
     if repo_dir.is_dir():
         return repo_dir
 
@@ -330,7 +328,7 @@ def get_git_short_sha(length: int = 12) -> str:
     """Return the short git SHA for the source-project repo, or DEFAULT_GIT_REF on failure."""
     try:
         sha = run_info_command(
-            ["git", "rev-parse", f"--short={length}", "HEAD"], cwd=str(HOLOHUB_ROOT)
+            ["git", "rev-parse", f"--short={length}", "HEAD"], cwd=str(get_holohub_root())
         )
         return sha or DEFAULT_GIT_REF
     except Exception:
@@ -346,7 +344,7 @@ def get_current_branch_slug() -> str:
     """
     try:
         branch = run_info_command(
-            ["git", "rev-parse", "--abbrev-ref", "HEAD"], cwd=str(HOLOHUB_ROOT)
+            ["git", "rev-parse", "--abbrev-ref", "HEAD"], cwd=str(get_holohub_root())
         )
         if not branch or branch in ["HEAD", "(no branch)"] or branch.startswith("(HEAD detached"):
             return DEFAULT_GIT_REF

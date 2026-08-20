@@ -25,6 +25,7 @@ ARG DEBIAN_FRONTEND=noninteractive
 # this adds nothing else to the image.
 COPY requirements-cli.txt /tmp/requirements-cli.txt
 RUN python3 -m pip install --no-cache-dir \
+        --extra-index-url https://pypi.nvidia.com \
         -r /tmp/requirements-cli.txt \
     && holoscan version
 

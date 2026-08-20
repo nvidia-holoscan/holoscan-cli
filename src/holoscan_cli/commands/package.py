@@ -225,7 +225,7 @@ def _package_locally(cli, args: argparse.Namespace, project_data: dict) -> None:
             f"-DPython3_EXECUTABLE={sys.executable}",
             f"-DPython3_ROOT_DIR={os.path.dirname(os.path.dirname(sys.executable))}",
             f"-DCMAKE_BUILD_TYPE={build_type}",
-            f"-DCMAKE_PREFIX_PATH={cli.DEFAULT_SDK_DIR}/lib",
+            f"-DCMAKE_PREFIX_PATH={cli.DEFAULT_SDK_DIR}",
             # BUILD_ALL=OFF keeps unrelated subprojects out of this package.
             # MODULE_<slug>=ON enters the module subdir for in-tree HoloHub
             # builds (modules/CMakeLists.txt gates add_holohub_module() on it);

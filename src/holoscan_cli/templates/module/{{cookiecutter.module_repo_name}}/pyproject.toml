@@ -26,6 +26,14 @@ dev = [
     "pytest>=8.2",
 ]
 
+[tool.uv.sources]
+holoscan-cli = { index = "nvidia" }
+
+[[tool.uv.index]]
+name = "nvidia"
+url = "https://pypi.nvidia.com"
+explicit = true
+
 [tool.scikit-build]
 cmake.version = ">=3.24"
 # Build only what the wheel needs: turn off test and app subprojects, and

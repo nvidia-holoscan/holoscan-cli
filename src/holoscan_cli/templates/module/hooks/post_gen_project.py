@@ -62,8 +62,8 @@ else:
     print(f"  operators/{OPERATOR_SLUG}/{OPERATOR_SLUG}.py\n")
 
 print("Build and run:")
-print("  holoscan run-container")
+print("  uv run holoscan run-container")
 print("  # Inside the container:")
 print(f"  holoscan build {pipeline}")
-print(f"  holoscan run   {pipeline} --language python\n")
+print(f"  holoscan run   {pipeline} --language {LANGUAGE}\n")
 print("Register your module at https://nvidia-holoscan.github.io/ when ready.")

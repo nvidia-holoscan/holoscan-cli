@@ -259,7 +259,7 @@ jobs:
           wheel=$(find dist -name 'holoscan_cli-*.whl' | head -n1)
           /tmp/holoscan-cli-smoke/bin/pip install "${wheel}[create]"
           /tmp/holoscan-cli-smoke/bin/python -c \
-            'import cookiecutter, jsonschema, packaging, referencing'
+            'import cookiecutter, jsonschema, referencing'
 
           create_root=$(mktemp -d)
           installed_version=$(/tmp/holoscan-cli-smoke/bin/python -c \

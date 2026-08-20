@@ -17,11 +17,12 @@ function(holohub_configure_deb)
   # parse args
   set(options)
   set(requiredArgs NAME DESCRIPTION VERSION VENDOR CONTACT DEPENDS)
-  list(APPEND oneValueArgs ${requiredArgs} SECTION PRIORITY RECOMMENDS SUGGESTS)
-  set(multiValueArgs COMPONENTS EXPORT_NAME)
+  list(APPEND oneValueArgs ${requiredArgs} SECTION PRIORITY RECOMMENDS SUGGESTS EXPORT_NAME)
+  set(multiValueArgs COMPONENTS)
   cmake_parse_arguments(ARG "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGV})
 
   # validate required args
+  set(missingArgs "")
   foreach(arg ${requiredArgs})
     if(NOT ARG_${arg})
       list(APPEND missingArgs ${arg})
@@ -66,7 +67,6 @@ function(holohub_configure_deb)
       "${CMAKE_CURRENT_BINARY_DIR}/${ARG_NAME}Config.cmake"
       INSTALL_DESTINATION ${config_install_dir}
       NO_SET_AND_CHECK_MACRO
-      NO_CHECK_REQUIRED_COMPONENTS_MACRO
     )
     write_basic_package_version_file(
       "${CMAKE_CURRENT_BINARY_DIR}/${ARG_NAME}ConfigVersion.cmake"

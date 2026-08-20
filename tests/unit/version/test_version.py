@@ -14,10 +14,16 @@
 # limitations under the License.
 
 import importlib.metadata
+import json
 from argparse import Namespace
 from pathlib import Path
 
-from holoscan_cli.version.version import execute_version_command, get_package_version
+from holoscan_cli.project_context import ProjectContext
+from holoscan_cli.version.version import (
+    collect_version_info,
+    execute_version_command,
+    get_package_version,
+)
 
 
 def test_get_package_version_from_package_metadata(monkeypatch):
@@ -50,3 +56,13 @@ def test_execute_version_command_reports_package_and_paths(monkeypatch, capsys):
     assert f"Module:      {Path('src/holoscan_cli/version/version.py').resolve()}" in output
     assert "Holoscan SDK:" not in output
     assert "MONAI Deploy App SDK:" not in output
+
+
+def test_version_info_preserves_a_missing_requirements_path_as_null(tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr("holoscan_cli.version.version.get_package_version", lambda: "1.2.3")
+    context = ProjectContext(root=tmp_path, kind="module", discovery="test")
+
+    assert collect_version_info(context)["requirements_file"] is None
+
+    execute_version_command(Namespace(project_context=context, json=True))
+    assert json.loads(capsys.readouterr().out)["requirements_file"] is None

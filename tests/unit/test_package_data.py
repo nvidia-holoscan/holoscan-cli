@@ -160,6 +160,8 @@ def test_setup_scripts_are_packaged():
     }
     missing = REQUIRED_SETUP_SCRIPTS - files
     assert not missing, f"missing bundled setup scripts: {missing}"
+    dockerfile = importlib.resources.files("holoscan_cli.setup_scripts").joinpath("Dockerfile.util")
+    assert "FROM ${BASE_IMAGE:-ubuntu:24.04} AS base" in dockerfile.read_text(encoding="utf-8")
 
 
 def test_cmake_support_is_packaged():
@@ -198,7 +200,7 @@ def test_bundled_template_script_uses_bundled_requirements(tmp_path):
     args_file = tmp_path / "python-args.txt"
     fake_python = bin_dir / "python3"
     fake_python.write_text(
-        "#!/usr/bin/env bash\n" 'printf \'%s\\n\' "$@" > "${PYTHON_ARGS_FILE}"\n',
+        '#!/usr/bin/env bash\nprintf \'%s\\n\' "$@" > "${PYTHON_ARGS_FILE}"\n',
         encoding="utf-8",
     )
     fake_python.chmod(0o755)
@@ -334,9 +336,8 @@ def test_pyproject_create_extra_bundles_validator_deps():
 
     The fatal in ``commands/create.py::validate_generated_metadata`` instructs
     users to install this extra when ``jsonschema`` / ``referencing`` are
-    missing, while Module generation also needs ``cookiecutter`` and
-    ``packaging``. The dependency set is therefore part of the user-facing
-    install story.
+    missing, while Module generation also needs ``cookiecutter``. The
+    dependency set is therefore part of the user-facing install story.
     """
     extras = _pyproject()["project"].get("optional-dependencies", {})
     assert "create" in extras, sorted(extras)
@@ -346,7 +347,6 @@ def test_pyproject_create_extra_bundles_validator_deps():
         "jsonschema",
         "referencing",
         "cookiecutter",
-        "packaging",
     }, create_specs
 
     jsonschema_spec = next(spec for spec in create_specs if spec.startswith("jsonschema"))
