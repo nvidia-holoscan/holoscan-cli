@@ -25,6 +25,9 @@ required=(
   'holoscan_cli/metadata/.+\.schema\.json$'
   'holoscan_cli/setup_scripts/.+'
   'holoscan_cli/setup_scripts/requirements\.template\.txt$'
+  'holoscan_cli/templates/module/cookiecutter\.json$'
+  'holoscan_cli/templates/module/hooks/post_gen_project\.py$'
+  'holoscan_cli/templates/module/.+/holohub$'
   'holoscan_cli/testing/'
 )
 for pattern in "${required[@]}"; do
