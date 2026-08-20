@@ -27,6 +27,8 @@ repos:
     hooks:
       - id: check-added-large-files
       - id: check-ast
+        # CMake substitutes these placeholders before this becomes Python.
+        exclude: '^src/holoscan_cli/cmake/pybind11/__init__\.py$'
       - id: check-case-conflict
       - id: check-docstring-first
       - id: check-json
