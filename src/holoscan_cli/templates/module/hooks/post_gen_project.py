@@ -21,7 +21,6 @@ import shutil
 
 LANGUAGE = "{{ cookiecutter.language }}"
 MODULE_SLUG = "{{ cookiecutter.module_slug }}"
-MODULE_REPO_NAME = "{{ cookiecutter.module_repo_name }}"
 OPERATOR_SLUG = "{{ cookiecutter.operator_slug }}"
 
 
@@ -52,7 +51,6 @@ remove_empty_dirs()
 # ── Next-steps message ────────────────────────────────────────────────────────
 op_parts = OPERATOR_SLUG.split("_")
 OPERATOR_CLASS = "".join(p.capitalize() for p in op_parts)
-pipeline = f"{MODULE_SLUG}_pipeline"
 
 print(f"\n\033[32mHoloscan Module '{MODULE_SLUG}' created successfully!\033[0m\n")
 print(f"Implement your operator ({OPERATOR_CLASS}) in:")
@@ -61,9 +59,6 @@ if LANGUAGE == "cpp":
 else:
     print(f"  operators/{OPERATOR_SLUG}/{OPERATOR_SLUG}.py\n")
 
-print("Build and run:")
-print("  uv run holoscan run-container")
-print("  # Inside the container:")
-print(f"  holoscan build {pipeline}")
-print(f"  holoscan run   {pipeline} --language {LANGUAGE}\n")
+print("Next steps:")
+print("  See README.md for environment setup, build, run, and test instructions.\n")
 print("Register your module at https://nvidia-holoscan.github.io/ when ready.")

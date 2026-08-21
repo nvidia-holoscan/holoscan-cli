@@ -464,7 +464,7 @@ def handle_create(cli, args: argparse.Namespace) -> None:
                 f"- Implement your operator in {project_dir}/operators/\n"
                 f"- Update metadata.json: {metadata_path}\n"
                 f"- Update project README\n"
-                f"- Build and test with: holoscan run-container\n"
+                f"- Follow the Quick Start in {project_dir / 'README.md'}\n"
             )
         else:
             msg_next = (

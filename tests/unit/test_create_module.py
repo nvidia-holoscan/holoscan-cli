@@ -182,6 +182,7 @@ def test_packaged_template_creates_a_standalone_module(
     requirement = (project / "requirements-cli.txt").read_text(encoding="utf-8")
     pyproject = (project / "pyproject.toml").read_text(encoding="utf-8")
     dockerfile = (project / "Dockerfile").read_text(encoding="utf-8")
+    readme = (project / "README.md").read_text(encoding="utf-8")
     active_requirements = [
         line for line in requirement.splitlines() if line and not line.startswith("#")
     ]
@@ -194,6 +195,9 @@ def test_packaged_template_creates_a_standalone_module(
     assert 'url = "https://pypi.nvidia.com"' in pyproject
     assert "explicit = true" in pyproject
     assert "--extra-index-url https://pypi.nvidia.com" in dockerfile
+    assert "python3 -m venv .venv" in readme
+    assert "uv sync --only-dev" in readme
+    assert "uv run holoscan" not in readme
     assert not (project / "holohub").exists()
     assert not (project / "holoscan").exists()
 

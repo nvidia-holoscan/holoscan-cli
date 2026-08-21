@@ -12,16 +12,27 @@ A **Holoscan Module** — a self-contained, redistributable library that extends
 
 ## Quick Start
 
+Create and activate a standard Python virtual environment, then install the exact CLI version
+pinned by this Module:
+
 ```bash
-uv sync
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install \
+  --extra-index-url https://pypi.nvidia.com \
+  -r requirements-cli.txt
 
 # Run the Python demo application
-uv run holoscan run {{ cookiecutter.module_slug }}_pipeline --language python
+holoscan run {{ cookiecutter.module_slug }}_pipeline --language python
 {% if cookiecutter.language == 'cpp' %}
 # Run the C++ demo application
-uv run holoscan run {{ cookiecutter.module_slug }}_pipeline
+holoscan run {{ cookiecutter.module_slug }}_pipeline
 {% endif %}
 ```
+
+If you use [uv](https://docs.astral.sh/uv/), replace the environment setup above with
+`uv sync --only-dev`, then run `source .venv/bin/activate` and use the same `holoscan` commands.
+This installs the development tools without trying to build the Module on the host.
 
 ---
 
@@ -102,7 +113,7 @@ cmake --build build -j$(nproc)
 ## Testing
 
 ```bash
-uv run holoscan test
+holoscan test
 ```
 
 Or, without the Holoscan CLI:
