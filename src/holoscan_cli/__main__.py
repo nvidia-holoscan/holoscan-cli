@@ -24,11 +24,8 @@ from typing import Optional, Union
 from .commands.registry import project_command_help
 from .project_context import (
     ProjectContextError,
-    ProjectVersionError,
     activate_project_context,
     discover_project_context,
-    enforce_project_requirement,
-    set_active_project_context,
 )
 
 logging.getLogger("docker.api.build").setLevel(logging.WARNING)
@@ -254,18 +251,13 @@ def _dispatch_project_cli(
     if command not in PROJECT_COMMANDS:
         return False
 
-    if command == "create" and project_root is None:
-        # Creation produces the Module contract and must not be controlled by
-        # an enclosing Module that merely happens to contain the current cwd.
-        set_active_project_context(None)
-    else:
+    # Creation must not inherit an enclosing project's defaults unless the
+    # caller explicitly selects that project.
+    if command != "create" or project_root is not None:
         context = discover_project_context(explicit_root=project_root)
         for warning in context.warnings:
             print(f"Warning: {warning}", file=sys.stderr)
         activate_project_context(context)
-        help_requested = any(arg in {"-h", "--help"} for arg in project_argv[2:])
-        if command not in {"create", "env-info"} and not help_requested:
-            enforce_project_requirement(context)
 
     set_up_logging(log_level)
 
@@ -295,21 +287,6 @@ def _dispatch(argv: Optional[list[str]]) -> None:
     set_up_logging(args.log_level)
 
     if args.command == "version" or args.show_version:
-        # `--version` answers which CLI is running and must not depend on the
-        # current project. `version` includes project details, but treats a
-        # discovery failure as report data instead of making version unusable.
-        context = None
-        if not args.show_version:
-            try:
-                context = discover_project_context(explicit_root=project_root)
-            except ProjectContextError as exc:
-                args.project_error = str(exc)
-                print(f"Warning: {exc}", file=sys.stderr)
-            else:
-                for warning in context.warnings:
-                    print(f"Warning: {warning}", file=sys.stderr)
-                set_active_project_context(context)
-        args.project_context = context
         from .version.version import execute_version_command
 
         execute_version_command(args)
@@ -318,9 +295,6 @@ def _dispatch(argv: Optional[list[str]]) -> None:
 def main(argv: Optional[list[str]] = None):
     try:
         _dispatch(argv)
-    except ProjectVersionError as exc:
-        print(f"Error: {exc}", file=sys.stderr)
-        raise SystemExit(1) from None
     except (DispatchUsageError, ProjectContextError) as exc:
         print(f"Error: {exc}", file=sys.stderr)
         raise SystemExit(2) from None

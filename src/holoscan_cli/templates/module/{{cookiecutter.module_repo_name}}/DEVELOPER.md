@@ -11,7 +11,7 @@ distributing this Holoscan Module.
 
 ```text
 {{ cookiecutter.module_repo_name }}/
-├── requirements-cli.txt            # Exact holoscan-cli version contract
+├── requirements-cli.txt            # Tested holoscan-cli development version
 ├── Dockerfile                      # Development container image
 ├── CMakeLists.txt                  # Root CMake — orchestrates operators/applications/tests
 ├── pyproject.toml                  # Python packaging metadata (scikit-build-core)
@@ -45,8 +45,8 @@ python -m pip install \
   -r requirements-cli.txt
 ```
 
-The CLI discovers this Module from its metadata and refuses lifecycle work when the environment
-contains a different version.
+The exact pin makes fresh host environments and development images reproducible. Lifecycle
+commands remain usable with another installed CLI version when its behavior is compatible.
 
 | Command | What it does |
 | --- | --- |
@@ -61,11 +61,9 @@ If you use [uv](https://docs.astral.sh/uv/), the project config selects NVIDIA's
 `source .venv/bin/activate` and use the same commands above. This installs the development tools
 without trying to build the Module on the host.
 
-To upgrade, update the CLI pin in both `requirements-cli.txt` and `pyproject.toml`, reinstall the
-requirements (or rerun `uv sync --only-dev`), and rebuild the image.
-
-If a container reports a version mismatch, rebuild it. Runtime commands deliberately never
-pip-install into a running container.
+To upgrade the tested development environment, update the CLI pin in both
+`requirements-cli.txt` and `pyproject.toml`, reinstall the requirements (or rerun
+`uv sync --only-dev`), and rebuild the image.
 
 ---
 

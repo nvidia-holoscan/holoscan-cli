@@ -9,46 +9,21 @@ import subprocess
 import sys
 from pathlib import Path
 
-import pytest
-
-from holoscan_cli.project_context import (
-    ProjectContextError,
-    ProjectVersionError,
-    activate_project_context,
-    discover_project_context,
-    enforce_project_requirement,
-    get_running_cli_version,
-    parse_cli_requirement,
-)
+from holoscan_cli.project_context import activate_project_context, discover_project_context
 
 
-def _module(
-    root: Path,
-    *,
-    required_version: str | None = None,
-    full_layout: bool = True,
-    legacy_launcher: bool = False,
-) -> Path:
+def _module(root: Path, *, full_layout: bool = True) -> Path:
     root.mkdir(parents=True)
     metadata = {
         "module": {
             "name": "holoscan-my-sensor",
             "namespace": {"python": "holoscan.my_sensor"},
             "holoscan_sdk": {"minimum_required_version": "4.6.0"},
-            "dockerfile": "Dockerfile",
         }
     }
     (root / "metadata.json").write_text(json.dumps(metadata), encoding="utf-8")
     if full_layout:
         (root / "applications").mkdir()
-        (root / "Dockerfile").write_text("FROM scratch\n", encoding="utf-8")
-    if required_version:
-        (root / "requirements-cli.txt").write_text(
-            f"# generated\nholoscan-cli=={required_version}\n",
-            encoding="utf-8",
-        )
-    if legacy_launcher:
-        (root / "holohub").write_text("#!/bin/sh\n", encoding="utf-8")
     return root
 
 
@@ -61,74 +36,43 @@ def _subprocess_env() -> dict[str, str]:
     return environment
 
 
-@pytest.mark.parametrize(
-    "contents,expected",
-    [
-        ("# comment\nholoscan-cli==5.0.0a1+dev.2\n", "5.0.0a1+dev.2"),
-        ("holoscan-cli>=5\n", None),
-        ("holoscan-cli[create]==5.0.0\n", None),
-        ("holoscan-cli==5.0.0\nholoscan-cli==5.0.1\n", None),
-    ],
-)
-def test_requirement_contract(tmp_path, contents, expected):
-    requirement = tmp_path / "requirements-cli.txt"
-    requirement.write_text(contents, encoding="utf-8")
-
-    if expected is None:
-        with pytest.raises(ProjectContextError):
-            parse_cli_requirement(requirement)
-    else:
-        assert parse_cli_requirement(requirement) == expected
-
-
-def test_module_discovery_and_profile(tmp_path, monkeypatch):
-    root = _module(tmp_path / "module", required_version=get_running_cli_version())
+def test_module_discovery_and_activation(tmp_path, monkeypatch):
+    root = _module(tmp_path / "module")
+    (root / "holohub").write_text("#!/bin/sh\n", encoding="utf-8")
     descendant = root / "applications/pipeline/python"
     descendant.mkdir(parents=True)
 
     context = discover_project_context(cwd=descendant, environ={})
 
     assert context.root == root
-    assert context.is_standalone_module
     assert context.repo_prefix == "my_sensor"
-    assert context.container_prefix == "my-sensor"
     assert context.base_sdk_version == "4.6.0"
-    assert context.dockerfile == root / "Dockerfile"
 
     monkeypatch.setattr(os, "environ", os.environ.copy())
     monkeypatch.setenv("HOLOSCAN_CLI_DATA_DIR", "/custom/data")
     monkeypatch.delenv("HOLOSCAN_CLI_ROOT", raising=False)
     activate_project_context(context)
+
     assert os.environ["HOLOSCAN_CLI_ROOT"] == str(root)
     assert os.environ["HOLOSCAN_CLI_BUILD_PARENT_DIR"] == str(root / "build")
     assert os.environ["HOLOSCAN_CLI_DATA_DIR"] == "/custom/data"
     assert os.environ["HOLOSCAN_CLI_REPO_PREFIX"] == "my_sensor"
+    assert os.environ["HOLOSCAN_CLI_CONTAINER_PREFIX"] == "my-sensor"
 
 
-def test_source_project_precedes_a_nested_metadata_only_module(tmp_path):
-    holohub = tmp_path / "holohub"
-    app = holohub / "applications/example"
+def test_source_project_precedes_nested_module(tmp_path):
+    source_root = tmp_path / "holohub"
+    app = source_root / "applications/example"
     app.mkdir(parents=True)
     (app / "metadata.json").write_text("{}\n", encoding="utf-8")
-    nested = _module(
-        holohub / "modules/holoscan-my-sensor",
-        required_version=get_running_cli_version(),
-        full_layout=False,
-    )
+    module = _module(source_root / "modules/holoscan-my-sensor", full_layout=False)
 
-    assert discover_project_context(cwd=nested, environ={}).root == holohub
-    assert (
-        discover_project_context(
-            cwd=tmp_path,
-            explicit_root=nested,
-            environ={},
-        ).root
-        == nested
-    )
+    assert discover_project_context(cwd=module, environ={}).root == source_root
+    assert discover_project_context(explicit_root=module, environ={}).root == module
 
 
-def test_declared_roots_are_trusted_and_invalid_environment_falls_back(tmp_path):
-    module = _module(tmp_path / "module", required_version=get_running_cli_version())
+def test_root_precedence_and_invalid_environment_fallback(tmp_path):
+    module = _module(tmp_path / "module")
     selected = tmp_path / "selected"
     selected.mkdir()
 
@@ -146,41 +90,13 @@ def test_declared_roots_are_trusted_and_invalid_environment_falls_back(tmp_path)
         environ={"HOLOSCAN_CLI_ROOT": str(tmp_path / "missing")},
     )
 
-    assert (explicit.root, explicit.discovery) == (selected, "project-root")
-    assert (environment.root, environment.discovery) == (selected, "environment")
+    assert explicit.root == selected
+    assert environment.root == selected
     assert fallback.root == module
     assert fallback.warnings
 
 
-@pytest.mark.parametrize(
-    "in_container,expected,excluded",
-    [
-        (False, "pip install -r", "Rebuild the development image"),
-        (True, "Rebuild the development image", "pip install"),
-    ],
-)
-def test_version_mismatch_has_contextual_guidance(tmp_path, in_container, expected, excluded):
-    root = _module(tmp_path / "module", required_version="999.0.0")
-    context = discover_project_context(cwd=root, environ={}, running_version="1.0.0")
-
-    with pytest.raises(ProjectVersionError) as error:
-        enforce_project_requirement(context, in_container=in_container)
-
-    assert expected in str(error.value)
-    assert excluded not in str(error.value)
-
-
-def test_legacy_module_launcher_has_no_version_lock(tmp_path):
-    root = _module(tmp_path / "module", legacy_launcher=True)
-    context = discover_project_context(cwd=root, environ={}, running_version="1.0.0")
-
-    enforce_project_requirement(context)
-
-    assert context.is_module
-    assert not context.is_standalone_module
-
-
-def test_lightweight_imports_do_not_load_project_cli_or_emit_warnings(tmp_path):
+def test_lightweight_import_does_not_load_project_cli(tmp_path):
     script = """
 import sys
 import holoscan_cli.__main__
@@ -204,8 +120,8 @@ assert not any(name in sys.modules for name in blocked)
     assert result.stdout == result.stderr == ""
 
 
-def test_dispatch_activates_a_standalone_module(tmp_path):
-    root = _module(tmp_path / "module", required_version=get_running_cli_version())
+def test_dispatch_activates_module_without_a_runtime_version_gate(tmp_path):
+    root = _module(tmp_path / "module")
 
     result = subprocess.run(
         [

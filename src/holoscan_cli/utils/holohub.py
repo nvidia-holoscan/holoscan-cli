@@ -89,7 +89,7 @@ def _get_holohub_root() -> Path:
     site-packages, root discovery must come from the wrapper environment or
     from the current working directory.
     """
-    context = discover_project_context(load_module_contract=False)
+    context = discover_project_context()
     for message in context.warnings:
         warn(message)
     return context.root

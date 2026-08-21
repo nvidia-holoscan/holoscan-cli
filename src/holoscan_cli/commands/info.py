@@ -35,12 +35,7 @@ import sys
 from collections import defaultdict
 
 from holoscan_cli.commands.registry import help_for, project_command_names
-from holoscan_cli.utils.env_info import (
-    collect_env_info,
-    collect_git_info,
-    collect_holohub_info,
-    collect_project_context_info,
-)
+from holoscan_cli.utils.env_info import collect_env_info, collect_git_info, collect_holohub_info
 from holoscan_cli.utils.io import Color, format_cmd
 from holoscan_cli.utils.json_output import dumps as json_dumps
 
@@ -233,7 +228,6 @@ def handle_env_info(cli, args: argparse.Namespace) -> None:
         data_dir=cli.DEFAULT_DATA_DIR,
         sdk_dir=cli.DEFAULT_SDK_DIR,
     )
-    collect_project_context_info()
     collect_git_info(holohub_root=cli.HOLOHUB_ROOT)
     collect_env_info()
     print(format_cmd("Complete (Before sharing, please review and remove sensitive information)"))

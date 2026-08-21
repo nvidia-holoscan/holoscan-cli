@@ -30,7 +30,6 @@ from pathlib import Path
 from typing import List, Optional
 
 import holoscan_cli
-from holoscan_cli.project_context import ProjectContext, get_active_project_context
 from holoscan_cli.utils.holohub import get_sccache_dir
 from holoscan_cli.utils.io import Color, run_info_command
 from holoscan_cli.utils.json_output import dumps as json_dumps
@@ -124,16 +123,6 @@ def collect_holohub_info(
     print(f"  HOLOSCAN_CLI_BUILD_PARENT_DIR: {build_dir}")
     print(f"  HOLOSCAN_CLI_DATA_DIR: {data_dir}")
     print(f"  HOLOSCAN_CLI_SDK_DIR: {sdk_dir}")
-
-
-def collect_project_context_info(context: Optional[ProjectContext] = None) -> None:
-    """Display standalone Module profile and exact-version contract details."""
-    context = context or get_active_project_context()
-    if context is None:
-        return
-    print(f"\n{Color.blue('Project Context:')}")
-    for key, value in context.diagnostics().items():
-        print(f"  {key}: {value if value is not None else '(not set)'}")
 
 
 def collect_git_info(holohub_root: Path) -> None:
@@ -372,12 +361,6 @@ def gather_source_project_info(
     }
 
 
-def gather_project_context_info(context: Optional[ProjectContext] = None) -> Optional[dict]:
-    """Return structured Module profile/version details, when activated."""
-    context = context or get_active_project_context()
-    return context.diagnostics() if context is not None else None
-
-
 def gather_git_info(holohub_root: Path) -> Optional[dict]:
     """Structured git state for ``holohub_root``, or ``None`` when unavailable."""
     if not holohub_root.exists() or not holohub_root.is_dir():
@@ -480,7 +463,6 @@ def format_env_info_json(holohub_root: Path, build_dir: Path, data_dir: Path, sd
         "system": gather_system_info(),
         "python": gather_python_info(),
         "source_project": gather_source_project_info(holohub_root, build_dir, data_dir, sdk_dir),
-        "project_context": gather_project_context_info(),
         "git": gather_git_info(holohub_root),
         "docker": gather_docker_info(),
         "cuda_gpu": gather_cuda_gpu_info(),

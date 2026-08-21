@@ -295,7 +295,8 @@ jobs:
               cd "${module_root}"
               /tmp/holoscan-cli-smoke/bin/holoscan version --json | \
                 /tmp/holoscan-cli-smoke/bin/python -c \
-                  'import json,sys; data=json.load(sys.stdin); assert data["version_match"] is True'
+                  'import json,sys; data=json.load(sys.stdin); assert data["version"] == sys.argv[1]' \
+                  "${installed_version}"
               /tmp/holoscan-cli-smoke/bin/holoscan list --json | \
                 /tmp/holoscan-cli-smoke/bin/python -c \
                   'import json,sys; data=json.load(sys.stdin); assert any(p["project_type"] == "module" for p in data["projects"])'
