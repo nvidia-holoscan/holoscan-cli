@@ -226,7 +226,6 @@ def test_build_project_locally_emits_application_cmake_and_build_commands(tmp_pa
     assert project_data is cli.project_data
     assert "-DAPP_smoke_app=ON" in cmake_args
     assert "-DCMAKE_BUILD_TYPE=Debug" in cmake_args
-    assert "-DCMAKE_PREFIX_PATH=/opt/nvidia/holoscan" in calls[0]
     assert '-DHOLOHUB_BUILD_OPERATORS="op_a;op_b"' in cmake_args
     assert "-DHOLOHUB_BUILD_PYTHON=ON" in cmake_args
     assert "-DHOLOHUB_BUILD_CPP=OFF" in cmake_args

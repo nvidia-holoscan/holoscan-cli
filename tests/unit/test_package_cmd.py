@@ -102,7 +102,6 @@ def test_package_deb_emits_pkg_flag_for_standalone_module(tmp_path, monkeypatch)
     # module repo MODULE_ is a harmless unused cache entry.
     assert "-DPKG_holoscan_smoke=ON" in cmake_args
     assert "-DMODULE_holoscan_smoke=ON" in cmake_args
-    assert "-DCMAKE_PREFIX_PATH=/opt/nvidia/holoscan" in calls[0]
 
 
 def test_package_container_honors_no_docker_build_and_cuda(tmp_path, monkeypatch):

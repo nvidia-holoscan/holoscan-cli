@@ -317,7 +317,7 @@ def build_project_locally(
         f"-DPython3_EXECUTABLE={sys.executable}",
         f"-DPython3_ROOT_DIR={os.path.dirname(os.path.dirname(sys.executable))}",
         f"-DCMAKE_BUILD_TYPE={build_type}",
-        f"-DCMAKE_PREFIX_PATH={cli.DEFAULT_SDK_DIR}",
+        f"-DCMAKE_PREFIX_PATH={cli.DEFAULT_SDK_DIR}/lib",
         f"-DHOLOHUB_DATA_DIR:PATH={cli.DEFAULT_DATA_DIR}",
     ]
     if project_type == "module":
