@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: {{ cookiecutter._license }}
 
 # add_holohub_package() handles the full cascade for both standalone
-# packaging (`./holohub package {{ cookiecutter.module_repo_name }} --pkg-generator DEB`, which
+# packaging (`holoscan package {{ cookiecutter.module_repo_name }} --pkg-generator DEB`, which
 # sets -DPKG_{{ cookiecutter.module_repo_name.replace('-', '_') }}=ON via the HoloHub CLI) and in-tree
 # HoloHub-monorepo packaging once this module is fetched as an external
 # dependency:

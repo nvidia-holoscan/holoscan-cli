@@ -262,13 +262,15 @@ each pattern in two lists:
 * **required** — files that must be present in the wheel:
   * `holoscan_cli/logging.json`
   * `holoscan_cli/py.typed`
+  * `holoscan_cli/cmake/` (support copied into generated standalone Modules)
   * `holoscan_cli/metadata/*.schema.json`
   * `holoscan_cli/setup_scripts/*`
+  * `holoscan_cli/templates/module/`
   * `holoscan_cli/testing/`
 * **forbidden** — paths that must NOT be present (regressions from past
   cleanups):
-  * `holoscan_cli/cmake/` (moved to HoloHub in commit `6aeb611`)
   * `holoscan_cli/testing/test_all_applications/` (decoupled in `2d2f44a`)
+  * `holoscan_cli/templates/module/*/holohub` (standalone Modules ship no wrapper)
 
 The same script runs in both pipelines so a wheel that passes
 `main.yaml` will pass `release.yaml`.

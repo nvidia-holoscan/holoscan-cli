@@ -8,7 +8,7 @@ target_include_directories({{ cookiecutter.operator_slug }} PUBLIC
     $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/operators>
     $<INSTALL_INTERFACE:include>)
 
-target_link_libraries({{ cookiecutter.operator_slug }} PRIVATE holoscan::core)
+target_link_libraries({{ cookiecutter.operator_slug }} PUBLIC holoscan::core)
 
 install(FILES {{ cookiecutter.operator_slug }}.hpp DESTINATION include/{{ cookiecutter.operator_slug }})
 

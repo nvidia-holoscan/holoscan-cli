@@ -33,8 +33,9 @@ import re
 from pathlib import Path
 from typing import Mapping, Optional, Tuple
 
+from holoscan_cli.project_context import SEARCH_DIRS, discover_project_context
 from holoscan_cli.utils.io import format_cmd, info, run_info_command, warn
-from holoscan_cli.utils.text import _slugify, get_env_bool, is_env_flag_true
+from holoscan_cli.utils.text import get_env_bool, is_env_flag_true, slugify
 
 DEFAULT_GIT_REF = "latest"
 
@@ -88,62 +89,23 @@ def _get_holohub_root() -> Path:
     site-packages, root discovery must come from the wrapper environment or
     from the current working directory.
     """
-    env_root = os.environ.get("HOLOSCAN_CLI_ROOT")
-    if env_root:
-        env_path = Path(env_root).expanduser()
-        if env_path.exists() and env_path.is_dir():
-            return env_path
-        warn(
-            f"Environment variable HOLOSCAN_CLI_ROOT='{env_root}' is invalid. "
-            f"Falling back to default path: {Path(__file__).parent.parent.parent}"
-        )
-    cwd = Path.cwd().resolve()
-    sentinel_files = ("holohub", "isaac_os", "i4h", "CMakeLists.txt", "Dockerfile")
-    metadata_dirs = (
-        "applications",
-        "benchmarks",
-        "gxf_extensions",
-        "modules",
-        "operators",
-        "pkg",
-        "subgraphs",
-        "tutorials",
-    )
-    for candidate in (cwd, *cwd.parents):
-        if (candidate / "src" / "holoscan_cli").is_dir() and (
-            candidate / "pyproject.toml"
-        ).exists():
-            return candidate
-        if any((candidate / name).exists() for name in sentinel_files):
-            if any((candidate / name).is_dir() for name in metadata_dirs):
-                return candidate
-        if any((candidate / name / "metadata.json").exists() for name in metadata_dirs):
-            return candidate
-    return cwd
+    context = discover_project_context()
+    for message in context.warnings:
+        warn(message)
+    return context.root
 
 
-HOLOHUB_ROOT = _get_holohub_root()
-
-
+@functools.lru_cache(maxsize=1)
 def get_holohub_root() -> Path:
-    """Return the cached source-project repo root."""
-    return HOLOHUB_ROOT
+    """Discover and cache the source-project repo root on first use."""
+    return _get_holohub_root()
 
 
 def get_component_search_paths(base_dir: Optional[Path] = None) -> tuple[Path, ...]:
     """Return metadata search paths honoring HOLOSCAN_CLI_SEARCH_PATH overrides."""
-    base_path = base_dir or HOLOHUB_ROOT
+    base_path = base_dir or get_holohub_root()
     tokens = os.environ.get("HOLOSCAN_CLI_SEARCH_PATH", "").split(",")
-    default_paths = (
-        "applications",
-        "benchmarks",
-        "gxf_extensions",
-        "modules",
-        "operators",
-        "pkg",
-        "tutorials",
-    )
-    paths = [token.strip() for token in tokens if token.strip()] or default_paths
+    paths = [token.strip() for token in tokens if token.strip()] or SEARCH_DIRS
     return tuple(
         (Path(token) if Path(token).is_absolute() else base_path / token) for token in paths
     )
@@ -166,7 +128,7 @@ def get_holohub_setup_scripts_dir() -> Path:
     if explicit:
         return Path(explicit).expanduser()
 
-    repo_dir = HOLOHUB_ROOT / "utilities" / "setup"
+    repo_dir = get_holohub_root() / "utilities" / "setup"
     if repo_dir.is_dir():
         return repo_dir
 
@@ -366,7 +328,7 @@ def get_git_short_sha(length: int = 12) -> str:
     """Return the short git SHA for the source-project repo, or DEFAULT_GIT_REF on failure."""
     try:
         sha = run_info_command(
-            ["git", "rev-parse", f"--short={length}", "HEAD"], cwd=str(HOLOHUB_ROOT)
+            ["git", "rev-parse", f"--short={length}", "HEAD"], cwd=str(get_holohub_root())
         )
         return sha or DEFAULT_GIT_REF
     except Exception:
@@ -382,11 +344,11 @@ def get_current_branch_slug() -> str:
     """
     try:
         branch = run_info_command(
-            ["git", "rev-parse", "--abbrev-ref", "HEAD"], cwd=str(HOLOHUB_ROOT)
+            ["git", "rev-parse", "--abbrev-ref", "HEAD"], cwd=str(get_holohub_root())
         )
         if not branch or branch in ["HEAD", "(no branch)"] or branch.startswith("(HEAD detached"):
             return DEFAULT_GIT_REF
-        return _slugify(branch) or DEFAULT_GIT_REF
+        return slugify(branch) or DEFAULT_GIT_REF
     except Exception:
         warn(f"Failed to get current branch, defaulting to {DEFAULT_GIT_REF}")
         return DEFAULT_GIT_REF

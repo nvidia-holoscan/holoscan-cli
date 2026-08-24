@@ -11,7 +11,7 @@ distributing this Holoscan Module.
 
 ```text
 {{ cookiecutter.module_repo_name }}/
-├── holohub                         # CLI wrapper (delegates to holoscan-cli)
+├── requirements-cli.txt            # Tested holoscan-cli development version
 ├── Dockerfile                      # Development container image
 ├── CMakeLists.txt                  # Root CMake — orchestrates operators/applications/tests
 ├── pyproject.toml                  # Python packaging metadata (scikit-build-core)
@@ -33,30 +33,46 @@ distributing this Holoscan Module.
 
 ---
 
-## `holohub` wrapper commands
+## Holoscan CLI environment and commands
 
-The `holohub` script at the module root wraps the `holoscan-cli` package with module-specific
-defaults. On a host, its first run creates a managed virtual environment and installs
-`holoscan-cli` there (internet required); subsequent runs reuse that environment. Containers
-reuse the package installed into the image during the Docker build.
+Create the development environment with the exact CLI version committed by this Module:
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install \
+  --extra-index-url https://pypi.nvidia.com \
+  -r requirements-cli.txt
+```
+
+The exact pin makes fresh host environments and development images reproducible. Lifecycle
+commands remain usable with another installed CLI version when its behavior is compatible.
 
 | Command | What it does |
 | --- | --- |
-| `./holohub run-container` | Build and start the development container |
-| `./holohub build {{ cookiecutter.module_slug }}_pipeline` | CMake configure + build inside the container |
-| `./holohub run {{ cookiecutter.module_slug }}_pipeline` | Run the example pipeline |
-| `./holohub test` | Run CTest (C++ unit tests) and pytest |
-| `./holohub install --dev` | Install a `.pth` hook so `import holoscan.{{ cookiecutter.module_slug }}` works in any shell |
+| `holoscan run-container` | Build and start the development container |
+| `holoscan build {{ cookiecutter.module_slug }}_pipeline` | CMake configure + build inside the container |
+| `holoscan run {{ cookiecutter.module_slug }}_pipeline` | Run the example pipeline |
+| `holoscan test` | Run CTest (C++ unit tests) and pytest |
+| `holoscan install --dev` | Install a `.pth` hook so `import holoscan.{{ cookiecutter.module_slug }}` works in any shell |
 
-The wrapper file owns the holoscan-cli version: bump
-`HOLOSCAN_CLI_PINNED_VERSION` in `./holohub` to upgrade the CLI everywhere;
-the Dockerfile copies and runs the wrapper, so the image follows the same
-pin. Set `HOLOSCAN_CLI_INSTALL_ARGS` to override the pip index arguments, or
-`HOLOSCAN_CLI_SOURCE` to a local checkout for host-side CLI development.
+The scaffold intentionally ships no launcher wrapper. Projects that need custom environment or
+bootstrap policy can add a thin wrapper as an advanced customization, keep it outside the Module's
+build and package contract, and delegate to the installed `holoscan` command. HoloHub's
+[`holohub` wrapper](https://github.com/nvidia-holoscan/holohub/blob/main/holohub) is one reference.
+
+If you use [uv](https://docs.astral.sh/uv/), the project config selects NVIDIA's package index for
+`holoscan-cli` while leaving other dependencies on PyPI. Run `uv sync --only-dev`, then
+`source .venv/bin/activate` and use the same commands above. This installs the development tools
+without trying to build the Module on the host.
+
+To upgrade the tested development environment, update the CLI pin in both
+`requirements-cli.txt` and `pyproject.toml`, reinstall the requirements (or rerun
+`uv sync --only-dev`), and rebuild the image.
 
 ---
 
-## Building without the wrapper
+## Building without the Holoscan CLI
 
 ```bash
 cmake -S . -B build -DBUILD_ALL=ON -D{{ cookiecutter.module_slug | upper }}_BUILD_TESTING=ON
@@ -89,7 +105,8 @@ pytest tests/python/ -v
 ## `pyproject.toml`
 
 `pyproject.toml` configures [scikit-build-core](https://scikit-build-core.readthedocs.io/) for
-wheel packaging. Key fields to update before publishing:
+wheel packaging and records an optional PEP 735 development dependency group. Key fields to update
+before publishing:
 
 | Field | Purpose |
 | --- | --- |
@@ -97,6 +114,8 @@ wheel packaging. Key fields to update before publishing:
 | `[project].version` | Sync with `metadata.json:module.version` |
 | `[project].description` | Short description shown on PyPI |
 | `[project].authors` | Your name / organisation |
+| `[dependency-groups].dev` | Exact CLI convenience pin; keep synchronized with `requirements-cli.txt` |
+| `[tool.uv]` | NVIDIA index selection for the pinned `holoscan-cli` development dependency |
 | `[tool.scikit-build].cmake.args` | Extra CMake flags passed during `pip install` |
 
 Build a wheel:

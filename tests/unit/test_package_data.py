@@ -18,7 +18,8 @@
 These prevent regressions where ``pyproject.toml`` accidentally drops the
 files an installed ``holoscan-cli`` wheel must ship: the ``py.typed``
 marker, the project metadata JSON schemas under ``holoscan_cli.metadata``,
-the logging configuration, and the CTest scripts under ``holoscan_cli.testing``.
+the logging configuration, CMake support copied into generated Modules, and
+the CTest scripts under ``holoscan_cli.testing``.
 The tests also pin the public ``holoscan`` console script entry point and the
 ``holoscan-cli`` package-name tool-runner alias.
 
@@ -72,13 +73,25 @@ REQUIRED_SETUP_SCRIPTS = {
     "requirements.template.txt",
 }
 
+REQUIRED_CMAKE_FILES = {
+    "Config.cmake.in",
+    "HoloHubConfigHelpers.cmake",
+    "holohub_configure_deb.cmake",
+    "pybind11_add_holohub_module.cmake",
+    "pybind11/__init__.py.in",
+    "pydoc/macros.hpp",
+}
+
 REQUIRED_MODULE_TEMPLATE_FILES = {
     "cookiecutter.json",
+    "hooks/pre_gen_project.py",
     "hooks/post_gen_project.py",
-    "{{cookiecutter.module_repo_name}}/holohub",
+    "{{cookiecutter.module_repo_name}}/requirements-cli.txt",
+    "{{cookiecutter.module_repo_name}}/.dockerignore",
     "{{cookiecutter.module_repo_name}}/Dockerfile",
     "{{cookiecutter.module_repo_name}}/CMakeLists.txt",
     "{{cookiecutter.module_repo_name}}/metadata.json",
+    "{{cookiecutter.module_repo_name}}/.github/workflows/scripts/check_copyright.py",
     "{{cookiecutter.module_repo_name}}/.github/workflows/ci.yml",
 }
 
@@ -147,10 +160,21 @@ def test_setup_scripts_are_packaged():
     }
     missing = REQUIRED_SETUP_SCRIPTS - files
     assert not missing, f"missing bundled setup scripts: {missing}"
+    dockerfile = importlib.resources.files("holoscan_cli.setup_scripts").joinpath("Dockerfile.util")
+    assert "FROM ${BASE_IMAGE:-ubuntu:24.04} AS base" in dockerfile.read_text(encoding="utf-8")
 
 
-def test_holohub_module_template_snapshot_is_packaged():
-    """The ownership snapshot must remain available as installed package data."""
+def test_cmake_support_is_packaged():
+    cmake = importlib.resources.files("holoscan_cli").joinpath("cmake")
+    missing = [
+        relative
+        for relative in sorted(REQUIRED_CMAKE_FILES)
+        if not cmake.joinpath(relative).is_file()
+    ]
+    assert not missing, f"missing bundled CMake support: {missing}"
+
+
+def test_standalone_module_template_is_packaged():
     template = importlib.resources.files("holoscan_cli.templates").joinpath("module")
     missing = [
         relative
@@ -158,6 +182,8 @@ def test_holohub_module_template_snapshot_is_packaged():
         if not template.joinpath(relative).is_file()
     ]
     assert not missing, f"missing bundled Module template assets: {missing}"
+    assert not template.joinpath("{{cookiecutter.module_repo_name}}/cmake").exists()
+    assert not template.joinpath("{{cookiecutter.module_repo_name}}/holohub").exists()
 
 
 def test_bundled_template_script_uses_bundled_requirements(tmp_path):
@@ -174,7 +200,7 @@ def test_bundled_template_script_uses_bundled_requirements(tmp_path):
     args_file = tmp_path / "python-args.txt"
     fake_python = bin_dir / "python3"
     fake_python.write_text(
-        "#!/usr/bin/env bash\n" 'printf \'%s\\n\' "$@" > "${PYTHON_ARGS_FILE}"\n',
+        '#!/usr/bin/env bash\nprintf \'%s\\n\' "$@" > "${PYTHON_ARGS_FILE}"\n',
         encoding="utf-8",
     )
     fake_python.chmod(0o755)
@@ -310,9 +336,8 @@ def test_pyproject_create_extra_bundles_validator_deps():
 
     The fatal in ``commands/create.py::validate_generated_metadata`` instructs
     users to install this extra when ``jsonschema`` / ``referencing`` are
-    missing, and ``commands/create.py::run_create`` does the same for
-    ``cookiecutter``, so the contract here is part of the user-facing install
-    story.
+    missing, while Module generation also needs ``cookiecutter``. The
+    dependency set is therefore part of the user-facing install story.
     """
     extras = _pyproject()["project"].get("optional-dependencies", {})
     assert "create" in extras, sorted(extras)

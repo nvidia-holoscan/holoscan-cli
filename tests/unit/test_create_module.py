@@ -1,36 +1,14 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-# http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
 
-"""Behavior tests for ``holoscan create`` against module templates.
-
-Exercises the module-template branch added in ``commands/create.py``
-without invoking cookiecutter or shell subprocesses:
-
-* ``--template`` paths whose first component is ``modules`` are detected
-  as module templates.
-* Module templates require an explicit output ``--directory`` (prompted
-  if omitted) and use a kebab ``holoscan-<slug>`` output folder.
-* The dryrun branch reports the correct intended directory and skips
-  the CMakeLists update.
-* The next-steps message diverges between application and module
-  templates.
-"""
+"""Focused coverage for standalone Module creation."""
 
 from __future__ import annotations
 
 import argparse
+import json
+import shutil
+import subprocess
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -39,136 +17,238 @@ import pytest
 from holoscan_cli.commands import create
 
 
-def _make_args(**overrides) -> argparse.Namespace:
-    """Build a ``--dryrun``-shaped Namespace with sensible defaults."""
-    defaults = dict(
-        project="My Mod",
-        template="modules/template",
-        language="python",
-        dryrun=True,
-        directory=None,
-        context=None,
-        interactive=False,
-    )
-    defaults.update(overrides)
-    return argparse.Namespace(**defaults)
+def _args(**overrides) -> argparse.Namespace:
+    values = {
+        "project": "My Mod",
+        "template": None,
+        "language": "python",
+        "dryrun": True,
+        "directory": None,
+        "context": None,
+        "interactive": False,
+    }
+    values.update(overrides)
+    return argparse.Namespace(**values)
 
 
 @pytest.fixture()
-def fake_cli(tmp_path):
-    """Stand-in for the real ``HoloscanCLI`` — handle_create only reads
-    ``HOLOHUB_ROOT`` and ``script_name``."""
+def cli(tmp_path):
     return SimpleNamespace(HOLOHUB_ROOT=tmp_path, script_name="holoscan")
 
 
-# ---- dryrun smoke ------------------------------------------------------------
+@pytest.fixture(autouse=True)
+def installed_version(monkeypatch):
+    if create.__version__ == create.LOCAL_SOURCE_VERSION:
+        monkeypatch.setattr(create, "__version__", "5.0.0a9")
 
 
-def test_dryrun_module_template_uses_kebab_output_folder(fake_cli, tmp_path, capsys):
-    out_dir = tmp_path / "ext"
-    out_dir.mkdir()
-    args = _make_args(directory=out_dir)
-    create.handle_create(fake_cli, args)
-
-    captured = capsys.readouterr().out
-    # holoscan-my_mod -> the slug is "my_mod"; kebab swap gives holoscan-my-mod
-    assert str(out_dir / "holoscan-my-mod") in captured
-    # Module templates must NOT trigger the applications/CMakeLists.txt path.
-    assert "applications/CMakeLists.txt" not in captured
-
-
-def test_dryrun_application_template_uses_slug_output_folder(fake_cli, tmp_path, capsys):
-    # Make the default output directory exist so the existence check passes.
-    (tmp_path / "applications").mkdir()
-    args = _make_args(template="applications/template", dryrun=True)
-    create.handle_create(fake_cli, args)
-
-    captured = capsys.readouterr().out
-    assert str(tmp_path / "applications" / "my_mod") in captured
-    # Applications scaffolded under HOLOHUB_ROOT/applications/ trigger the
-    # CMakeLists hint.
-    assert "applications/CMakeLists.txt" in captured
+def _write_template(root: Path, relative: str, *, module: bool) -> Path:
+    template = root / relative
+    template.mkdir(parents=True)
+    context = {"project_name": "Example", "project_slug": "example"}
+    if module:
+        context.update(
+            module_slug="{{ cookiecutter.project_slug }}",
+            module_repo_name="holoscan-{{ cookiecutter.module_slug }}",
+        )
+    (template / "cookiecutter.json").write_text(json.dumps(context), encoding="utf-8")
+    return template
 
 
-def test_dryrun_omits_holoscan_version_when_not_configured(fake_cli, tmp_path, capsys, monkeypatch):
-    monkeypatch.setattr(create.HoloscanContainer, "BASE_SDK_VERSION", None, raising=False)
-    (tmp_path / "applications").mkdir()
-    args = _make_args(template="applications/template", dryrun=True)
-    create.handle_create(fake_cli, args)
-
-    captured = capsys.readouterr().out
-    assert "holoscan_version" not in captured
-
-
-def test_module_template_prompts_for_directory_when_omitted(
-    fake_cli, tmp_path, capsys, monkeypatch
+def test_direct_create_uses_packaged_template_inside_a_source_project(
+    cli, tmp_path, monkeypatch, capsys
 ):
-    """When ``--directory`` is omitted for a module template, ``handle_create``
-    prompts via ``input()``. The path the user provides is honored."""
-    out_dir = tmp_path / "user-typed"
-    out_dir.mkdir()
-    monkeypatch.setattr("builtins.input", lambda _prompt="": str(out_dir))
+    monkeypatch.chdir(tmp_path)
 
-    args = _make_args(directory=None)
-    create.handle_create(fake_cli, args)
+    create.handle_create(cli, _args())
+    output = capsys.readouterr().out
+    assert "Template: packaged Module template" in output
+    assert f"Directory: {tmp_path / 'holoscan-my-mod'}" in output
 
-    captured = capsys.readouterr().out
-    assert str(out_dir / "holoscan-my-mod") in captured
+    _write_template(tmp_path, "applications/template", module=False)
+    create.handle_create(cli, _args())
+    output = capsys.readouterr().out
+    assert "Template: packaged Module template" in output
+    assert f"Directory: {tmp_path / 'holoscan-my-mod'}" in output
+    assert "applications/CMakeLists.txt" not in output
 
 
-def test_module_template_empty_prompt_input_is_fatal(fake_cli, monkeypatch):
-    """An empty response to the directory prompt aborts."""
-    monkeypatch.setattr("builtins.input", lambda _prompt="": "")
-    args = _make_args(directory=None)
+def test_wrapper_default_selects_application_template(cli, tmp_path, monkeypatch, capsys):
+    application_template = _write_template(tmp_path, "applications/template", module=False)
+    monkeypatch.setenv(create.CREATE_TEMPLATE_ENV, "applications/template")
+
+    create.handle_create(cli, _args())
+
+    output = capsys.readouterr().out
+    assert f"Template: {application_template}" in output
+    assert f"Directory: {tmp_path / 'applications/my_mod'}" in output
+    assert "applications/CMakeLists.txt" in output
+
+
+def test_explicit_template_beats_the_wrapper_default(cli, tmp_path, monkeypatch, capsys):
+    _write_template(tmp_path, "applications/template", module=False)
+    selected = _write_template(tmp_path, "custom/module", module=True)
+    monkeypatch.setenv(create.CREATE_TEMPLATE_ENV, "applications/template")
+
+    create.handle_create(
+        cli,
+        _args(template="custom/module", directory=tmp_path / "output"),
+    )
+
+    output = capsys.readouterr().out
+    assert f"Template: {selected}" in output
+    assert f"Directory: {tmp_path / 'output/holoscan-my-mod'}" in output
+
+
+def test_create_rejects_an_unsafe_destination_name(cli, tmp_path, capsys):
     with pytest.raises(SystemExit):
-        create.handle_create(fake_cli, args)
+        create.handle_create(
+            cli,
+            _args(directory=tmp_path / "output", context=["module_repo_name=../escaped"]),
+        )
+
+    assert "one directory name" in capsys.readouterr().err
+    assert not (tmp_path / "escaped").exists()
 
 
-# ---- detection edge cases ----------------------------------------------------
+def test_custom_module_template_gets_packaged_cmake(cli, tmp_path, monkeypatch):
+    template = _write_template(tmp_path, "custom/module", module=True)
+    output = tmp_path / "output"
+    destination = output / "holoscan-my-mod"
+    git_config = destination / ".git/config"
+    git_config.parent.mkdir(parents=True)
+    git_config.write_text("keep\n", encoding="utf-8")
+
+    def generate(_cli, _template, **kwargs):
+        project = kwargs["output_dir"] / destination.name
+        (project / "cmake").mkdir(parents=True)
+        (project / "cmake/custom.cmake").write_text("# custom\n", encoding="utf-8")
+        return str(project)
+
+    monkeypatch.setattr(create, "_run_cookiecutter", generate)
+    monkeypatch.setattr(create, "validate_generated_metadata", lambda *_args: None)
+
+    create.handle_create(
+        cli,
+        _args(template=str(template), dryrun=False, directory=output),
+    )
+
+    assert git_config.read_text(encoding="utf-8") == "keep\n"
+    assert (destination / "cmake/custom.cmake").is_file()
+    assert (destination / "cmake/HoloHubConfigHelpers.cmake").is_file()
+
+
+def test_create_never_overwrites_an_existing_project(cli, tmp_path, monkeypatch):
+    destination = tmp_path / "output/holoscan-my-mod"
+    destination.mkdir(parents=True)
+    marker = destination / "keep.txt"
+    marker.write_text("keep\n", encoding="utf-8")
+    monkeypatch.setattr(
+        create,
+        "_run_cookiecutter",
+        lambda *_args, **_kwargs: pytest.fail("generation must not start"),
+    )
+
+    with pytest.raises(SystemExit):
+        create.handle_create(cli, _args(dryrun=False, directory=destination.parent))
+
+    assert marker.read_text(encoding="utf-8") == "keep\n"
+
+
+@pytest.mark.skipif(shutil.which("git") is None, reason="git is required")
+def test_initialize_module_git_only_initializes_standalone_directory(tmp_path):
+    standalone = tmp_path / "standalone"
+    standalone.mkdir()
+    assert create._initialize_module_git(standalone)
+    assert (standalone / ".git").is_dir()
+
+    repository = tmp_path / "repository"
+    repository.mkdir()
+    subprocess.run(
+        ["git", "init", "."],
+        cwd=repository,
+        check=True,
+        capture_output=True,
+    )
+    nested = repository / "packages/module"
+    nested.mkdir(parents=True)
+
+    assert not create._initialize_module_git(nested)
+    assert not (nested / ".git").exists()
+
+
+def test_missing_cookiecutter_points_to_the_create_extra(cli, tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr(
+        create.importlib,
+        "import_module",
+        lambda _name: (_ for _ in ()).throw(ImportError),
+    )
+
+    with pytest.raises(SystemExit):
+        create._run_cookiecutter(
+            cli,
+            tmp_path,
+            interactive=False,
+            context={},
+            output_dir=tmp_path,
+        )
+
+    assert "pip install 'holoscan-cli[create]'" in capsys.readouterr().err
 
 
 @pytest.mark.parametrize(
-    "template,is_module",
+    "language,generated_source",
     [
-        ("modules/template", True),
-        ("modules/foo/bar", True),
-        ("applications/template", False),
-        # Substring "modules" inside another segment must NOT match — the
-        # detection keys on full path parts.
-        ("my_modules_collection/template", False),
-        ("workflows/some-modules-thing", False),
+        ("python", "operators/my_mod_op/my_mod_op.py"),
+        ("cpp", "operators/my_mod_op/my_mod_op.cpp"),
     ],
 )
-def test_module_template_detection_keys_on_path_parts(
-    fake_cli, tmp_path, template, is_module, capsys
+def test_packaged_template_creates_a_standalone_module(
+    cli, tmp_path, monkeypatch, language, generated_source
 ):
-    """The module-template detection must key on whole path segments,
-    not substrings. Otherwise paths like ``my_modules_collection/`` would
-    wrongly hit the module branch."""
-    out_dir = tmp_path / "out"
-    out_dir.mkdir()
-    args = _make_args(template=template, directory=out_dir)
-    create.handle_create(fake_cli, args)
-    captured = capsys.readouterr().out
+    pytest.importorskip("cookiecutter")
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    (tmp_path / "home").mkdir()
+    monkeypatch.setattr(create, "_initialize_module_git", lambda _path: False)
 
-    if is_module:
-        assert str(out_dir / "holoscan-my-mod") in captured
-    else:
-        assert str(out_dir / "my_mod") in captured
+    create.handle_create(
+        cli,
+        _args(language=language, dryrun=False, directory=tmp_path / "output"),
+    )
+
+    project = tmp_path / "output/holoscan-my-mod"
+    requirement = (project / "requirements-cli.txt").read_text(encoding="utf-8")
+    pyproject = (project / "pyproject.toml").read_text(encoding="utf-8")
+    dockerfile = (project / "Dockerfile").read_text(encoding="utf-8")
+    readme = (project / "README.md").read_text(encoding="utf-8")
+    active_requirements = [
+        line for line in requirement.splitlines() if line and not line.startswith("#")
+    ]
+
+    assert (project / generated_source).is_file()
+    assert (project / "cmake/HoloHubConfigHelpers.cmake").is_file()
+    assert active_requirements == [f"holoscan-cli=={create.__version__}"]
+    assert "--extra-index-url https://pypi.nvidia.com" in requirement
+    assert 'holoscan-cli = { index = "nvidia" }' in pyproject
+    assert 'url = "https://pypi.nvidia.com"' in pyproject
+    assert "explicit = true" in pyproject
+    assert "--extra-index-url https://pypi.nvidia.com" in dockerfile
+    assert "python3 -m venv .venv" in readme
+    assert "uv sync --only-dev" in readme
+    assert "uv run holoscan" not in readme
+    assert not (project / "holohub").exists()
+    assert not (project / "holoscan").exists()
 
 
-# ---- parser surface ----------------------------------------------------------
-
-
-def test_directory_argument_defaults_to_none():
-    """Module templates need ``--directory`` to default to ``None`` so the
-    handler can decide whether to prompt or fall back to ``applications/``.
-    Pinning this prevents an accidental revert to the old behaviour where
-    ``--directory`` defaulted eagerly to ``applications/`` (which made the
-    module-template prompt unreachable)."""
+def test_parser_leaves_template_and_directory_contextual():
     parser = argparse.ArgumentParser()
-    cli_stub = SimpleNamespace(HOLOHUB_ROOT=Path("/dev/null"), script_name="holoscan")
-    sub = parser.add_subparsers()
-    create.register_create_parser(cli_stub, sub)
-    ns = parser.parse_args(["create", "MyProj"])
-    assert ns.directory is None
+    subparsers = parser.add_subparsers()
+    create.register_create_parser(
+        SimpleNamespace(HOLOHUB_ROOT=Path("/unused"), script_name="holoscan"),
+        subparsers,
+    )
+
+    args = parser.parse_args(["create", "My Project"])
+
+    assert args.template is None
+    assert args.directory is None

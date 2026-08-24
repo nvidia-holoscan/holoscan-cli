@@ -261,6 +261,48 @@ jobs:
           /tmp/holoscan-cli-smoke/bin/python -c \
             'import cookiecutter, jsonschema, referencing'
 
+          create_root=$(mktemp -d)
+          installed_version=$(/tmp/holoscan-cli-smoke/bin/python -c \
+            'from importlib.metadata import version; print(version("holoscan-cli"))')
+          for language in cpp python; do
+            project_name="Artifact ${language}"
+            module_root="${create_root}/holoscan-artifact-${language}"
+            operator_extension=cpp
+            if [[ "${language}" == "python" ]]; then
+              operator_extension=py
+            fi
+            /tmp/holoscan-cli-smoke/bin/holoscan create "${project_name}" \
+              --interactive false \
+              --language "${language}" \
+              --directory "${create_root}"
+
+            test -f "${module_root}/metadata.json"
+            /tmp/holoscan-cli-smoke/bin/python -c \
+              'import json,sys; data=json.load(open(sys.argv[1])); assert "module" in data' \
+              "${module_root}/metadata.json"
+            grep -Fx "holoscan-cli==${installed_version}" \
+              "${module_root}/requirements-cli.txt"
+            grep -F "\"holoscan-cli==${installed_version}\"" "${module_root}/pyproject.toml"
+            ! grep -F "holoscan-cli[create]" "${module_root}/pyproject.toml"
+            test ! -e "${module_root}/holohub"
+            test ! -e "${module_root}/holoscan"
+            test -f "${module_root}/CMakeLists.txt"
+            test -f \
+              "${module_root}/applications/artifact_${language}_pipeline/python/metadata.json"
+            test -f \
+              "${module_root}/operators/artifact_${language}_op/artifact_${language}_op.${operator_extension}"
+            (
+              cd "${module_root}"
+              /tmp/holoscan-cli-smoke/bin/holoscan version --json | \
+                /tmp/holoscan-cli-smoke/bin/python -c \
+                  'import json,sys; data=json.load(sys.stdin); assert data["version"] == sys.argv[1]' \
+                  "${installed_version}"
+              /tmp/holoscan-cli-smoke/bin/holoscan list --json | \
+                /tmp/holoscan-cli-smoke/bin/python -c \
+                  'import json,sys; data=json.load(sys.stdin); assert any(p["project_type"] == "module" for p in data["projects"])'
+            )
+          done
+
       - name: Install sdist in clean venv
         run: |
           python -m venv /tmp/holoscan-cli-sdist-smoke

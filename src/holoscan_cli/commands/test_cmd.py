@@ -61,7 +61,11 @@ def register_test_parser(cli, subparsers, *, container_build) -> argparse.Argume
         help="CTest options, "
         "example: --ctest-options='-DGPU_TYPE=rtx4090' --ctest-options='-DDEBUG_MODE=ON'",
     )
-    parser.add_argument("--no-xvfb", action="store_true", help="Do not use xvfb")
+    parser.add_argument(
+        "--no-xvfb",
+        action="store_true",
+        help="Skip Xvfb detection and run tests directly",
+    )
     parser.add_argument("--ctest-script", help="CTest script")
     parser.add_argument(
         "--local-sdk-root",
@@ -158,8 +162,6 @@ def handle_test(cli, args: argparse.Namespace) -> None:
         if hasattr(args, "cuda") and args.cuda is not None:
             container.cuda_version = args.cuda
 
-    xvfb = "" if args.no_xvfb else "xvfb-run -a"
-
     # TAG is used in CTest scripts by default
     if getattr(args, "build_name_suffix", None):
         tag = args.build_name_suffix
@@ -173,7 +175,15 @@ def handle_test(cli, args: argparse.Namespace) -> None:
         )
         tag = image_name.split(":")[-1]
 
-    ctest_cmd = f"{xvfb} ctest "
+    xvfb = ""
+    if not args.no_xvfb:
+        xvfb = (
+            "if command -v xvfb-run >/dev/null 2>&1; then xvfb_cmd='xvfb-run -a'; "
+            "else echo 'WARNING: xvfb-run is unavailable; running tests without a virtual "
+            "display. Install Xvfb, or rebuild with --extra-scripts xvfb if these tests need "
+            "one.' >&2; xvfb_cmd=''; fi; ${xvfb_cmd} "
+        )
+    ctest_cmd = f'{xvfb}ctest -DCTEST_SOURCE_DIRECTORY="$PWD" '
     if args.project:
         project_metadata = container.project_metadata or {}
         project_name = project_metadata.get("project_name", args.project)

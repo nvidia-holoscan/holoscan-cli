@@ -76,6 +76,7 @@ Documentation = "https://docs.nvidia.com/holoscan/sdk-user-guide/index.html"
 requires-poetry = ">=2.0"
 packages = [{ include = "holoscan_cli", from = "src" }]
 include = [
+    { path = "src/holoscan_cli/cmake/**/*", format = ["sdist", "wheel"] },
     { path = "src/holoscan_cli/metadata/*.schema.json", format = ["sdist", "wheel"] },
     { path = "src/holoscan_cli/setup_scripts/*", format = ["sdist", "wheel"] },
     { path = "src/holoscan_cli/templates/**/*", format = ["sdist", "wheel"] },
@@ -100,6 +101,7 @@ tomli = { version = "^2.4", markers = "python_version < '3.11'" }
 # schema validator (``test_metadata_validator.py``) and the smoke
 # fixture (``test_smoke_fixture.py``) can import them without
 # requiring callers to ``pip install 'holoscan-cli[create]'`` first.
+cookiecutter = ">=2.7.1"
 jsonschema = ">=4.26.0,<5.0"
 referencing = ">=0.37.0"
 

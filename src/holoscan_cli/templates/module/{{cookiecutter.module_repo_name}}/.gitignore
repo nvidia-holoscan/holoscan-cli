@@ -2,8 +2,8 @@
 build/
 .cmake/
 
-# HoloHub CLI tools (auto-downloaded by the holohub wrapper on first run)
-.holohub/
+# Caller-owned Python environments
+.venv/
 
 # Container HOME-mapped junk (dev container sets HOME=/workspace/{{ cookiecutter.module_slug }})
 .local/

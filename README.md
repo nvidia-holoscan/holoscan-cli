@@ -23,7 +23,15 @@ Per-repo wrappers install this package and delegate to `holoscan`, layering on t
 | [HoloHub](https://github.com/nvidia-holoscan/holohub) | `./holohub` | source-project metadata search paths, container/workspace names |
 | [I4H Workflows](https://github.com/isaac-for-healthcare/i4h-workflows) | `./i4h` | RTI DDS license auto-download + mount, TTY serial device passthrough |
 
-Common env vars: `HOLOSCAN_CLI_ROOT` (repo root), `HOLOSCAN_CLI_SEARCH_PATH` (subdirs to scan for `metadata.json`), `HOLOSCAN_CLI_PATH_PREFIX` (placeholder prefix in metadata templates), `HOLOSCAN_CLI_REPO_PREFIX` (container image name prefix). The legacy `HOLOHUB_*` spelling is no longer honored since holoscan v4.3.0 — set the `HOLOSCAN_CLI_*` names directly. `holoscan env-info` lists every env var the CLI reads in the current shell.
+Common env vars:
+
+- `HOLOSCAN_CLI_ROOT` — repo root
+- `HOLOSCAN_CLI_SEARCH_PATH` — subdirs to scan for `metadata.json`
+- `HOLOSCAN_CLI_PATH_PREFIX` — placeholder prefix in metadata templates
+- `HOLOSCAN_CLI_REPO_PREFIX` — container image name prefix
+- `HOLOSCAN_CLI_CREATE_TEMPLATE` — default template for `holoscan create`
+
+`holoscan env-info` lists every env var the CLI reads in the current shell.
 
 ## JSON output
 
@@ -45,11 +53,13 @@ src/holoscan_cli/
   cli.py              top-level argparse + dispatch (HoloscanCLI)
   commands/           one file per subcommand + a central registry
   container/          HoloscanContainer + docker arg helpers + parser builders
+  cmake/              packaged CMake support copied into standalone Modules
   utils/              io.py, text.py, sdk.py, docker.py, host_setup.py,
                       env_info.py, holohub.py
   setup_scripts/      bundled bash scripts backing `setup --scripts` and
                       `build-container --extra-scripts`
   metadata/           project metadata JSON schemas
+  templates/module/   standalone Module cookiecutter
   testing/            CTest helpers shipped in the wheel
 ```
 
@@ -78,6 +88,23 @@ work when you want the canonical command name from a transient runner:
 ```bash
 uvx --from holoscan-cli holoscan --help
 pipx run --spec holoscan-cli holoscan --help
+```
+
+Creating a standalone Module needs the optional creation dependencies. NVIDIA's
+index is included so release candidates are available too. This command requires
+`uv` 0.4.23 or later for `uvx --index` support:
+
+```bash
+uvx --index https://pypi.nvidia.com \
+  --from 'holoscan-cli[create]' holoscan create my-sensor
+```
+
+To run any command against a project outside the current directory, pass the
+global `--project-root PATH` before the subcommand (equivalent to setting
+`HOLOSCAN_CLI_ROOT`):
+
+```bash
+holoscan --project-root ~/holoscan-my-sensor list
 ```
 
 ## Versioning

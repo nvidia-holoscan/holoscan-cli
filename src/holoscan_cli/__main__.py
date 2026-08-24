@@ -22,6 +22,11 @@ from pathlib import Path
 from typing import Optional, Union
 
 from .commands.registry import project_command_help
+from .project_context import (
+    ProjectContextError,
+    activate_project_context,
+    discover_project_context,
+)
 
 logging.getLogger("docker.api.build").setLevel(logging.WARNING)
 logging.getLogger("docker.auth").setLevel(logging.WARNING)
@@ -57,6 +62,19 @@ REMOVED_COMMAND_FOOTER = (
     "Removed HAP/MAP commands are not available since holoscan v4.3.0. Pin "
     "holoscan-cli<=4.2.0 and holoscan<=4.2.0 if you still need that legacy command surface."
 )
+
+
+class DispatchUsageError(ValueError):
+    """A top-level option is invalid or misplaced."""
+
+
+# Top-level options consumed before the subcommand, mapped to the value each one
+# expects. Used for both parsing and the "requires a ..." usage errors.
+TOP_LEVEL_OPTIONS = {
+    "-l": "logging level",
+    "--log-level": "logging level",
+    "--project-root": "directory path",
+}
 
 
 def parse_args(argv: Optional[list[str]] = None) -> argparse.Namespace:
@@ -96,6 +114,11 @@ def parse_args(argv: Optional[list[str]] = None) -> argparse.Namespace:
         action="store_true",
         dest="show_version",
         help="display the holoscan-cli package version",
+    )
+    parser.add_argument(
+        "--project-root",
+        metavar="PATH",
+        help="use PATH as the source-project root (must appear before the subcommand)",
     )
 
     subparser = parser.add_subparsers(dest="command")
@@ -158,39 +181,57 @@ def _program_name(argv: list[str]) -> str:
     return "holoscan" if command_name == "__main__.py" else command_name
 
 
-def _project_dispatch_argv(argv: list[str]) -> tuple[Optional[str], list[str], Optional[str]]:
-    """Return command, argv with top-level options removed, and requested log level."""
+def _project_dispatch_argv(
+    argv: list[str],
+) -> tuple[Optional[str], list[str], Optional[str], Optional[str]]:
+    """Return command, stripped argv, log level, and explicit project root."""
     project_argv = [argv[0]]
     log_level = None
+    project_root = None
     index = 1
 
     while index < len(argv):
-        arg = argv[index]
-        if arg in {"-l", "--log-level"} and index + 1 < len(argv):
-            log_level = argv[index + 1].upper()
-            index += 2
-            continue
-        if arg.startswith("--log-level="):
-            log_level = arg.split("=", 1)[1].upper()
-            index += 1
-            continue
+        name, equals, inline_value = argv[index].partition("=")
+        if name not in TOP_LEVEL_OPTIONS:
+            project_argv.extend(argv[index:])
+            break
+        if equals:
+            value, index = inline_value, index + 1
+        elif index + 1 < len(argv):
+            value, index = argv[index + 1], index + 2
+        else:
+            raise DispatchUsageError(f"{name} requires a {TOP_LEVEL_OPTIONS[name]}.")
 
-        project_argv.extend(argv[index:])
-        break
+        if name == "--project-root":
+            if project_root is not None:
+                raise DispatchUsageError("--project-root may be specified only once.")
+            # A bare subcommand or another option here means the path was omitted.
+            if not value or value.startswith("-") or value in {*PROJECT_COMMANDS, "version"}:
+                raise DispatchUsageError("--project-root requires a non-empty directory path.")
+            project_root = value
+        else:
+            # argparse never sees this prefix form, so apply its choices here.
+            log_level = value.upper()
+            if log_level not in LOG_LEVELS:
+                raise DispatchUsageError(
+                    f"{name} must be one of {', '.join(LOG_LEVELS)}; got {value!r}."
+                )
 
     command = project_argv[1] if len(project_argv) > 1 else None
-    return command, project_argv, log_level
+    for arg in project_argv[2:]:
+        if arg == "--project-root" or arg.startswith("--project-root="):
+            program = _program_name(argv)
+            raise DispatchUsageError(
+                f"--project-root is a global option; place it before {command!r}, for example: "
+                f"{program} --project-root PATH {command}"
+            )
+    return command, project_argv, log_level, project_root
 
 
-def _exit_if_removed_command(argv: list[str]) -> None:
-    """Print a removal note and exit 2 if argv's first non-flag token names a
-    removed subcommand. Runs before any parser so users typing the old name
-    see why it's gone instead of argparse's bare "invalid choice".
-    """
-    command, _, _ = _project_dispatch_argv(argv)
-    if command is None or command not in REMOVED_COMMANDS:
+def _exit_if_removed_command(program: str, command: Optional[str]) -> None:
+    """Explain a removed subcommand before argparse reports an invalid choice."""
+    if command not in REMOVED_COMMANDS:
         return
-    program = _program_name(argv)
     print(
         f"Error: '{program} {command}' was removed since holoscan v4.3.0 — "
         f"{REMOVED_COMMANDS[command]} is no longer shipped.\n"
@@ -200,11 +241,23 @@ def _exit_if_removed_command(argv: list[str]) -> None:
     sys.exit(2)
 
 
-def _dispatch_project_cli(argv: list[str]) -> bool:
+def _dispatch_project_cli(
+    command: Optional[str],
+    project_argv: list[str],
+    log_level: Optional[str],
+    project_root: Optional[str],
+) -> bool:
     """Forward source-project commands to the ported project CLI."""
-    command, project_argv, log_level = _project_dispatch_argv(argv)
     if command not in PROJECT_COMMANDS:
         return False
+
+    # Creation must not inherit an enclosing project's defaults unless the
+    # caller explicitly selects that project.
+    if command != "create" or project_root is not None:
+        context = discover_project_context(explicit_root=project_root)
+        for warning in context.warnings:
+            print(f"Warning: {warning}", file=sys.stderr)
+        activate_project_context(context)
 
     set_up_logging(log_level)
 
@@ -219,12 +272,17 @@ def _dispatch(argv: Optional[list[str]]) -> None:
         argv = sys.argv
     argv = list(argv)
 
-    _exit_if_removed_command(argv)
+    command, native_argv, log_level, project_root = _project_dispatch_argv(argv)
 
-    if _dispatch_project_cli(argv):
+    _exit_if_removed_command(_program_name(argv), command)
+
+    if _dispatch_project_cli(command, native_argv, log_level, project_root):
         return
 
-    args = parse_args(argv)
+    args = parse_args(native_argv)
+    if log_level is not None:
+        args.log_level = log_level
+    args.project_root = project_root
 
     set_up_logging(args.log_level)
 
@@ -237,6 +295,9 @@ def _dispatch(argv: Optional[list[str]]) -> None:
 def main(argv: Optional[list[str]] = None):
     try:
         _dispatch(argv)
+    except (DispatchUsageError, ProjectContextError) as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        raise SystemExit(2) from None
     except KeyboardInterrupt:
         # The CLI owns pre-launch work. After launch, exec removes this frame
         # and the application retains control of its signal handling and status.

@@ -18,8 +18,9 @@
 # Lightweight Dockerfile to run a single setup script adding dependencies
 # on top of a pre-existing project development image.
 
+# The CLI always supplies BASE_IMAGE. Keep a valid fallback for static checks.
 ARG BASE_IMAGE
-FROM ${BASE_IMAGE} AS base
+FROM ${BASE_IMAGE:-ubuntu:24.04} AS base
 
 # Setup scripts use `sudo` for system packages. Ensure it exists on top of the
 # (arbitrary) base image; as root `sudo` is a harmless passthrough. Kept in its

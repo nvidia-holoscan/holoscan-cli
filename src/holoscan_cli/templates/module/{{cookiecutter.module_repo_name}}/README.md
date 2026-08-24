@@ -12,14 +12,27 @@ A **Holoscan Module** — a self-contained, redistributable library that extends
 
 ## Quick Start
 
+Create and activate a standard Python virtual environment, then install the exact CLI version
+pinned by this Module:
+
 ```bash
-# 1. Run the Python demo application
-./holohub run {{ cookiecutter.module_slug }}_pipeline --language python
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install \
+  --extra-index-url https://pypi.nvidia.com \
+  -r requirements-cli.txt
+
+# Run the Python demo application
+holoscan run {{ cookiecutter.module_slug }}_pipeline --language python
 {% if cookiecutter.language == 'cpp' %}
-# 2. Run the C++ demo application
-./holohub run {{ cookiecutter.module_slug }}_pipeline
+# Run the C++ demo application
+holoscan run {{ cookiecutter.module_slug }}_pipeline
 {% endif %}
 ```
+
+If you use [uv](https://docs.astral.sh/uv/), replace the environment setup above with
+`uv sync --only-dev`, then run `source .venv/bin/activate` and use the same `holoscan` commands.
+This installs the development tools without trying to build the Module on the host.
 
 ---
 
@@ -78,18 +91,17 @@ int main() { holoscan::make_application<MyApp>()->run(); }
 {% endif -%}
 ---
 
-## Building from Source (without HoloHub CLI)
+## Building from Source (without Holoscan CLI)
 
 | Requirement | Version |
 | --- | --- |
 | Holoscan SDK | ≥ {{ cookiecutter.holoscan_version }} |
-| CUDA Toolkit | 13.x (matches the Holoscan SDK CUDA pin; the dev `Dockerfile` uses `cuda13-dgpu`) |
+| CUDA Toolkit | 13.x (matches the Holoscan SDK CUDA pin; the dev `Dockerfile` uses `cuda13`) |
 | CMake | ≥ 3.24 |
 {%- if cookiecutter.language == 'cpp' %}
-| C++ compiler | C++17 (GCC 11+) |
-| pybind11 | ≥ 2.11 |
+| C++ compiler | C++17-capable |
 {%- endif %}
-| Python | 3.10–3.13 |
+| Python | ≥ 3.10 |
 
 ```bash
 cmake -S . -B build -DBUILD_ALL=ON -D{{ cookiecutter.module_slug | upper }}_BUILD_TESTING=ON
@@ -101,20 +113,18 @@ cmake --build build -j$(nproc)
 ## Testing
 
 ```bash
-./holohub test
+holoscan test
 ```
 
-Or, without the HoloHub CLI:
+Or, without the Holoscan CLI:
 
-{% if cookiecutter.language == 'cpp' %}
-
+{% if cookiecutter.language == 'cpp' -%}
 ```bash
 # C++ (GTest via CTest)
 ctest --test-dir build --output-on-failure -L unit
 ```
 
-{% endif %}
-
+{% endif -%}
 ```bash
 # Python (pytest)
 PYTHONPATH=build/python/lib${PYTHONPATH:+:$PYTHONPATH} {{ cookiecutter.module_slug | upper }}_BUILD_DIR=build pytest tests/python/ -v

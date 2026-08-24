@@ -5,8 +5,8 @@
 # Run `pre-commit run --all-files` to lint the whole tree.
 # Run `pre-commit autoupdate` to refresh to latest compatible versions.
 
-# Build outputs, dev-container HOME junk, and the cmake/ helpers copied in from
-# the HoloHub clone (vendored, not maintained here) are excluded from all hooks.
+# Build outputs, dev-container HOME junk, and scaffolded third-party cmake/
+# helpers (vendored, not maintained here) are excluded from all hooks.
 exclude: '^(build[^/]*|install[^/]*|dist|\.cache|\.local|\.cupy|_CPack_Packages|cmake)/'
 
 repos:
@@ -65,8 +65,11 @@ repos:
     hooks:
       - id: holoscan-metadata-validate
         name: validate metadata.json against the Holoscan CLI schema
-        entry: python3 .github/workflows/scripts/validate_metadata.py
-        language: system
+        # This hook uses pre-commit's isolated Python so its schema dependencies
+        # stay separate from the Module's lightweight CLI environment.
+        entry: python .github/workflows/scripts/validate_metadata.py
+        language: python
+        additional_dependencies: ["holoscan-cli[create]=={{ cookiecutter._holoscan_cli_version }}"]
         files: '(^|/)metadata\.json$'
         pass_filenames: false
 
@@ -81,7 +84,9 @@ repos:
 
       - id: check-copyright
         name: check-copyright
-        entry: python3 .github/workflows/scripts/check_copyright.py
+        # `holoscan lint` exports HOLOSCAN_CLI_PYTHON_BIN so the hook runs on the
+        # same interpreter as the CLI; plain `pre-commit run` falls back to python3.
+        entry: bash -c 'exec "${HOLOSCAN_CLI_PYTHON_BIN:-python3}" .github/workflows/scripts/check_copyright.py "$@"' --
         args:
           - .
           - --git-modified-only
