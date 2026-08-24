@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Discover and activate a Holoscan source-project root before CLI imports."""
+"""Discover and activate a Holoscan-based source-project root before CLI imports."""
 
 from __future__ import annotations
 

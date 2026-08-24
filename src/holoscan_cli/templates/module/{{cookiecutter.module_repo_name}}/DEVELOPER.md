@@ -56,6 +56,11 @@ commands remain usable with another installed CLI version when its behavior is c
 | `holoscan test` | Run CTest (C++ unit tests) and pytest |
 | `holoscan install --dev` | Install a `.pth` hook so `import holoscan.{{ cookiecutter.module_slug }}` works in any shell |
 
+The scaffold intentionally ships no launcher wrapper. Projects that need custom environment or
+bootstrap policy can add a thin wrapper as an advanced customization, keep it outside the Module's
+build and package contract, and delegate to the installed `holoscan` command. HoloHub's
+[`holohub` wrapper](https://github.com/nvidia-holoscan/holohub/blob/main/holohub) is one reference.
+
 If you use [uv](https://docs.astral.sh/uv/), the project config selects NVIDIA's package index for
 `holoscan-cli` while leaving other dependencies on PyPI. Run `uv sync --only-dev`, then
 `source .venv/bin/activate` and use the same commands above. This installs the development tools

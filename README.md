@@ -83,7 +83,8 @@ pipx run --spec holoscan-cli holoscan --help
 ```
 
 Creating a standalone Module needs the optional creation dependencies. NVIDIA's
-index is included so release candidates are available too:
+index is included so release candidates are available too. This command requires
+`uv` 0.4.23 or later for `uvx --index` support:
 
 ```bash
 uvx --index https://pypi.nvidia.com \

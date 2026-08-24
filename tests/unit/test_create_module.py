@@ -7,6 +7,8 @@ from __future__ import annotations
 
 import argparse
 import json
+import shutil
+import subprocess
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -53,7 +55,9 @@ def _write_template(root: Path, relative: str, *, module: bool) -> Path:
     return template
 
 
-def test_dryrun_uses_the_contextual_default(cli, tmp_path, monkeypatch, capsys):
+def test_direct_create_uses_packaged_template_inside_a_source_project(
+    cli, tmp_path, monkeypatch, capsys
+):
     monkeypatch.chdir(tmp_path)
 
     create.handle_create(cli, _args())
@@ -61,8 +65,20 @@ def test_dryrun_uses_the_contextual_default(cli, tmp_path, monkeypatch, capsys):
     assert "Template: packaged Module template" in output
     assert f"Directory: {tmp_path / 'holoscan-my-mod'}" in output
 
-    application_template = _write_template(tmp_path, "applications/template", module=False)
+    _write_template(tmp_path, "applications/template", module=False)
     create.handle_create(cli, _args())
+    output = capsys.readouterr().out
+    assert "Template: packaged Module template" in output
+    assert f"Directory: {tmp_path / 'holoscan-my-mod'}" in output
+    assert "applications/CMakeLists.txt" not in output
+
+
+def test_wrapper_default_selects_application_template(cli, tmp_path, monkeypatch, capsys):
+    application_template = _write_template(tmp_path, "applications/template", module=False)
+    monkeypatch.setenv(create.CREATE_TEMPLATE_ENV, "applications/template")
+
+    create.handle_create(cli, _args())
+
     output = capsys.readouterr().out
     assert f"Template: {application_template}" in output
     assert f"Directory: {tmp_path / 'applications/my_mod'}" in output
@@ -137,6 +153,28 @@ def test_create_never_overwrites_an_existing_project(cli, tmp_path, monkeypatch)
         create.handle_create(cli, _args(dryrun=False, directory=destination.parent))
 
     assert marker.read_text(encoding="utf-8") == "keep\n"
+
+
+@pytest.mark.skipif(shutil.which("git") is None, reason="git is required")
+def test_initialize_module_git_only_initializes_standalone_directory(tmp_path):
+    standalone = tmp_path / "standalone"
+    standalone.mkdir()
+    assert create._initialize_module_git(standalone)
+    assert (standalone / ".git").is_dir()
+
+    repository = tmp_path / "repository"
+    repository.mkdir()
+    subprocess.run(
+        ["git", "init", "."],
+        cwd=repository,
+        check=True,
+        capture_output=True,
+    )
+    nested = repository / "packages/module"
+    nested.mkdir(parents=True)
+
+    assert not create._initialize_module_git(nested)
+    assert not (nested / ".git").exists()
 
 
 def test_missing_cookiecutter_points_to_the_create_extra(cli, tmp_path, monkeypatch, capsys):

@@ -14,7 +14,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Post-generation hook: clean up language-specific files."""
+"""Post-generation hook: clean up language-specific files.
+
+Repository initialization belongs to ``holoscan create`` after the staged tree
+has been safely materialized, so this hook never mutates caller-owned Git state.
+"""
 
 import os
 import shutil

@@ -50,10 +50,9 @@ PRESERVED_DESTINATION_ENTRIES = {".git"}
 def register_create_parser(cli, subparsers) -> argparse.ArgumentParser:
     """Register the ``create`` subcommand.
 
-    Direct ``holoscan create`` uses the packaged Module template. An existing
-    source-project application template remains the contextual default for
-    compatibility. Wrappers can override either default with
-    ``HOLOSCAN_CLI_CREATE_TEMPLATE``; an explicit ``--template`` always wins.
+    Direct ``holoscan create`` uses the packaged Module template. Source-project
+    wrappers can select their own default with ``HOLOSCAN_CLI_CREATE_TEMPLATE``;
+    an explicit ``--template`` always wins.
     """
     parser = subparsers.add_parser("create", help=help_for("create"))
     parser.add_argument("project", help="Name of the project to create")
@@ -61,8 +60,9 @@ def register_create_parser(cli, subparsers) -> argparse.ArgumentParser:
         "--template",
         default=None,
         help=(
-            "Path to the template directory to use (default: the current source-project "
-            "application template when present, otherwise the packaged Module template)"
+            "Path to the template directory to use "
+            "(default: HOLOSCAN_CLI_CREATE_TEMPLATE when set, otherwise the packaged "
+            "Module template)"
         ),
     )
     parser.add_argument(
@@ -110,10 +110,16 @@ def register_create_parser(cli, subparsers) -> argparse.ArgumentParser:
 
 
 def _initialize_module_git(project_dir: Path) -> bool:
-    """Initialize and stage a new Module without touching pre-existing Git state."""
-    if (project_dir / ".git").exists() or (project_dir / ".git").is_symlink():
-        return False
+    """Initialize a fresh standalone Module without touching existing Git state."""
     try:
+        worktree = subprocess.run(
+            ["git", "rev-parse", "--show-toplevel"],
+            cwd=project_dir,
+            check=False,
+            capture_output=True,
+        )
+        if worktree.returncode == 0:
+            return False
         subprocess.run(["git", "init", "."], cwd=project_dir, check=True, capture_output=True)
         subprocess.run(
             ["git", "symbolic-ref", "HEAD", "refs/heads/main"],
@@ -233,17 +239,14 @@ def _select_template(cli, template: Optional[str]) -> tuple[AbstractContextManag
     """Resolve the template directory and whether it is the packaged Module one.
 
     An explicit ``--template`` wins, then ``HOLOSCAN_CLI_CREATE_TEMPLATE``, then
-    the current source project's application template, then the packaged Module
-    template. Relative paths resolve against the source-project root.
+    the packaged Module template. Relative paths resolve against the active
+    source-project root so wrappers can set a project-relative default.
     """
     if template is not None and not str(template).strip():
         fatal("--template requires a non-empty directory path.")
 
     selected = template or os.environ.get(CREATE_TEMPLATE_ENV) or None
     if selected is None:
-        source_template = Path(cli.HOLOHUB_ROOT) / "applications" / "template"
-        if source_template.is_dir():
-            return nullcontext(source_template.resolve()), False
         return _packaged_module_template(), True
 
     resolved = Path(selected).expanduser()
