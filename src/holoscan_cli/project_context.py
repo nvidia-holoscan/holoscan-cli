@@ -64,24 +64,20 @@ def _is_source_root(path: Path) -> bool:
     )
 
 
-def _read_module(root: Path, *, strict: bool) -> dict | None:
+def _read_module(root: Path) -> dict | None:
     path = root / MODULE_METADATA_FILENAME
     if not path.is_file():
         return None
     try:
         document = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, UnicodeError, json.JSONDecodeError) as exc:
-        if strict:
-            raise ProjectContextError(f"Invalid Module metadata at {path}: {exc}") from exc
-        return None
+        raise ProjectContextError(f"Invalid Module metadata at {path}: {exc}") from exc
 
     module = document.get("module") if isinstance(document, dict) else None
     if module is None:
         return None
     if not isinstance(module, dict):
-        if strict:
-            raise ProjectContextError(f"Module metadata at {path} must contain an object.")
-        return None
+        raise ProjectContextError(f"Module metadata at {path} must contain an object.")
     return module
 
 
@@ -120,10 +116,17 @@ def _module_defaults(module: dict, path: Path) -> tuple[str, str | None]:
 
 
 def _context(root: Path, warnings: tuple[str, ...] = ()) -> ProjectContext:
-    module = _read_module(root, strict=True)
-    if module is None:
-        return ProjectContext(root=root, warnings=warnings)
-    prefix, sdk_version = _module_defaults(module, root / MODULE_METADATA_FILENAME)
+    """Build a context without making metadata validity a root-discovery requirement."""
+    try:
+        module = _read_module(root)
+        if module is None:
+            return ProjectContext(root=root, warnings=warnings)
+        prefix, sdk_version = _module_defaults(module, root / MODULE_METADATA_FILENAME)
+    except ProjectContextError as exc:
+        # Metadata validation belongs to `holoscan lint`. Keep the selected
+        # root usable so lint and other recovery commands can report/fix it.
+        return ProjectContext(root=root, warnings=(*warnings, str(exc)))
+
     return ProjectContext(root, prefix, sdk_version, warnings)
 
 
@@ -159,7 +162,7 @@ def discover_project_context(
     for candidate in (cwd, *cwd.parents):
         if _is_source_root(candidate):
             return _context(candidate, warnings)
-        if module_fallback is None and _read_module(candidate, strict=False) is not None:
+        if module_fallback is None and (candidate / MODULE_METADATA_FILENAME).is_file():
             module_fallback = candidate
 
     if module_fallback is not None:

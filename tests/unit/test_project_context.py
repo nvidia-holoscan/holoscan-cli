@@ -60,6 +60,21 @@ def test_module_discovery_and_activation(tmp_path, monkeypatch):
     assert os.environ["HOLOSCAN_CLI_CONTAINER_PREFIX"] == "my-sensor"
 
 
+def test_implicit_discovery_tolerates_malformed_module_metadata(tmp_path):
+    root = tmp_path / "module"
+    descendant = root / "nested/deep"
+    descendant.mkdir(parents=True)
+    (root / "metadata.json").write_text("{not json", encoding="utf-8")
+
+    context = discover_project_context(cwd=descendant, environ={})
+
+    assert context.root == root
+    assert context.repo_prefix is None
+    assert context.base_sdk_version is None
+    assert len(context.warnings) == 1
+    assert "Invalid Module metadata" in context.warnings[0]
+
+
 def test_source_project_precedes_nested_module(tmp_path):
     source_root = tmp_path / "holohub"
     app = source_root / "applications/example"
