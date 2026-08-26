@@ -19,7 +19,6 @@ is intentionally named `CI.md` (not `README.md`) so it doesn't compete with the
 │   ├── smoke_test.sh
 │   └── tool_runner_smoke.sh
 └── workflows/
-    ├── blossom-ci.yml        ← NVIDIA Blossom hybrid CI bridge (/build comments)
     ├── codeql.yaml           ← CodeQL Advanced (Python)
     ├── dependency-review.yml ← Dependency review on PRs
     ├── main.yaml             ← Code Check — push and PR CI
@@ -315,10 +314,6 @@ Runs only in `main.yaml` against the built wheel. It is intentionally CPU-only:
   `allow-licenses` rather than the deprecated `deny-licenses` option (see
   actions/dependency-review-action#997); add new SPDX identifiers there if
   a vetted permissive license isn't already on the list.
-* **`blossom-ci.yml`** — NVIDIA-internal bridge: an authorized maintainer
-  commenting `/build` on a PR kicks off a vulnerability scan and a Jenkins
-  job on Blossom-managed runners. Configuration is org-managed; do not edit
-  the authorization list without going through the Blossom CI team.
 
 ## GitHub Actions allowlist
 
