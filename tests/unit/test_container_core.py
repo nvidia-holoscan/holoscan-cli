@@ -62,6 +62,11 @@ def _isolate_container_class_attrs(monkeypatch):
         "{container_prefix}:ngc-v{sdk_version}-{cuda_tag}",
         raising=False,
     )
+    monkeypatch.delenv("DOCKER_HOST", raising=False)
+    monkeypatch.delenv("DOCKER_CONTEXT", raising=False)
+    monkeypatch.delenv("BUILDX_BUILDER", raising=False)
+    monkeypatch.setattr(container_core, "get_effective_cpu_set", lambda: None)
+    monkeypatch.setattr(container_core, "docker_build_supports_resource", lambda _docker_exe: True)
 
 
 def _stub_container(tmp_path, project_metadata=None, language=None):
@@ -427,6 +432,7 @@ def test_build_dryrun_emits_base_and_extra_script_layers(tmp_path, monkeypatch):
     monkeypatch.setattr(container_core, "get_default_cuda_version", lambda: "13")
     monkeypatch.setattr(container_core, "get_current_branch_slug", lambda: "feature-x")
     monkeypatch.setattr(container_core, "get_git_short_sha", lambda: "abcdef0")
+    monkeypatch.setattr(container_core, "get_effective_cpu_set", lambda: "0,1")
     monkeypatch.setattr(
         container_core.HoloscanContainer,
         "DEFAULT_DOCKER_BUILD_ARGS",
@@ -461,6 +467,8 @@ def test_build_dryrun_emits_base_and_extra_script_layers(tmp_path, monkeypatch):
     assert "-f" in first
     assert str(dockerfile) in first
     assert "holohub-my_app:feature-x-base" in first
+    resource_index = first.index("--resource")
+    assert first[resource_index + 1] == "cpuset-cpus=0,1"
 
     layer = calls[1]
     assert layer[:2] == ["docker", "build"]
@@ -468,6 +476,77 @@ def test_build_dryrun_emits_base_and_extra_script_layers(tmp_path, monkeypatch):
     assert "SCRIPT=utilities/setup/coverage.sh" in layer
     assert str(setup_dir / "Dockerfile.util") in layer
     assert "holohub-my_app:feature-x-coverage" in layer
+    resource_index = layer.index("--resource")
+    assert layer[resource_index + 1] == "cpuset-cpus=0,1"
+
+
+@pytest.mark.parametrize(
+    "build_args",
+    [
+        "--resource cpuset-cpus=4,5",
+        "--resource=memory=2g --resource=cpuset-cpus=4,5",
+    ],
+)
+def test_build_preserves_explicit_cpu_resource(tmp_path, monkeypatch, build_args):
+    project_dir = _stub_build_env(tmp_path, monkeypatch)
+    calls = []
+    monkeypatch.setattr(container_core, "get_effective_cpu_set", lambda: "0,1")
+    monkeypatch.setattr(container_core, "run_command", lambda cmd, **kwargs: calls.append(cmd))
+
+    c = _stub_container(
+        tmp_path,
+        project_metadata={
+            "project_name": "my_app",
+            "source_folder": str(project_dir),
+            "metadata": {"language": "python"},
+        },
+    )
+    c.dryrun = True
+
+    c.build(build_args=build_args)
+
+    assert "cpuset-cpus=4,5" in " ".join(calls[0])
+    assert "cpuset-cpus=0,1" not in calls[0]
+
+
+@pytest.mark.parametrize(
+    ("cpu_set", "expected_probe_count", "expected_warning_count"),
+    [("0,1", 1, 1), (None, 0, 0)],
+)
+def test_build_handles_missing_resource_support(
+    tmp_path, monkeypatch, cpu_set, expected_probe_count, expected_warning_count
+):
+    project_dir = _stub_build_env(tmp_path, monkeypatch)
+    calls = []
+    probes = []
+    warnings = []
+    monkeypatch.setattr(container_core, "get_effective_cpu_set", lambda: cpu_set)
+    monkeypatch.setattr(
+        container_core,
+        "docker_build_supports_resource",
+        lambda _exe: probes.append(True) and False,
+    )
+    monkeypatch.setattr(container_core, "warn", warnings.append)
+    monkeypatch.setattr(
+        container_core,
+        "run_command",
+        lambda cmd, **kwargs: calls.append(cmd) or subprocess.CompletedProcess(cmd, 0),
+    )
+    c = _stub_container(
+        tmp_path,
+        project_metadata={
+            "project_name": "my_app",
+            "source_folder": str(project_dir),
+            "metadata": {"language": "python"},
+        },
+    )
+
+    c.build()
+
+    build = next(cmd for cmd in calls if cmd[:2] == ["docker", "build"])
+    assert "--resource" not in build
+    assert len(probes) == expected_probe_count
+    assert len(warnings) == expected_warning_count
 
 
 def test_build_dryrun_allows_bundled_extra_script_dir(tmp_path, monkeypatch):
@@ -642,6 +721,84 @@ def test_run_default_args_suppression_and_as_root_user_override(tmp_path, monkey
     assert "--network" in suppressed
     image_index = elevated.index("custom:image")
     assert elevated[image_index - 2 : image_index] == ["--user", "0:0"]
+
+
+def test_run_forwards_effective_cpu_set(tmp_path, monkeypatch):
+    project_dir = _stub_run_env(tmp_path, monkeypatch)
+    calls = []
+    monkeypatch.setattr(container_core, "get_effective_cpu_set", lambda: "0,2,4")
+    monkeypatch.setattr(container_core, "run_command", lambda cmd, **kwargs: calls.append(cmd))
+    c = _stub_container(
+        tmp_path,
+        project_metadata={
+            "project_name": "my_app",
+            "source_folder": str(project_dir),
+            "metadata": {"language": "python"},
+        },
+    )
+    c.dryrun = True
+
+    c.run(img="custom:image")
+
+    assert "--cpuset-cpus=0,2,4" in calls[0]
+
+
+@pytest.mark.parametrize(
+    ("cpu_option", "use_default"),
+    [
+        ("--cpuset-cpus=4,5", False),
+        ("--cpus=2", True),
+        ("--cpu-quota=200000", False),
+        ("--cpu-period=100000", False),
+    ],
+)
+def test_run_preserves_explicit_cpu_limit(tmp_path, monkeypatch, cpu_option, use_default):
+    project_dir = _stub_run_env(tmp_path, monkeypatch)
+    calls = []
+    monkeypatch.setattr(container_core, "get_effective_cpu_set", lambda: "0,1")
+    monkeypatch.setattr(container_core, "run_command", lambda cmd, **kwargs: calls.append(cmd))
+    if use_default:
+        monkeypatch.setattr(HoloscanContainer, "DEFAULT_DOCKER_RUN_ARGS", cpu_option)
+    c = _stub_container(
+        tmp_path,
+        project_metadata={
+            "project_name": "my_app",
+            "source_folder": str(project_dir),
+            "metadata": {"language": "python"},
+        },
+    )
+    c.dryrun = True
+
+    c.run(img="custom:image", docker_opts="" if use_default else cpu_option)
+
+    assert cpu_option in calls[0]
+    assert "--cpuset-cpus=0,1" not in calls[0]
+
+
+@pytest.mark.parametrize("env_name", ["DOCKER_HOST", "DOCKER_CONTEXT"])
+def test_run_does_not_copy_cpu_ids_to_remote_docker(tmp_path, monkeypatch, env_name):
+    project_dir = _stub_run_env(tmp_path, monkeypatch)
+    calls = []
+    monkeypatch.setenv(env_name, "remote")
+    monkeypatch.setattr(
+        container_core,
+        "get_effective_cpu_set",
+        lambda: pytest.fail("must not inspect local limits for remote Docker"),
+    )
+    monkeypatch.setattr(container_core, "run_command", lambda cmd, **kwargs: calls.append(cmd))
+    c = _stub_container(
+        tmp_path,
+        project_metadata={
+            "project_name": "my_app",
+            "source_folder": str(project_dir),
+            "metadata": {"language": "python"},
+        },
+    )
+    c.dryrun = True
+
+    c.run(img="custom:image")
+
+    assert not any(arg.startswith("--cpuset-cpus") for arg in calls[0])
 
 
 # ---- build-args / cuda forwarding -------------------------------------------

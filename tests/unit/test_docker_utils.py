@@ -25,9 +25,156 @@ wrappers (which override images via ``--img``) doesn't quietly regress.
 
 from __future__ import annotations
 
+import subprocess
+
 import pytest
 
 from holoscan_cli.utils import docker as utils_docker
+
+
+def _write_cgroup_files(tmp_path, *, cgroup: str, mountinfo: str):
+    proc_root = tmp_path / "proc"
+    (proc_root / "self").mkdir(parents=True)
+    (proc_root / "self" / "cgroup").write_text(cgroup, encoding="utf-8")
+    (proc_root / "self" / "mountinfo").write_text(mountinfo, encoding="utf-8")
+    return proc_root
+
+
+def test_effective_cpu_set_uses_cgroup_v2_quota(tmp_path, monkeypatch):
+    cgroup_mount = tmp_path / "cgroup"
+    current = cgroup_mount / "job"
+    current.mkdir(parents=True)
+    (current / "cpu.max").write_text("200000 100000\n", encoding="utf-8")
+    proc_root = _write_cgroup_files(
+        tmp_path,
+        cgroup="0::/job\n",
+        mountinfo=f"1 0 0:1 / {cgroup_mount} rw - cgroup2 cgroup rw\n",
+    )
+    monkeypatch.setattr(utils_docker.os, "sched_getaffinity", lambda _pid: set(range(8)))
+    monkeypatch.setattr(utils_docker.os, "cpu_count", lambda: 8)
+
+    assert utils_docker.get_effective_cpu_set(proc_root=proc_root) == "0,1"
+
+
+def test_effective_cpu_set_uses_cgroup_v2_ancestor_quota(tmp_path, monkeypatch):
+    cgroup_mount = tmp_path / "cgroup"
+    current = cgroup_mount / "container"
+    current.mkdir(parents=True)
+    (current / "cpu.max").write_text("max 100000\n", encoding="utf-8")
+    (cgroup_mount / "cpu.max").write_text("300000 100000\n", encoding="utf-8")
+    proc_root = _write_cgroup_files(
+        tmp_path,
+        cgroup="0::/pod/container\n",
+        mountinfo=f"1 0 0:1 /pod {cgroup_mount} rw - cgroup2 cgroup rw\n",
+    )
+    monkeypatch.setattr(utils_docker.os, "sched_getaffinity", lambda _pid: set(range(8)))
+    monkeypatch.setattr(utils_docker.os, "cpu_count", lambda: 8)
+
+    assert utils_docker.get_effective_cpu_set(proc_root=proc_root) == "0,1,2"
+
+
+def test_effective_cpu_set_prefers_v1_cpu_controller_on_hybrid_host(tmp_path, monkeypatch):
+    cgroup_v2_mount = tmp_path / "unified"
+    cgroup_v2_mount.mkdir()
+    (cgroup_v2_mount / "cpu.max").write_text("max 100000\n", encoding="utf-8")
+    cpu_mount = tmp_path / "cpu"
+    cpu_job = cpu_mount / "job"
+    cpu_job.mkdir(parents=True)
+    (cpu_job / "cpu.cfs_quota_us").write_text("200000\n", encoding="utf-8")
+    (cpu_job / "cpu.cfs_period_us").write_text("100000\n", encoding="utf-8")
+    proc_root = _write_cgroup_files(
+        tmp_path,
+        cgroup="0::/\n2:cpu,cpuacct:/job\n",
+        mountinfo=(
+            f"1 0 0:1 / {cgroup_v2_mount} rw - cgroup2 cgroup rw\n"
+            f"2 0 0:2 / {cpu_mount} rw - cgroup cgroup rw,cpu,cpuacct\n"
+        ),
+    )
+    monkeypatch.setattr(utils_docker.os, "sched_getaffinity", lambda _pid: set(range(8)))
+    monkeypatch.setattr(utils_docker.os, "cpu_count", lambda: 8)
+
+    assert utils_docker.get_effective_cpu_set(proc_root=proc_root) == "0,1"
+
+
+@pytest.mark.parametrize(
+    ("quota", "period", "expected"),
+    [("150000", "100000", "0,1"), ("-1", "100000", None), ("100000", "0", None)],
+)
+def test_effective_cpu_set_uses_cgroup_v1_quota(tmp_path, monkeypatch, quota, period, expected):
+    cpu_mount = tmp_path / "cpu"
+    current = cpu_mount / "container"
+    current.mkdir(parents=True)
+    (current / "cpu.cfs_quota_us").write_text(f"{quota}\n", encoding="utf-8")
+    (current / "cpu.cfs_period_us").write_text(f"{period}\n", encoding="utf-8")
+    proc_root = _write_cgroup_files(
+        tmp_path,
+        cgroup="2:cpu,cpuacct:/pod/container\n",
+        mountinfo=(
+            f"1 0 0:1 /unrelated {tmp_path / 'unrelated'} rw - cgroup cgroup rw,cpu\n"
+            f"2 0 0:2 /pod {cpu_mount} rw - cgroup cgroup rw,cpu,cpuacct\n"
+        ),
+    )
+    monkeypatch.setattr(utils_docker.os, "sched_getaffinity", lambda _pid: set(range(8)))
+    monkeypatch.setattr(utils_docker.os, "cpu_count", lambda: 8)
+
+    assert utils_docker.get_effective_cpu_set(proc_root=proc_root) == expected
+
+
+@pytest.mark.parametrize(
+    ("affinity", "expected"),
+    [
+        ({0, 2, 4}, "0,2,4"),
+        (set(range(8)), None),
+    ],
+)
+def test_effective_cpu_set_respects_existing_affinity(tmp_path, monkeypatch, affinity, expected):
+    cgroup_mount = tmp_path / "cgroup"
+    cgroup_mount.mkdir()
+    (cgroup_mount / "cpu.max").write_text("max 100000\n", encoding="utf-8")
+    proc_root = _write_cgroup_files(
+        tmp_path,
+        cgroup="0::/\n",
+        mountinfo=f"1 0 0:1 / {cgroup_mount} rw - cgroup2 cgroup rw\n",
+    )
+    monkeypatch.setattr(utils_docker.os, "sched_getaffinity", lambda _pid: affinity)
+    monkeypatch.setattr(utils_docker.os, "cpu_count", lambda: 8)
+
+    assert utils_docker.get_effective_cpu_set(proc_root=proc_root) == expected
+
+
+def test_effective_cpu_set_fails_open_without_affinity(tmp_path, monkeypatch):
+    proc_root = _write_cgroup_files(tmp_path, cgroup="malformed\n", mountinfo="malformed\n")
+    monkeypatch.delattr(utils_docker.os, "sched_getaffinity", raising=False)
+
+    assert utils_docker.get_effective_cpu_set(proc_root=proc_root) is None
+
+
+def test_effective_cpu_set_keeps_restricted_affinity_when_cgroup_is_unreadable(
+    tmp_path, monkeypatch
+):
+    proc_root = _write_cgroup_files(tmp_path, cgroup="malformed\n", mountinfo="malformed\n")
+    monkeypatch.setattr(utils_docker.os, "sched_getaffinity", lambda _pid: {1, 3})
+    monkeypatch.setattr(utils_docker.os, "cpu_count", lambda: 8)
+
+    assert utils_docker.get_effective_cpu_set(proc_root=proc_root) == "1,3"
+
+
+def test_docker_build_resource_support_is_cached(monkeypatch):
+    calls = []
+
+    def docker_help(args, **kwargs):
+        calls.append(args)
+        help_text = "--resource stringArray" if args[0] == "docker-new" else "--tag string"
+        return subprocess.CompletedProcess(args, 0, stdout=help_text)
+
+    monkeypatch.setattr(utils_docker.subprocess, "run", docker_help)
+
+    assert utils_docker.docker_build_supports_resource("docker-new") is True
+    assert utils_docker.docker_build_supports_resource("docker-new") is True
+    assert utils_docker.docker_build_supports_resource("docker-old") is False
+    assert utils_docker.docker_build_supports_resource("docker-old") is False
+    assert len(calls) == 2
+
 
 # ---- user-supplied --entrypoint in docker_opts ------------------------------
 

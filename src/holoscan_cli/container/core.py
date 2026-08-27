@@ -30,7 +30,11 @@ from typing import Any, List, Optional, Union
 
 from holoscan_cli.metadata.utils import list_normalized_languages
 
-from ..utils.docker import get_image_pythonpath
+from ..utils.docker import (
+    docker_build_supports_resource,
+    get_effective_cpu_set,
+    get_image_pythonpath,
+)
 from ..utils.holohub import (
     build_holohub_path_mapping,
     get_current_branch_slug,
@@ -60,6 +64,31 @@ from .signals import (
 )
 
 SCCACHE_CONTAINER_DIR = "/.cache/sccache"
+
+
+def _has_build_cpu_resource(args: List[str]) -> bool:
+    for index, arg in enumerate(args):
+        if arg.startswith("--resource=cpuset-cpus="):
+            return True
+        if (
+            arg == "--resource"
+            and index + 1 < len(args)
+            and args[index + 1].startswith("cpuset-cpus=")
+        ):
+            return True
+    return False
+
+
+def _has_run_cpu_limit(args: List[str]) -> bool:
+    options = ("--cpuset-cpus", "--cpus", "--cpu-quota", "--cpu-period")
+    option_prefixes = tuple(f"{option}=" for option in options)
+    return any(arg in options or arg.startswith(option_prefixes) for arg in args)
+
+
+def _uses_local_docker_cpu_ids(for_build: bool = False) -> bool:
+    if os.environ.get("DOCKER_HOST") or os.environ.get("DOCKER_CONTEXT"):
+        return False
+    return not for_build or not os.environ.get("BUILDX_BUILDER")
 
 
 class HoloscanContainer:
@@ -472,6 +501,10 @@ class HoloscanContainer:
             self.cuda_version if self.cuda_version is not None else get_default_cuda_version()
         )
 
+        full_build_args = " ".join(
+            filter(None, [HoloscanContainer.DEFAULT_DOCKER_BUILD_ARGS, build_args])
+        )
+        parsed_build_args = shlex.split(full_build_args) if full_build_args else []
         # Check if buildx exists
         if not self.dryrun:
             try:
@@ -481,6 +514,20 @@ class HoloscanContainer:
                     "docker buildx plugin is missing. Please install docker-buildx-plugin:\n"
                     "https://docs.docker.com/engine/install/ubuntu/#install-using-the-repository"
                 )
+
+        cpu_resource_args = []
+        if _uses_local_docker_cpu_ids(for_build=True) and not _has_build_cpu_resource(
+            parsed_build_args
+        ):
+            cpu_set = get_effective_cpu_set()
+            if cpu_set:
+                if self.dryrun or docker_build_supports_resource(self.DOCKER_EXE):
+                    cpu_resource_args = ["--resource", f"cpuset-cpus={cpu_set}"]
+                else:
+                    warn(
+                        "Docker Buildx does not support build resource limits; "
+                        "the job CPU limit will not be forwarded to build steps."
+                    )
 
         # Set DOCKER_BUILDKIT environment variable
         os.environ["DOCKER_BUILDKIT"] = "1"
@@ -507,12 +554,8 @@ class HoloscanContainer:
             cmd.append("--no-cache")
 
         cmd.extend(self.local_source_build_context_args())
-
-        full_build_args = " ".join(
-            filter(None, [HoloscanContainer.DEFAULT_DOCKER_BUILD_ARGS, build_args])
-        )
-        if full_build_args:
-            cmd.extend(shlex.split(full_build_args))
+        cmd.extend(cpu_resource_args)
+        cmd.extend(parsed_build_args)
 
         cmd.extend(["-f", str(docker_file_path)])
         for tag_name in tags:
@@ -547,6 +590,7 @@ class HoloscanContainer:
                     "--network=host",
                     "--build-arg",
                     f"SCRIPT={relative_script_path}",
+                    *cpu_resource_args,
                     "-f",
                     str(setup_scripts_dir / "Dockerfile.util"),
                     str(script_build_context),
@@ -579,7 +623,8 @@ class HoloscanContainer:
             (HoloscanContainer.DEFAULT_DOCKER_RUN_ARGS or "") if include_default_run_args else ""
         )
         extra_run_args = shlex.split(docker_opts or "")
-        configured_runtime = get_cli_arg_value(default_run_args + extra_run_args, "--runtime")
+        run_args = default_run_args + extra_run_args
+        configured_runtime = get_cli_arg_value(run_args, "--runtime")
         runtime = configured_runtime or "nvidia"
 
         if not self.dryrun and runtime == "nvidia":
@@ -595,7 +640,7 @@ class HoloscanContainer:
         # If the caller already supplies --cidfile (via DEFAULT_DOCKER_RUN_ARGS or
         # docker_opts), use that path for cleanup and skip injecting our own —
         # Docker rejects duplicate --cidfile flags.
-        explicit_cidfile = get_cli_arg_value(default_run_args + extra_run_args, "--cidfile")
+        explicit_cidfile = get_cli_arg_value(run_args, "--cidfile")
         internal_cidfile: Optional[Path] = None
         if explicit_cidfile:
             cidfile = Path(explicit_cidfile)
@@ -604,6 +649,11 @@ class HoloscanContainer:
             cidfile = internal_cidfile
 
         cmd = [self.DOCKER_EXE, "run"]
+
+        if _uses_local_docker_cpu_ids() and not _has_run_cpu_limit(run_args):
+            cpu_set = get_effective_cpu_set()
+            if cpu_set:
+                cmd.append(f"--cpuset-cpus={cpu_set}")
 
         cmd.extend(self.get_basic_args())
         if internal_cidfile is not None:
