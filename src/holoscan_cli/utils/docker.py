@@ -26,10 +26,125 @@ import json
 import os
 import shlex
 import subprocess
+from functools import cache
+from pathlib import Path, PurePosixPath
 from typing import List, Optional
 
 from holoscan_cli.utils.io import Color, run_command
 from holoscan_cli.utils.text import get_cli_arg_value
+
+
+def _find_cpu_cgroup(proc_root: Path) -> tuple[Optional[Path], Optional[Path], bool]:
+    """Return the CPU cgroup mount, current directory, and whether it is v2."""
+    cgroup_v2 = None
+    cgroup_v1 = None
+    for line in (proc_root / "self" / "cgroup").read_text(encoding="utf-8").splitlines():
+        _, controllers, cgroup_path = line.split(":", 2)
+        if not controllers:
+            cgroup_v2 = cgroup_path
+        elif "cpu" in controllers.split(","):
+            cgroup_v1 = cgroup_path
+
+    for line in (proc_root / "self" / "mountinfo").read_text(encoding="utf-8").splitlines():
+        try:
+            mount, filesystem = line.split(" - ", 1)
+            mount_fields = mount.split()
+            filesystem_fields = filesystem.split()
+            root = PurePosixPath(mount_fields[3])
+            mountpoint = Path(mount_fields[4])
+            fs_type = filesystem_fields[0]
+            options = filesystem_fields[2].split(",")
+
+            if cgroup_v1 is not None:
+                if fs_type != "cgroup" or "cpu" not in options:
+                    continue
+                cgroup_path = cgroup_v1
+                is_v2 = False
+            else:
+                if fs_type != "cgroup2" or cgroup_v2 is None:
+                    continue
+                cgroup_path = cgroup_v2
+                is_v2 = True
+
+            relative_path = PurePosixPath(cgroup_path).relative_to(root)
+            return mountpoint, mountpoint / relative_path, is_v2
+        except (ValueError, IndexError):
+            continue
+
+    return None, None, False
+
+
+def _read_cpu_quota(proc_root: Path) -> Optional[int]:
+    """Return the smallest CPU quota in the current cgroup hierarchy."""
+    try:
+        mountpoint, current, is_v2 = _find_cpu_cgroup(proc_root)
+    except (OSError, ValueError, IndexError):
+        return None
+    if mountpoint is None or current is None:
+        return None
+
+    quotas = []
+    while True:
+        try:
+            if is_v2:
+                quota, period = (current / "cpu.max").read_text(encoding="utf-8").split()
+                if quota != "max":
+                    quota = int(quota)
+                    period = int(period)
+                    if quota > 0 and period > 0:
+                        quotas.append((quota + period - 1) // period)
+            else:
+                quota = int((current / "cpu.cfs_quota_us").read_text(encoding="utf-8"))
+                period = int((current / "cpu.cfs_period_us").read_text(encoding="utf-8"))
+                if quota > 0 and period > 0:
+                    quotas.append((quota + period - 1) // period)
+        except (OSError, ValueError):
+            pass
+
+        if current == mountpoint:
+            break
+        current = current.parent
+
+    return min(quotas) if quotas else None
+
+
+def get_effective_cpu_set(proc_root: Path = Path("/proc")) -> Optional[str]:
+    """Return CPUs to forward when affinity or cgroup quota limits this process.
+
+    A quota narrower than the affinity set deterministically selects its lowest CPU IDs.
+    """
+    try:
+        affinity = sorted(os.sched_getaffinity(0))
+    except (AttributeError, OSError):
+        return None
+    if not affinity:
+        return None
+
+    quota = _read_cpu_quota(proc_root)
+    cpu_count = os.cpu_count()
+    limited_by_affinity = cpu_count is not None and len(affinity) < cpu_count
+    limited_by_quota = quota is not None and quota < len(affinity)
+    if not limited_by_affinity and not limited_by_quota:
+        return None
+
+    usable_count = min(quota, len(affinity)) if quota is not None else len(affinity)
+    return ",".join(str(cpu) for cpu in affinity[:usable_count])
+
+
+@cache
+def docker_build_supports_resource(docker_exe: str) -> bool:
+    """Return whether this Docker installation accepts build resource limits."""
+    try:
+        result = subprocess.run(
+            [docker_exe, "build", "--help"],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+    return result.returncode == 0 and "--resource" in result.stdout
 
 
 def get_entrypoint_command_args(
