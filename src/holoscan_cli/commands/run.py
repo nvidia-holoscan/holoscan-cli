@@ -88,7 +88,10 @@ def register_run_parser(
     parser = subparsers.add_parser(
         "run", help=help_for("run"), parents=[container_build, container_run]
     )
-    parser.add_argument("project", help="Project to run")
+    parser.add_argument(
+        "project",
+        help="Project to run (executes its metadata.json run command as project code)",
+    )
     parser.add_argument("mode", nargs="?", help="Mode to run (optional)")
     parser.add_argument("--local", action="store_true", help="Run locally instead of in container")
     parser.add_argument("--verbose", action="store_true", help="Print extra output")
@@ -303,6 +306,9 @@ def handle_run(cli, args: argparse.Namespace) -> None:
 
             cmd = f"{nsys_cmd} profile --trace=cuda,vulkan,nvtx,osrt {cmd}"
 
+        # `run.command` is intentionally executable project configuration. Keep
+        # plain strings out of a shell: projects that need shell semantics must
+        # request an interpreter explicitly (for example, `bash -c ...`).
         cmd_to_run = cmd if isinstance(cmd, list) else shlex.split(cmd)
         as_root = getattr(args, "as_root", False)
         # sudo resets the environment; list every variable the elevated app

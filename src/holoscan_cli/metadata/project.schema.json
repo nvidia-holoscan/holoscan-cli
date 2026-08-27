@@ -158,7 +158,7 @@
       "properties": {
         "command": {
           "type": "string",
-          "description": "Complete command to execute including all arguments"
+          "description": "Executable project configuration launched by `holoscan run`. The CLI expands placeholders, parses the string into an argument vector, and does not add an implicit shell. Review metadata from untrusted projects before running it."
         },
         "workdir": {
           "type": "string",

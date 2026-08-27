@@ -25,6 +25,26 @@ Per-repo wrappers install this package and delegate to `holoscan`, layering on t
 
 Common env vars: `HOLOSCAN_CLI_ROOT` (repo root), `HOLOSCAN_CLI_SEARCH_PATH` (subdirs to scan for `metadata.json`), `HOLOSCAN_CLI_PATH_PREFIX` (placeholder prefix in metadata templates), `HOLOSCAN_CLI_REPO_PREFIX` (container image name prefix). The legacy `HOLOHUB_*` spelling is no longer honored since holoscan v4.3.0 — set the `HOLOSCAN_CLI_*` names directly. `holoscan env-info` lists every env var the CLI reads in the current shell.
 
+## Project trust model
+
+Holoscan source projects are executable code, not passive data. In particular,
+`metadata.json` can define a `run.command` (directly or through a mode), and
+`holoscan run` executes that project-defined command. Build files, Dockerfiles,
+setup scripts, and test configuration can execute project code as well. Review
+the source and metadata before building or running a repository you do not
+trust.
+
+For a plain `run.command` string, the CLI expands Holoscan placeholders, parses
+the result into an argument vector, and launches it without an implicit shell.
+A project can still request a shell explicitly (for example, `bash -c ...`) or
+name any other executable. Local execution runs with the invoking user's
+permissions; elevation happens only when the user explicitly passes
+`--as-root`.
+
+Use `holoscan run <project> --dryrun --local --verbose` to inspect the resolved
+local build and run commands without executing them. A dry run helps with
+review, but it is not a sandbox and does not make untrusted project code safe.
+
 ## JSON output
 
 `list`, `modes`, `status`, `env-info`, `env-check`, and `version` accept `--json`
