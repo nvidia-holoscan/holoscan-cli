@@ -63,6 +63,8 @@ def _isolate_container_class_attrs(monkeypatch):
         raising=False,
     )
     monkeypatch.delenv("DOCKER_HOST", raising=False)
+    monkeypatch.delenv("DOCKER_CONTEXT", raising=False)
+    monkeypatch.delenv("BUILDX_BUILDER", raising=False)
     monkeypatch.setattr(container_core, "get_effective_cpu_set", lambda: None)
     monkeypatch.setattr(container_core, "docker_build_supports_resource", lambda _docker_exe: True)
 
