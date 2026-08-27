@@ -42,6 +42,12 @@ from holoscan_cli.utils.text import parse_semantic_version
 
 _apt_updated = False  # track whether apt update has been called
 
+_NGC_CLI_VERSION = "3.64.3"
+_NGC_CLI_SHA256 = {
+    "arm64": "fbb763bb818ca8ff3302a7764a95c63a42d80b7f864e87639833c55e59b6aadf",
+    "linux": "a31a87a87593f5ca575d924f5e12cd0fcda1c81528f4cc3aebe0669e1643678f",
+}
+
 
 class PackageInstallationError(Exception):
     """Raised when a package cannot be installed via apt"""
@@ -287,7 +293,7 @@ def setup_ngc_cli(dry_run: bool = False) -> None:
     arch_suffix = "arm64" if platform.machine() == "aarch64" else "linux"
     ngc_url = (
         "https://api.ngc.nvidia.com/v2/resources/nvidia/ngc-apps/ngc_cli"
-        f"/versions/3.64.3/files/ngccli_{arch_suffix}.zip"
+        f"/versions/{_NGC_CLI_VERSION}/files/ngccli_{arch_suffix}.zip"
     )
     ngc_filename = f"ngccli_{arch_suffix}.zip"
 
@@ -295,6 +301,12 @@ def setup_ngc_cli(dry_run: bool = False) -> None:
         run_command(
             ["wget", "--quiet", "--content-disposition", ngc_url, "-O", ngc_filename],
             dry_run=dry_run,
+        )
+        run_command(
+            ["sha256sum", "--check", "--status"],
+            dry_run=dry_run,
+            input=f"{_NGC_CLI_SHA256[arch_suffix]}  {ngc_filename}\n",
+            text=True,
         )
         # -o: overwrite leftovers from an interrupted run instead of prompting
         run_command(["unzip", "-q", "-o", ngc_filename], dry_run=dry_run)
