@@ -79,6 +79,28 @@ def _stub_container(tmp_path, project_metadata=None, language=None):
     return HoloscanContainer(project_metadata=project_metadata, language=language)
 
 
+# ---- device mounts ----------------------------------------------------------
+
+
+def test_get_device_mounts_includes_sipl_host_paths(monkeypatch):
+    host_paths = {
+        "/usr/lib/nvsipl_drv",
+        "/usr/lib/nvsipl_uddf",
+        "/usr/src/jetson_sipl_api",
+        "/var/nvidia/nvcam",
+    }
+    monkeypatch.setattr(container_core.glob, "glob", lambda _pattern: [])
+    monkeypatch.setattr(container_core.os.path, "isdir", lambda _path: False)
+    monkeypatch.setattr(container_core.os.path, "exists", host_paths.__contains__)
+
+    options = HoloscanContainer.get_device_mounts()
+
+    for path in host_paths:
+        mount = f"{path}:{path}"
+        index = options.index(mount)
+        assert options[index - 1] == "-v"
+
+
 # ---- get_project_name -------------------------------------------------------
 
 

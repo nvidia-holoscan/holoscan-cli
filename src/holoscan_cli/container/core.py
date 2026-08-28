@@ -305,6 +305,10 @@ class HoloscanContainer:
             "/opt/yuan/qcap/lib",
             "/usr/lib/aarch64-linux-gnu/tegra",
             "/usr/lib/aarch64-linux-gnu/nvidia",
+            "/usr/lib/nvsipl_drv",
+            "/usr/lib/nvsipl_uddf",
+            "/usr/src/jetson_sipl_api",
+            "/var/nvidia/nvcam",
         ]
 
         for path in conditional_mounts:
