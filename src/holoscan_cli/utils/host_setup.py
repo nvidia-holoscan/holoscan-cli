@@ -47,7 +47,6 @@ _NGC_CLI_SHA256 = {
     "arm64": "fbb763bb818ca8ff3302a7764a95c63a42d80b7f864e87639833c55e59b6aadf",
     "linux": "a31a87a87593f5ca575d924f5e12cd0fcda1c81528f4cc3aebe0669e1643678f",
 }
-_KITWARE_ARCHIVE_KEY_URL = "https://apt.kitware.com/keys/kitware-archive-latest.asc"
 # Published at https://apt.kitware.com/. Update deliberately when Kitware rotates its key.
 _KITWARE_ARCHIVE_KEY_FINGERPRINT = "4DBEBE3EEC96E7B8C6EC5BE99E92FDC6C5B9BA75"
 
@@ -212,24 +211,13 @@ def get_ubuntu_codename() -> str:
 # ---- high-level setup_* orchestrators ---------------------------------------
 
 
-def _primary_key_fingerprints(key_listing: bytes) -> List[str]:
-    """Extract primary-key fingerprints from GPG's machine-readable output."""
-    fingerprints: List[str] = []
-    primary_index = None
-    for line in key_listing.decode(errors="replace").splitlines():
-        fields = line.split(":")
-        record_type = fields[0]
-        if record_type == "pub":
-            fingerprints.append("")
-            primary_index = len(fingerprints) - 1
-        elif record_type == "sub":
-            primary_index = None
-        elif record_type == "fpr" and primary_index is not None:
-            fingerprint = fields[9] if len(fields) > 9 else ""
-            if re.fullmatch(r"[0-9A-Fa-f]+", fingerprint):
-                fingerprints[primary_index] = fingerprint.upper()
-            primary_index = None
-    return fingerprints
+def _is_expected_kitware_key(key_listing: bytes) -> bool:
+    """Return whether GPG reported only Kitware's expected primary key."""
+    records = key_listing.decode(errors="replace").splitlines()
+    fingerprints = [record.split(":")[9].upper() for record in records if record.startswith("fpr:")]
+    return sum(record.startswith("pub:") for record in records) == 1 and fingerprints[:1] == [
+        _KITWARE_ARCHIVE_KEY_FINGERPRINT
+    ]
 
 
 def setup_cmake(min_version: str = "3.26.4", dry_run: bool = False) -> None:
@@ -259,7 +247,7 @@ def setup_cmake(min_version: str = "3.26.4", dry_run: bool = False) -> None:
         gpg = shutil.which("gpg") or "/usr/bin/gpg"
         try:
             key = subprocess.run(
-                [wget, "-qO-", _KITWARE_ARCHIVE_KEY_URL],
+                [wget, "-qO-", "https://apt.kitware.com/keys/kitware-archive-latest.asc"],
                 check=True,
                 capture_output=True,
             ).stdout
@@ -276,12 +264,10 @@ def setup_cmake(min_version: str = "3.26.4", dry_run: bool = False) -> None:
                 check=True,
                 capture_output=True,
             ).stdout
-            fingerprints = _primary_key_fingerprints(key_listing)
-            if fingerprints != [_KITWARE_ARCHIVE_KEY_FINGERPRINT]:
-                found = ", ".join(fingerprint or "<invalid>" for fingerprint in fingerprints)
+            if not _is_expected_kitware_key(key_listing):
                 fatal(
                     "Kitware apt archive key fingerprint verification failed: "
-                    f"expected {_KITWARE_ARCHIVE_KEY_FINGERPRINT}, found {found or '<none>'}."
+                    f"expected {_KITWARE_ARCHIVE_KEY_FINGERPRINT}."
                 )
             dearmored = subprocess.run(
                 [gpg, "--dearmor"],
@@ -290,11 +276,11 @@ def setup_cmake(min_version: str = "3.26.4", dry_run: bool = False) -> None:
                 capture_output=True,
             ).stdout
         except FileNotFoundError as e:
-            fatal(f"Failed to download or process the Kitware apt archive key: {e}")
+            fatal(f"Failed to download the Kitware apt archive key: {e}")
         except subprocess.CalledProcessError as e:
             fatal(
-                "Failed to download or process the Kitware apt archive key: "
-                f"{e.stderr.decode(errors='replace').strip()}"
+                "Failed to download the Kitware apt archive key "
+                f"(is the network available?): {e.stderr.decode(errors='replace').strip()}"
             )
         write_system_file(keyring_path, dearmored)
         write_system_file("/etc/apt/sources.list.d/kitware.list", source_line)
