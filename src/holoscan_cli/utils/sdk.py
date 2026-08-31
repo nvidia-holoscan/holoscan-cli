@@ -23,7 +23,7 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
-from typing import Mapping, Optional, Union
+from typing import Callable, Mapping, Optional, Union
 
 from holoscan_cli.utils.io import fatal, resolve, run_info_command, warn
 from holoscan_cli.utils.text import parse_semantic_version
@@ -323,6 +323,48 @@ def _sdk_layout_rank(
     return {True: 2, False: 0, None: 1}[prefer_cuda_qualified]
 
 
+def _sdk_gpu_rank(candidate_gpu: str, expected_gpu: str) -> int:
+    """Rank an exact GPU layout ahead of generic and mismatched layouts."""
+    if not expected_gpu:
+        return 0 if not candidate_gpu else 1
+    if candidate_gpu == expected_gpu:
+        return 0
+    return 1 if not candidate_gpu else 2
+
+
+def _sdk_layout_entry_rank(
+    entry: Path,
+    *,
+    kind: str,
+    target_arch: str,
+    expected_gpu: str,
+    cuda_major: Optional[str],
+    prefer_cuda_qualified: Optional[bool],
+    validator: Callable[[Path], bool],
+) -> Optional[tuple[int, int]]:
+    """Validate and rank one architecture-specific SDK layout entry."""
+    if not entry.is_dir():
+        return None
+    match = _SDK_LAYOUT_RE.fullmatch(entry.name)
+    if match is None or match.group("kind") != kind:
+        return None
+
+    build_type = match.group("build_type")
+    if kind == "install" and build_type is not None:
+        return None
+    if match.group("arch") != target_arch or not validator(entry):
+        return None
+
+    gpu_rank = _sdk_gpu_rank(match.group("gpu") or "", expected_gpu)
+    layout_rank = _sdk_layout_rank(
+        candidate_cuda=match.group("cuda"),
+        build_type=build_type,
+        cuda_major=cuda_major,
+        prefer_cuda_qualified=prefer_cuda_qualified,
+    )
+    return gpu_rank, layout_rank
+
+
 def _sdk_layout_candidates(
     root: Path,
     *,
@@ -346,31 +388,17 @@ def _sdk_layout_candidates(
         except OSError:
             continue
         for entry in entries:
-            if not entry.is_dir():
-                continue
-            match = _SDK_LAYOUT_RE.fullmatch(entry.name)
-            if match is None or match.group("kind") != kind:
-                continue
-            build_type = match.group("build_type")
-            if kind == "install" and build_type is not None:
-                continue
-            if match.group("arch") != target_arch or not validator(entry):
-                continue
-
-            candidate_gpu = match.group("gpu") or ""
-            if expected_gpu:
-                gpu_rank = 0 if candidate_gpu == expected_gpu else 1 if not candidate_gpu else 2
-            else:
-                gpu_rank = 0 if not candidate_gpu else 1
-
-            candidate_cuda = match.group("cuda")
-            layout_rank = _sdk_layout_rank(
-                candidate_cuda=candidate_cuda,
-                build_type=build_type,
+            entry_rank = _sdk_layout_entry_rank(
+                entry,
+                kind=kind,
+                target_arch=target_arch,
+                expected_gpu=expected_gpu,
                 cuda_major=cuda_major,
                 prefer_cuda_qualified=prefer_cuda_qualified,
+                validator=validator,
             )
-            ranked.append(((gpu_rank, layout_rank, root_priority, entry.name), entry))
+            if entry_rank is not None:
+                ranked.append(((*entry_rank, root_priority, entry.name), entry))
 
     return [entry for _, entry in sorted(ranked)]
 
