@@ -19,7 +19,7 @@ Covers ``write_external_operators_manifest``: emits FetchContent
 declarations through ``holohub_declare_external_module`` calls, supports
 ``FETCHCONTENT_SOURCE_DIR_<UPPER>`` overrides, warns on operator
 collisions, and is idempotent on identical input. Also covers the
-``_provider_id`` string helper.
+``_cmake_bracket_argument`` and ``_provider_id`` string helpers.
 """
 
 from __future__ import annotations
@@ -28,6 +28,7 @@ import re
 from pathlib import Path
 
 from holoscan_cli.utils.cmake_manifest import (
+    _cmake_bracket_argument,
     _provider_id,
     write_external_operators_manifest,
 )
@@ -36,7 +37,12 @@ from holoscan_cli.utils.external_resolver import ModuleDep
 FULL_SHA = "0" * 40
 
 
-# ---- _provider_id ------------------------------------------------------------
+# ---- string helpers ----------------------------------------------------------
+
+
+def test_cmake_bracket_argument_uses_noncolliding_delimiter():
+    value = 'repo]]and]=]")\nmessage(FATAL_ERROR "injected")'
+    assert _cmake_bracket_argument(value) == f"[==[{value}]==]"
 
 
 def test_provider_id_sanitises_hyphens():
@@ -70,8 +76,25 @@ def test_emits_git_repository_and_tag(tmp_path):
         tmp_path,
         [ModuleDep(name="mymod", git_url="https://example.com/foo.git", ref="abc" + "0" * 37)],
     )
-    assert 'GIT_REPOSITORY  "https://example.com/foo.git"' in text
-    assert 'GIT_TAG         "' + "abc" + "0" * 37 + '"' in text
+    assert "GIT_REPOSITORY  [[https://example.com/foo.git]]" in text
+    assert "GIT_TAG         [[" + "abc" + "0" * 37 + "]]" in text
+
+
+def test_git_values_cannot_break_out_of_manifest(tmp_path):
+    payload = "\n".join(
+        [
+            'https://example.invalid/repo.git]]")',
+            'message(FATAL_ERROR "injected")',
+            'set(dummy "',
+        ]
+    )
+    literal = _cmake_bracket_argument(payload)
+    text = _emit(
+        tmp_path,
+        [ModuleDep(name="mymod", git_url=payload, ref=payload)],
+    )
+    assert f"GIT_REPOSITORY  {literal}" in text
+    assert f"GIT_TAG         {literal}" in text
 
 
 def test_provider_id_sanitised_in_declare(tmp_path):
@@ -98,7 +121,7 @@ def test_emits_provides_operators_in_function_call(tmp_path):
     # The function (defined in the consumer's CMake helpers) sets
     # HOLOHUB_EXT_OP_<op>_PROVIDER as normal variables at PARENT_SCOPE.
     # The manifest must NOT emit them as raw set() calls.
-    assert "PROVIDES_OPERATORS bigmod_signal_op bigmod_render_op" in text
+    assert "PROVIDES_OPERATORS [[bigmod_signal_op]] [[bigmod_render_op]]" in text
     assert not re.search(r"set\(HOLOHUB_EXT_OP_\S+_PROVIDER\b", text)
 
 
@@ -126,14 +149,14 @@ def test_local_override_emits_source_dir_var(tmp_path):
     # The override line must precede the function call so the override is
     # visible at MakeAvailable time.
     assert idx_src < idx_decl
-    assert '"/abs/path/to/mymod"' in text
+    assert "[[/abs/path/to/mymod]]" in text
     assert "FORCE" in text
 
 
 def test_local_override_only_forwards_source_dir(tmp_path):
     text = _emit(tmp_path, [ModuleDep(name="mymod", override_path=Path("/abs/local"))])
     assert "holohub_declare_external_module(mymod" in text
-    assert 'SOURCE_DIR  "/abs/local"' in text
+    assert "SOURCE_DIR  [[/abs/local]]" in text
 
 
 def test_operator_collision_warns_and_keeps_latter(tmp_path, capsys):
