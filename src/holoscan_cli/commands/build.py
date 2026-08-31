@@ -74,6 +74,8 @@ def make_local_build_command(
         command += f" --parallel {args.parallel}"
     if args.verbose:
         command += " --verbose"
+    if getattr(args, "configure_only", False):
+        command += " --configure-only"
     if getattr(args, "benchmark", False):
         command += " --benchmark"
     for configure_arg in getattr(args, "configure_args", None) or []:
@@ -103,6 +105,12 @@ def register_build_parser(
         "--build-with",
         dest="with_operators",
         help="Optional operators that should be built, separated by semicolons (;)",
+    )
+    parser.add_argument(
+        "--configure-only",
+        action="store_true",
+        help="Stop after the CMake configure step instead of compiling. Validates that a "
+        "project configures without paying for a full build",
     )
     parser.add_argument(
         "--dryrun", action="store_true", help="Print commands without executing them"
@@ -176,6 +184,7 @@ def handle_build(cli, args: argparse.Namespace) -> None:
             benchmark=getattr(args, "benchmark", False),
             configure_args=build_args.get("configure_args"),
             extra_env=build_mode_env,
+            configure_only=getattr(args, "configure_only", False),
         )
     else:
         # Build in container
@@ -230,6 +239,15 @@ def handle_build(cli, args: argparse.Namespace) -> None:
         )
 
 
+def _restore_benchmark_patch(cli, app_source_path, project_type: str, dryrun: bool) -> None:
+    """Revert the flow-benchmarking patch applied before configure, if there was one."""
+    if app_source_path and project_type in ["application", "benchmark"]:
+        restore_script = (
+            cli.HOLOHUB_ROOT / "benchmarks/holoscan_flow_benchmarking/restore_application.sh"
+        )
+        run_command([str(restore_script), str(app_source_path)], dry_run=dryrun)
+
+
 def build_project_locally(
     cli,
     project_name: str,
@@ -243,8 +261,13 @@ def build_project_locally(
     benchmark: bool = False,
     configure_args: Optional[list[str]] = None,
     extra_env: Optional[dict] = None,
+    configure_only: bool = False,
 ) -> tuple[Path, dict]:
-    """Helper to build a project locally (cmake + cmake --build)."""
+    """Helper to build a project locally (cmake + cmake --build).
+
+    With *configure_only*, stop after the configure step. Any benchmark patch applied
+    beforehand is still reverted, so the source tree is left as it was found.
+    """
     project_data = cli.find_project(project_name=project_name, language=language)
     project_type = project_data.get("project_type", "application")
 
@@ -396,6 +419,10 @@ def build_project_locally(
 
     run_command(cmake_args, dry_run=dryrun, env=build_env)
 
+    if configure_only:
+        _restore_benchmark_patch(cli, app_source_path, project_type, dryrun)
+        return build_dir, project_data
+
     # Build the project with optional parallel jobs
     build_cmd = ["cmake", "--build", str(build_dir), "--config", build_type]
     # Determine the number of parallel jobs (user input > env var > CPU count):
@@ -439,11 +466,6 @@ def build_project_locally(
                     env=build_env,
                 )
 
-    # Handle benchmark restoration after building
-    if benchmark and app_source_path and project_type in ["application", "benchmark"]:
-        restore_script = (
-            cli.HOLOHUB_ROOT / "benchmarks/holoscan_flow_benchmarking/restore_application.sh"
-        )
-        run_command([str(restore_script), str(app_source_path)], dry_run=dryrun)
+    _restore_benchmark_patch(cli, app_source_path, project_type, dryrun)
 
     return build_dir, project_data
