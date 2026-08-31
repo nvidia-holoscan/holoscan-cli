@@ -26,10 +26,19 @@ wrappers (which override images via ``--img``) doesn't quietly regress.
 from __future__ import annotations
 
 import subprocess
+from argparse import Namespace
 
 import pytest
 
 from holoscan_cli.utils import docker as utils_docker
+
+
+def test_resolve_cli_docker_opts_merges_repeated_fragments():
+    value = utils_docker.resolve_cli_docker_opts(
+        Namespace(docker_opts=["--env 'NAME=value with spaces'", "--network=host"])
+    )
+
+    assert value == "--env 'NAME=value with spaces' --network=host"
 
 
 def _write_cgroup_files(tmp_path, *, cgroup: str, mountinfo: str):

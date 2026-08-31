@@ -33,8 +33,13 @@ import re
 from pathlib import Path
 from typing import Mapping, Optional, Tuple
 
-from holoscan_cli.project_context import SEARCH_DIRS, discover_project_context
+from holoscan_cli.project_context import (
+    SEARCH_DIRS,
+    activated_environment_source,
+    discover_project_context,
+)
 from holoscan_cli.utils.io import format_cmd, info, run_info_command, warn
+from holoscan_cli.utils.project import CMAKE_BUILD_TYPES, resolve_build_type
 from holoscan_cli.utils.text import get_env_bool, is_env_flag_true, slugify
 
 DEFAULT_GIT_REF = "latest"
@@ -50,13 +55,7 @@ PROJECT_PREFIXES = {
     "default": "APP",  # specified type but not recognized
 }
 
-BUILD_TYPES = {
-    "debug": "Debug",
-    "release": "Release",
-    "rel-debug": "RelWithDebInfo",
-    "relwithdebinfo": "RelWithDebInfo",
-    "default": "Release",
-}
+BUILD_TYPES = CMAKE_BUILD_TYPES
 
 
 def check_skip_builds(args) -> Tuple[bool, bool]:
@@ -76,9 +75,14 @@ def check_skip_builds(args) -> Tuple[bool, bool]:
 
 
 def is_env_request_local_build(*mode_envs: Mapping[str, str]) -> bool:
-    """Return whether local execution was selected by the environment."""
-    environments = (os.environ, *mode_envs)
-    return any(is_env_flag_true(env.get("HOLOSCAN_CLI_BUILD_LOCAL")) for env in environments)
+    """Resolve process and mode-local execution settings by precedence."""
+    key = "HOLOSCAN_CLI_BUILD_LOCAL"
+    if key in os.environ:
+        return is_env_flag_true(os.environ[key])
+    for mode_env in reversed(mode_envs):
+        if key in mode_env:
+            return is_env_flag_true(mode_env[key])
+    return False
 
 
 def _get_holohub_root() -> Path:
@@ -151,12 +155,11 @@ def determine_project_prefix(project_type: str) -> str:
     return PROJECT_PREFIXES["default"]
 
 
-def get_buildtype_str(build_type: Optional[str]) -> str:
-    """Get CMake build type string"""
-    if not build_type:
-        return os.environ.get("CMAKE_BUILD_TYPE", BUILD_TYPES["default"])
-    build_type_str = build_type.lower().strip()
-    return BUILD_TYPES.get(build_type_str, BUILD_TYPES["default"])
+def get_buildtype_str(
+    build_type: Optional[str], environ: Optional[Mapping[str, str]] = None
+) -> str:
+    """Compatibility wrapper for generic CMake build-type resolution."""
+    return resolve_build_type(build_type, environ=environ)
 
 
 @functools.lru_cache(maxsize=32)
@@ -295,6 +298,8 @@ def update_env(
     new_env: dict[str, str],
     path_mapping: dict[str, str] | None = None,
     verbose: bool = False,
+    overwrite: bool = True,
+    project_defaults_are_lower: bool = False,
 ) -> None:
     """
     Update the environment variable with the new value from the new environment dictionary.
@@ -310,15 +315,33 @@ def update_env(
     - "value:<VAR>:value2" - prepend and append to existing variable VAR
     - "value" - replace existing variable
 
+    Set ``overwrite=False`` when ``env`` already contains the higher-precedence
+    process environment. Static mode values then act as defaults, while a
+    self-referential value such as ``value:<VAR>`` remains an explicit
+    composition with the inherited value.
+
     """
     # Default to empty dictionaries if not provided
     path_mapping = path_mapping or {}
 
-    # Update the environment variables
+    # Update the environment variables. When applying repository mode defaults
+    # to a copy of the process environment, preserve explicit host values. A
+    # self-reference such as ``value:<PATH>`` is an intentional composition and
+    # therefore still updates the value while retaining the higher layer.
     for key, value in new_env.items():
+        if not overwrite and key in env and f"<{key}>" not in value:
+            if not project_defaults_are_lower:
+                continue
+            # Project activation temporarily bridges root defaults through
+            # os.environ. A selected metadata mode is a more-specific project
+            # layer and may replace those values, but never a real process env.
+            if activated_environment_source(key) != "project":
+                continue
         env[key] = replace_placeholders(value, path_mapping, env)
         if verbose:
-            print(format_cmd(f"    export {key}={env[key]}", is_dryrun=False))
+            # Mode environments can contain credentials or endpoint tokens.
+            # Show which name was configured without copying its value to logs.
+            print(format_cmd(f"    export {key}=<configured>", is_dryrun=False))
 
 
 # ---- git helpers (tag container images with the source-project state) -------

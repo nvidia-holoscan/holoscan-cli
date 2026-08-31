@@ -22,7 +22,12 @@ from pathlib import Path
 
 from holoscan_cli.commands.build import build_project_locally
 from holoscan_cli.commands.registry import help_for
-from holoscan_cli.utils.docker import get_entrypoint_command_args
+from holoscan_cli.container.parsers import (
+    add_configure_args,
+    add_docker_build_args,
+    add_local_container_args,
+)
+from holoscan_cli.utils.docker import apply_container_cli_overrides, get_entrypoint_command_args
 from holoscan_cli.utils.holohub import (
     build_holohub_path_mapping,
     check_skip_builds,
@@ -30,6 +35,11 @@ from holoscan_cli.utils.holohub import (
     update_env,
 )
 from holoscan_cli.utils.io import Color, fatal, run_command
+from holoscan_cli.utils.project import (
+    append_configure_args,
+    report_effective_configuration,
+    resolve_effective_build_type,
+)
 
 
 def register_install_parser(
@@ -46,9 +56,7 @@ def register_install_parser(
         help="Project to install (omit with --dev to install every staged hook)",
     )
     parser.add_argument("mode", nargs="?", help="Mode to install (optional)")
-    parser.add_argument(
-        "--local", action="store_true", help="Install locally instead of in container"
-    )
+    add_local_container_args(parser, "Install")
     parser.add_argument(
         "--dev",
         action="store_true",
@@ -75,8 +83,10 @@ def register_install_parser(
     parser.add_argument("--site-dir", type=Path, default=None, help=argparse.SUPPRESS)
     parser.add_argument(
         "--build-type",
-        help="Build type (debug, release, rel-debug). "
-        "If not specified, uses CMAKE_BUILD_TYPE environment variable or defaults to 'release'",
+        help=(
+            "Build type (debug, release, rel-debug). Precedence: this option, "
+            "CMAKE_BUILD_TYPE, selected mode, then release"
+        ),
     )
     parser.add_argument(
         "--language", choices=["cpp", "python"], help="Specify language implementation"
@@ -84,7 +94,10 @@ def register_install_parser(
     parser.add_argument(
         "--build-with",
         dest="with_operators",
-        help="Optional operators that should be built, separated by semicolons (;)",
+        help=(
+            "Complete operator selection, separated by semicolons (;). Replaces the "
+            "selected mode's build.depends; use --build-with= to clear it"
+        ),
     )
     parser.add_argument("--verbose", action="store_true", help="Print extra output")
     parser.add_argument(
@@ -93,15 +106,8 @@ def register_install_parser(
     parser.add_argument(
         "--parallel", help="Number of parallel build jobs (e.g. --parallel $(($(nproc)-1)))"
     )
-    parser.add_argument(
-        "--no-docker-build", action="store_true", help="Skip building the container"
-    )
-    parser.add_argument(
-        "--configure-args",
-        action="append",
-        help="Additional configuration arguments for cmake "
-        "example: --configure-args='-DCUSTOM_OPTION=ON' --configure-args='-Dtest=ON'",
-    )
+    add_docker_build_args(parser)
+    add_configure_args(parser)
     parser.set_defaults(func=lambda args: handle_install(cli, args))
     return parser
 
@@ -137,11 +143,24 @@ def handle_install(cli, args: argparse.Namespace) -> None:
     # Get mode-specific build environment variables
     build_mode_env = mode_config.get("env", {}).copy()
     update_env(build_mode_env, mode_config.get("build", {}).get("env", {}))
+    effective_build_type = resolve_effective_build_type(args.build_type, build_mode_env)
 
     # Check if local mode is requested
-    is_local_mode = args.local or is_env_request_local_build(build_mode_env)
+    is_local_mode = (
+        args.local if args.local is not None else is_env_request_local_build(build_mode_env)
+    )
 
     if is_local_mode:
+        report_effective_configuration(
+            args,
+            mode_name=mode_name,
+            mode_config=mode_config,
+            location_mode_environment=build_mode_env,
+            effective_build_type=effective_build_type,
+            is_local_mode=True,
+            default_sdk_root=cli.DEFAULT_SDK_DIR,
+            include_configure=True,
+        )
         # Build and install locally
         build_dir, project_data = build_project_locally(
             cli,
@@ -154,6 +173,7 @@ def handle_install(cli, args: argparse.Namespace) -> None:
             parallel=getattr(args, "parallel", None),
             configure_args=build_args.get("configure_args"),
             extra_env=build_mode_env,
+            local_sdk_root=getattr(args, "local_sdk_root", None),
         )
 
         # Build path mapping
@@ -170,7 +190,12 @@ def handle_install(cli, args: argparse.Namespace) -> None:
         install_env = os.environ.copy()
         if build_mode_env:
             update_env(
-                install_env, build_mode_env, path_mapping, verbose=(args.verbose or args.dryrun)
+                install_env,
+                build_mode_env,
+                path_mapping,
+                verbose=(args.verbose or args.dryrun),
+                overwrite=False,
+                project_defaults_are_lower=True,
             )
 
         # Install the project
@@ -183,8 +208,22 @@ def handle_install(cli, args: argparse.Namespace) -> None:
             project_name=args.project,
             language=getattr(args, "language", None),
         )
+        apply_container_cli_overrides(args, container)
         container.dryrun = args.dryrun
         container.verbose = args.verbose
+        report_effective_configuration(
+            args,
+            mode_name=mode_name,
+            mode_config=mode_config,
+            location_mode_environment=build_mode_env,
+            effective_build_type=effective_build_type,
+            is_local_mode=False,
+            default_sdk_root=cli.DEFAULT_SDK_DIR,
+            container=container,
+            include_build=not skip_docker_build,
+            include_run=True,
+            include_configure=True,
+        )
         if not skip_docker_build:
             container.build(
                 docker_file=args.docker_file,
@@ -192,37 +231,41 @@ def handle_install(cli, args: argparse.Namespace) -> None:
                 img=args.img,
                 no_cache=args.no_cache,
                 build_args=build_args.get("build_args"),
+                mode_build_args=build_args.get("mode_build_args"),
                 cuda_version=getattr(args, "cuda", None),
                 extra_scripts=getattr(args, "extra_scripts", []),
             )
-        else:
-            if hasattr(args, "cuda") and args.cuda is not None:
-                container.cuda_version = args.cuda
-
-        install_cmd = f"{in_container_cli_command()} install {args.project} --local"
-        if args.build_type:
-            install_cmd += f" --build-type {args.build_type}"
+        install_tokens = [
+            *shlex.split(in_container_cli_command()),
+            "install",
+            str(args.project),
+        ]
+        if mode_name and getattr(args, "mode", None) is not None:
+            install_tokens.append(str(mode_name))
+        install_tokens.extend(["--local", "--build-type", effective_build_type])
         if getattr(args, "language", None):
-            install_cmd += f" --language {args.language}"
-        if getattr(args, "with_operators", None):
-            install_cmd += f' --build-with "{args.with_operators}"'
-        if getattr(args, "parallel", None):
-            install_cmd += f" --parallel {args.parallel}"
+            install_tokens.extend(["--language", str(args.language)])
+        if getattr(args, "with_operators", None) is not None:
+            install_tokens.append(f"--build-with={args.with_operators}")
+        if getattr(args, "parallel", None) is not None:
+            install_tokens.extend(["--parallel", str(args.parallel)])
         if args.verbose:
-            install_cmd += " --verbose"
-        if getattr(args, "configure_args", None):
-            for configure_arg in args.configure_args:
-                install_cmd += f" --configure-args={shlex.quote(configure_arg)}"
+            install_tokens.append("--verbose")
+        append_configure_args(install_tokens, args)
+        install_cmd = shlex.join(install_tokens)
 
-        img = getattr(args, "img", None) or container.image_name
-        docker_opts = build_args.get("docker_opts", "")
+        img = container.resolve_run_image(getattr(args, "img", None))
+        docker_opts = container.compose_run_args(
+            mode_docker_opts=build_args.get("mode_docker_opts"),
+            docker_opts=build_args.get("docker_opts", ""),
+        )
         docker_opts_extra, extra_args = get_entrypoint_command_args(
             img, install_cmd, docker_opts, dry_run=args.dryrun
         )
         if docker_opts_extra:
             docker_opts = f"{docker_opts} {docker_opts_extra}".strip()
         container.run(
-            img=getattr(args, "img", None),
+            img=img,
             local_sdk_root=getattr(args, "local_sdk_root", None),
             enable_x11=getattr(args, "enable_x11", True),
             ssh_x11=getattr(args, "ssh_x11", False),
@@ -231,7 +274,8 @@ def handle_install(cli, args: argparse.Namespace) -> None:
             nsys_profile=getattr(args, "nsys_profile", False),
             nsys_location=getattr(args, "nsys_location", ""),
             as_root=getattr(args, "as_root", False),
-            docker_opts=docker_opts,
+            effective_docker_opts=docker_opts,
+            forward_env=getattr(args, "forward_env", None),
             add_volumes=getattr(args, "add_volume", None),
             enable_mps=getattr(args, "mps", False),
             extra_args=extra_args,
@@ -363,7 +407,17 @@ def _handle_install_dev(cli, args: argparse.Namespace) -> None:
             continue
         try:
             _shutil.copy2(build_dir / pth_name, pth_dst)
-            _shutil.copy2(build_dir / helper_name, helper_dst)
+            helper_text = (build_dir / helper_name).read_text(encoding="utf-8")
+            host_build_path = (build_dir / "python" / "lib" / "holoscan").resolve()
+            helper_text = "".join(
+                (
+                    f"_BUILD_PATH = {str(host_build_path)!r}\n"
+                    if line.startswith("_BUILD_PATH = ")
+                    else line
+                )
+                for line in helper_text.splitlines(keepends=True)
+            )
+            helper_dst.write_text(helper_text, encoding="utf-8")
         except OSError as exc:
             for path in (pth_dst, helper_dst):
                 try:

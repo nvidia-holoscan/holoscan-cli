@@ -127,35 +127,166 @@ def test_get_host_arch_normalizes_common_architectures(monkeypatch, machine, exp
     assert sdk.get_host_arch() == expected
 
 
-def test_get_sdk_version_and_validation_from_install_tree(tmp_path):
-    install = tmp_path / "install"
+def test_get_sdk_version_and_validation_from_install_tree(tmp_path, make_sdk_directory):
+    install = make_sdk_directory(tmp_path / "install")
     config_dir = install / "lib" / "cmake" / "holoscan"
-    config_dir.mkdir(parents=True)
-    (config_dir / "holoscan-config.cmake").write_text("# ok\n", encoding="utf-8")
     (config_dir / "holoscan-config-version.cmake").write_text(
         'set(PACKAGE_VERSION "4.2.1")\n',
         encoding="utf-8",
     )
 
     assert sdk.is_valid_sdk_installation(install)
+    assert not sdk.is_valid_sdk_build(install)
+    assert sdk.is_valid_sdk_directory(install)
     assert sdk.get_sdk_version(install) == "4.2.1"
     (install / "VERSION").write_text("4.3.0\n", encoding="utf-8")
     assert sdk.get_sdk_version(install) == "4.3.0"
 
 
-def test_find_hsdk_build_rel_dir_prefers_install_then_build(tmp_path, monkeypatch):
-    root = tmp_path / "sdk-src"
-    install = root / "install-x86_64"
-    build = root / "build-x86_64"
-    for candidate in (install, build):
-        config_dir = candidate / "lib" / "cmake" / "holoscan"
-        config_dir.mkdir(parents=True)
-        (config_dir / "HoloscanConfig.cmake").write_text("# ok\n", encoding="utf-8")
-    monkeypatch.delenv("HOLOSCAN_SDK_ROOT", raising=False)
-    monkeypatch.setattr(sdk, "get_arch_gpu_str", lambda: "x86_64")
+def test_get_sdk_version_and_validation_from_4x_build_tree(tmp_path, make_sdk_directory):
+    build = make_sdk_directory(tmp_path / "build-cu13-x86_64", build=True)
+    (build / "holoscan-config-version.cmake").write_text(
+        'set(PACKAGE_VERSION "4.6.0")\n',
+        encoding="utf-8",
+    )
 
-    assert sdk.find_hsdk_build_rel_dir(root) == "install-x86_64"
-    assert sdk.find_hsdk_build_rel_dir(root / "missing") == "build-x86_64"
+    assert not sdk.is_valid_sdk_installation(build)
+    assert sdk.is_valid_sdk_build(build)
+    assert sdk.is_valid_sdk_directory(build)
+    assert sdk.get_sdk_version(build) == "4.6.0"
+    assert sdk.get_sdk_cmake_prefix_path(build) == f"{build};{build / 'lib'}"
+
+
+def test_find_hsdk_dir_prefers_cuda_install_then_other_install_then_build(
+    tmp_path, make_sdk_directory
+):
+    root = tmp_path / "sdk-src"
+    install_cuda12 = make_sdk_directory(
+        root / "public/install-cu12-x86_64", config_name="HoloscanConfig.cmake"
+    )
+    install_cuda13 = make_sdk_directory(
+        root / "public/install-cu13-x86_64", config_name="HoloscanConfig.cmake"
+    )
+    make_sdk_directory(root / "public/build-cu13-x86_64", build=True)
+
+    assert (
+        sdk.find_hsdk_dir(root, target_arch="x86_64", cuda_version="13")
+        == "public/install-cu13-x86_64"
+    )
+    assert sdk.resolve_sdk_installation(root, "x86_64", "13") == install_cuda13
+
+    (install_cuda13 / "lib/cmake/holoscan/HoloscanConfig.cmake").unlink()
+    assert (
+        sdk.find_hsdk_dir(root, target_arch="x86_64", cuda_version="13")
+        == "public/install-cu12-x86_64"
+    )
+
+    (install_cuda12 / "lib/cmake/holoscan/HoloscanConfig.cmake").unlink()
+    assert (
+        sdk.find_hsdk_dir(root, target_arch="x86_64", cuda_version="13")
+        == "public/build-cu13-x86_64"
+    )
+
+
+@pytest.mark.parametrize(
+    ("source_version", "expected"),
+    [
+        ("4.6.0", "public/install-cu13-x86_64"),
+        ("5.0.0", "public/install-x86_64"),
+    ],
+)
+def test_find_hsdk_dir_uses_source_version_to_select_4x_or_5x_layout(
+    tmp_path, source_version, expected, make_sdk_directory
+):
+    root = tmp_path / "sdk-src"
+    public = root / "public"
+    public.mkdir(parents=True)
+    (public / "VERSION").write_text(f"{source_version}\n", encoding="utf-8")
+    for name in ("install-cu13-x86_64", "install-x86_64"):
+        make_sdk_directory(public / name)
+
+    assert sdk.find_hsdk_dir(root, target_arch="x86_64", cuda_version="13") == expected
+    assert sdk.resolve_sdk_directory(root, "x86_64", "13") == root / expected
+
+
+def test_find_hsdk_dir_supports_4x_developer_build_layout(tmp_path, make_sdk_directory):
+    root = tmp_path / "sdk-src"
+    build = root / "public/build-debug-x86_64"
+    (root / "public").mkdir(parents=True)
+    (root / "public/VERSION").write_text("4.6.0\n", encoding="utf-8")
+    make_sdk_directory(build, build=True)
+
+    assert (
+        sdk.find_hsdk_dir(root, target_arch="x86_64", cuda_version="13")
+        == "public/build-debug-x86_64"
+    )
+    assert sdk.resolve_sdk_directory(root, "x86_64", "13") == build
+    assert sdk.resolve_sdk_installation(root, "x86_64", "13") is None
+
+
+def test_resolve_local_sdk_dir_accepts_direct_4x_build_tree(tmp_path, make_sdk_directory):
+    build = make_sdk_directory(tmp_path / "build-cu13-x86_64", build=True)
+
+    assert (
+        sdk.resolve_local_sdk_dir(
+            "/opt/nvidia/holoscan",
+            build,
+            environ={
+                "HOLOSCAN_CLI_TARGET_ARCH": "x86_64",
+                "HOLOSCAN_CLI_DEFAULT_CUDA_VERSION": "13",
+            },
+        )
+        == build.resolve()
+    )
+
+
+def test_find_hsdk_dir_explicit_parent_outranks_ambient_install(
+    tmp_path, monkeypatch, make_sdk_directory
+):
+    explicit_root = tmp_path / "explicit-sdk"
+    explicit_install = explicit_root / "install-cu13-x86_64"
+    ambient_install = tmp_path / "ambient-sdk"
+    for candidate in (explicit_install, ambient_install):
+        make_sdk_directory(candidate, config_name="HoloscanConfig.cmake")
+    monkeypatch.setenv("HOLOSCAN_SDK_ROOT", str(ambient_install))
+
+    assert (
+        sdk.find_hsdk_dir(explicit_root, target_arch="x86_64", cuda_version="13")
+        == "install-cu13-x86_64"
+    )
+
+
+def test_resolve_local_sdk_dir_treats_empty_environment_as_unset(tmp_path):
+    assert sdk.resolve_local_sdk_dir(tmp_path, environ={"HOLOSCAN_SDK_ROOT": ""}) == tmp_path
+
+
+@pytest.mark.parametrize("gpu", ["igpu", "dgpu"])
+def test_find_hsdk_dir_prefers_host_aarch64_gpu_variant(
+    tmp_path, monkeypatch, gpu, make_sdk_directory
+):
+    root = tmp_path / "sdk-src"
+    for name in ("install-cu13-aarch64-dgpu", "install-cu13-aarch64-igpu"):
+        make_sdk_directory(root / name, config_name="HoloscanConfig.cmake")
+    monkeypatch.setattr(sdk, "get_host_gpu", lambda: gpu)
+
+    assert (
+        sdk.find_hsdk_dir(root, target_arch="aarch64", cuda_version="13")
+        == f"install-cu13-aarch64-{gpu}"
+    )
+
+
+def test_find_hsdk_dir_never_falls_back_to_another_target(
+    tmp_path, monkeypatch, make_sdk_directory
+):
+    root = tmp_path / "sdk-src"
+    for name in ("install-cu13-x86_64", "install"):
+        make_sdk_directory(root / name, config_name="HoloscanConfig.cmake")
+    monkeypatch.setattr(sdk, "get_host_gpu", lambda: "dgpu")
+
+    assert (
+        sdk.find_hsdk_dir(root, target_arch="aarch64", cuda_version="13")
+        == "build-cu13-aarch64-dgpu"
+    )
 
 
 def test_get_compute_capacity_from_nvidia_smi(monkeypatch):

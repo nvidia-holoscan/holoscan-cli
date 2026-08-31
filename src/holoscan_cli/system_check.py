@@ -30,11 +30,11 @@ from .utils.io import Color, run_info_command
 from .utils.json_output import dumps as json_dumps
 from .utils.sdk import (
     cuda_major_from_driver,
-    find_hsdk_build_rel_dir,
+    find_hsdk_dir,
     get_cuda_runtime_version,
     get_gpu_name,
     get_sdk_version,
-    is_valid_sdk_installation,
+    is_valid_sdk_directory,
 )
 
 
@@ -246,30 +246,30 @@ def check_docker() -> CheckResult:
 
 def check_holoscan() -> CheckResult:
     """Check Holoscan SDK availability"""
-    sdk_dir = os.environ.get("HOLOSCAN_CLI_DEFAULT_HSDK_DIR", "/opt/nvidia/holoscan")
-    sdk_path = Path(sdk_dir)
-    if sdk_path.exists() and is_valid_sdk_installation(sdk_path):
-        version = get_sdk_version(sdk_path)
-        return CheckResult(status="OK", name="Holoscan", message=f"SDK {version} at {sdk_dir}")
-
     sdk_root = os.environ.get("HOLOSCAN_SDK_ROOT")
     if sdk_root:
         root_path = Path(sdk_root)
-        if root_path.exists() and is_valid_sdk_installation(root_path):
+        if root_path.exists() and is_valid_sdk_directory(root_path):
             version = get_sdk_version(root_path)
             return CheckResult(status="OK", name="Holoscan", message=f"SDK {version} at {sdk_root}")
         if root_path.exists():
-            resolved = find_hsdk_build_rel_dir(root_path)
+            resolved = find_hsdk_dir(root_path)
             resolved_path = (
                 root_path / resolved if not Path(resolved).is_absolute() else Path(resolved)
             )
-            if resolved_path.exists() and is_valid_sdk_installation(resolved_path):
+            if resolved_path.exists() and is_valid_sdk_directory(resolved_path):
                 version = get_sdk_version(resolved_path)
                 return CheckResult(
                     status="OK",
                     name="Holoscan",
                     message=f"SDK {version} at {resolved_path} (via HOLOSCAN_SDK_ROOT)",
                 )
+
+    sdk_dir = os.environ.get("HOLOSCAN_CLI_DEFAULT_HSDK_DIR", "/opt/nvidia/holoscan")
+    sdk_path = Path(sdk_dir)
+    if sdk_path.exists() and is_valid_sdk_directory(sdk_path):
+        version = get_sdk_version(sdk_path)
+        return CheckResult(status="OK", name="Holoscan", message=f"SDK {version} at {sdk_dir}")
 
     searched = sdk_dir
     if sdk_root:
@@ -365,14 +365,17 @@ def check_cli() -> CheckResult:
     holohub_root = get_holohub_root()
 
     cli_commit_file = holohub_root / ".cli_commit_hash"
+    project_name = cli_commit_file.parent.name or "source project"
     if cli_commit_file.exists():
         cli_hash = cli_commit_file.read_text().strip()
         return CheckResult(
-            status="OK", name="CLI", message=f"{cli_version}, holohub (cli commit {cli_hash})"
+            status="OK",
+            name="CLI",
+            message=f"{cli_version}, {project_name} (cli commit {cli_hash})",
         )
 
     commit_hash = get_git_short_sha(length=7)
-    msg = f"{cli_version}, holohub (commit {commit_hash})"
+    msg = f"{cli_version}, {project_name} (commit {commit_hash})"
     return CheckResult(status="OK", name="CLI", message=msg)
 
 

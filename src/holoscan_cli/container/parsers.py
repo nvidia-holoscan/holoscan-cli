@@ -17,6 +17,7 @@
 import argparse
 
 from ..utils.io import warn
+from ..utils.validators import cuda_major, image_reference, nonempty_path
 
 
 class _DeprecatedDisplayFlagAction(argparse.Action):
@@ -29,12 +30,47 @@ class _DeprecatedDisplayFlagAction(argparse.Action):
         setattr(namespace, self.dest, True)
 
 
+def add_local_container_args(parser: argparse.ArgumentParser, verb: str) -> None:
+    """Add the opt-in local execution flag shared by lifecycle commands."""
+    parser.add_argument("--local", action="store_true", default=None, help=f"{verb} locally")
+
+
+def add_docker_build_args(parser: argparse.ArgumentParser) -> None:
+    """Add the opt-out container-build flag shared by lifecycle commands."""
+    parser.add_argument(
+        "--no-docker-build",
+        action="store_true",
+        help="Skip building the container",
+    )
+
+
+def add_configure_args(parser: argparse.ArgumentParser) -> None:
+    """Add the shared additive CMake configuration options."""
+    parser.add_argument(
+        "--configure-args",
+        action="append",
+        help="Additional configuration arguments for cmake "
+        "example: --configure-args='-DCUSTOM_OPTION=ON' --configure-args='-Dtest=ON'",
+    )
+
+
 def get_build_argparse() -> argparse.ArgumentParser:
     """Get argument parser for container build options."""
     parser = argparse.ArgumentParser(add_help=False)
-    parser.add_argument("--base-img", help="(Build container) Fully qualified base image name")
+    parser.add_argument(
+        "--base-img",
+        type=image_reference,
+        help=(
+            "(Build container) Base image used exactly as written (tag or digest recommended; "
+            "an untagged repository uses Docker's default tag)"
+        ),
+    )
     parser.add_argument("--docker-file", help="(Build container) Path to Dockerfile to use")
-    parser.add_argument("--img", help="(Build container) Specify fully qualified container name")
+    parser.add_argument(
+        "--img",
+        type=image_reference,
+        help="(Build container) Specify fully qualified container name",
+    )
     parser.add_argument(
         "--no-cache",
         action="store_true",
@@ -42,8 +78,11 @@ def get_build_argparse() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--cuda",
-        type=str,
-        help="(Build container) CUDA version (e.g., 12, 13). Default: 12",
+        type=cuda_major,
+        help=(
+            "(Build container) CUDA major version (normally 12 or 13). Defaults to "
+            "HOLOSCAN_CLI_DEFAULT_CUDA_VERSION, tool.holoscan.cuda, then host detection"
+        ),
     )
     parser.add_argument(
         "--build-args",
@@ -65,9 +104,21 @@ def get_run_argparse() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(add_help=False)
     parser.add_argument(
         "--docker-opts",
-        default="",
-        help="Additional options to the Docker run command, "
-        "example: `--docker-opts='--entrypoint=bash'` or `--docker-opts '-e DISPLAY=:1'`",
+        action="append",
+        help=(
+            "Additional options appended to the Docker run command. Repeat for multiple "
+            "fragments; example: `--docker-opts='--entrypoint=bash'` or "
+            "`--docker-opts='-e DISPLAY=:1'`"
+        ),
+    )
+    parser.add_argument(
+        "--forward-env",
+        action="append",
+        metavar="NAME",
+        help=(
+            "Forward a host environment variable by name. Repeat for multiple variables; "
+            "values are inherited by Docker and are not placed in the command line"
+        ),
     )
     parser.add_argument(
         "--ssh-x11",
@@ -83,7 +134,12 @@ def get_run_argparse() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--local-sdk-root",
-        help="Path to Holoscan SDK used for building local Holoscan SDK container",
+        type=nonempty_path,
+        help=(
+            "SDK installation, configured build, or parent directory for local builds and "
+            "container mounts; "
+            "overrides HOLOSCAN_SDK_ROOT for this command"
+        ),
     )
     parser.add_argument("--init", action="store_true", help="Support tini entry point")
     parser.add_argument(

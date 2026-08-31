@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Docker host inspection helpers.
+"""Docker image-reference and host-inspection helpers.
 
 Used by the project lifecycle commands (``build``, ``run``, ``install``,
 ``test``) and by ``HoloscanContainer`` to figure out how to invoke
@@ -22,16 +22,72 @@ Used by the project lifecycle commands (``build``, ``run``, ``install``,
 ``get_entrypoint_command_args``.
 """
 
+import argparse
 import json
 import os
 import shlex
 import subprocess
 from functools import cache
 from pathlib import Path, PurePosixPath
-from typing import List, Optional
+from typing import TYPE_CHECKING, List, Optional, Sequence
 
 from holoscan_cli.utils.io import Color, run_command
-from holoscan_cli.utils.text import get_cli_arg_value
+from holoscan_cli.utils.text import get_cli_arg_value, merge_args_str
+
+if TYPE_CHECKING:
+    from holoscan_cli.container.core import HoloscanContainer
+
+RESERVED_CONTAINER_ENV_NAMES = frozenset(
+    {
+        "NVIDIA_DRIVER_CAPABILITIES",
+        "NVIDIA_VISIBLE_DEVICES",
+        "HOME",
+        "CUPY_CACHE_DIR",
+        "HOLOSCAN_CLI_BUILD_LOCAL",
+    }
+)
+
+
+def apply_container_cli_overrides(
+    args: argparse.Namespace,
+    container: "HoloscanContainer",
+) -> None:
+    """Apply typed invocation choices before image names are inspected."""
+    cuda = getattr(args, "cuda", None)
+    if cuda is not None:
+        container.cuda_version = cuda
+    local_sdk_root = getattr(args, "local_sdk_root", None)
+    if local_sdk_root is not None:
+        args.local_sdk_root = container.resolve_local_sdk_root(local_sdk_root)
+
+
+def resolve_cli_docker_opts(args: argparse.Namespace) -> str:
+    """Return repeated ``--docker-opts`` fragments as one shell-safe string."""
+    values = getattr(args, "docker_opts", None)
+    return merge_args_str(*values) if isinstance(values, list) else merge_args_str(values)
+
+
+def image_reference_has_tag_or_digest(image: str) -> bool:
+    """Return whether an image reference already names an exact tag or digest."""
+    return "@" in image or ":" in image.rsplit("/", 1)[-1]
+
+
+def get_build_arg_names(tokens: Sequence[str]) -> set[str]:
+    """Return names assigned through Docker's raw ``--build-arg`` syntax."""
+    names = set()
+    index = 0
+    while index < len(tokens):
+        token = tokens[index]
+        value = None
+        if token == "--build-arg" and index + 1 < len(tokens):
+            value = tokens[index + 1]
+            index += 1
+        elif token.startswith("--build-arg="):
+            value = token.split("=", 1)[1]
+        if value:
+            names.add(value.split("=", 1)[0])
+        index += 1
+    return names
 
 
 def _find_cpu_cgroup(proc_root: Path) -> tuple[Optional[Path], Optional[Path], bool]:

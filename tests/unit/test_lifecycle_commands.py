@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import shlex
 from argparse import Namespace
 
 from holoscan_cli.commands import build as build_cmd
@@ -21,6 +22,7 @@ class RecordingContainer:
             "metadata": {"language": "python"},
         }
         self.image_name = "holohub-smoke:latest"
+        self.image_names = [self.image_name]
         self.dryrun = False
         self.verbose = False
         self.cuda_version = None
@@ -33,8 +35,31 @@ class RecordingContainer:
     def run(self, **kwargs):
         self.run_calls.append(kwargs)
 
-    def default_base_image(self):
+    def compose_run_args(
+        self,
+        *,
+        mode_docker_opts=None,
+        docker_opts=None,
+    ):
+        return " ".join(
+            filter(
+                None,
+                (
+                    getattr(self, "DEFAULT_DOCKER_RUN_ARGS", None),
+                    mode_docker_opts,
+                    docker_opts,
+                ),
+            )
+        )
+
+    def default_base_image(self, _cuda_version=None):
         return "nvcr.io/nvidia/holoscan:v4.2.0-cuda13"
+
+    def resolve_run_image(self, img=None):
+        return img or self.image_names[0]
+
+    def resolve_local_sdk_root(self, local_sdk_root=None):
+        return local_sdk_root
 
 
 class RecordingCLI:
@@ -80,13 +105,19 @@ class RecordingCLI:
         return {
             "with_operators": build.get("with_operators", getattr(args, "with_operators", None)),
             "configure_args": build.get("configure_args", getattr(args, "configure_args", None)),
-            "build_args": build.get("build_args", getattr(args, "build_args", None)),
-            "docker_opts": run.get("docker_opts", getattr(args, "docker_opts", "")),
+            "build_args": getattr(args, "build_args", None),
+            "mode_build_args": build.get("build_args"),
+            "docker_opts": getattr(args, "docker_opts", ""),
+            "mode_docker_opts": run.get("docker_opts"),
         }
 
     def get_effective_run_config(self, args, mode_config):
         run = mode_config.get("run", {})
-        return {"run_args": getattr(args, "run_args", None) or run.get("run_args")}
+        return {
+            "run_args": getattr(args, "run_args", None) or run.get("run_args"),
+            "docker_opts": getattr(args, "docker_opts", ""),
+            "mode_docker_opts": run.get("docker_opts"),
+        }
 
     def make_project_container(self, project_name=None, language=None):
         self.container.project_name_arg = project_name
@@ -121,6 +152,16 @@ def _container_args(**overrides):
         "language": None,
         "local": False,
         "no_docker_build": False,
+        "coverage": False,
+        "clear_cache": False,
+        "no_xvfb": False,
+        "site_name": None,
+        "cdash_url": None,
+        "platform_name": None,
+        "cmake_options": None,
+        "ctest_options": None,
+        "ctest_script": None,
+        "build_name_suffix": None,
     }
     defaults.update(overrides)
     return Namespace(**defaults)
@@ -130,7 +171,6 @@ def _project_args(**overrides):
     defaults = vars(_container_args()).copy()
     defaults.update(
         {
-            "local": False,
             "build_type": None,
             "with_operators": None,
             "pkg_generator": "DEB",
@@ -168,7 +208,8 @@ def test_handle_build_container_applies_mode_build_args(tmp_path, capsys):
             "base_img": "base:image",
             "img": None,
             "no_cache": False,
-            "build_args": "--build-arg MODE=dev",
+            "build_args": "--build-arg USER=dev",
+            "mode_build_args": "--build-arg MODE=dev",
             "cuda_version": "13",
             "extra_scripts": [],
         }
@@ -190,7 +231,7 @@ def test_handle_run_container_skips_build_and_wraps_trailing_command(tmp_path, m
             no_docker_build=True,
             as_root=True,
             docker_opts="--ipc=host",
-            _trailing_args=["echo", "hello world"],
+            _trailing_args=["echo hello > hello-output.log"],
         ),
     )
 
@@ -198,8 +239,8 @@ def test_handle_run_container_skips_build_and_wraps_trailing_command(tmp_path, m
     assert cli.container.cuda_version == "13"
     run_call = cli.container.run_calls[0]
     assert run_call["as_root"] is True
-    assert run_call["docker_opts"] == "--ipc=host --entrypoint=/bin/bash"
-    assert run_call["extra_args"] == ["-c", "echo hello world"]
+    assert run_call["effective_docker_opts"] == "--ipc=host --entrypoint=/bin/bash"
+    assert run_call["extra_args"] == ["-c", "echo hello > hello-output.log"]
 
 
 def test_build_project_locally_emits_application_cmake_and_build_commands(tmp_path, monkeypatch):
@@ -226,6 +267,7 @@ def test_build_project_locally_emits_application_cmake_and_build_commands(tmp_pa
     assert project_data is cli.project_data
     assert "-DAPP_smoke_app=ON" in cmake_args
     assert "-DCMAKE_BUILD_TYPE=Debug" in cmake_args
+    assert f"-DCMAKE_PREFIX_PATH={cli.DEFAULT_SDK_DIR};{cli.DEFAULT_SDK_DIR}/lib" in calls[0]
     assert '-DHOLOHUB_BUILD_OPERATORS="op_a;op_b"' in cmake_args
     assert "-DHOLOHUB_BUILD_PYTHON=ON" in cmake_args
     assert "-DHOLOHUB_BUILD_CPP=OFF" in cmake_args
@@ -314,17 +356,23 @@ def test_build_writes_external_operators_manifest_from_module_sites(tmp_path, mo
     assert "videomaster_source" in content
 
 
-def test_build_project_locally_verbose_prints_env_mapping(tmp_path, monkeypatch, capsys):
-    """`--verbose` surfaces the resolved env mapping on a non-dryrun local build."""
+def test_build_project_locally_verbose_redacts_env_mapping(tmp_path, monkeypatch, capsys):
+    """`--verbose` names mode environment entries without logging their values."""
     cli = RecordingCLI(tmp_path)
     monkeypatch.setattr(build_cmd, "run_command", lambda cmd, **kwargs: None)
     monkeypatch.setattr(build_cmd.shutil, "which", lambda name: None)
 
     build_cmd.build_project_locally(
-        cli, "smoke_app", dryrun=False, verbose=True, extra_env={"DEMO_VAR": "on"}
+        cli,
+        "smoke_app",
+        dryrun=False,
+        verbose=True,
+        extra_env={"DEMO_VAR": "secret-value"},
     )
 
-    assert "export DEMO_VAR=on" in capsys.readouterr().out
+    output = capsys.readouterr().out
+    assert "export DEMO_VAR=<configured>" in output
+    assert "secret-value" not in output
 
 
 def test_handle_build_container_branch_passes_recursive_local_command(tmp_path, monkeypatch):
@@ -367,16 +415,49 @@ def test_handle_build_container_branch_passes_recursive_local_command(tmp_path, 
         ),
     )
 
-    assert cli.container.build_calls[0]["build_args"] == "--build-arg MODE=dev"
+    assert cli.container.build_calls[0]["build_args"] == "--build-arg USER=dev"
+    assert cli.container.build_calls[0]["mode_build_args"] == "--build-arg MODE=dev"
     img, command, docker_opts, dryrun = captured["entrypoint"]
     assert img == "holohub-smoke:latest"
     assert docker_opts == "--ipc=host"
     assert dryrun is True
-    assert command == (
-        "holoscan build smoke_app dev --local --build-type rel-debug"
-        ' --build-with "cli_op" --pkg-generator DEB --language python'
-        " --parallel 2 --verbose --benchmark --configure-args=-DCLI=ON"
+    assert shlex.split(command) == [
+        "holoscan",
+        "build",
+        "smoke_app",
+        "dev",
+        "--local",
+        "--build-type",
+        "RelWithDebInfo",
+        "--build-with=cli_op",
+        "--pkg-generator",
+        "DEB",
+        "--language",
+        "python",
+        "--parallel",
+        "2",
+        "--verbose",
+        "--benchmark",
+        "--configure-args=-DCLI=ON",
+    ]
+    assert cli.container.run_calls
+
+
+def test_handle_build_no_docker_build_still_applies_cuda_override(tmp_path, monkeypatch):
+    cli = RecordingCLI(tmp_path)
+    monkeypatch.setattr(
+        build_cmd,
+        "get_entrypoint_command_args",
+        lambda _img, _cmd, _opts, dry_run=False: ("", []),
     )
+
+    build_cmd.handle_build(
+        cli,
+        _project_args(no_docker_build=True, cuda="12"),
+    )
+
+    assert cli.container.build_calls == []
+    assert cli.container.cuda_version == "12"
     assert cli.container.run_calls
 
 
@@ -434,7 +515,7 @@ def test_handle_run_container_branch_passes_recursive_local_command(tmp_path, mo
     assert docker_opts == "--ipc=host"
     assert dryrun is True
     assert command.startswith("holoscan run smoke_app --language python --local")
-    assert "--build-type debug" in command
+    assert "--build-type Debug" in command
     assert "--pkg-generator WHEEL" in command
     assert "--no-local-build" in command
     assert "--run-args=--once" in command
@@ -468,23 +549,25 @@ def test_handle_run_container_as_root_builds_as_user_then_runs_as_root(tmp_path,
     assert len(cli.container.run_calls) == 2
     build_command, build_opts = entrypoints[0]
     assert build_command.startswith("holoscan build smoke_app --local")
-    assert "--build-type debug" in build_command
+    assert "--build-type Debug" in build_command
     assert "--configure-args=-DDEV=ON" in build_command
     assert "--run-args" not in build_command
-    # blocking, user-mapped builder: name/detach/user overrides stripped
+    # The builder stays attached and user-mapped.
     assert "--user 12345:23456" in build_opts
     assert "-it" in build_opts
-    assert "--ipc=host" in build_opts and "--network host" in build_opts
+    assert "--ipc=host" in build_opts
+    assert "--network host" in build_opts
     for stripped in ("--name", "--detach", "--user root"):
         assert stripped not in build_opts
 
     build_run, app_run = cli.container.run_calls
     assert build_run["as_root"] is False
-    assert build_run["include_default_run_args"] is False
+    assert "effective_docker_opts" in build_run
     run_command, _ = entrypoints[1]
     assert "--no-local-build" in run_command
     assert "--run-args=--once" in run_command
     assert app_run["as_root"] is True
+    assert "effective_docker_opts" in app_run
     assert app_run["extra_args"] == ["-c", run_command]
 
 
@@ -532,9 +615,9 @@ def test_handle_install_container_branch_passes_recursive_local_command(tmp_path
     assert docker_opts == "--ipc=host"
     assert dryrun is True
     assert command.startswith("holoscan install smoke_app --local")
-    assert "--build-type debug" in command
+    assert "--build-type Debug" in command
     assert "--language python" in command
-    assert '--build-with "op_a"' in command
+    assert "--build-with=op_a" in shlex.split(command)
     assert "--parallel 4" in command
     assert "--configure-args=-DDEV=ON" in command
     assert cli.container.run_calls[0]["extra_args"] == ["-c", command]
@@ -544,15 +627,12 @@ def test_handle_test_container_adds_coverage_build_args_and_ctest_options(tmp_pa
     cli = RecordingCLI(tmp_path)
     args = _container_args(
         coverage=True,
-        clear_cache=False,
         no_xvfb=True,
         site_name="site-a",
         cdash_url="https://cdash.example",
         platform_name="linux",
         cmake_options=["-DFOO=ON"],
         ctest_options=["-DCASE=smoke"],
-        ctest_script=None,
-        build_name_suffix=None,
         language="python",
         local_sdk_root=str(tmp_path / "sdk"),
     )
@@ -565,11 +645,11 @@ def test_handle_test_container_adds_coverage_build_args_and_ctest_options(tmp_pa
     assert "xvfb" not in build_call["extra_scripts"]
     run_call = cli.container.run_calls[0]
     ctest_command = run_call["extra_args"][1]
-    assert run_call["docker_opts"] == "--entrypoint=bash"
+    assert run_call["effective_docker_opts"] == "--entrypoint=bash"
     assert run_call["as_root"] is True
     assert run_call["local_sdk_root"] == str(tmp_path / "sdk")
     assert "-DAPP=smoke_app" in ctest_command
-    assert "-DTAG=image" in ctest_command
+    assert "-DTAG=latest" in ctest_command
     assert (
         '-DCONFIGURE_OPTIONS="-DFOO=ON;-DHOLOHUB_BUILD_PYTHON=ON;-DHOLOHUB_BUILD_CPP=OFF"'
         in ctest_command
@@ -586,18 +666,7 @@ def test_handle_test_container_adds_coverage_build_args_and_ctest_options(tmp_pa
 
 def test_handle_test_container_detects_optional_xvfb(tmp_path):
     cli = RecordingCLI(tmp_path)
-    args = _container_args(
-        coverage=False,
-        clear_cache=False,
-        no_xvfb=False,
-        site_name=None,
-        cdash_url=None,
-        platform_name=None,
-        cmake_options=None,
-        ctest_options=None,
-        ctest_script=None,
-        build_name_suffix=None,
-    )
+    args = _container_args()
 
     test_cmd.handle_test(cli, args)
 
@@ -616,17 +685,8 @@ def test_handle_test_local_runs_ctest_in_repo_with_environment(tmp_path, monkeyp
     monkeypatch.setattr(test_cmd, "run_command", lambda cmd, **kwargs: calls.append((cmd, kwargs)))
     args = _container_args(
         local=True,
-        clear_cache=False,
-        no_xvfb=False,
-        site_name=None,
-        cdash_url=None,
-        platform_name=None,
-        cmake_options=None,
-        ctest_options=None,
         ctest_script="local.ctest",
-        coverage=False,
         build_name_suffix="manual",
-        language=None,
     )
 
     test_cmd.handle_test(cli, args)

@@ -277,8 +277,7 @@ def register_all(
         container_run=container_run,
     )
 
-    # Project actions (build/run/install share the container build+run parents,
-    # test only takes container_build because it never forwards docker run flags).
+    # Project lifecycle commands.
     for register_fn, name in (
         (build.register_build_parser, "build"),
         (run.register_run_parser, "run"),
@@ -286,7 +285,12 @@ def register_all(
         (package.register_package_parser, "package"),
     ):
         add(register_fn, name, container_build=container_build, container_run=container_run)
-    add(test_cmd.register_test_parser, "test", container_build=container_build)
+    add(
+        test_cmd.register_test_parser,
+        "test",
+        container_build=container_build,
+        container_run=container_run,
+    )
 
     # Discovery / info commands (all six live in commands/info.py).
     for register_fn, name in (

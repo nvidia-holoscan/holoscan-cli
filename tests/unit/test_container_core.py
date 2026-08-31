@@ -29,11 +29,13 @@ from __future__ import annotations
 
 import subprocess
 from pathlib import Path
+from unittest.mock import Mock
 
 import pytest
 
 from holoscan_cli.container import core as container_core
 from holoscan_cli.container.core import HoloscanContainer
+from holoscan_cli.project_context import ProjectContext
 
 # ---- helpers ----------------------------------------------------------------
 
@@ -79,6 +81,14 @@ def _stub_container(tmp_path, project_metadata=None, language=None):
     return HoloscanContainer(project_metadata=project_metadata, language=language)
 
 
+def _project_metadata(project_dir, **metadata):
+    return {
+        "project_name": "my_app",
+        "source_folder": str(project_dir),
+        "metadata": {"language": "python", **metadata},
+    }
+
+
 # ---- get_project_name -------------------------------------------------------
 
 
@@ -93,7 +103,7 @@ def _stub_container(tmp_path, project_metadata=None, language=None):
         ("", ""),
     ],
 )
-def test_get_project_name_sanitises(tmp_path, raw, expected, monkeypatch):
+def test_get_project_name_sanitises(tmp_path, raw, expected):
     c = _stub_container(tmp_path, project_metadata={"project_name": raw, "metadata": {}})
     assert c.get_project_name() == expected
 
@@ -148,6 +158,20 @@ def test_default_base_image_uses_explicit_base_image_without_sdk_version(tmp_pat
     assert c.default_base_image() == "example.com/base:tag"
 
 
+def test_exact_project_base_image_does_not_probe_host(tmp_path, monkeypatch):
+    monkeypatch.setattr(HoloscanContainer, "BASE_IMAGE_FORMAT", None, raising=False)
+    monkeypatch.setattr(HoloscanContainer, "BASE_IMAGE_NAME", "example.com/arm64", raising=False)
+    monkeypatch.setattr(container_core, "activated_environment_source", lambda _name: "project")
+
+    def _boom(*_args, **_kwargs):
+        raise AssertionError("an exact target image must not probe the host")
+
+    monkeypatch.setattr(container_core, "get_cuda_tag", _boom)
+    c = _stub_container(tmp_path, project_metadata=None)
+
+    assert c.default_base_image() == "example.com/arm64"
+
+
 def test_default_base_image_does_not_probe_host_when_unconfigured(tmp_path, monkeypatch):
     """When nothing is configured the method must fatal *without* probing the
     host GPU. Computing ``cuda_tag`` eagerly used to emit a spurious driver
@@ -168,10 +192,10 @@ def test_default_base_image_does_not_probe_host_when_unconfigured(tmp_path, monk
 # ---- _format_image_template validation --------------------------------------
 
 
-def test_format_image_template_fatals_on_unknown_field():
-    """A mistyped placeholder is rejected with a fatal, not a raw KeyError."""
+@pytest.mark.parametrize("template", ["{bogus}", "{base_image"])
+def test_format_image_template_fatals_on_invalid_template(template):
     with pytest.raises(SystemExit):
-        HoloscanContainer._format_image_template("{bogus}", base_image="x")
+        HoloscanContainer._format_image_template(template, base_image="x")
 
 
 def test_format_image_template_fatals_on_missing_value():
@@ -195,7 +219,7 @@ def test_format_image_template_allows_escaped_braces():
     )
 
 
-def test_image_name_uses_project_tag_when_dockerfile_is_overridden(tmp_path, monkeypatch):
+def test_image_name_uses_project_tag_when_dockerfile_is_overridden(tmp_path):
     """A project-specific Dockerfile must produce a project-tagged image
     even when ``--img`` is not supplied. Dockerfile detection is via
     ``dockerfile_path`` — drop a Dockerfile alongside the project's
@@ -257,15 +281,48 @@ def test_image_names_uses_project_repo_when_project_set(tmp_path, monkeypatch):
 
     c = _stub_container(
         tmp_path,
-        project_metadata={
-            "project_name": "my_app",
-            "source_folder": str(project_dir),
-            "metadata": {"language": "python"},
-        },
+        project_metadata=_project_metadata(project_dir),
     )
     names = c.image_names
     assert "holohub-my_app:main" in names
     assert "holohub-my_app:0123456789ab" in names
+
+
+def test_explicit_local_sdk_root_is_validated(tmp_path):
+    container = _stub_container(tmp_path)
+
+    with pytest.raises(SystemExit):
+        container.resolve_local_sdk_root(tmp_path / "missing-sdk")
+
+
+def test_standalone_explicit_sdk_parent_resolves_to_concrete_installation(
+    tmp_path, monkeypatch, make_sdk_directory
+):
+    sdk_root = tmp_path / "holoscan-sdk"
+    installation = make_sdk_directory(sdk_root / "install-x86_64")
+    context = ProjectContext(
+        root=tmp_path,
+        kind="module",
+        discovery="project-root",
+        target_arch="x86_64",
+    )
+    monkeypatch.setattr(container_core, "get_active_project_context", lambda: context)
+    monkeypatch.setenv("HOLOSCAN_CLI_TARGET_ARCH", "x86_64")
+    container = _stub_container(tmp_path)
+
+    assert container.resolve_local_sdk_root(sdk_root) == installation.resolve()
+
+
+def test_explicit_cuda_selects_matching_local_sdk_build(tmp_path, monkeypatch):
+    sdk_root = tmp_path / "holoscan-sdk"
+    resolver = Mock(return_value=sdk_root)
+    monkeypatch.setattr(container_core, "resolve_local_sdk_dir", resolver)
+    container = _stub_container(tmp_path)
+    container.cuda_version = "12"
+
+    container.resolve_local_sdk_root(sdk_root)
+
+    resolver.assert_called_once_with(container.SDK_PATH, sdk_root, cuda_version="12")
 
 
 # ---- dockerfile_path strategies ---------------------------------------------
@@ -318,11 +375,7 @@ def test_dockerfile_path_strategy_2_language_specific(tmp_path):
 
     c = _stub_container(
         tmp_path,
-        project_metadata={
-            "project_name": "my_app",
-            "source_folder": str(project_dir),
-            "metadata": {"language": "python"},
-        },
+        project_metadata=_project_metadata(project_dir),
     )
     assert Path(c.dockerfile_path) == lang_df
 
@@ -337,11 +390,7 @@ def test_dockerfile_path_strategy_3_source_folder(tmp_path):
 
     c = _stub_container(
         tmp_path,
-        project_metadata={
-            "project_name": "my_app",
-            "source_folder": str(project_dir),
-            "metadata": {"language": "python"},
-        },
+        project_metadata=_project_metadata(project_dir),
     )
     assert Path(c.dockerfile_path) == df
 
@@ -357,11 +406,7 @@ def test_dockerfile_path_strategy_4_parent_traversal(tmp_path):
 
     c = _stub_container(
         tmp_path,
-        project_metadata={
-            "project_name": "my_app",
-            "source_folder": str(project_dir),
-            "metadata": {"language": "python"},
-        },
+        project_metadata=_project_metadata(project_dir),
     )
     assert Path(c.dockerfile_path) == parent_df
 
@@ -377,16 +422,12 @@ def test_dockerfile_path_strategy_6_default_when_no_match(tmp_path, monkeypatch)
 
     c = _stub_container(
         tmp_path,
-        project_metadata={
-            "project_name": "my_app",
-            "source_folder": str(project_dir),
-            "metadata": {"language": "python"},
-        },
+        project_metadata=_project_metadata(project_dir),
     )
     assert Path(c.dockerfile_path) == fake_default
 
 
-def test_dockerfile_path_metadata_missing_path_falls_through(tmp_path, monkeypatch):
+def test_dockerfile_path_metadata_missing_path_falls_through(tmp_path):
     """If metadata.json:dockerfile points at a non-existent file, the
     resolver must warn and fall through to the folder-search chain rather
     than returning a broken path."""
@@ -397,14 +438,9 @@ def test_dockerfile_path_metadata_missing_path_falls_through(tmp_path, monkeypat
 
     c = _stub_container(
         tmp_path,
-        project_metadata={
-            "project_name": "my_app",
-            "source_folder": str(project_dir),
-            "metadata": {
-                "language": "python",
-                "dockerfile": str(project_dir / "does-not-exist"),
-            },
-        },
+        project_metadata=_project_metadata(
+            project_dir, dockerfile=str(project_dir / "does-not-exist")
+        ),
     )
     assert Path(c.dockerfile_path) == folder_df
 
@@ -443,11 +479,7 @@ def test_build_dryrun_emits_base_and_extra_script_layers(tmp_path, monkeypatch):
 
     c = _stub_container(
         tmp_path,
-        project_metadata={
-            "project_name": "my_app",
-            "source_folder": str(project_dir),
-            "metadata": {"language": "python"},
-        },
+        project_metadata=_project_metadata(project_dir),
     )
     c.dryrun = True
 
@@ -495,11 +527,7 @@ def test_build_preserves_explicit_cpu_resource(tmp_path, monkeypatch, build_args
 
     c = _stub_container(
         tmp_path,
-        project_metadata={
-            "project_name": "my_app",
-            "source_folder": str(project_dir),
-            "metadata": {"language": "python"},
-        },
+        project_metadata=_project_metadata(project_dir),
     )
     c.dryrun = True
 
@@ -534,11 +562,7 @@ def test_build_handles_missing_resource_support(
     )
     c = _stub_container(
         tmp_path,
-        project_metadata={
-            "project_name": "my_app",
-            "source_folder": str(project_dir),
-            "metadata": {"language": "python"},
-        },
+        project_metadata=_project_metadata(project_dir),
     )
 
     c.build()
@@ -573,11 +597,7 @@ def test_build_dryrun_allows_bundled_extra_script_dir(tmp_path, monkeypatch):
 
     c = _stub_container(
         root,
-        project_metadata={
-            "project_name": "my_app",
-            "source_folder": str(project_dir),
-            "metadata": {"language": "python"},
-        },
+        project_metadata=_project_metadata(project_dir),
     )
     c.dryrun = True
 
@@ -605,11 +625,7 @@ def test_build_dryrun_omits_base_sdk_version_when_not_configured(tmp_path, monke
 
     c = _stub_container(
         tmp_path,
-        project_metadata={
-            "project_name": "my_app",
-            "source_folder": str(project_dir),
-            "metadata": {"language": "python"},
-        },
+        project_metadata=_project_metadata(project_dir),
     )
     c.dryrun = True
 
@@ -646,11 +662,7 @@ def test_run_assembles_docker_command_without_ctk_for_custom_runtime(tmp_path, m
 
     c = _stub_container(
         tmp_path,
-        project_metadata={
-            "project_name": "my_app",
-            "source_folder": str(project_dir),
-            "metadata": {"language": "python"},
-        },
+        project_metadata=_project_metadata(project_dir),
     )
     c.verbose = True
 
@@ -692,7 +704,7 @@ def test_run_assembles_docker_command_without_ctk_for_custom_runtime(tmp_path, m
     assert cmd[-4:] == ["custom:image", "bash", "-lc", "echo ok"]
 
 
-def test_run_default_args_suppression_and_as_root_user_override(tmp_path, monkeypatch):
+def test_run_composes_default_args_and_as_root_user_override(tmp_path, monkeypatch):
     project_dir = tmp_path / "applications" / "my_app"
     project_dir.mkdir(parents=True)
     (project_dir / "Dockerfile").write_text("FROM scratch\n", encoding="utf-8")
@@ -705,22 +717,37 @@ def test_run_default_args_suppression_and_as_root_user_override(tmp_path, monkey
     monkeypatch.setattr(container_core, "run_command", lambda cmd, **kwargs: calls.append(cmd))
     c = _stub_container(
         tmp_path,
-        project_metadata={
-            "project_name": "my_app",
-            "source_folder": str(project_dir),
-            "metadata": {"language": "python"},
-        },
+        project_metadata=_project_metadata(project_dir),
     )
     c.dryrun = True
 
-    c.run(img="custom:image", docker_opts="--network host", include_default_run_args=False)
+    c.run(img="custom:image", docker_opts="--network host")
     c.run(img="custom:image", as_root=True, docker_opts="--user 1234:1234")
 
-    suppressed, elevated = calls
-    assert "default" not in suppressed and "--detach" not in suppressed
-    assert "--network" in suppressed
+    composed, elevated = calls
+    assert "default" in composed and "--detach" in composed
+    assert "--network" in composed
     image_index = elevated.index("custom:image")
     assert elevated[image_index - 2 : image_index] == ["--user", "0:0"]
+
+
+def test_run_reasserts_typed_cleanup_after_raw_docker_options(tmp_path, monkeypatch):
+    project_dir = _stub_run_env(tmp_path, monkeypatch)
+    calls = []
+    monkeypatch.delenv("HOLOSCAN_SDK_ROOT", raising=False)
+    monkeypatch.setattr(container_core, "run_command", lambda cmd, **kwargs: calls.append(cmd))
+    container = _stub_container(
+        tmp_path,
+        project_metadata=_project_metadata(project_dir),
+    )
+    container.dryrun = True
+
+    container.run(img="custom:image", persistent=False, docker_opts="--rm=false")
+    container.run(img="custom:image", persistent=True, docker_opts="--rm")
+
+    transient, persistent = calls
+    assert [arg for arg in transient if arg.startswith("--rm")] == ["--rm=false", "--rm"]
+    assert [arg for arg in persistent if arg.startswith("--rm")] == ["--rm", "--rm=false"]
 
 
 def test_run_forwards_effective_cpu_set(tmp_path, monkeypatch):
@@ -730,11 +757,7 @@ def test_run_forwards_effective_cpu_set(tmp_path, monkeypatch):
     monkeypatch.setattr(container_core, "run_command", lambda cmd, **kwargs: calls.append(cmd))
     c = _stub_container(
         tmp_path,
-        project_metadata={
-            "project_name": "my_app",
-            "source_folder": str(project_dir),
-            "metadata": {"language": "python"},
-        },
+        project_metadata=_project_metadata(project_dir),
     )
     c.dryrun = True
 
@@ -761,11 +784,7 @@ def test_run_preserves_explicit_cpu_limit(tmp_path, monkeypatch, cpu_option, use
         monkeypatch.setattr(HoloscanContainer, "DEFAULT_DOCKER_RUN_ARGS", cpu_option)
     c = _stub_container(
         tmp_path,
-        project_metadata={
-            "project_name": "my_app",
-            "source_folder": str(project_dir),
-            "metadata": {"language": "python"},
-        },
+        project_metadata=_project_metadata(project_dir),
     )
     c.dryrun = True
 
@@ -788,11 +807,7 @@ def test_run_does_not_copy_cpu_ids_to_remote_docker(tmp_path, monkeypatch, env_n
     monkeypatch.setattr(container_core, "run_command", lambda cmd, **kwargs: calls.append(cmd))
     c = _stub_container(
         tmp_path,
-        project_metadata={
-            "project_name": "my_app",
-            "source_folder": str(project_dir),
-            "metadata": {"language": "python"},
-        },
+        project_metadata=_project_metadata(project_dir),
     )
     c.dryrun = True
 
@@ -833,11 +848,7 @@ def test_build_forwards_explicit_build_args_to_docker(tmp_path, monkeypatch):
 
     c = _stub_container(
         tmp_path,
-        project_metadata={
-            "project_name": "my_app",
-            "source_folder": str(project_dir),
-            "metadata": {"language": "python"},
-        },
+        project_metadata=_project_metadata(project_dir),
     )
     c.dryrun = True
     c.build(build_args="--build-arg TEST=value")
@@ -864,11 +875,7 @@ def test_default_docker_build_args_env_propagates_to_docker_build(tmp_path, monk
 
     c = _stub_container(
         tmp_path,
-        project_metadata={
-            "project_name": "my_app",
-            "source_folder": str(project_dir),
-            "metadata": {"language": "python"},
-        },
+        project_metadata=_project_metadata(project_dir),
     )
     c.dryrun = True
     c.build()
@@ -876,6 +883,28 @@ def test_default_docker_build_args_env_propagates_to_docker_build(tmp_path, monk
     cmd = calls[0]
     assert "--build-arg" in cmd
     assert "DEFAULT_FLAG=abc" in cmd
+
+
+def test_project_docker_args_are_composed_before_mode_environment_and_cli(tmp_path, monkeypatch):
+    context = ProjectContext(
+        root=tmp_path,
+        kind="module",
+        discovery="project-root",
+        docker_build_args="--build-arg PROJECT=1",
+        docker_run_args="--label project=1",
+    )
+    monkeypatch.setattr(container_core, "get_active_project_context", lambda: context)
+    monkeypatch.setenv("HOLOSCAN_CLI_DEFAULT_DOCKER_BUILD_ARGS", "--build-arg ENV=1")
+    monkeypatch.setenv("HOLOSCAN_CLI_DEFAULT_DOCKER_RUN_ARGS", "--label env=1")
+    container = _stub_container(tmp_path)
+
+    assert container.compose_build_args(
+        mode_build_args="--build-arg MODE=1", build_args="--build-arg CLI=1"
+    ) == ("--build-arg PROJECT=1 --build-arg MODE=1 --build-arg ENV=1 --build-arg CLI=1")
+    assert (
+        container.compose_run_args(mode_docker_opts="--label mode=1", docker_opts="--label cli=1")
+        == "--label project=1 --label mode=1 --label env=1 --label cli=1"
+    )
 
 
 def test_cuda_version_arg_lands_as_cuda_major_build_arg(tmp_path, monkeypatch):
@@ -887,11 +916,7 @@ def test_cuda_version_arg_lands_as_cuda_major_build_arg(tmp_path, monkeypatch):
 
     c = _stub_container(
         tmp_path,
-        project_metadata={
-            "project_name": "my_app",
-            "source_folder": str(project_dir),
-            "metadata": {"language": "python"},
-        },
+        project_metadata=_project_metadata(project_dir),
     )
     c.dryrun = True
     c.build(cuda_version="13")
@@ -915,6 +940,36 @@ def _stub_run_env(tmp_path, monkeypatch):
     return project_dir
 
 
+def test_precomposed_run_args_are_not_composed_again(tmp_path, monkeypatch):
+    project_dir = _stub_run_env(tmp_path, monkeypatch)
+    context = ProjectContext(
+        root=tmp_path,
+        kind="module",
+        discovery="project-root",
+        docker_run_args="--label project=1",
+    )
+    monkeypatch.setattr(container_core, "get_active_project_context", lambda: context)
+    monkeypatch.setenv("HOLOSCAN_CLI_DEFAULT_DOCKER_RUN_ARGS", "--label env=1")
+    monkeypatch.delenv("HOLOSCAN_SDK_ROOT", raising=False)
+    calls = []
+    monkeypatch.setattr(container_core, "run_command", lambda cmd, **kw: calls.append(cmd))
+    container = _stub_container(
+        tmp_path,
+        project_metadata=_project_metadata(project_dir),
+    )
+    container.dryrun = True
+    effective = container.compose_run_args(
+        mode_docker_opts="--label mode=1",
+        docker_opts="--label cli=1",
+    )
+
+    container.run(img="custom:image", effective_docker_opts=effective)
+
+    command = calls[0]
+    for label in ("project=1", "mode=1", "env=1", "cli=1"):
+        assert command.count(label) == 1
+
+
 def test_add_volume_appears_as_v_mount_in_docker_run(tmp_path, monkeypatch):
     """`--add-volume /some/path` lands as `-v /some/path:/workspace/volumes/...`
     in `docker run` (pre-consolidation `test_holohub_run_container_add_volume`)."""
@@ -926,11 +981,7 @@ def test_add_volume_appears_as_v_mount_in_docker_run(tmp_path, monkeypatch):
 
     c = _stub_container(
         tmp_path,
-        project_metadata={
-            "project_name": "my_app",
-            "source_folder": str(project_dir),
-            "metadata": {"language": "python"},
-        },
+        project_metadata=_project_metadata(project_dir),
     )
     c.dryrun = True
     c.run(img="custom:image", add_volumes=[str(volume)])
@@ -960,11 +1011,7 @@ def test_default_docker_run_args_env_propagates_to_docker_run(tmp_path, monkeypa
 
     c = _stub_container(
         tmp_path,
-        project_metadata={
-            "project_name": "my_app",
-            "source_folder": str(project_dir),
-            "metadata": {"language": "python"},
-        },
+        project_metadata=_project_metadata(project_dir),
     )
     c.dryrun = True
     c.run(img="custom:image")

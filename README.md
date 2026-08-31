@@ -29,6 +29,7 @@ Common env vars:
 - `HOLOSCAN_CLI_SEARCH_PATH` — subdirs to scan for `metadata.json`
 - `HOLOSCAN_CLI_PATH_PREFIX` — placeholder prefix in metadata templates
 - `HOLOSCAN_CLI_REPO_PREFIX` — container image name prefix
+- `HOLOSCAN_CLI_CONTAINER_PREFIX` — standalone Module image name prefix
 - `HOLOSCAN_CLI_CREATE_TEMPLATE` — default template for `holoscan create`
 
 `holoscan env-info` lists every env var the CLI reads in the current shell.
@@ -71,6 +72,7 @@ removal or rename bumps `schema_version`.
 ```text
 src/holoscan_cli/
   cli.py              top-level argparse + dispatch (HoloscanCLI)
+  configuration.py    effective-configuration reporting
   commands/           one file per subcommand + a central registry
   container/          HoloscanContainer + docker arg helpers + parser builders
   cmake/              packaged CMake support copied into standalone Modules
@@ -127,6 +129,31 @@ global `--project-root PATH` before the subcommand (equivalent to setting
 holoscan --project-root ~/holoscan-my-sensor list
 ```
 
+### Project configuration
+
+Standalone Modules can persist a small set of settings that cannot be inferred
+from `metadata.json` or the host:
+
+```toml
+[tool.holoscan]
+cuda = 13
+ctest-script = "ci/container.ctest"
+forward-env = ["IS_CI_BUILD"]
+docker-build-args = ["--build-arg", "PROJECT_FEATURE=ON"]
+docker-run-args = ["--network=host"]
+
+[tool.holoscan.base-images]
+x86_64 = "registry.example.com/holoscan/sdk-build-x86_64:4.5.0-cuda13"
+aarch64 = "registry.example.com/holoscan/sdk-build-aarch64:4.5.0-cuda13"
+```
+
+`cuda` and `ctest-script` provide Module-wide toolchain defaults,
+`forward-env` contains names only, the Docker argument arrays provide static
+defaults, and `base-images` contains exact images for the supported target
+architectures. Use command options for one-off choices. See
+[Configuring Holoscan CLI](https://github.com/nvidia-holoscan/holoscan-cli/blob/main/CONFIGURATION.md)
+for the complete user-facing behavior.
+
 ## Versioning
 
 `holoscan-cli` release versions are aligned with Holoscan SDK GA release
@@ -149,8 +176,8 @@ with `FROM ${BASE_IMAGE}`, using any of the methods below:
    holoscan build-container my_app --base-img nvcr.io/nvidia/clara-holoscan/holoscan:v4.4.0-cuda13
    ```
 
-2. Set the `HOLOSCAN_CLI_BASE_IMAGE` environment variable to a fully qualified
-   image path:
+2. Set `HOLOSCAN_CLI_BASE_IMAGE` to an exact tagged or digested image. It is
+   used without adding another tag:
 
    ```bash
    export HOLOSCAN_CLI_BASE_IMAGE=nvcr.io/nvidia/clara-holoscan/holoscan:v4.4.0-cuda13
@@ -173,9 +200,16 @@ with `FROM ${BASE_IMAGE}`, using any of the methods below:
 If none of these is configured, the CLI asks for a base image instead of
 inferring one from its own package version.
 
+Advanced wrappers can set `HOLOSCAN_CLI_BASE_IMAGE_FORMAT` with
+`{base_image}`, `{sdk_version}`, and `{cuda_tag}`, or
+`HOLOSCAN_CLI_DEFAULT_IMAGE_FORMAT` with `{container_prefix}`,
+`{sdk_version}`, and `{cuda_tag}`. An explicit base-image format controls
+composition; without one, tagged images and digests are exact while an
+untagged environment repository uses the SDK/CUDA-derived tag.
+
 ## Build from source
 
-Python 3.10+ and [Poetry 2.0+](https://python-poetry.org/docs/#installation) required.
+Python 3.11+ and [Poetry 2.0+](https://python-poetry.org/docs/#installation) required.
 
 ```bash
 # Create + activate a virtual environment
