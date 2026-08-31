@@ -3,9 +3,118 @@
 
 from __future__ import annotations
 
+import subprocess
+
 import pytest
 
 from holoscan_cli.utils import host_setup
+
+
+def _prepare_cmake_setup(monkeypatch):
+    package_calls = []
+    writes = []
+    commands = []
+    monkeypatch.setattr(host_setup, "_apt_updated", False)
+    monkeypatch.setattr(host_setup, "get_installed_package_version", lambda _: None)
+    monkeypatch.setattr(host_setup, "get_ubuntu_codename", lambda: "jammy")
+    monkeypatch.setattr(host_setup.shutil, "which", lambda name: f"/usr/bin/{name}")
+    monkeypatch.setattr(
+        host_setup,
+        "install_packages_if_missing",
+        lambda packages, **kwargs: package_calls.append((packages, kwargs)),
+    )
+    monkeypatch.setattr(
+        host_setup,
+        "write_system_file",
+        lambda path, content, **kwargs: writes.append((path, content, kwargs)),
+    )
+    monkeypatch.setattr(
+        host_setup,
+        "run_command",
+        lambda command, **kwargs: commands.append((command, kwargs)),
+    )
+    return package_calls, writes, commands
+
+
+def _gpg_listing(*primary_fingerprints: str) -> bytes:
+    records = []
+    for fingerprint in primary_fingerprints:
+        records.extend(("pub::::::::::", f"fpr:::::::::{fingerprint}:"))
+    return "\n".join(records).encode()
+
+
+def test_setup_cmake_verifies_kitware_key_before_install(monkeypatch):
+    package_calls, writes, commands = _prepare_cmake_setup(monkeypatch)
+    key = b"armored Kitware key"
+    key_listing = (
+        _gpg_listing(host_setup._KITWARE_ARCHIVE_KEY_FINGERPRINT)
+        + b"\nsub::::::::::\nfpr:::::::::8DB54F8C710EB2D4EF4F1BFA65ADECD7A7039392:"
+    )
+    dearmored = b"dearmored Kitware key"
+    outputs = iter((key, key_listing, dearmored))
+    subprocess_calls = []
+
+    def fake_subprocess_run(command, **kwargs):
+        subprocess_calls.append((command, kwargs))
+        return subprocess.CompletedProcess(command, 0, stdout=next(outputs), stderr=b"")
+
+    monkeypatch.setattr(host_setup.subprocess, "run", fake_subprocess_run)
+
+    host_setup.setup_cmake()
+
+    assert [call[0] for call in subprocess_calls] == [
+        ["/usr/bin/wget", "-qO-", host_setup._KITWARE_ARCHIVE_KEY_URL],
+        [
+            "/usr/bin/gpg",
+            "--batch",
+            "--no-options",
+            "--with-colons",
+            "--fingerprint",
+            "--show-keys",
+        ],
+        ["/usr/bin/gpg", "--dearmor"],
+    ]
+    assert subprocess_calls[1][1]["input"] == key
+    assert writes[0] == (
+        "/usr/share/keyrings/kitware-archive-keyring.gpg",
+        dearmored,
+        {},
+    )
+    assert package_calls == [
+        (["gpg", "wget"], {"dry_run": False}),
+        (["cmake", "cmake-curses-gui"], {"dry_run": False}),
+    ]
+    assert commands == [(["apt-get", "update"], {"dry_run": False, "as_root": True})]
+
+
+@pytest.mark.parametrize(
+    "fingerprints",
+    [
+        (),
+        ("0" * 40,),
+        (host_setup._KITWARE_ARCHIVE_KEY_FINGERPRINT, "0" * 40),
+    ],
+)
+def test_setup_cmake_rejects_unexpected_kitware_primary_keys(monkeypatch, capsys, fingerprints):
+    _package_calls, writes, commands = _prepare_cmake_setup(monkeypatch)
+    key = b"untrusted armored key"
+    outputs = iter((key, _gpg_listing(*fingerprints)))
+    subprocess_calls = []
+
+    def fake_subprocess_run(command, **kwargs):
+        subprocess_calls.append((command, kwargs))
+        return subprocess.CompletedProcess(command, 0, stdout=next(outputs), stderr=b"")
+
+    monkeypatch.setattr(host_setup.subprocess, "run", fake_subprocess_run)
+
+    with pytest.raises(SystemExit) as exc_info:
+        host_setup.setup_cmake()
+
+    assert exc_info.value.code == 1
+    assert host_setup._KITWARE_ARCHIVE_KEY_FINGERPRINT in capsys.readouterr().err
+    assert len(subprocess_calls) == 2
+    assert writes == []
+    assert commands == []
 
 
 def test_install_packages_if_missing_installs_only_missing_and_pinned(monkeypatch):
