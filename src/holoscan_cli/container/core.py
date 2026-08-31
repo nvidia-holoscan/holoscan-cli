@@ -29,11 +29,18 @@ from pathlib import Path
 from typing import Any, List, Optional, Union
 
 from holoscan_cli.metadata.utils import list_normalized_languages
+from holoscan_cli.project_context import (
+    activated_environment_source,
+    get_active_project_context,
+)
 
 from ..utils.docker import (
+    RESERVED_CONTAINER_ENV_NAMES,
     docker_build_supports_resource,
+    get_build_arg_names,
     get_effective_cpu_set,
     get_image_pythonpath,
+    image_reference_has_tag_or_digest,
 )
 from ..utils.holohub import (
     build_holohub_path_mapping,
@@ -48,15 +55,25 @@ from ..utils.holohub import (
 from ..utils.io import fatal, info, run_command, warn
 from ..utils.sdk import (
     check_nvidia_ctk,
-    find_hsdk_build_rel_dir,
+    find_hsdk_dir,
     get_arch_gpu_str,
     get_compute_capacity,
     get_cuda_tag,
     get_default_cuda_version,
     get_host_gpu,
-    is_valid_sdk_installation,
+    is_valid_sdk_directory,
+    resolve_local_sdk_dir,
 )
-from ..utils.text import get_cli_arg_value, get_env_bool
+from ..utils.text import (
+    get_cli_arg_value,
+    get_env_bool,
+    merge_args_str,
+    redact_cli_option_values,
+)
+from ..utils.validators import (
+    validate_environment_name,
+    validate_image_reference,
+)
 from .signals import (
     _ContainerTerminationHandler,
     _ContainerTerminationSignal,
@@ -64,6 +81,7 @@ from .signals import (
 )
 
 SCCACHE_CONTAINER_DIR = "/.cache/sccache"
+_RESERVED_BUILD_ARGS = frozenset({"BASE_IMAGE", "CUDA_MAJOR", "BASE_SDK_VERSION"})
 
 
 def _has_build_cpu_resource(args: List[str]) -> bool:
@@ -161,46 +179,63 @@ class HoloscanContainer:
         braces such as ``{{sdk_version}}`` from being mistaken for a real
         ``sdk_version`` placeholder.
         """
-        fields = {name for _, name, _, _ in string.Formatter().parse(template) if name}
-        unknown = fields - set(values)
-        if unknown:
-            fatal(
-                f"Image format {template!r} references unknown field(s): "
-                f"{', '.join(sorted(unknown))}."
-            )
-        missing = sorted(name for name in fields if not values.get(name))
-        if missing:
-            fatal(
-                f"Image format {template!r} requires value(s) that are not set: "
-                f"{', '.join(missing)} (e.g. set HOLOSCAN_CLI_BASE_SDK_VERSION for "
-                "sdk_version)."
-            )
         try:
+            fields = {name for _, name, _, _ in string.Formatter().parse(template) if name}
+            unknown = fields - set(values)
+            if unknown:
+                fatal(
+                    f"Image format {template!r} references unknown field(s): "
+                    f"{', '.join(sorted(unknown))}."
+                )
+            missing = sorted(name for name in fields if not values.get(name))
+            if missing:
+                fatal(
+                    f"Image format {template!r} requires value(s) that are not set: "
+                    f"{', '.join(missing)} (e.g. set HOLOSCAN_CLI_BASE_SDK_VERSION for "
+                    "sdk_version)."
+                )
             return template.format(**values)
         except (KeyError, IndexError, ValueError) as exc:
             fatal(f"Invalid image format template {template!r}: {exc}")
 
     @classmethod
     def default_base_image(cls, cuda_version: Optional[Union[str, int]] = None) -> str:
+        base_image_name = str(cls.BASE_IMAGE_NAME)
+        try:
+            validate_image_reference(base_image_name)
+        except ValueError:
+            fatal(
+                "Configured base image must be non-empty and contain no whitespace. "
+                "Check HOLOSCAN_CLI_BASE_IMAGE or tool.holoscan.base-images."
+            )
         # ``cuda_tag`` is resolved lazily: computing it probes the host GPU /
         # driver (and can emit a warning), so it must not run on the branches
         # that return an explicit image or fatal without ever using it.
+        if cls.BASE_IMAGE_FORMAT == "{base_image}":
+            return base_image_name
         if cls.BASE_IMAGE_FORMAT:
             return cls._format_image_template(
                 cls.BASE_IMAGE_FORMAT,
-                base_image=cls.BASE_IMAGE_NAME,
+                base_image=base_image_name,
                 sdk_version=cls.BASE_SDK_VERSION,
                 cuda_tag=get_cuda_tag(cuda_version, cls.BASE_SDK_VERSION),
             )
+        # Project base-images are exact; legacy environment repositories may
+        # still use the SDK/CUDA-derived tag below.
+        if activated_environment_source("HOLOSCAN_CLI_BASE_IMAGE") == "project":
+            return base_image_name
+        if image_reference_has_tag_or_digest(base_image_name):
+            return base_image_name
         if cls.BASE_SDK_VERSION:
             cuda_tag = get_cuda_tag(cuda_version, cls.BASE_SDK_VERSION)
-            return f"{cls.BASE_IMAGE_NAME}:v{cls.BASE_SDK_VERSION}-{cuda_tag}"
-        if cls.BASE_IMAGE_NAME != cls.DEFAULT_BASE_IMAGE_NAME:
-            return cls.BASE_IMAGE_NAME
+            return f"{base_image_name}:v{cls.BASE_SDK_VERSION}-{cuda_tag}"
+        if base_image_name != cls.DEFAULT_BASE_IMAGE_NAME:
+            return base_image_name
         fatal(
             "No default Holoscan SDK base image is configured. Pass --base-img, "
-            "set HOLOSCAN_CLI_BASE_IMAGE to a fully qualified image tag, or set "
-            "HOLOSCAN_CLI_BASE_SDK_VERSION."
+            "set HOLOSCAN_CLI_BASE_IMAGE, or configure tool.holoscan.base-images. "
+            "To derive a tag from a repository, also set HOLOSCAN_CLI_BASE_SDK_VERSION, "
+            "or module.holoscan_sdk.minimum_required_version."
         )
 
     @classmethod
@@ -342,16 +377,6 @@ class HoloscanContainer:
             options.extend(["--group-add", str(gid)])
         return options
 
-    def get_conditional_options(
-        self, use_tini: bool = False, persistent: bool = False
-    ) -> List[str]:
-        options = []
-        if use_tini:
-            options.append("--init")
-        if not persistent:
-            options.append("--rm")
-        return options
-
     @property
     def image_name(self) -> str:
         if self.dockerfile_path != HoloscanContainer.default_dockerfile():
@@ -369,14 +394,48 @@ class HoloscanContainer:
         sha_tag = f"{repo}:{get_git_short_sha()}"
         branch_tag = f"{repo}:{get_current_branch_slug()}"
         legacy_tag = self.image_name
-        # Deduplicate while preserving order.
-        seen = set()
-        result = []
-        for tag in [branch_tag, sha_tag, legacy_tag]:
-            if tag and tag not in seen:
-                result.append(tag)
-                seen.add(tag)
-        return result
+        return list(dict.fromkeys(tag for tag in (branch_tag, sha_tag, legacy_tag) if tag))
+
+    def resolve_run_image(self, img: Optional[str] = None) -> str:
+        """Select the one image tag used for inspection and container launch."""
+        return img or self.image_names[0]
+
+    def resolve_local_sdk_root(
+        self, local_sdk_root: Optional[Union[str, Path]] = None
+    ) -> Optional[Path]:
+        """Return the SDK path selected once for this invocation.
+
+        Standalone Modules resolve their bounded project search and explicit
+        override before container construction. Reuse that exact installation
+        for the mount and PYTHONPATH instead of running the broader legacy SDK
+        search a second time.
+        """
+        context = get_active_project_context()
+        if local_sdk_root is not None:
+            installation = resolve_local_sdk_dir(
+                self.SDK_PATH,
+                local_sdk_root,
+                cuda_version=self.cuda_version,
+            )
+            if context is not None and context.is_module:
+                return installation
+            # Preserve the existing source-tree mount layout after validating it.
+            return Path(local_sdk_root).expanduser().resolve()
+
+        if context is not None and context.is_module:
+            if context.sdk_root is not None:
+                return context.sdk_root
+
+            if activated_environment_source("HOLOSCAN_SDK_ROOT") == "environment":
+                source = f"HOLOSCAN_SDK_ROOT={os.environ['HOLOSCAN_SDK_ROOT']}"
+            else:
+                return None
+            fatal(
+                f"{source} does not contain a Holoscan SDK installation or build for "
+                f"{context.target_arch or 'the selected architecture'}."
+            )
+
+        return None
 
     @property
     def dockerfile_path(self) -> Path:
@@ -465,10 +524,56 @@ class HoloscanContainer:
             language = self.project_metadata.get("metadata", {}).get("language", "")
         self.language = list_normalized_languages(language, strict=True)[0]
 
-        self.cuda_version = None  # None means use default from get_cuda_tag
+        # The parser deliberately leaves an omitted --cuda unset. Resolve the
+        # environment layer here so an explicit CLI value can still
+        # replace it in build().
+        self.cuda_version = os.environ.get("HOLOSCAN_CLI_DEFAULT_CUDA_VERSION") or None
         self.dryrun = False
         self.verbose = False
         self._display_temp_files: List[Path] = []
+
+    def compose_build_args(
+        self,
+        *,
+        mode_build_args: Optional[str] = None,
+        build_args: Optional[str] = None,
+    ) -> str:
+        """Compose Docker build options in project -> mode -> environment -> CLI order."""
+        context = get_active_project_context()
+        project_args = context.docker_build_args if context is not None else None
+        environment_args = os.environ.get(
+            "HOLOSCAN_CLI_DEFAULT_DOCKER_BUILD_ARGS", self.DEFAULT_DOCKER_BUILD_ARGS
+        )
+        return merge_args_str(project_args, mode_build_args, environment_args, build_args)
+
+    def compose_run_args(
+        self,
+        *,
+        mode_docker_opts: Optional[str] = None,
+        docker_opts: Optional[str] = None,
+    ) -> str:
+        """Compose Docker run options in project -> mode -> environment -> CLI order."""
+        context = get_active_project_context()
+        project_args = context.docker_run_args if context is not None else None
+        environment_args = os.environ.get(
+            "HOLOSCAN_CLI_DEFAULT_DOCKER_RUN_ARGS", self.DEFAULT_DOCKER_RUN_ARGS
+        )
+        return merge_args_str(project_args, mode_docker_opts, environment_args, docker_opts)
+
+    def compose_forward_env(
+        self,
+        *,
+        forward_env: Optional[List[str]] = None,
+    ) -> List[str]:
+        """Compose forwarded names in project -> environment -> CLI order."""
+        names: List[str] = []
+        context = get_active_project_context()
+        project_names = getattr(context, "forward_env", None) if context else None
+        if project_names:
+            names.extend(project_names)
+        names.extend(os.environ.get("HOLOSCAN_CLI_FORWARD_ENV", "").split(","))
+        names.extend(forward_env or [])
+        return names
 
     def build(
         self,
@@ -479,6 +584,7 @@ class HoloscanContainer:
         build_args: Optional[str] = None,
         extra_scripts: Optional[List[str]] = None,
         cuda_version: Optional[Union[str, int]] = None,
+        mode_build_args: Optional[str] = None,
     ) -> None:
         """
         Build the container image according to the procedure:
@@ -505,10 +611,11 @@ class HoloscanContainer:
             self.cuda_version if self.cuda_version is not None else get_default_cuda_version()
         )
 
-        full_build_args = " ".join(
-            filter(None, [HoloscanContainer.DEFAULT_DOCKER_BUILD_ARGS, build_args])
+        full_build_args = self.compose_build_args(
+            mode_build_args=mode_build_args,
+            build_args=build_args,
         )
-        parsed_build_args = shlex.split(full_build_args) if full_build_args else []
+        raw_build_tokens = shlex.split(full_build_args) if full_build_args else []
         # Check if buildx exists
         if not self.dryrun:
             try:
@@ -521,7 +628,7 @@ class HoloscanContainer:
 
         cpu_resource_args = []
         if _uses_local_docker_cpu_ids(for_build=True) and not _has_build_cpu_resource(
-            parsed_build_args
+            raw_build_tokens
         ):
             cpu_set = get_effective_cpu_set()
             if cpu_set:
@@ -541,16 +648,51 @@ class HoloscanContainer:
             "build",
             "--build-arg",
             "BUILDKIT_INLINE_CACHE=1",
-            "--build-arg",
-            f"BASE_IMAGE={base_img}",
-            "--build-arg",
-            f"GPU_TYPE={gpu_type}",
-            "--build-arg",
-            f"COMPUTE_CAPACITY={compute_capacity}",
-            "--build-arg",
-            f"CUDA_MAJOR={cuda_major}",
             "--network=host",
         ]
+        # Detected GPU values have no dedicated CLI controls. Emit them before
+        # the raw layers so an explicit raw value can replace them.
+        cmd.extend(
+            [
+                "--build-arg",
+                f"GPU_TYPE={gpu_type}",
+                "--build-arg",
+                f"COMPUTE_CAPACITY={compute_capacity}",
+            ]
+        )
+        cmd.extend(cpu_resource_args)
+        raw_build_start = len(cmd)
+        if raw_build_tokens:
+            reserved_names = sorted(get_build_arg_names(raw_build_tokens) & _RESERVED_BUILD_ARGS)
+            if reserved_names:
+                guidance = {
+                    "BASE_IMAGE": "--base-img",
+                    "CUDA_MAJOR": "--cuda",
+                    "BASE_SDK_VERSION": (
+                        "HOLOSCAN_CLI_BASE_SDK_VERSION or module.holoscan_sdk.minimum_required_version"
+                    ),
+                }
+                alternatives = ", ".join(f"{name} via {guidance[name]}" for name in reserved_names)
+                fatal(
+                    "Raw Docker build arguments cannot set CLI-owned key(s): "
+                    f"{', '.join(reserved_names)}. Configure {alternatives}."
+                )
+            cmd.extend(raw_build_tokens)
+        raw_build_end = len(cmd)
+
+        # These are typed CLI/environment/project settings, not part of the raw Docker
+        # argument bag. Emit them after raw defaults so a lower-precedence
+        # `--build-arg BASE_IMAGE=...` or `CUDA_MAJOR=...` cannot defeat an
+        # explicit --base-img/--cuda. Users should use the typed controls for
+        # these reserved keys.
+        cmd.extend(
+            [
+                "--build-arg",
+                f"BASE_IMAGE={base_img}",
+                "--build-arg",
+                f"CUDA_MAJOR={cuda_major}",
+            ]
+        )
         if self.BASE_SDK_VERSION:
             cmd.extend(["--build-arg", f"BASE_SDK_VERSION={self.BASE_SDK_VERSION}"])
 
@@ -558,8 +700,6 @@ class HoloscanContainer:
             cmd.append("--no-cache")
 
         cmd.extend(self.local_source_build_context_args())
-        cmd.extend(cpu_resource_args)
-        cmd.extend(parsed_build_args)
 
         cmd.extend(["-f", str(docker_file_path)])
         for tag_name in tags:
@@ -570,7 +710,14 @@ class HoloscanContainer:
                 cmd.extend(["-t", f"{tag_name}-base"])
         cmd.append(str(HoloscanContainer.HOLOHUB_ROOT))
 
-        run_command(cmd, dry_run=self.dryrun)
+        display_cmd = list(cmd)
+        if raw_build_end > raw_build_start:
+            token_count = raw_build_end - raw_build_start
+            display_cmd[raw_build_start:raw_build_end] = [
+                f"<{token_count} configured Docker build option token(s) hidden>"
+            ]
+
+        run_command(cmd, dry_run=self.dryrun, display_override=display_cmd)
 
         if extra_scripts:
             setup_scripts_dir = get_holohub_setup_scripts_dir()
@@ -619,32 +766,34 @@ class HoloscanContainer:
         add_volumes: List[str] = None,
         enable_mps: bool = False,
         extra_args: List[str] = None,
-        include_default_run_args: bool = True,
+        mode_docker_opts: Optional[str] = None,
+        forward_env: Optional[List[str]] = None,
+        effective_docker_opts: Optional[str] = None,
     ) -> None:
         """Launch the container"""
 
-        default_run_args = shlex.split(
-            (HoloscanContainer.DEFAULT_DOCKER_RUN_ARGS or "") if include_default_run_args else ""
-        )
-        extra_run_args = shlex.split(docker_opts or "")
-        run_args = default_run_args + extra_run_args
-        configured_runtime = get_cli_arg_value(run_args, "--runtime")
+        if effective_docker_opts is None:
+            effective_docker_opts = self.compose_run_args(
+                mode_docker_opts=mode_docker_opts,
+                docker_opts=docker_opts,
+            )
+        extra_run_args = shlex.split(effective_docker_opts)
+        configured_runtime = get_cli_arg_value(extra_run_args, "--runtime")
         runtime = configured_runtime or "nvidia"
 
         if not self.dryrun and runtime == "nvidia":
             check_nvidia_ctk()
 
-        if local_sdk_root is not None:
-            local_sdk_root = Path(local_sdk_root)
+        local_sdk_root = self.resolve_local_sdk_root(local_sdk_root)
 
-        img = img or self.image_names[0]
+        img = self.resolve_run_image(img)
         add_volumes = add_volumes or []
         extra_args = extra_args or []
 
         # If the caller already supplies --cidfile (via DEFAULT_DOCKER_RUN_ARGS or
         # docker_opts), use that path for cleanup and skip injecting our own —
         # Docker rejects duplicate --cidfile flags.
-        explicit_cidfile = get_cli_arg_value(run_args, "--cidfile")
+        explicit_cidfile = get_cli_arg_value(extra_run_args, "--cidfile")
         internal_cidfile: Optional[Path] = None
         if explicit_cidfile:
             cidfile = Path(explicit_cidfile)
@@ -654,7 +803,7 @@ class HoloscanContainer:
 
         cmd = [self.DOCKER_EXE, "run"]
 
-        if _uses_local_docker_cpu_ids() and not _has_run_cpu_limit(run_args):
+        if _uses_local_docker_cpu_ids() and not _has_run_cpu_limit(extra_run_args):
             cpu_set = get_effective_cpu_set()
             if cpu_set:
                 cmd.append(f"--cpuset-cpus={cpu_set}")
@@ -665,9 +814,12 @@ class HoloscanContainer:
         cmd.extend(self.get_security_args(as_root))
         cmd.extend(self.get_volume_args(add_volumes, enable_mps))
         cmd.extend(self.get_gpu_runtime_args(None if configured_runtime is not None else runtime))
-        cmd.extend(self.get_environment_args())
+        cmd.extend(
+            self.get_environment_args(
+                forward_env=forward_env,
+            )
+        )
 
-        cmd.extend(self.get_conditional_options(use_tini, persistent))
         cmd.extend(self.ucx_args())
         cmd.extend(self.get_device_mounts())
         cmd.extend(self.group_args())
@@ -680,22 +832,40 @@ class HoloscanContainer:
         if local_sdk_root or os.environ.get("HOLOSCAN_SDK_ROOT"):
             cmd.extend(self.get_local_sdk_options(local_sdk_root))
 
-        # Default docker run arguments and caller-supplied docker_opts (parsed above).
-        cmd.extend(default_run_args)
+        # Effective project/mode/environment/CLI Docker options (parsed above).
+        raw_run_start = len(cmd)
         cmd.extend(extra_run_args)
+        raw_run_end = len(cmd)
+        # Reassert cleanup semantics after raw project/user extensions so a
+        # conflicting --rm/--rm=false value cannot override the typed choice.
+        cmd.append("--rm=false" if persistent else "--rm")
+        if use_tini:
+            cmd.append("--init")
         if as_root:
             cmd.extend(["--user", "0:0"])
 
         cmd.append(img)
         cmd.extend(extra_args)
 
+        display_cmd = list(cmd)
+        if raw_run_end > raw_run_start:
+            token_count = raw_run_end - raw_run_start
+            display_cmd[raw_run_start:raw_run_end] = [
+                f"<{token_count} configured Docker run option token(s) hidden>"
+            ]
+        display_cmd = redact_cli_option_values(
+            display_cmd,
+            "--configure-args",
+            "<configured CMake option hidden>",
+        )
+
         if self.verbose:
-            cmd_list = [f'"{arg}"' if " " in str(arg) else str(arg) for arg in cmd]
+            cmd_list = [f'"{arg}"' if " " in str(arg) else str(arg) for arg in display_cmd]
             print(f"Launch command: {' '.join(cmd_list)}")
 
         try:
             if self.dryrun:
-                run_command(cmd, dry_run=self.dryrun)
+                run_command(cmd, dry_run=self.dryrun, display_override=display_cmd)
                 return
 
             # Docker refuses to start if --cidfile already exists; clear stale internal
@@ -707,7 +877,7 @@ class HoloscanContainer:
             try:
                 try:
                     with _ContainerTerminationHandler():
-                        result = run_command(cmd, check=False)
+                        result = run_command(cmd, check=False, display_override=display_cmd)
                     if result.returncode:
                         # Docker and the application already wrote their diagnostics.
                         # Preserve the status without repeating the full launch command.
@@ -844,7 +1014,10 @@ class HoloscanContainer:
         args.extend(self.get_device_cgroup_args())
         return args
 
-    def get_environment_args(self) -> List[str]:
+    def get_environment_args(
+        self,
+        forward_env: Optional[List[str]] = None,
+    ) -> List[str]:
         """Environment variable arguments"""
         # Default GPU visibility is controlled via NVIDIA_VISIBLE_DEVICES (from the image and/or
         # environment args). This keeps the default behavior ("all") while allowing users to
@@ -862,40 +1035,85 @@ class HoloscanContainer:
             "-e",
             "HOLOSCAN_CLI_BUILD_LOCAL=1",
         ]
+        # These values are CLI-owned container invariants. A project allowlist
+        # must not append ``-e NAME`` later and replace them with host values.
+        forwarded_names = set(RESERVED_CONTAINER_ENV_NAMES)
         # Pass CMAKE_BUILD_PARALLEL_LEVEL to container if set on host
         cmake_parallel_level = os.environ.get("CMAKE_BUILD_PARALLEL_LEVEL")
         if cmake_parallel_level:
             args.extend(["-e", f"CMAKE_BUILD_PARALLEL_LEVEL={cmake_parallel_level}"])
+            forwarded_names.add("CMAKE_BUILD_PARALLEL_LEVEL")
         # Forward host-side wrapper customizations that the in-container CLI needs
         # to reproduce project discovery and command routing decisions.
         for new_name in (
             "HOLOSCAN_CLI_PATH_PREFIX",
             "HOLOSCAN_CLI_SEARCH_PATH",
             "HOLOSCAN_CLI_CTEST_SCRIPT",
+            "HOLOSCAN_CLI_TARGET_ARCH",
         ):
             value = os.environ.get(new_name)
             if value:
                 args.extend(["-e", f"{new_name}={value}"])
+                forwarded_names.add(new_name)
 
         # Pass adequate variables for SCCACHE
         _, enable_sccache = get_env_bool("HOLOSCAN_CLI_ENABLE_SCCACHE", default=False)
         sccache_keys = [k for k in os.environ if k.startswith("SCCACHE_")]
+
+        # Project-declared passthrough: forward only the names the project asked
+        # for, and only when they are set on the host. Let Docker inherit values
+        # from its own environment instead of putting them in argv/dry-run output.
+        configured_forward_env = self.compose_forward_env(
+            forward_env=forward_env,
+        )
+        for name in configured_forward_env:
+            name = name.strip()
+            if not name:
+                continue
+            try:
+                validate_environment_name(name)
+            except ValueError:
+                fatal(
+                    f"Invalid forwarded environment variable name: {name!r}. "
+                    "Check tool.holoscan.forward-env, HOLOSCAN_CLI_FORWARD_ENV, "
+                    "and --forward-env."
+                )
+            if name in RESERVED_CONTAINER_ENV_NAMES:
+                fatal(
+                    f"Cannot forward {name!r}: it is a CLI-owned container environment "
+                    "invariant. Remove it from forward-env."
+                )
+            if name not in os.environ or name in forwarded_names:
+                continue
+            # An enabled sccache always uses the mounted container cache path.
+            # Do not first inherit a conflicting host-side SCCACHE_DIR.
+            if enable_sccache and name == "SCCACHE_DIR":
+                continue
+            args.extend(["-e", name])
+            forwarded_names.add(name)
+
         if enable_sccache:
             # Forward HOLOSCAN_CLI_ENABLE_SCCACHE so the in-container launcher
             # enables sccache before cmake build.
-            args.extend(["-e", "HOLOSCAN_CLI_ENABLE_SCCACHE"])
+            if "HOLOSCAN_CLI_ENABLE_SCCACHE" not in forwarded_names:
+                args.extend(["-e", "HOLOSCAN_CLI_ENABLE_SCCACHE"])
+                forwarded_names.add("HOLOSCAN_CLI_ENABLE_SCCACHE")
             # Always set SCCACHE_DIR inside container to mounted path
             args.extend(["-e", f"SCCACHE_DIR={SCCACHE_CONTAINER_DIR}"])
+            forwarded_names.add("SCCACHE_DIR")
             # Forward other SCCACHE_* environment variables present on host
             for k in sccache_keys:
-                if k != "SCCACHE_DIR":
+                if k != "SCCACHE_DIR" and k not in forwarded_names:
                     args.extend(["-e", k])
-        elif len(sccache_keys) > 0:
-            warn(
-                "SCCACHE_* environment variables detected but HOLOSCAN_CLI_ENABLE_SCCACHE is "
-                "disabled; not forwarding sccache environment variables into the container: "
-                f"{', '.join(sccache_keys)}"
-            )
+                    forwarded_names.add(k)
+        else:
+            unforwarded_sccache_keys = [k for k in sccache_keys if k not in forwarded_names]
+            if unforwarded_sccache_keys:
+                warn(
+                    "SCCACHE_* environment variables detected but HOLOSCAN_CLI_ENABLE_SCCACHE is "
+                    "disabled; not forwarding sccache environment variables into the container: "
+                    f"{', '.join(unforwarded_sccache_keys)}"
+                )
         return args
 
     def get_display_options(self, enable_x11: bool, ssh_x11: bool) -> List[str]:
@@ -1034,13 +1252,13 @@ class HoloscanContainer:
 
         # Resolve SDK python/lib path
         if using_local_sdk:
-            sdk_dir = find_hsdk_build_rel_dir(local_sdk_root)
+            sdk_dir = find_hsdk_dir(local_sdk_root, cuda_version=self.cuda_version)
             root = Path(local_sdk_root) if local_sdk_root else Path(os.environ["HOLOSCAN_SDK_ROOT"])
-            if not Path(sdk_dir).is_absolute() and not is_valid_sdk_installation(root / sdk_dir):
+            if not Path(sdk_dir).is_absolute() and not is_valid_sdk_directory(root / sdk_dir):
                 arch_gpu = get_arch_gpu_str()
                 info(
-                    f"Valid SDK installation not found."
-                    f" Looking for 'install-{arch_gpu}' or 'build-{arch_gpu}'."
+                    "Valid SDK directory not found. Looking for a matching "
+                    f"install/build directory for {arch_gpu}."
                 )
             if Path(sdk_dir).is_absolute():
                 sdk_python_lib = "/workspace/holoscan-sdk/python/lib"
@@ -1080,19 +1298,17 @@ class HoloscanContainer:
             local_sdk_root = Path(env_root)
         else:
             local_sdk_root = Path(local_sdk_root)
-        build_dir = find_hsdk_build_rel_dir(local_sdk_root)
-        if not Path(build_dir).is_absolute() and not is_valid_sdk_installation(
-            local_sdk_root / build_dir
-        ):
+        sdk_dir = find_hsdk_dir(local_sdk_root, cuda_version=self.cuda_version)
+        if not Path(sdk_dir).is_absolute() and not is_valid_sdk_directory(local_sdk_root / sdk_dir):
             arch_gpu = get_arch_gpu_str()
             info(
-                f"Valid SDK installation not found."
-                f" Looking for 'install-{arch_gpu}' or 'build-{arch_gpu}'."
+                "Valid SDK directory not found. Looking for a matching "
+                f"install/build directory for {arch_gpu}."
             )
-        if Path(build_dir).is_absolute():
+        if Path(sdk_dir).is_absolute():
             lib_path = "/workspace/holoscan-sdk/lib"
         else:
-            lib_path = f"/workspace/holoscan-sdk/{build_dir}/lib"
+            lib_path = f"/workspace/holoscan-sdk/{sdk_dir}/lib"
         return [
             "-v",
             f"{local_sdk_root}:/workspace/holoscan-sdk",

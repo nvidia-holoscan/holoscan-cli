@@ -16,6 +16,8 @@
 import os
 from types import SimpleNamespace
 
+import pytest
+
 from holoscan_cli import cli as project_cli
 from holoscan_cli import container as project_container
 from holoscan_cli.cli import in_container_cli_command
@@ -45,46 +47,32 @@ def _make_container() -> project_container.HoloscanContainer:
 
 def _delenv_wrapper_vars(monkeypatch) -> None:
     """Clear the canonical HOLOSCAN_CLI_* wrapper vars."""
-    for suffix in ("PATH_PREFIX", "SEARCH_PATH", "CTEST_SCRIPT"):
+    for suffix in (
+        "PATH_PREFIX",
+        "SEARCH_PATH",
+        "CTEST_SCRIPT",
+        "TARGET_ARCH",
+    ):
         monkeypatch.delenv(f"HOLOSCAN_CLI_{suffix}", raising=False)
 
 
-def test_environment_args_forward_path_prefix(monkeypatch):
+@pytest.mark.parametrize(
+    ("suffix", "value"),
+    [
+        ("PATH_PREFIX", "isaac"),
+        ("SEARCH_PATH", "tutorials,applications,benchmarks,subgraphs,operators"),
+        ("CTEST_SCRIPT", "cmake/isaac_os.container.ctest"),
+        ("TARGET_ARCH", "aarch64"),
+    ],
+)
+def test_environment_args_forward_wrapper_values(monkeypatch, suffix, value):
     _delenv_wrapper_vars(monkeypatch)
-    monkeypatch.setenv("HOLOSCAN_CLI_PATH_PREFIX", "isaac")
+    monkeypatch.setenv(f"HOLOSCAN_CLI_{suffix}", value)
 
     args = _make_container().get_environment_args()
 
-    assert "HOLOSCAN_CLI_PATH_PREFIX=isaac" in args
-    # Legacy HOLOHUB_* spelling is no longer forwarded.
-    assert "HOLOHUB_PATH_PREFIX=isaac" not in args
-    assert all(
-        not a.startswith("HOLOSCAN_CLI_SEARCH_PATH=") for a in args
-    ), "search path must not be forwarded when unset"
-
-
-def test_environment_args_forward_search_path(monkeypatch):
-    _delenv_wrapper_vars(monkeypatch)
-    monkeypatch.setenv(
-        "HOLOSCAN_CLI_SEARCH_PATH",
-        "tutorials,applications,benchmarks,subgraphs,operators",
-    )
-
-    args = _make_container().get_environment_args()
-
-    expected_value = "tutorials,applications,benchmarks,subgraphs,operators"
-    assert f"HOLOSCAN_CLI_SEARCH_PATH={expected_value}" in args
-    assert f"HOLOHUB_SEARCH_PATH={expected_value}" not in args
-
-
-def test_environment_args_forward_ctest_script(monkeypatch):
-    _delenv_wrapper_vars(monkeypatch)
-    monkeypatch.setenv("HOLOSCAN_CLI_CTEST_SCRIPT", "cmake/isaac_os.container.ctest")
-
-    args = _make_container().get_environment_args()
-
-    assert "HOLOSCAN_CLI_CTEST_SCRIPT=cmake/isaac_os.container.ctest" in args
-    assert "HOLOHUB_CTEST_SCRIPT=cmake/isaac_os.container.ctest" not in args
+    assert f"HOLOSCAN_CLI_{suffix}={value}" in args
+    assert f"HOLOHUB_{suffix}={value}" not in args
 
 
 def test_environment_args_omits_unset_wrapper_vars(monkeypatch):

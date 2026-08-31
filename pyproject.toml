@@ -19,7 +19,7 @@ description = "Command line interface for HoloHub-style Holoscan source-project 
 readme = "README.md"
 license = "Apache-2.0"
 license-files = ["LICENSE"]
-requires-python = ">=3.10,<3.14"
+requires-python = ">=3.11,<3.14"
 authors = [{ name = "NVIDIA" }]
 maintainers = [{ name = "NVIDIA" }]
 keywords = [
@@ -44,7 +44,6 @@ classifiers = [
     "Intended Audience :: Healthcare Industry",
     "Operating System :: POSIX :: Linux",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
@@ -96,7 +95,6 @@ pytest-cov= "^7.0.0"
 pytest-mock= "^3.15.1"
 pytest = "^9.1.1"
 coveralls = { version = "^4.1.0", markers = "python_version < '3.13'" }
-tomli = { version = "^2.4", markers = "python_version < '3.11'" }
 # Mirrors the runtime ``[create]`` extra so the unit tests for the
 # schema validator (``test_metadata_validator.py``) and the smoke
 # fixture (``test_smoke_fixture.py``) can import them without
@@ -131,7 +129,7 @@ skip_glob = [
 
 [tool.black]
 line-length = 100
-target-version = ["py310", "py311", "py312", "py313"]
+target-version = ["py311", "py312", "py313"]
 force-exclude = 'src/holoscan_cli/templates/module/'
 extend-exclude = '''
 (
@@ -145,7 +143,7 @@ extend-exclude = '''
 
 [tool.ruff]
 line-length = 100
-target-version = "py310"
+target-version = "py311"
 cache-dir = ".cache/ruff"
 exclude = [
   ".cache",

@@ -8,6 +8,26 @@ import subprocess
 from holoscan_cli.utils import io
 
 
+def test_run_command_display_override_hides_value_without_changing_execution(monkeypatch, capsys):
+    calls = []
+
+    def fake_run(cmd, **_kwargs):
+        calls.append(cmd)
+        return subprocess.CompletedProcess(cmd, 0)
+
+    monkeypatch.setattr(io.subprocess, "run", fake_run)
+
+    io.run_command(
+        ["tool", "--token", "secret-value"],
+        display_override=["tool", "<configured options hidden>"],
+    )
+
+    assert calls == [["tool", "--token", "secret-value"]]
+    output = capsys.readouterr().out
+    assert "<configured options hidden>" in output
+    assert "secret-value" not in output
+
+
 def test_run_command_as_root_when_already_root_runs_directly(monkeypatch):
     monkeypatch.setattr(io.os, "geteuid", lambda: 0)
     seen = {}

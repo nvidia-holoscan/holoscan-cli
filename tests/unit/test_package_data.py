@@ -37,14 +37,10 @@ import os
 import re
 import subprocess
 import sys
+import tomllib
 from pathlib import Path
 
 import pytest
-
-if sys.version_info >= (3, 11):
-    import tomllib
-else:  # pragma: no cover - exercised only on Python 3.10
-    import tomli as tomllib
 
 REQUIRED_SCHEMAS = {
     "application.schema.json",
@@ -87,6 +83,7 @@ REQUIRED_MODULE_TEMPLATE_FILES = {
     "hooks/pre_gen_project.py",
     "hooks/post_gen_project.py",
     "{{cookiecutter.module_repo_name}}/requirements-cli.txt",
+    "{{cookiecutter.module_repo_name}}/pyproject.toml",
     "{{cookiecutter.module_repo_name}}/.dockerignore",
     "{{cookiecutter.module_repo_name}}/Dockerfile",
     "{{cookiecutter.module_repo_name}}/CMakeLists.txt",
@@ -311,8 +308,8 @@ def test_holoscan_console_script_is_registered_at_runtime():
 def test_pyproject_targets_supported_python_versions():
     """``requires-python`` must stay in sync with the runtime version check."""
     requires_python = _pyproject()["project"]["requires-python"]
-    assert ">=3.10" in requires_python
-    assert sys.version_info >= (3, 10)
+    assert ">=3.11" in requires_python
+    assert sys.version_info >= (3, 11)
 
 
 def _dep_names(specs: list[str]) -> set[str]:

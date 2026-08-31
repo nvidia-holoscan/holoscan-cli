@@ -228,6 +228,7 @@ def run_command(
     as_root: bool = False,
     preserve_env: Optional[Iterable[str]] = None,
     replace_process: bool = False,
+    display_override: Optional[Union[str, List[str]]] = None,
     **kwargs,
 ) -> subprocess.CompletedProcess:
     """Run a command, optionally elevated with ``sudo``.
@@ -245,6 +246,8 @@ def run_command(
     ``exec`` so the Python CLI cannot also receive terminal signals or overwrite
     the application's status. Do not use it for builds or the host Docker
     launch, where the caller must continue for cleanup. A dry run only prints.
+    ``display_override`` may provide a redacted command for logs while ``cmd``
+    remains the exact argv that is executed.
     """
     if preserve_env is not None and not as_root:
         raise ValueError("preserve_env requires as_root=True")
@@ -296,12 +299,17 @@ def run_command(
     if isinstance(cmd, str):
         prefix = shlex.join(sudo_prefix)
         exec_cmd: Union[str, List[str]] = f"{prefix} {cmd}" if elevate else cmd
-        display_prefix = shlex.join(sudo_display_prefix)
-        display_cmd = f"{display_prefix} {cmd}" if elevate else cmd
     else:
         argv = [str(x) for x in cmd]
         exec_cmd = [*sudo_prefix, *argv] if elevate else argv
-        display_argv = [*sudo_display_prefix, *argv] if elevate else argv
+
+    display_value = cmd if display_override is None else display_override
+    if isinstance(display_value, str):
+        display_prefix = shlex.join(sudo_display_prefix)
+        display_cmd = f"{display_prefix} {display_value}" if elevate else display_value
+    else:
+        display_argv = [str(x) for x in display_value]
+        display_argv = [*sudo_display_prefix, *display_argv] if elevate else display_argv
         quoted = [f'"{x}"' if " " in x else x for x in display_argv]
         display_cmd = format_long_command(quoted) if dry_run else " ".join(quoted)
 

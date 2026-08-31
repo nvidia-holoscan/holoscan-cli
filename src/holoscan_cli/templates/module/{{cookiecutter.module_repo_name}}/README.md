@@ -30,9 +30,14 @@ holoscan run {{ cookiecutter.module_slug }}_pipeline
 {% endif %}
 ```
 
-If you use [uv](https://docs.astral.sh/uv/), replace the environment setup above with
-`uv sync --only-dev`, then run `source .venv/bin/activate` and use the same `holoscan` commands.
-This installs the development tools without trying to build the Module on the host.
+If you use [uv](https://docs.astral.sh/uv/), no separate environment setup or activation is
+needed. Prefix the same commands with `uv run`, for example:
+
+```bash
+uv run holoscan run {{ cookiecutter.module_slug }}_pipeline --language python
+```
+
+The project configuration installs the development tools without building the Module on the host.
 
 ---
 
@@ -101,7 +106,7 @@ int main() { holoscan::make_application<MyApp>()->run(); }
 {%- if cookiecutter.language == 'cpp' %}
 | C++ compiler | C++17-capable |
 {%- endif %}
-| Python | ≥ 3.10 |
+| Python | ≥ 3.11 |
 
 ```bash
 cmake -S . -B build -DBUILD_ALL=ON -D{{ cookiecutter.module_slug | upper }}_BUILD_TESTING=ON

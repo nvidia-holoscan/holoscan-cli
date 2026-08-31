@@ -12,3 +12,29 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
+import pytest
+
+from holoscan_cli.project_context import set_active_project_context
+
+
+@pytest.fixture(autouse=True)
+def _reset_active_project_context():
+    """Keep process-local project defaults from leaking between tests."""
+    set_active_project_context(None)
+    yield
+    set_active_project_context(None)
+
+
+@pytest.fixture
+def make_sdk_directory():
+    """Return a factory for minimal installed or source-build SDK layouts."""
+
+    def make(path, *, build=False, config_name="holoscan-config.cmake"):
+        (path / "lib").mkdir(parents=True, exist_ok=True)
+        config_dir = path if build else path / "lib/cmake/holoscan"
+        config_dir.mkdir(parents=True, exist_ok=True)
+        (config_dir / config_name).write_text("# config\n", encoding="utf-8")
+        return path
+
+    return make

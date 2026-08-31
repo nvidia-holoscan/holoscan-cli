@@ -47,6 +47,9 @@ python -m pip install \
 
 The exact pin makes fresh host environments and development images reproducible. Lifecycle
 commands remain usable with another installed CLI version when its behavior is compatible.
+The global `holoscan` command discovers this Module from its metadata. Target architecture and
+CUDA default to host detection, and lifecycle commands use containers unless you pass `--local`.
+Run a lifecycle command with `--verbose` to see what was selected.
 
 | Command | What it does |
 | --- | --- |
@@ -54,7 +57,7 @@ commands remain usable with another installed CLI version when its behavior is c
 | `holoscan build {{ cookiecutter.module_slug }}_pipeline` | CMake configure + build inside the container |
 | `holoscan run {{ cookiecutter.module_slug }}_pipeline` | Run the example pipeline |
 | `holoscan test` | Run CTest (C++ unit tests) and pytest |
-| `holoscan install --dev` | Install a `.pth` hook so `import holoscan.{{ cookiecutter.module_slug }}` works in any shell |
+| `holoscan install --dev` | Install a `.pth` hook for live Module imports in the current Python environment |
 
 The scaffold intentionally ships no launcher wrapper. Projects that need custom environment or
 bootstrap policy can add a thin wrapper as an advanced customization, keep it outside the Module's
@@ -62,13 +65,16 @@ build and package contract, and delegate to the installed `holoscan` command. Ho
 [`holohub` wrapper](https://github.com/nvidia-holoscan/holohub/blob/main/holohub) is one reference.
 
 If you use [uv](https://docs.astral.sh/uv/), the project config selects NVIDIA's package index for
-`holoscan-cli` while leaving other dependencies on PyPI. Run `uv sync --only-dev`, then
-`source .venv/bin/activate` and use the same commands above. This installs the development tools
-without trying to build the Module on the host.
+`holoscan-cli` while leaving other dependencies on PyPI. It also avoids installing the Module
+during normal UV commands, so no separate setup or activation is needed:
+
+```bash
+uv run holoscan test
+```
 
 To upgrade the tested development environment, update the CLI pin in both
 `requirements-cli.txt` and `pyproject.toml`, reinstall the requirements (or rerun
-`uv sync --only-dev`), and rebuild the image.
+`uv sync`), and rebuild the image.
 
 ---
 
@@ -105,8 +111,8 @@ pytest tests/python/ -v
 ## `pyproject.toml`
 
 `pyproject.toml` configures [scikit-build-core](https://scikit-build-core.readthedocs.io/) for
-wheel packaging and records an optional PEP 735 development dependency group. Key fields to update
-before publishing:
+wheel packaging and records an optional PEP 735 development dependency group. Key fields to
+update before publishing:
 
 | Field | Purpose |
 | --- | --- |
@@ -115,8 +121,15 @@ before publishing:
 | `[project].description` | Short description shown on PyPI |
 | `[project].authors` | Your name / organisation |
 | `[dependency-groups].dev` | Exact CLI convenience pin; keep synchronized with `requirements-cli.txt` |
-| `[tool.uv]` | NVIDIA index selection for the pinned `holoscan-cli` development dependency |
+| `[tool.uv]` | UV development environment and NVIDIA index selection for `holoscan-cli` |
+| `[tool.holoscan]` | Optional Module-wide CUDA, CTest, Docker, environment, and base-image defaults |
 | `[tool.scikit-build].cmake.args` | Extra CMake flags passed during `pip install` |
+
+The supported keys are `tool.holoscan.cuda`, `tool.holoscan.ctest-script`,
+`tool.holoscan.docker-build-args`, `tool.holoscan.docker-run-args`,
+`tool.holoscan.forward-env`, and `tool.holoscan.base-images.{x86_64,aarch64}`. Docker argument
+arrays contain one command token per element. Do not store credentials or machine paths here;
+use `HOLOSCAN_SDK_ROOT` or `--local-sdk-root` for a machine-specific SDK.
 
 Build a wheel:
 

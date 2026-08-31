@@ -29,7 +29,9 @@ def test_install_dev_copies_staged_hook_pair(tmp_path):
     build_dir = tmp_path / "build" / "smoke"
     site_dir = tmp_path / "site"
     build_dir.mkdir(parents=True)
-    (build_dir / "holoscan_smoke_dev.py").write_text("# helper\n", encoding="utf-8")
+    (build_dir / "holoscan_smoke_dev.py").write_text(
+        '_BUILD_PATH = r"/workspace/smoke/build/python/lib/holoscan"\n', encoding="utf-8"
+    )
     (build_dir / "holoscan-smoke-dev.pth").write_text(
         "import holoscan_smoke_dev\n", encoding="utf-8"
     )
@@ -37,7 +39,9 @@ def test_install_dev_copies_staged_hook_pair(tmp_path):
 
     install_cmd.handle_install(cli, _dev_args(project="holoscan-smoke", site_dir=site_dir))
 
-    assert (site_dir / "holoscan_smoke_dev.py").read_text(encoding="utf-8") == "# helper\n"
+    assert (site_dir / "holoscan_smoke_dev.py").read_text(
+        encoding="utf-8"
+    ) == f"_BUILD_PATH = {str(build_dir / 'python/lib/holoscan')!r}\n"
     assert (site_dir / "holoscan-smoke-dev.pth").exists()
 
 

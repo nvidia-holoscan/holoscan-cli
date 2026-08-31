@@ -14,7 +14,7 @@ license = { text = "{{ cookiecutter._license }}" }
 authors = [
     { name = "{{ cookiecutter.full_name }}" },
 ]
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 
 # NOTE: holoscan SDK is not declared as a runtime dependency here because the
 # wheel cannot guarantee binary compatibility across CUDA variants (cu12/cu13).
@@ -25,6 +25,9 @@ dev = [
     "holoscan-cli=={{ cookiecutter._holoscan_cli_version }}",
     "pytest>=8.2",
 ]
+
+[tool.uv]
+package = false
 
 [tool.uv.sources]
 holoscan-cli = { index = "nvidia" }
@@ -50,7 +53,7 @@ wheel.packages = []
 
 [tool.ruff]
 line-length = 100
-target-version = "py310"
+target-version = "py311"
 # build*/, dist/ are CMake/wheel outputs; .local/, .cache/, .cupy/ are
 # dev-container HOME junk.
 exclude = [

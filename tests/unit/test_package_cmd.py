@@ -66,6 +66,7 @@ def test_package_deb_emits_module_cmake_flag_for_in_tree_module(tmp_path, monkey
     }
     cli = _cli(tmp_path, project_data)
     calls = []
+    monkeypatch.setenv("CMAKE_BUILD_PARALLEL_LEVEL", "5")
     monkeypatch.setattr(package_cmd, "run_command", lambda cmd, **kwargs: calls.append(cmd))
     monkeypatch.setattr(package_cmd.shutil, "which", lambda _: None)
 
@@ -77,6 +78,7 @@ def test_package_deb_emits_module_cmake_flag_for_in_tree_module(tmp_path, monkey
     assert "-DMODULE_test_module_fixture=ON" in cmake_args
     assert "-DPKG_test_module_fixture=ON" in cmake_args
     assert "-DBUILD_ALL=OFF" in cmake_args
+    assert calls[1][-2:] == ["-j", "5"]
     assert calls[2][0] == "cpack"
     assert not (cli.DEFAULT_BUILD_PARENT_DIR / "test_module_fixture" / "package").exists()
 

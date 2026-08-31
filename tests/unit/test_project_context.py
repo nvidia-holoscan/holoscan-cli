@@ -9,10 +9,16 @@ import subprocess
 import sys
 from pathlib import Path
 
-from holoscan_cli.project_context import activate_project_context, discover_project_context
+import pytest
+
+from holoscan_cli.project_context import (
+    ProjectContextError,
+    activate_project_context,
+    discover_project_context,
+)
 
 
-def _module(root: Path, *, full_layout: bool = True) -> Path:
+def _module(root: Path, *, full_layout: bool = True, pyproject: str | None = None) -> Path:
     root.mkdir(parents=True)
     metadata = {
         "module": {
@@ -22,6 +28,8 @@ def _module(root: Path, *, full_layout: bool = True) -> Path:
         }
     }
     (root / "metadata.json").write_text(json.dumps(metadata), encoding="utf-8")
+    if pyproject is not None:
+        (root / "pyproject.toml").write_text(pyproject, encoding="utf-8")
     if full_layout:
         (root / "applications").mkdir()
     return root
@@ -47,6 +55,7 @@ def test_module_discovery_and_activation(tmp_path, monkeypatch):
     assert context.root == root
     assert context.repo_prefix == "my_sensor"
     assert context.base_sdk_version == "4.6.0"
+    assert context.forward_env == ()
 
     monkeypatch.setattr(os, "environ", os.environ.copy())
     monkeypatch.setenv("HOLOSCAN_CLI_DATA_DIR", "/custom/data")
@@ -109,6 +118,94 @@ def test_root_precedence_and_invalid_environment_fallback(tmp_path):
     assert environment.root == selected
     assert fallback.root == module
     assert fallback.warnings
+
+
+def test_module_pyproject_resolves_project_contract_and_nearby_sdk(
+    tmp_path, monkeypatch, make_sdk_directory
+):
+    root = _module(
+        tmp_path / "module",
+        pyproject="""
+[tool.holoscan]
+cuda = 13
+ctest-script = "ci/container.ctest"
+forward-env = ["CI"]
+docker-build-args = ["--build-arg", "PROJECT_FEATURE=ON"]
+docker-run-args = ["--network=host"]
+
+[tool.holoscan.base-images]
+x86_64 = "example.test/holoscan:fixed"
+""",
+    )
+    sdk = make_sdk_directory(tmp_path / "holoscan-sdk/public/install-x86_64")
+    monkeypatch.setattr("holoscan_cli.project_context.platform.machine", lambda: "x86_64")
+
+    context = discover_project_context(cwd=root, environ={})
+    profile = context.profile_environment()
+
+    assert context.base_image == "example.test/holoscan:fixed"
+    assert context.sdk_root == sdk.resolve()
+    assert context.cuda == "13"
+    assert context.ctest_script == "ci/container.ctest"
+    assert context.docker_build_args == "--build-arg PROJECT_FEATURE=ON"
+    assert context.docker_run_args == "--network=host"
+    assert context.forward_env == ("CI",)
+    assert profile["HOLOSCAN_CLI_DEFAULT_CUDA_VERSION"] == "13"
+    assert profile["HOLOSCAN_CLI_CTEST_SCRIPT"] == "ci/container.ctest"
+    assert {
+        "HOLOSCAN_CLI_FORWARD_ENV",
+        "HOLOSCAN_CLI_DEFAULT_DOCKER_BUILD_ARGS",
+        "HOLOSCAN_CLI_DEFAULT_DOCKER_RUN_ARGS",
+        "HOLOSCAN_CLI_BASE_IMAGE_FORMAT",
+        "HOLOSCAN_CLI_DEFAULT_HSDK_DIR",
+        "holoscan_ROOT",
+    }.isdisjoint(profile)
+
+
+def test_module_environment_resolves_4x_sdk_build_tree(tmp_path, monkeypatch, make_sdk_directory):
+    root = _module(tmp_path / "module")
+    sdk_root = tmp_path / "holoscan-sdk"
+    build = sdk_root / "public/build-cu13-x86_64"
+    (sdk_root / "public").mkdir(parents=True)
+    (sdk_root / "public/VERSION").write_text("4.6.0\n", encoding="utf-8")
+    make_sdk_directory(build, build=True)
+    monkeypatch.setattr("holoscan_cli.project_context.platform.machine", lambda: "x86_64")
+
+    context = discover_project_context(
+        cwd=root,
+        environ={
+            "HOLOSCAN_SDK_ROOT": str(sdk_root),
+            "HOLOSCAN_CLI_DEFAULT_CUDA_VERSION": "13",
+        },
+    )
+
+    assert context.sdk_root == build.resolve()
+    assert context.sdk_root_source == "HOLOSCAN_SDK_ROOT"
+    assert context.warnings == ()
+
+
+@pytest.mark.parametrize(
+    ("pyproject", "error"),
+    [
+        ("[tool.holoscan]\ncdua = 13\n", "unknown field.*cdua"),
+        ("[tool.holoscan]\ncuda = '13'\n", "cuda"),
+        ("[tool.holoscan]\nctest-script = '../container.ctest'\n", "ctest-script"),
+        ("[tool.holoscan]\nforward-env = ['HOME']\n", "forward-env"),
+        ("[tool.holoscan]\ndocker-run-args = ['']\n", "docker-run-args"),
+        ("[tool.holoscan]\nbase-images = 'x86_64'\n", "base-images must be a table"),
+        (
+            "[tool.holoscan.base-images]\n"
+            "x86_64 = 'invalid image'\n"
+            "aarch64 = 'invalid image'\n",
+            "base-images",
+        ),
+    ],
+)
+def test_module_pyproject_rejects_unsafe_or_unknown_values(tmp_path, pyproject, error):
+    root = _module(tmp_path / "module", pyproject=pyproject)
+
+    with pytest.raises(ProjectContextError, match=error):
+        discover_project_context(cwd=root, environ={})
 
 
 def test_lightweight_import_does_not_load_project_cli(tmp_path):

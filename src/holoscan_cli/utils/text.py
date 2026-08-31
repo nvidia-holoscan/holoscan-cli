@@ -22,10 +22,13 @@ without side effects beyond reading os.environ or the filesystem.
 
 import os
 import re
+import shlex
 import time
 from collections.abc import Iterable
 from pathlib import Path
-from typing import List, Optional, Tuple
+from typing import List, Mapping, Optional, Tuple
+
+from holoscan_cli.utils.io import fatal
 
 # ---- version parsing ---------------------------------------------------------
 
@@ -111,9 +114,11 @@ def get_env_bool(
     env_var_name: str,
     default: bool = True,
     false_values: Tuple[str, ...] = _FALSE_ENV_VALUES,
+    environ: Optional[Mapping[str, str]] = None,
 ) -> Tuple[str, bool]:
     """Check environment variable as boolean flag"""
-    env_value = os.environ.get(env_var_name, str(default).lower())
+    source = os.environ if environ is None else environ
+    env_value = source.get(env_var_name, str(default).lower())
     is_true = env_value.lower() not in false_values
     return env_value, is_true
 
@@ -142,12 +147,75 @@ def get_cli_arg_value(args: List[str], flag: str) -> Optional[str]:
 
 def normalize_args_str(args):
     """Convert arguments to string format, handling both string and array inputs"""
-    if isinstance(args, str):
-        return os.path.expandvars(args)
-    elif isinstance(args, list):
-        expanded_args = [os.path.expandvars(arg) for arg in args]
-        return " ".join(expanded_args)
-    return ""
+    fragments = [args] if isinstance(args, str) else args if isinstance(args, list) else []
+    # metadata.json arrays historically allow one shell fragment per element,
+    # such as ["-u root", "-e ACCEPT_EULA=Y"]. Parse every fragment before
+    # expanding variables so an expanded value cannot introduce new options.
+    tokens = []
+    for fragment in fragments:
+        try:
+            split_tokens = shlex.split(fragment)
+        except ValueError as exc:
+            fatal(f"Cannot parse argument value {fragment!r}: {exc}")
+        tokens.extend(os.path.expandvars(token) for token in split_tokens)
+    return shlex.join(tokens)
+
+
+def merge_args_str(*values) -> str:
+    """Compose shell-style argument values without losing token boundaries.
+
+    Each value may use the metadata string form or token-array form accepted by
+    :func:`normalize_args_str`. Values are ordered from lower to higher
+    precedence, so tools with last-option-wins behavior naturally honor the
+    later layer.
+    """
+    tokens = []
+    for value in values:
+        normalized = normalize_args_str(value)
+        if normalized:
+            tokens.extend(shlex.split(normalized))
+    return shlex.join(tokens)
+
+
+def redact_cli_option_values(args: List[str], option: str, replacement: str) -> List[str]:
+    """Redact an option's values inside argv entries or shell-joined commands."""
+    assignment_prefix = f"{option}="
+
+    def redact_tokens(tokens: List[str]) -> tuple[List[str], bool]:
+        redacted: List[str] = []
+        changed = False
+        index = 0
+        while index < len(tokens):
+            token = tokens[index]
+            if token == option and index + 1 < len(tokens):
+                redacted.extend([token, replacement])
+                changed = True
+                index += 2
+                continue
+            if token.startswith(assignment_prefix):
+                redacted.append(f"{assignment_prefix}{replacement}")
+                changed = True
+            else:
+                redacted.append(token)
+            index += 1
+        return redacted, changed
+
+    result: List[str] = []
+    for arg in args:
+        if option not in arg:
+            result.append(arg)
+            continue
+        if arg.startswith(assignment_prefix):
+            result.append(f"{assignment_prefix}{replacement}")
+            continue
+        try:
+            tokens = shlex.split(arg)
+        except ValueError:
+            result.append(f"<command containing {option} hidden>")
+            continue
+        redacted, changed = redact_tokens(tokens)
+        result.append(shlex.join(redacted) if changed else arg)
+    return result
 
 
 # ---- filesystem stats + reporting --------------------------------------------

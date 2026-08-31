@@ -229,13 +229,14 @@ def test_packaged_template_creates_a_standalone_module(
     assert (project / "cmake/HoloHubConfigHelpers.cmake").is_file()
     assert active_requirements == [f"holoscan-cli=={create.__version__}"]
     assert "--extra-index-url https://pypi.nvidia.com" in requirement
+    assert 'requires-python = ">=3.11"' in pyproject
     assert 'holoscan-cli = { index = "nvidia" }' in pyproject
     assert 'url = "https://pypi.nvidia.com"' in pyproject
     assert "explicit = true" in pyproject
+    assert "package = false" in pyproject
     assert "--extra-index-url https://pypi.nvidia.com" in dockerfile
     assert "python3 -m venv .venv" in readme
-    assert "uv sync --only-dev" in readme
-    assert "uv run holoscan" not in readme
+    assert "uv run holoscan" in readme
     assert not (project / "holohub").exists()
     assert not (project / "holoscan").exists()
 

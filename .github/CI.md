@@ -34,15 +34,14 @@ surface is exercised before merge. Jobs run in this order:
 | Job                           | Purpose                                                                    |
 | ----------------------------- | -------------------------------------------------------------------------- |
 | `pre-commit`                  | Run all hooks listed in `.pre-commit-config.yaml` on Python 3.12.          |
-| `test` matrix                 | `poetry run pytest` on Python 3.10, 3.11, 3.12, and 3.13 (Ubuntu).         |
+| `test` matrix                 | `poetry run pytest` on Python 3.11, 3.12, and 3.13 (Ubuntu).               |
 | `HoloHub project integration` | Test current CLI against HoloHub's real project tree and wrapper suite.    |
 | `build wheel + sdist`         | `poetry build` + `twine check` + `assert_wheel_contents.sh`.               |
 | `installed artifact smoke`    | Test clean wheel and sdist installs, the `create` extra, uvx, and pipx.    |
 | `CPU CLI + Docker smoke test` | Installed-wheel source-project dry-runs plus a tiny CPU Docker build.      |
 
 The 3.12 `test` entry uploads coverage to Coveralls; the other matrix entries
-exist purely to catch version-specific regressions (e.g. `tomllib` is stdlib
-on 3.11+ but missing on 3.10).
+exist purely to catch version-specific regressions across supported runtimes.
 
 `coveralls` itself is only pulled in for `python_version < '3.13'`; on Python
 3.13 the test job skips the upload step.

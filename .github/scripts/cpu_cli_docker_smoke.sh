@@ -79,7 +79,7 @@ run_fixture run-container --dryrun --no-docker-build --img "$image" \
   --docker-opts "--memory 128m" --add-volume "$tmpdir" -- echo hello \
   > "$tmpdir/run-container.log"
 grep -q -- "docker run" "$tmpdir/run-container.log"
-grep -q -- "--memory 128m" "$tmpdir/run-container.log"
+grep -Fq -- "<2 configured Docker run option token(s) hidden>" "$tmpdir/run-container.log"
 grep -q -- "$tmpdir" "$tmpdir/run-container.log"
 grep -q -- "echo hello" "$tmpdir/run-container.log"
 
