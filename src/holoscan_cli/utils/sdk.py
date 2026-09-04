@@ -233,6 +233,12 @@ def is_valid_sdk_installation(path: Union[str, Path]) -> bool:
     ).exists()
 
 
+def get_sdk_cmake_prefix_path(path: Union[str, Path]) -> str:
+    """Return CMake prefixes that work for SDK install and source-build layouts."""
+    sdk_path = Path(path)
+    return ";".join((str(sdk_path), str(sdk_path / "lib")))
+
+
 def find_hsdk_build_rel_dir(local_sdk_root: Optional[Union[str, Path]] = None) -> str:
     """
     Find a suitable SDK installation or build directory.
