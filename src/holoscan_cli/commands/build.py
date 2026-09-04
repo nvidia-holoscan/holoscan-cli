@@ -48,6 +48,7 @@ from holoscan_cli.utils.holohub import (
     update_env,
 )
 from holoscan_cli.utils.io import fatal, info, run_command, warn
+from holoscan_cli.utils.sdk import get_sdk_cmake_prefix_path
 from holoscan_cli.utils.text import get_env_bool
 
 
@@ -317,7 +318,7 @@ def build_project_locally(
         f"-DPython3_EXECUTABLE={sys.executable}",
         f"-DPython3_ROOT_DIR={os.path.dirname(os.path.dirname(sys.executable))}",
         f"-DCMAKE_BUILD_TYPE={build_type}",
-        f"-DCMAKE_PREFIX_PATH={cli.DEFAULT_SDK_DIR}/lib",
+        f"-DCMAKE_PREFIX_PATH={get_sdk_cmake_prefix_path(cli.DEFAULT_SDK_DIR)}",
         f"-DHOLOHUB_DATA_DIR:PATH={cli.DEFAULT_DATA_DIR}",
     ]
     if project_type == "module":
