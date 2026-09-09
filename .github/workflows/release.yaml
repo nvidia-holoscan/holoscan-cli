@@ -15,11 +15,10 @@
 
 # Manual release workflow: lint, unit tests, wheel + sdist build,
 # package metadata + content validation, installed-wheel smoke tests,
-# and TestPyPI publish (for both GA and non-GA dispatches). The K2
-# Kitmaker wheel-release flow promotes the staged wheel from TestPyPI
-# (preferred — via the new `release_kitmaker_wheel.py upload
-# --wheel-url https://test.pypi.org/project/holoscan-cli/<v>/` shape)
-# or, as a fallback, from the `wheel-artifact` uploaded here.
+# and TestPyPI publish (for both GA and non-GA dispatches). The approved
+# NVIDIA package-promotion process consumes the staged wheel from TestPyPI
+# or, as a fallback, from the `wheel-artifact` uploaded here. This workflow
+# has no public-PyPI deployment job.
 #
 # For more information see:
 # https://help.github.com/actions/language-and-framework-guides/using-python-with-github-actions
@@ -33,6 +32,10 @@ on:
         description: 'Version (e.g. v1.2.34)'
         required: true
         type: string
+      alpha:
+        description: 'Alpha build number (for example, 1 produces X.Y.Za1)'
+        required: false
+        type: number
       rc:
         description: 'RC Build Number'
         required: false
@@ -152,15 +155,34 @@ jobs:
     - name: Validate release inputs
       env:
         VERSION: ${{ github.event.inputs.version }}
+        ALPHA: ${{ github.event.inputs.alpha }}
         RC: ${{ github.event.inputs.rc }}
         GA: ${{ github.event.inputs.ga }}
+        REF_NAME: ${{ github.ref_name }}
       run: |
         if [[ ! "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
           echo "version must look like vX.Y.Z, got '$VERSION'" >&2
           exit 1
         fi
-        if [[ "$GA" == "true" && -n "$RC" ]]; then
-          echo "rc must be empty for GA releases" >&2
+        if [[ -n "$ALPHA" && ! "$ALPHA" =~ ^[1-9][0-9]*$ ]]; then
+          echo "alpha must be a positive integer, got '$ALPHA'" >&2
+          exit 1
+        fi
+        if [[ -n "$RC" && ! "$RC" =~ ^[1-9][0-9]*$ ]]; then
+          echo "rc must be a positive integer, got '$RC'" >&2
+          exit 1
+        fi
+        if [[ -n "$ALPHA" && -n "$RC" ]]; then
+          echo "alpha and rc are mutually exclusive" >&2
+          exit 1
+        fi
+        if [[ "$GA" == "true" && ( -n "$ALPHA" || -n "$RC" ) ]]; then
+          echo "alpha and rc must be empty for GA releases" >&2
+          exit 1
+        fi
+        if [[ ( -n "$ALPHA" || -n "$RC" || "$GA" == "true" ) \
+              && "$REF_NAME" != release/* ]]; then
+          echo "explicit alpha, RC, and GA releases must use a release/* branch" >&2
           exit 1
         fi
 
@@ -187,6 +209,23 @@ jobs:
       with:
         python-version: "3.12"
 
+    - name: Resolve explicit release package version
+      id: release-version
+      env:
+        VERSION: ${{ github.event.inputs.version }}
+        ALPHA: ${{ github.event.inputs.alpha }}
+        RC: ${{ github.event.inputs.rc }}
+        GA: ${{ github.event.inputs.ga }}
+        REF_NAME: ${{ github.ref_name }}
+      run: |
+        package_version=$(python .github/scripts/resolve_release_version.py \
+          --version "$VERSION" \
+          --alpha "$ALPHA" \
+          --rc "$RC" \
+          --ga "$GA" \
+          --ref-name "$REF_NAME")
+        echo "package-version=${package_version}" >> "$GITHUB_OUTPUT"
+
     - name: Install Poetry
       # See note in the pre-commit job above.
       run: |
@@ -195,15 +234,29 @@ jobs:
 
     - name: Build wheel and sdist
       env:
+        EXACT_VERSION: ${{ steps.release-version.outputs.package-version }}
         rc: ${{ github.event.inputs.rc }}
         ga: ${{ github.event.inputs.ga }}
       run: |
+        if [[ -n "$EXACT_VERSION" ]]; then
+          export POETRY_DYNAMIC_VERSIONING_BYPASS="$EXACT_VERSION"
+          echo "Building exact release version $EXACT_VERSION"
+        fi
         git tag -l
         poetry run which python
         source $(poetry env info --path)/bin/activate
         poetry install
         poetry dynamic-versioning -vvv
         poetry build -vvv --clean
+        if [[ -n "$EXACT_VERSION" ]]; then
+          wheel=$(find dist -maxdepth 1 -type f \
+            -name "holoscan_cli-${EXACT_VERSION}-*.whl" -print -quit)
+          if [[ -z "$wheel" || ! -f "dist/holoscan_cli-${EXACT_VERSION}.tar.gz" ]]; then
+            echo "built artifacts do not match expected version $EXACT_VERSION" >&2
+            find dist -maxdepth 1 -type f -print >&2
+            exit 1
+          fi
+        fi
 
     - name: Validate package metadata
       run: |
@@ -221,7 +274,7 @@ jobs:
         path: dist/*
 
     - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-      name: Upload wheel for K2 Kitmaker
+      name: Upload wheel for NVIDIA promotion
       with:
         name: wheel-artifact
         path: dist/holoscan_cli-*.whl
