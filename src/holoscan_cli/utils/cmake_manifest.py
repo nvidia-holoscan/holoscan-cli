@@ -31,6 +31,14 @@ from typing import Iterable
 from holoscan_cli.utils.external_resolver import ModuleDep
 
 
+def _cmake_bracket_argument(value: str) -> str:
+    """Encode ``value`` as one literal CMake bracket argument."""
+    delimiter = ""
+    while f"]{delimiter}]" in value:
+        delimiter += "="
+    return f"[{delimiter}[{value}]{delimiter}]"
+
+
 def _provider_id(module_name: str) -> str:
     """Sanitise a module name into a CMake-friendly identifier.
 
@@ -65,6 +73,10 @@ def write_external_operators_manifest(
     ``MakeAvailable``, no ``add_holohub_operator``. CMake decides what to
     fetch based on which ``OP_<x>`` survives configure-time gating.
 
+    Metadata-derived values are emitted as literal CMake bracket arguments or
+    bracket comments. The delimiter is selected so the value cannot close its
+    own argument and inject CMake syntax.
+
     Provider lookups are NORMAL variables (no ``CACHE INTERNAL``), so they
     don't survive across configure runs. This matters when a build dir is
     reused across consumers with different external Module needs (e.g.
@@ -97,12 +109,14 @@ def write_external_operators_manifest(
             # In-tree modules are already part of the consuming source tree.
             # The tree's normal CMake options enable their operators, so this
             # manifest must not emit a FetchContent declaration for them.
-            lines.append(f"# {dep.name} (in-tree: {dep.override_path})")
+            in_tree_comment = f"{dep.name} (in-tree: {dep.override_path})"
+            lines.append("#" + _cmake_bracket_argument(in_tree_comment))
             if dep.provides_operators:
-                lines.append(
-                    f"# Operators {dep.provides_operators} are built by the source tree "
+                comment = (
+                    f"Operators {dep.provides_operators} are built by the source tree "
                     "when the corresponding OP_* flags are ON."
                 )
+                lines.append("#" + _cmake_bracket_argument(comment))
             lines.append("")
             continue
 
@@ -117,7 +131,8 @@ def write_external_operators_manifest(
         provider_upper = provider.upper()
         ref_note = f", ref {dep.ref}" if dep.ref else ""
         origin = "local-override" if dep.override_path else "fetch"
-        lines.append(f"# {dep.name} ({origin}{ref_note})")
+        origin_comment = f"{dep.name} ({origin}{ref_note})"
+        lines.append("#" + _cmake_bracket_argument(origin_comment))
 
         override_str = None
         if dep.override_path is not None:
@@ -125,9 +140,11 @@ def write_external_operators_manifest(
             # FETCHCONTENT_SOURCE_DIR_<UPPER> is a cache variable (global scope) that
             # redirects FetchContent_MakeAvailable at the local tree. Emitted as a
             # separate set() before the function call so it's visible to readers.
+            override_arg = _cmake_bracket_argument(override_str)
+            description_arg = _cmake_bracket_argument(f"Local override for {dep.name}")
             lines.append(
-                f'set(FETCHCONTENT_SOURCE_DIR_{provider_upper} "{override_str}" '
-                f'CACHE PATH "Local override for {dep.name}" FORCE)'
+                f"set(FETCHCONTENT_SOURCE_DIR_{provider_upper} {override_arg} "
+                f"CACHE PATH {description_arg} FORCE)"
             )
 
         # Build holohub_declare_external_module(...) call, forwarding FetchContent
@@ -136,10 +153,10 @@ def write_external_operators_manifest(
         # directory scope).
         call_parts = [f"holohub_declare_external_module({provider}"]
         if dep.git_url and dep.ref:
-            call_parts.append(f'    GIT_REPOSITORY  "{dep.git_url}"')
-            call_parts.append(f'    GIT_TAG         "{dep.ref}"')
+            call_parts.append(f"    GIT_REPOSITORY  {_cmake_bracket_argument(dep.git_url)}")
+            call_parts.append(f"    GIT_TAG         {_cmake_bracket_argument(dep.ref)}")
         elif override_str is not None:
-            call_parts.append(f'    SOURCE_DIR  "{override_str}"')
+            call_parts.append(f"    SOURCE_DIR  {_cmake_bracket_argument(override_str)}")
 
         for op in dep.provides_operators:
             prior = seen_op_provider.get(op)
@@ -152,7 +169,8 @@ def write_external_operators_manifest(
             seen_op_provider[op] = provider
 
         if dep.provides_operators:
-            call_parts.append(f"    PROVIDES_OPERATORS {' '.join(dep.provides_operators)}")
+            operators = " ".join(_cmake_bracket_argument(op) for op in dep.provides_operators)
+            call_parts.append(f"    PROVIDES_OPERATORS {operators}")
 
         call_parts.append(")")
         lines.append("\n".join(call_parts))
