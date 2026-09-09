@@ -203,15 +203,36 @@ published GA tags.
 4. **Check for a stale temporary base tag, then dispatch alpha 1:**
 
    ```bash
-   git fetch origin --tags --prune
-   git ls-remote --refs origin refs/tags/v5.0.0 refs/tags/v5.0.0a1
-
-   gh workflow run release.yaml --ref release/5.0.0 \
-     -f version=v5.0.0 -f alpha=1 -f ga=false
+   (
+     set -euo pipefail
+     alpha=1
+     package_version="5.0.0a${alpha}"
+     git fetch origin --tags --prune
+     existing_tags=$(git ls-remote --refs origin \
+       refs/tags/v5.0.0 "refs/tags/v${package_version}")
+     if [[ -n "$existing_tags" ]]; then
+       echo "Stop: base or alpha tag already exists: $existing_tags" >&2
+       exit 1
+     fi
+     status=$(curl --silent --show-error --location --max-time 30 \
+       --output /dev/null --write-out '%{http_code}' \
+       "https://test.pypi.org/pypi/holoscan-cli/${package_version}/json")
+     if [[ "$status" != 404 ]]; then
+       echo "Stop: version exists or availability is unknown (HTTP $status)" >&2
+       exit 1
+     fi
+     gh workflow run release.yaml --ref release/5.0.0 \
+       -f version=v5.0.0 -f alpha="$alpha" -f ga=false
+   )
    ```
 
    If `v5.0.0` exists, stop and determine whether it is a retained GA tag or a
    failed workflow's temporary tag before doing anything to it.
+   If the alpha tag or TestPyPI version exists, select the next unused alpha
+   number and repeat the preflight. Use that number consistently in the
+   installation, promotion, and tagging steps below. Only HTTP 404 establishes
+   that the TestPyPI version is absent; network errors and other responses stop
+   the sequence.
 5. **Watch the run and validate the TestPyPI package:**
 
    ```bash
@@ -221,7 +242,8 @@ published GA tags.
 
    python3 -m venv /tmp/holoscan-cli-5.0.0a1
    . /tmp/holoscan-cli-5.0.0a1/bin/activate
-   python -m pip install --index-url https://test.pypi.org/simple/ \
+   python -m pip install --only-binary=holoscan-cli \
+     --index-url https://test.pypi.org/simple/ \
      --extra-index-url https://pypi.org/simple/ "holoscan-cli==5.0.0a1"
    holoscan version
    ```
@@ -236,9 +258,28 @@ published GA tags.
    ```bash
    python3 -m venv /tmp/holoscan-cli-nvidia-5.0.0a1
    /tmp/holoscan-cli-nvidia-5.0.0a1/bin/pip install \
-     --index-url https://pypi.nvidia.com/simple \
+     --only-binary=holoscan-cli --index-url https://pypi.nvidia.com \
      "holoscan-cli==5.0.0a1"
    /tmp/holoscan-cli-nvidia-5.0.0a1/bin/holoscan version
+   ```
+
+   Verify that promotion preserved the exact wheel bytes. Stop if the digests
+   differ; publishing different source under the same version breaks provenance.
+
+   ```bash
+   (
+     set -euo pipefail
+     audit_dir=$(mktemp -d /tmp/holoscan-cli-promotion.XXXXXX)
+     python -m pip --isolated download --no-cache-dir --no-deps \
+       --only-binary=:all: --index-url https://test.pypi.org/simple/ \
+       --dest "$audit_dir/testpypi" "holoscan-cli==5.0.0a1"
+     python -m pip --isolated download --no-cache-dir --no-deps \
+       --only-binary=:all: --index-url https://pypi.nvidia.com \
+       --dest "$audit_dir/nvidia" "holoscan-cli==5.0.0a1"
+     wheel_name=holoscan_cli-5.0.0a1-py3-none-any.whl
+     sha256sum "$audit_dir/testpypi/$wheel_name" "$audit_dir/nvidia/$wheel_name"
+     cmp "$audit_dir/testpypi/$wheel_name" "$audit_dir/nvidia/$wheel_name"
+   )
    ```
 
 8. **Record the successful alpha** at the exact release-branch commit. Do this
@@ -248,7 +289,8 @@ published GA tags.
    (
      set -euo pipefail
      git fetch origin --tags --prune
-     release_sha=$(git rev-parse --verify origin/release/5.0.0)
+     release_sha=$(gh run view <run-id> --json headSha --jq .headSha)
+     git rev-parse --verify "${release_sha}^{commit}"
      git tag -a v5.0.0a1 "${release_sha}" \
        -m "holoscan-cli 5.0.0a1" \
        -m "TestPyPI: https://test.pypi.org/project/holoscan-cli/5.0.0a1/"
@@ -259,18 +301,19 @@ published GA tags.
    )
    ```
 
+   Select the successful **Release** run that built the validated alpha, and
+   verify its branch, version inputs, and conclusion before using its run ID.
+   The branch may have advanced since the build; always tag the run's `headSha`.
+
 9. **Iterate with `a2`, `a3`, …** when fixes are needed. Merge each fix to
    `main`, cherry-pick its single-parent commit to `release/5.0.0`, push the
-   branch, rerun branch CI, and dispatch the next unused alpha number:
+   branch, rerun branch CI, and repeat step 4 with the next unused alpha number:
 
    ```bash
    git switch release/5.0.0
    git pull --ff-only origin release/5.0.0
    git cherry-pick <single-parent-fix-sha>
    git push origin release/5.0.0
-
-   gh workflow run release.yaml --ref release/5.0.0 \
-     -f version=v5.0.0 -f alpha=2 -f ga=false
    ```
 
    Do not pass a merge commit to plain `git cherry-pick <sha>`.
@@ -286,12 +329,27 @@ published GA tags.
     ```
 
     Apply the same validation, promotion, and permanent-tag rules to
-    `v5.0.0rcN`. A successful GA dispatch retains `v5.0.0`.
+    `v5.0.0rcN`, using the successful RC run's `headSha` for its annotated tag.
+    A successful GA dispatch retains `v5.0.0`; verify that existing tag against
+    the successful GA run's `headSha` instead of recreating or moving it:
+
+    ```bash
+    (
+      set -euo pipefail
+      git fetch origin --tags --prune
+      ga_sha=$(gh run view <ga-run-id> --json headSha --jq .headSha)
+      test "$(git rev-parse --verify 'refs/tags/v5.0.0^{commit}')" = "$ga_sha"
+    )
+    ```
+
 11. **Publish the cumulative GA changelog** only after the GA workflow,
     downstream validation, and approved promotion have succeeded. Compare the
     previous GA tag with the new GA tag, not with an alpha or RC tag:
 
     ```bash
+    git fetch origin --tags --prune
+    git rev-parse --verify 'refs/tags/vPREVIOUS.GA^{commit}'
+    git rev-parse --verify 'refs/tags/v5.0.0^{commit}'
     git diff --stat vPREVIOUS.GA..v5.0.0
     git log --cherry-pick --right-only --no-merges --oneline \
       vPREVIOUS.GA...v5.0.0

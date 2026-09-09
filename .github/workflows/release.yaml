@@ -398,6 +398,7 @@ jobs:
           python -m venv /tmp/holoscan-cli-testpypi
           for i in 1 2 3 4 5 6 7 8 9 10; do
             if /tmp/holoscan-cli-testpypi/bin/pip install \
+                 --only-binary=holoscan-cli \
                  --index-url https://test.pypi.org/simple/ \
                  --extra-index-url https://pypi.org/simple/ \
                  "holoscan-cli==$version"; then
