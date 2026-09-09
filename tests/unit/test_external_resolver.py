@@ -203,7 +203,7 @@ def test_missing_source_raises_when_no_override(tmp_path):
         parse_module_dependencies(meta)
 
 
-def test_branch_ref_warns_but_succeeds(tmp_path, capsys):
+def test_branch_ref_is_rejected(tmp_path):
     meta = _write_metadata(
         tmp_path,
         {
@@ -216,12 +216,11 @@ def test_branch_ref_warns_but_succeeds(tmp_path, capsys):
             }
         },
     )
-    deps = parse_module_dependencies(meta)
-    assert len(deps) == 1
-    assert "not a 40-char commit SHA" in capsys.readouterr().err
+    with pytest.raises(ValueError, match="full 40-character commit SHA"):
+        parse_module_dependencies(meta)
 
 
-def test_full_sha_does_not_warn(tmp_path, capsys):
+def test_full_sha_is_accepted(tmp_path):
     meta = _write_metadata(
         tmp_path,
         {
@@ -234,8 +233,8 @@ def test_full_sha_does_not_warn(tmp_path, capsys):
             }
         },
     )
-    parse_module_dependencies(meta)
-    assert "not a 40-char commit SHA" not in capsys.readouterr().err
+    deps = parse_module_dependencies(meta)
+    assert deps[0].ref == FULL_SHA
 
 
 # ---- HOLOSCAN_CLI_LOCAL_<NAME> override ------------------------------------------
@@ -448,6 +447,15 @@ def test_module_sites_missing_file_returns_empty(tmp_path):
 def test_module_sites_partial_source_spec_raises(tmp_path, _clean_local_override_env):
     sites = _write_sites(tmp_path, [{"name": "broken", "url": "https://x/y"}])
     with pytest.raises(ValueError, match="both 'url' and 'ref'"):
+        parse_module_sites(sites)
+
+
+def test_module_sites_mutable_ref_is_rejected(tmp_path, _clean_local_override_env):
+    sites = _write_sites(
+        tmp_path,
+        [{"name": "mutable", "url": "https://example.com/module.git", "ref": "main"}],
+    )
+    with pytest.raises(ValueError, match="full 40-character commit SHA"):
         parse_module_sites(sites)
 
 

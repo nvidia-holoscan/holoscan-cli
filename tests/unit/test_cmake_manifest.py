@@ -27,6 +27,8 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+import pytest
+
 from holoscan_cli.utils.cmake_manifest import (
     _provider_id,
     write_external_operators_manifest,
@@ -72,6 +74,14 @@ def test_emits_git_repository_and_tag(tmp_path):
     )
     assert 'GIT_REPOSITORY  "https://example.com/foo.git"' in text
     assert 'GIT_TAG         "' + "abc" + "0" * 37 + '"' in text
+
+
+def test_rejects_mutable_git_ref(tmp_path):
+    with pytest.raises(ValueError, match="full 40-character commit SHA"):
+        _emit(
+            tmp_path,
+            [ModuleDep(name="mymod", git_url="https://example.com/foo.git", ref="main")],
+        )
 
 
 def test_provider_id_sanitised_in_declare(tmp_path):
@@ -131,9 +141,21 @@ def test_local_override_emits_source_dir_var(tmp_path):
 
 
 def test_local_override_only_forwards_source_dir(tmp_path):
-    text = _emit(tmp_path, [ModuleDep(name="mymod", override_path=Path("/abs/local"))])
+    text = _emit(
+        tmp_path,
+        [
+            ModuleDep(
+                name="mymod",
+                git_url="https://example.com/foo.git",
+                ref="main",
+                override_path=Path("/abs/local"),
+            )
+        ],
+    )
     assert "holohub_declare_external_module(mymod" in text
     assert 'SOURCE_DIR  "/abs/local"' in text
+    assert "GIT_REPOSITORY" not in text
+    assert "GIT_TAG" not in text
 
 
 def test_operator_collision_warns_and_keeps_latter(tmp_path, capsys):

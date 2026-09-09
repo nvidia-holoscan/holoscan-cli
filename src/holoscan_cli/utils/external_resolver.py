@@ -34,17 +34,16 @@ from __future__ import annotations
 import json
 import os
 import re
-import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 
-_SHA_RE = re.compile(r"^[0-9a-f]{40}$")
+_SHA_RE = re.compile(r"[0-9a-f]{40}")
 
 
 def _ref_is_immutable(ref: str) -> bool:
     """True if ``ref`` looks like a full commit SHA (40 hex chars)."""
-    return bool(_SHA_RE.match(ref or ""))
+    return bool(_SHA_RE.fullmatch(ref or ""))
 
 
 @dataclass
@@ -71,6 +70,16 @@ def _override_env_name(module_name: str) -> str:
     """
     sanitized = re.sub(r"[^A-Za-z0-9]+", "_", module_name).strip("_").upper()
     return f"HOLOSCAN_CLI_LOCAL_{sanitized}"
+
+
+def _require_immutable_ref(module_name: str, ref: str) -> None:
+    """Reject remote module refs that do not identify one exact commit."""
+    if not _ref_is_immutable(ref):
+        raise ValueError(
+            f"External module '{module_name}' ref {ref!r} is mutable. "
+            "Use a full 40-character commit SHA, or set "
+            f"{_override_env_name(module_name)}=<path> for local development."
+        )
 
 
 def _read_metadata(path: Path) -> dict:
@@ -161,13 +170,7 @@ def parse_module_dependencies(
                     f"{_override_env_name(name)}=<path>, or add a module descriptor "
                     f"at modules/{name}/metadata.json for in-tree modules."
                 )
-            if not _ref_is_immutable(ref):
-                print(
-                    f"WARNING: dependency '{name}' pinned to ref '{ref}', which "
-                    "is not a 40-char commit SHA. Tags and branches are mutable; "
-                    "consider pinning to an immutable SHA for reproducible builds.",
-                    file=sys.stderr,
-                )
+            _require_immutable_ref(name, ref)
 
         out.append(
             ModuleDep(
@@ -242,13 +245,8 @@ def parse_module_sites(
             )
 
         if url and ref:
-            if not _ref_is_immutable(ref):
-                print(
-                    f"WARNING: module-sites entry '{name}' pinned to ref '{ref}', which "
-                    "is not a 40-char commit SHA. Tags and branches are mutable; "
-                    "consider pinning to an immutable SHA for reproducible builds.",
-                    file=sys.stderr,
-                )
+            if override_path is None:
+                _require_immutable_ref(name, ref)
             out.append(
                 ModuleDep(
                     name=name,

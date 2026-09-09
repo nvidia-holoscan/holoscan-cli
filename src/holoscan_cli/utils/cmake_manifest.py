@@ -28,7 +28,7 @@ import sys
 from pathlib import Path
 from typing import Iterable
 
-from holoscan_cli.utils.external_resolver import ModuleDep
+from holoscan_cli.utils.external_resolver import ModuleDep, _require_immutable_ref
 
 
 def _provider_id(module_name: str) -> str:
@@ -53,9 +53,9 @@ def write_external_operators_manifest(
 
     * ``FetchContent_Declare(<provider_id> GIT_REPOSITORY <url> GIT_TAG <ref>)``.
       Pure declaration; no fetch.
-    * For ``HOLOSCAN_CLI_LOCAL_<NAME>`` overrides: also emit
+    * For ``HOLOSCAN_CLI_LOCAL_<NAME>`` overrides: emit
       ``FETCHCONTENT_SOURCE_DIR_<UPPER>=<path>`` so ``MakeAvailable`` uses the
-      local tree instead of cloning.
+      local tree instead of cloning, and omit remote Git coordinates.
     * One ``set(HOLOHUB_EXT_OP_<op>_PROVIDER <provider_id>)`` per advertised
       operator (a normal variable, not a cache entry — see below). The root
       post-step iterates these and calls ``MakeAvailable`` on the modules
@@ -135,11 +135,12 @@ def write_external_operators_manifest(
         # as a normal variable inside the function (PARENT_SCOPE → root CMakeLists.txt
         # directory scope).
         call_parts = [f"holohub_declare_external_module({provider}"]
-        if dep.git_url and dep.ref:
+        if override_str is not None:
+            call_parts.append(f'    SOURCE_DIR  "{override_str}"')
+        elif dep.git_url and dep.ref:
+            _require_immutable_ref(dep.name, dep.ref)
             call_parts.append(f'    GIT_REPOSITORY  "{dep.git_url}"')
             call_parts.append(f'    GIT_TAG         "{dep.ref}"')
-        elif override_str is not None:
-            call_parts.append(f'    SOURCE_DIR  "{override_str}"')
 
         for op in dep.provides_operators:
             prior = seen_op_provider.get(op)
