@@ -23,7 +23,36 @@ Per-repo wrappers install this package and delegate to `holoscan`, layering on t
 | [HoloHub](https://github.com/nvidia-holoscan/holohub) | `./holohub` | source-project metadata search paths, container/workspace names |
 | [I4H Workflows](https://github.com/isaac-for-healthcare/i4h-workflows) | `./i4h` | RTI DDS license auto-download + mount, TTY serial device passthrough |
 
-Common env vars: `HOLOSCAN_CLI_ROOT` (repo root), `HOLOSCAN_CLI_SEARCH_PATH` (subdirs to scan for `metadata.json`), `HOLOSCAN_CLI_PATH_PREFIX` (placeholder prefix in metadata templates), `HOLOSCAN_CLI_REPO_PREFIX` (container image name prefix). The legacy `HOLOHUB_*` spelling is no longer honored since holoscan v4.3.0 — set the `HOLOSCAN_CLI_*` names directly. `holoscan env-info` lists every env var the CLI reads in the current shell.
+Common env vars:
+
+- `HOLOSCAN_CLI_ROOT` — repo root
+- `HOLOSCAN_CLI_SEARCH_PATH` — subdirs to scan for `metadata.json`
+- `HOLOSCAN_CLI_PATH_PREFIX` — placeholder prefix in metadata templates
+- `HOLOSCAN_CLI_REPO_PREFIX` — container image name prefix
+- `HOLOSCAN_CLI_CONTAINER_PREFIX` — standalone Module image name prefix
+- `HOLOSCAN_CLI_CREATE_TEMPLATE` — default template for `holoscan create`
+
+`holoscan env-info` lists every env var the CLI reads in the current shell.
+
+## Project trust model
+
+Holoscan source projects are executable code, not passive data. In particular,
+`metadata.json` can define a `run.command` (directly or through a mode), and
+`holoscan run` executes that project-defined command. Build files, Dockerfiles,
+setup scripts, and test configuration can execute project code as well. Review
+the source and metadata before building or running a repository you do not
+trust.
+
+For a plain `run.command` string, the CLI expands Holoscan placeholders, parses
+the result into an argument vector, and launches it without an implicit shell.
+A project can still request a shell explicitly (for example, `bash -c ...`) or
+name any other executable. Local execution runs with the invoking user's
+permissions; elevation happens only when the user explicitly passes
+`--as-root`.
+
+Use `holoscan run <project> --dryrun --local --verbose` to inspect the resolved
+local build and run commands without executing them. A dry run helps with
+review, but it is not a sandbox and does not make untrusted project code safe.
 
 ## JSON output
 
@@ -43,13 +72,16 @@ removal or rename bumps `schema_version`.
 ```text
 src/holoscan_cli/
   cli.py              top-level argparse + dispatch (HoloscanCLI)
+  configuration.py    effective-configuration reporting
   commands/           one file per subcommand + a central registry
   container/          HoloscanContainer + docker arg helpers + parser builders
+  cmake/              packaged CMake support copied into standalone Modules
   utils/              io.py, text.py, sdk.py, docker.py, host_setup.py,
                       env_info.py, holohub.py
   setup_scripts/      bundled bash scripts backing `setup --scripts` and
                       `build-container --extra-scripts`
   metadata/           project metadata JSON schemas
+  templates/module/   standalone Module cookiecutter
   testing/            CTest helpers shipped in the wheel
 ```
 
@@ -80,6 +112,48 @@ uvx --from holoscan-cli holoscan --help
 pipx run --spec holoscan-cli holoscan --help
 ```
 
+Creating a standalone Module needs the optional creation dependencies. NVIDIA's
+index is included so release candidates are available too. This command requires
+`uv` 0.4.23 or later for `uvx --index` support:
+
+```bash
+uvx --index https://pypi.nvidia.com \
+  --from 'holoscan-cli[create]' holoscan create my-sensor
+```
+
+To run any command against a project outside the current directory, pass the
+global `--project-root PATH` before the subcommand (equivalent to setting
+`HOLOSCAN_CLI_ROOT`):
+
+```bash
+holoscan --project-root ~/holoscan-my-sensor list
+```
+
+### Project configuration
+
+Standalone Modules can persist a small set of settings that cannot be inferred
+from `metadata.json` or the host:
+
+```toml
+[tool.holoscan]
+cuda = 13
+ctest-script = "ci/container.ctest"
+forward-env = ["IS_CI_BUILD"]
+docker-build-args = ["--build-arg", "PROJECT_FEATURE=ON"]
+docker-run-args = ["--network=host"]
+
+[tool.holoscan.base-images]
+x86_64 = "registry.example.com/holoscan/sdk-build-x86_64:4.5.0-cuda13"
+aarch64 = "registry.example.com/holoscan/sdk-build-aarch64:4.5.0-cuda13"
+```
+
+`cuda` and `ctest-script` provide Module-wide toolchain defaults,
+`forward-env` contains names only, the Docker argument arrays provide static
+defaults, and `base-images` contains exact images for the supported target
+architectures. Use command options for one-off choices. See
+[Configuring Holoscan CLI](https://github.com/nvidia-holoscan/holoscan-cli/blob/main/CONFIGURATION.md)
+for the complete user-facing behavior.
+
 ## Versioning
 
 `holoscan-cli` release versions are aligned with Holoscan SDK GA release
@@ -102,8 +176,8 @@ with `FROM ${BASE_IMAGE}`, using any of the methods below:
    holoscan build-container my_app --base-img nvcr.io/nvidia/clara-holoscan/holoscan:v4.4.0-cuda13
    ```
 
-2. Set the `HOLOSCAN_CLI_BASE_IMAGE` environment variable to a fully qualified
-   image path:
+2. Set `HOLOSCAN_CLI_BASE_IMAGE` to an exact tagged or digested image. It is
+   used without adding another tag:
 
    ```bash
    export HOLOSCAN_CLI_BASE_IMAGE=nvcr.io/nvidia/clara-holoscan/holoscan:v4.4.0-cuda13
@@ -126,9 +200,16 @@ with `FROM ${BASE_IMAGE}`, using any of the methods below:
 If none of these is configured, the CLI asks for a base image instead of
 inferring one from its own package version.
 
+Advanced wrappers can set `HOLOSCAN_CLI_BASE_IMAGE_FORMAT` with
+`{base_image}`, `{sdk_version}`, and `{cuda_tag}`, or
+`HOLOSCAN_CLI_DEFAULT_IMAGE_FORMAT` with `{container_prefix}`,
+`{sdk_version}`, and `{cuda_tag}`. An explicit base-image format controls
+composition; without one, tagged images and digests are exact while an
+untagged environment repository uses the SDK/CUDA-derived tag.
+
 ## Build from source
 
-Python 3.10+ and [Poetry 2.0+](https://python-poetry.org/docs/#installation) required.
+Python 3.11+ and [Poetry 2.0+](https://python-poetry.org/docs/#installation) required.
 
 ```bash
 # Create + activate a virtual environment

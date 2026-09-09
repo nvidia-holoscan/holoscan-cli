@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Compact status display for HoloHub development environment."""
+"""Compact status display for the active source project."""
 
 import os
 from dataclasses import asdict, dataclass
@@ -24,6 +24,7 @@ from typing import List, Optional
 from .utils.io import Color, run_info_command
 from .utils.json_output import dumps as json_dumps
 from .utils.sdk import (
+    find_hsdk_dir,
     get_default_cuda_version,
     get_gpu_name,
     get_host_arch,
@@ -40,6 +41,7 @@ class PlatformInfo:
     gpu_name: Optional[str]
     cuda_version: str
     holoscan_version: str
+    target_arch: Optional[str] = None
 
 
 @dataclass
@@ -72,10 +74,19 @@ class FolderInfo:
 
 def collect_platform_info() -> PlatformInfo:
     arch = get_host_arch()
+    target_arch = os.environ.get("HOLOSCAN_CLI_TARGET_ARCH") or None
+    if target_arch == arch:
+        target_arch = None
     gpu_type = get_host_gpu()
     gpu_name = get_gpu_name()
-    cuda_version = get_default_cuda_version()
-    sdk_path = Path(os.environ.get("HOLOSCAN_CLI_DEFAULT_HSDK_DIR", "/opt/nvidia/holoscan"))
+    cuda_version = os.environ.get("HOLOSCAN_CLI_DEFAULT_CUDA_VERSION") or get_default_cuda_version()
+    sdk_root = os.environ.get("HOLOSCAN_SDK_ROOT")
+    if sdk_root:
+        root = Path(sdk_root).expanduser().resolve()
+        resolved = Path(find_hsdk_dir(root))
+        sdk_path = resolved if resolved.is_absolute() else root / resolved
+    else:
+        sdk_path = Path(os.environ.get("HOLOSCAN_CLI_DEFAULT_HSDK_DIR", "/opt/nvidia/holoscan"))
     holoscan_version = get_sdk_version(sdk_path)
 
     return PlatformInfo(
@@ -84,6 +95,7 @@ def collect_platform_info() -> PlatformInfo:
         gpu_name=gpu_name.split("\n")[0] if gpu_name else None,
         cuda_version=cuda_version,
         holoscan_version=holoscan_version,
+        target_arch=target_arch,
     )
 
 
@@ -116,7 +128,8 @@ def collect_folder_info(paths: List[Path]) -> List[FolderInfo]:
 def collect_image_info() -> List[ImageInfo]:
     images = []
     image_prefix = os.environ.get("HOLOSCAN_CLI_REPO_PREFIX", "holohub")
-    prefixes = [image_prefix]
+    container_prefix = os.environ.get("HOLOSCAN_CLI_CONTAINER_PREFIX", image_prefix)
+    prefixes = {prefix for prefix in (image_prefix, container_prefix) if prefix}
     docker_exe = os.environ.get("HOLOSCAN_CLI_DOCKER_EXE", "docker")
 
     # Use image IDs from running containers for reliable comparison
@@ -212,8 +225,11 @@ def format_status(
 
     # Platform
     gpu = platform.gpu_name or "unknown"
+    architecture = platform.arch
+    if platform.target_arch:
+        architecture = f"host {architecture} -> target {platform.target_arch}"
     lines.append(
-        f"Platform: {platform.arch} | {platform.gpu_type} | {gpu}"
+        f"Platform: {architecture} | {platform.gpu_type} | {gpu}"
         f" | CUDA {platform.cuda_version} | Holoscan {platform.holoscan_version}"
     )
 

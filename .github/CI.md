@@ -19,7 +19,6 @@ is intentionally named `CI.md` (not `README.md`) so it doesn't compete with the
 │   ├── smoke_test.sh
 │   └── tool_runner_smoke.sh
 └── workflows/
-    ├── blossom-ci.yml        ← NVIDIA Blossom hybrid CI bridge (/build comments)
     ├── codeql.yaml           ← CodeQL Advanced (Python)
     ├── dependency-review.yml ← Dependency review on PRs
     ├── main.yaml             ← Code Check — push and PR CI
@@ -35,15 +34,14 @@ surface is exercised before merge. Jobs run in this order:
 | Job                           | Purpose                                                                    |
 | ----------------------------- | -------------------------------------------------------------------------- |
 | `pre-commit`                  | Run all hooks listed in `.pre-commit-config.yaml` on Python 3.12.          |
-| `test` matrix                 | `poetry run pytest` on Python 3.10, 3.11, 3.12, and 3.13 (Ubuntu).         |
+| `test` matrix                 | `poetry run pytest` on Python 3.11, 3.12, and 3.13 (Ubuntu).               |
 | `HoloHub project integration` | Test current CLI against HoloHub's real project tree and wrapper suite.    |
 | `build wheel + sdist`         | `poetry build` + `twine check` + `assert_wheel_contents.sh`.               |
 | `installed artifact smoke`    | Test clean wheel and sdist installs, the `create` extra, uvx, and pipx.    |
 | `CPU CLI + Docker smoke test` | Installed-wheel source-project dry-runs plus a tiny CPU Docker build.      |
 
 The 3.12 `test` entry uploads coverage to Coveralls; the other matrix entries
-exist purely to catch version-specific regressions (e.g. `tomllib` is stdlib
-on 3.11+ but missing on 3.10).
+exist purely to catch version-specific regressions across supported runtimes.
 
 `coveralls` itself is only pulled in for `python_version < '3.13'`; on Python
 3.13 the test job skips the upload step.
@@ -304,13 +302,15 @@ each pattern in two lists:
 * **required** — files that must be present in the wheel:
   * `holoscan_cli/logging.json`
   * `holoscan_cli/py.typed`
+  * `holoscan_cli/cmake/` (support copied into generated standalone Modules)
   * `holoscan_cli/metadata/*.schema.json`
   * `holoscan_cli/setup_scripts/*`
+  * `holoscan_cli/templates/module/`
   * `holoscan_cli/testing/`
 * **forbidden** — paths that must NOT be present (regressions from past
   cleanups):
-  * `holoscan_cli/cmake/` (moved to HoloHub in commit `6aeb611`)
   * `holoscan_cli/testing/test_all_applications/` (decoupled in `2d2f44a`)
+  * `holoscan_cli/templates/module/*/holohub` (standalone Modules ship no wrapper)
 
 The same script runs in both pipelines so a wheel that passes
 `main.yaml` will pass `release.yaml`.
@@ -355,10 +355,6 @@ Runs only in `main.yaml` against the built wheel. It is intentionally CPU-only:
   `allow-licenses` rather than the deprecated `deny-licenses` option (see
   actions/dependency-review-action#997); add new SPDX identifiers there if
   a vetted permissive license isn't already on the list.
-* **`blossom-ci.yml`** — NVIDIA-internal bridge: an authorized maintainer
-  commenting `/build` on a PR kicks off a vulnerability scan and a Jenkins
-  job on Blossom-managed runners. Configuration is org-managed; do not edit
-  the authorization list without going through the Blossom CI team.
 
 ## GitHub Actions allowlist
 

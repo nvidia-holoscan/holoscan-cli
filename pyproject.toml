@@ -19,7 +19,7 @@ description = "Command line interface for HoloHub-style Holoscan source-project 
 readme = "README.md"
 license = "Apache-2.0"
 license-files = ["LICENSE"]
-requires-python = ">=3.10,<3.14"
+requires-python = ">=3.11,<3.14"
 authors = [{ name = "NVIDIA" }]
 maintainers = [{ name = "NVIDIA" }]
 keywords = [
@@ -44,7 +44,6 @@ classifiers = [
     "Intended Audience :: Healthcare Industry",
     "Operating System :: POSIX :: Linux",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
@@ -76,8 +75,10 @@ Documentation = "https://docs.nvidia.com/holoscan/sdk-user-guide/index.html"
 requires-poetry = ">=2.0"
 packages = [{ include = "holoscan_cli", from = "src" }]
 include = [
+    { path = "src/holoscan_cli/cmake/**/*", format = ["sdist", "wheel"] },
     { path = "src/holoscan_cli/metadata/*.schema.json", format = ["sdist", "wheel"] },
     { path = "src/holoscan_cli/setup_scripts/*", format = ["sdist", "wheel"] },
+    { path = "src/holoscan_cli/templates/**/*", format = ["sdist", "wheel"] },
     { path = "src/holoscan_cli/testing/**/*", format = ["sdist", "wheel"] },
 ]
 version = "0.0.0"
@@ -87,18 +88,18 @@ version = "0.0.0"
 gitchangelog = "^3.0.4"
 
 [tool.poetry.group.test.dependencies]
-coverage= "^7.15.2"
-mypy= "^2.3.0"
-pre-commit = "^4.6.1"
+coverage= "^7.16.0"
+mypy= "^2.3.1"
+pre-commit = "^4.6.2"
 pytest-cov= "^7.0.0"
 pytest-mock= "^3.15.1"
 pytest = "^9.1.1"
 coveralls = { version = "^4.1.0", markers = "python_version < '3.13'" }
-tomli = { version = "^2.4", markers = "python_version < '3.11'" }
 # Mirrors the runtime ``[create]`` extra so the unit tests for the
 # schema validator (``test_metadata_validator.py``) and the smoke
 # fixture (``test_smoke_fixture.py``) can import them without
 # requiring callers to ``pip install 'holoscan-cli[create]'`` first.
+cookiecutter = ">=2.7.1"
 jsonschema = ">=4.26.0,<5.0"
 referencing = ">=0.37.0"
 
@@ -118,29 +119,38 @@ quiet-level = 3
 profile = "black"
 line_length = 100
 known_first_party = "holoscan_cli"
-skip_glob = ["build*/*", "dist/*", ".cache/*", ".ruff_cache/*"]
+skip_glob = [
+    "build*/*",
+    "dist/*",
+    ".cache/*",
+    ".ruff_cache/*",
+    "src/holoscan_cli/templates/module/**",
+]
 
 [tool.black]
 line-length = 100
-target-version = ["py310", "py311", "py312", "py313"]
+target-version = ["py311", "py312", "py313"]
+force-exclude = 'src/holoscan_cli/templates/module/'
 extend-exclude = '''
 (
   ^\.cache/
   | ^build[^/]*/
   | ^dist/
+  | ^src/holoscan_cli/templates/module/
   | tests/reports/
 )
 '''
 
 [tool.ruff]
 line-length = 100
-target-version = "py310"
+target-version = "py311"
 cache-dir = ".cache/ruff"
 exclude = [
   ".cache",
   ".ruff_cache",
   "build*",
   "dist",
+  "src/holoscan_cli/templates/module",
   "tests/reports",
 ]
 

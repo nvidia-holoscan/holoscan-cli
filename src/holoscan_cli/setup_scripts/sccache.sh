@@ -18,7 +18,7 @@
 # Install RAPIDS sccache for Holoscan SDK projects
 # This script downloads and installs the RAPIDS-customized sccache binary.
 #
-# Prerequisites: wget, tar (must be available on PATH).
+# Prerequisites: wget, sha256sum, tar (must be available on PATH).
 
 set -e
 
@@ -61,13 +61,10 @@ version_gte() {
     return 0
 }
 
-# Cleanup on exit: remove tarball and, on failure, any partially extracted binary.
+# Cleanup downloaded and staged files.
 cleanup_install() {
     local exit_code=$?
-    rm -f "$tar_path"
-    if [[ $exit_code -ne 0 ]]; then
-        rm -f "${INSTALL_DIR}/sccache"
-    fi
+    rm -f -- "$tar_path" "$staged_binary"
     exit "$exit_code"
 }
 
@@ -111,6 +108,7 @@ check_existing_sccache() {
 main() {
     # Verify required tools are available
     command -v wget &>/dev/null || { echo "wget is required but not installed." >&2; exit 1; }
+    command -v sha256sum &>/dev/null || { echo "sha256sum is required but not installed." >&2; exit 1; }
     command -v tar &>/dev/null || { echo "tar is required but not installed." >&2; exit 1; }
 
     if [[ ! "$SCCACHE_MIN_VERSION" =~ $SCCACHE_VERSION_REGEX ]]; then
@@ -146,36 +144,49 @@ main() {
     local tarball_name="sccache-${INSTALL_VERSION}-${arch}-unknown-linux-musl.tar.gz"
     local url="${BASE_URL}/${INSTALL_VERSION}/${tarball_name}"
     local tar_path="${INSTALL_DIR}/sccache.tar.gz"
+    local staged_binary="${INSTALL_DIR}/sccache.new"
     local extracted_rel="sccache-${INSTALL_VERSION}-${arch}-unknown-linux-musl/sccache"
+    local expected_sha256="${SCCACHE_SHA256:-}"
+    if [[ -z "$expected_sha256" ]]; then
+        case "${INSTALL_VERSION}:${arch}" in
+            v0.12.0-rapids.20:x86_64) expected_sha256="00c66819327c0032b9e23ca79b55ae4b4df2840d8b5cbf41a08f95bbe5f573f9" ;;
+            v0.12.0-rapids.20:aarch64) expected_sha256="d0bce03eeab491edc37eb8ea30b9153c405aadde83f61df34d5876557a8269de" ;;
+        esac
+    fi
+    if [[ ! "$expected_sha256" =~ ^[0-9a-fA-F]{64}$ ]]; then
+        echo "ERROR: Set SCCACHE_SHA256 to a trusted 64-character digest for ${INSTALL_VERSION}/${arch}." >&2
+        exit 1
+    fi
 
     echo "Installing sccache ${INSTALL_VERSION} for ${arch}..."
 
-    # Ensure cleanup on exit (partial download or failed extraction)
-    trap cleanup_install EXIT
-
     # Prepare install + symlink directories (user-owned on host, system when root)
     mkdir -p "$INSTALL_DIR" "$(dirname "$SYMLINK_PATH")"
+    trap cleanup_install EXIT
 
     # Download, verify, and extract release tarball
     echo "Downloading from ${url}..."
     if ! wget --quiet --content-disposition "$url" -O "$tar_path" \
         || [[ ! -s "$tar_path" ]] \
-        || ! tar -tzf "$tar_path" &>/dev/null \
-        || ! tar -xzf "$tar_path" -C "$INSTALL_DIR" --strip-components=1 "$extracted_rel"; then
-        echo "ERROR: Failed to download or extract sccache (${INSTALL_VERSION}/${arch})." >&2
+        || ! printf '%s  %s\n' "$expected_sha256" "$tar_path" | sha256sum --check --status \
+        || ! tar -xOzf "$tar_path" "$extracted_rel" >"$staged_binary"; then
+        echo "ERROR: Failed to download, verify, or extract sccache (${INSTALL_VERSION}/${arch})." >&2
         echo "URL: ${url}" >&2
         exit 1
     fi
-    chmod u+x "${INSTALL_DIR}/sccache"
+    chmod 755 "$staged_binary"
+    local installed_version
+    installed_version=$("$staged_binary" --version)
 
-    # Symlink onto PATH (system dir when root, ~/.local/bin on the host)
+    # Link first, then atomically replace the validated binary.
     ln -sf "${INSTALL_DIR}/sccache" "$SYMLINK_PATH"
+    mv -f "$staged_binary" "${INSTALL_DIR}/sccache"
 
     trap - EXIT
     rm -f "$tar_path"
 
     echo "sccache ${INSTALL_VERSION} installed successfully"
-    "${SYMLINK_PATH}" --version
+    echo "$installed_version"
     warn_if_not_on_path
 }
 

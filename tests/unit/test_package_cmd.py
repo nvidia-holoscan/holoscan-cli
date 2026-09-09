@@ -66,6 +66,7 @@ def test_package_deb_emits_module_cmake_flag_for_in_tree_module(tmp_path, monkey
     }
     cli = _cli(tmp_path, project_data)
     calls = []
+    monkeypatch.setenv("CMAKE_BUILD_PARALLEL_LEVEL", "5")
     monkeypatch.setattr(package_cmd, "run_command", lambda cmd, **kwargs: calls.append(cmd))
     monkeypatch.setattr(package_cmd.shutil, "which", lambda _: None)
 
@@ -77,6 +78,7 @@ def test_package_deb_emits_module_cmake_flag_for_in_tree_module(tmp_path, monkey
     assert "-DMODULE_test_module_fixture=ON" in cmake_args
     assert "-DPKG_test_module_fixture=ON" in cmake_args
     assert "-DBUILD_ALL=OFF" in cmake_args
+    assert calls[1][-2:] == ["-j", "5"]
     assert calls[2][0] == "cpack"
     assert not (cli.DEFAULT_BUILD_PARENT_DIR / "test_module_fixture" / "package").exists()
 
@@ -197,7 +199,7 @@ def test_resolve_module_project_respects_explicit_project(tmp_path, monkeypatch)
     module_dir = tmp_path / "external-module"
     module_dir.mkdir()
     (module_dir / "metadata.json").write_text(
-        json.dumps({"module": {"name": "holoscan-smoke", "language": ["Python"]}}),
+        json.dumps({"module": {"name": "  holoscan-smoke  ", "language": ["Python"]}}),
         encoding="utf-8",
     )
     requested_module = {
@@ -221,10 +223,19 @@ def test_resolve_module_project_respects_explicit_project(tmp_path, monkeypatch)
         "project_type": "module",
         "project_name": "holoscan-smoke",
         "source_folder": str(module_dir),
-        "metadata": {"name": "holoscan-smoke", "language": ["Python"]},
+        "metadata": {"name": "  holoscan-smoke  ", "language": ["Python"]},
     }
     assert matching_project == cwd_project
     assert explicit_project == requested_module
+
+    (module_dir / "metadata.json").write_text(
+        json.dumps({"module": {"name": "   ", "language": ["Python"]}}), encoding="utf-8"
+    )
+    fallback_project = package_cmd._resolve_module_project(
+        cli, project_arg=module_dir.name, language=None
+    )
+
+    assert fallback_project["project_name"] == module_dir.name
 
 
 def test_resolve_module_project_falls_back_to_source_tree_when_cwd_metadata_invalid(

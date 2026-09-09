@@ -247,6 +247,16 @@ class TestMain:
                     main(["holoscan", "version"])
                     mock_execute.assert_called_once_with(mock_args)
 
+    @pytest.mark.parametrize("flag", ["-v", "--version"])
+    def test_main_version_flag_matches_version_command(self, flag, capsys):
+        """`-v`/`--version` are aliases: identical output to `holoscan version`."""
+        main(["holoscan", "version"])
+        expected = capsys.readouterr().out
+        assert "Version:" in expected
+
+        main(["holoscan", flag])
+        assert capsys.readouterr().out == expected
+
     @pytest.mark.parametrize(
         "argv,command",
         [(["holoscan", command], command) for command in REMOVED_COMMANDS],
@@ -262,6 +272,22 @@ class TestMain:
         assert f"'holoscan {command}' was removed since holoscan v4.3.0" in err
         assert "Removed HAP/MAP commands are not available since holoscan v4.3.0" in err
         assert "holoscan-cli<=4.2.0 and holoscan<=4.2.0" in err
+
+    @pytest.mark.parametrize(
+        "argv",
+        [
+            ["holoscan", "-l", "BOGUS", "version"],
+            ["holoscan", "--log-level=bogus", "list"],
+        ],
+    )
+    def test_main_rejects_invalid_top_level_log_level(self, argv, capsys):
+        """The dispatcher strips this prefix form, so it owns argparse's choices check."""
+        with patch("holoscan_cli.cli.main") as mock_project_main:
+            with pytest.raises(SystemExit) as excinfo:
+                main(argv)
+        mock_project_main.assert_not_called()
+        assert excinfo.value.code == 2
+        assert "must be one of" in capsys.readouterr().err
 
     def test_main_with_log_level(self):
         mock_args = MagicMock()

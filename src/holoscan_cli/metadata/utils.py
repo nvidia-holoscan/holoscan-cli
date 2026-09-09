@@ -79,6 +79,14 @@ def normalize_language(language: str | None, *, strict: bool = False) -> str:
     return normalized
 
 
+def resolve_module_name(metadata: dict, fallback: str) -> str:
+    """Return a trimmed declared Module name, or ``fallback`` when invalid."""
+    declared_name = metadata.get("name")
+    if isinstance(declared_name, str) and declared_name.strip():
+        return declared_name.strip()
+    return fallback
+
+
 def list_normalized_languages(language, *, strict: bool = False) -> list[str]:
     """Return a list of normalized language tags from a single value or sequence."""
     if isinstance(language, str) or language is None:
@@ -116,10 +124,17 @@ def iter_metadata_paths(
         )
 
     for repo_path in repo_paths:
-        for root, _, files in os.walk(repo_path):
-            if "metadata.json" not in files:
-                continue
-            file_path = os.path.join(root, "metadata.json")
+        path = Path(repo_path)
+        if path.is_file():
+            candidates = [str(path)] if path.name == "metadata.json" else []
+        else:
+            candidates = [
+                os.path.join(root, "metadata.json")
+                for root, _, files in os.walk(path)
+                if "metadata.json" in files
+            ]
+
+        for file_path in candidates:
             if excludes and _matches_segment(file_path, excludes):
                 continue
 

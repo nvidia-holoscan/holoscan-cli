@@ -18,7 +18,7 @@ import logging
 import os
 from pathlib import Path
 
-from holoscan_cli.metadata.utils import iter_metadata_paths
+from holoscan_cli.metadata.utils import iter_metadata_paths, resolve_module_name
 
 logger = logging.getLogger(__name__)
 
@@ -90,6 +90,11 @@ def gather_metadata(repo_paths: list[str], exclude_paths: list[str] | None = Non
                     data["metadata"] = data.pop(schema_type)
 
                     project_name = extract_project_name(file_path)
+                    if schema_type == "module":
+                        # A Module may be checked out or mounted under a normalized
+                        # workspace path. Its declared identity must not change with
+                        # that directory name.
+                        project_name = resolve_module_name(data["metadata"], project_name)
                     source_folder = Path(file_path).parent
                     data["project_name"] = project_name
                     data["source_folder"] = str(source_folder)

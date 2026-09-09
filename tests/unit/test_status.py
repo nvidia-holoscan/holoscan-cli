@@ -32,21 +32,35 @@ from holoscan_cli import status as project_status
 # ---- collect_platform_info --------------------------------------------------
 
 
-def test_collect_platform_info_uses_probes(monkeypatch):
+def test_collect_platform_info_uses_probes(monkeypatch, tmp_path):
+    monkeypatch.delenv("HOLOSCAN_CLI_DEFAULT_CUDA_VERSION", raising=False)
     monkeypatch.setattr(project_status, "get_host_arch", lambda: "x86_64")
     monkeypatch.setattr(project_status, "get_host_gpu", lambda: "dGPU")
     monkeypatch.setattr(project_status, "get_gpu_name", lambda: "RTX 4090\nRTX 4090")
     monkeypatch.setattr(project_status, "get_default_cuda_version", lambda: "12.6")
-    monkeypatch.setattr(project_status, "get_sdk_version", lambda _path: "3.4.0")
+    sdk_root = tmp_path / "holoscan-sdk"
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("HOLOSCAN_SDK_ROOT", sdk_root.name)
+    monkeypatch.setenv("HOLOSCAN_CLI_TARGET_ARCH", "aarch64")
+    monkeypatch.setattr(project_status, "find_hsdk_dir", lambda _path: "install-aarch64")
+    observed_sdk_paths = []
+    monkeypatch.setattr(
+        project_status,
+        "get_sdk_version",
+        lambda path: observed_sdk_paths.append(path) or "3.4.0",
+    )
 
     info = project_status.collect_platform_info()
 
-    assert info.arch == "x86_64"
-    assert info.gpu_type == "dGPU"
-    # Multi-line GPU name is truncated to the first line.
-    assert info.gpu_name == "RTX 4090"
-    assert info.cuda_version == "12.6"
-    assert info.holoscan_version == "3.4.0"
+    assert info == project_status.PlatformInfo(
+        arch="x86_64",
+        target_arch="aarch64",
+        gpu_type="dGPU",
+        gpu_name="RTX 4090",
+        cuda_version="12.6",
+        holoscan_version="3.4.0",
+    )
+    assert observed_sdk_paths == [sdk_root / "install-aarch64"]
 
 
 def test_collect_platform_info_handles_missing_gpu(monkeypatch):
@@ -54,11 +68,12 @@ def test_collect_platform_info_handles_missing_gpu(monkeypatch):
     monkeypatch.setattr(project_status, "get_host_arch", lambda: "aarch64")
     monkeypatch.setattr(project_status, "get_host_gpu", lambda: "unknown")
     monkeypatch.setattr(project_status, "get_gpu_name", lambda: None)
-    monkeypatch.setattr(project_status, "get_default_cuda_version", lambda: "n/a")
     monkeypatch.setattr(project_status, "get_sdk_version", lambda _path: "n/a")
+    monkeypatch.setenv("HOLOSCAN_CLI_DEFAULT_CUDA_VERSION", "13")
 
     info = project_status.collect_platform_info()
     assert info.gpu_name is None
+    assert info.cuda_version == "13"
 
 
 # ---- collect_git_info -------------------------------------------------------
@@ -141,10 +156,11 @@ def test_collect_folder_info_dedupes_resolved_paths(tmp_path):
 
 
 def test_collect_image_info_filters_by_prefix(monkeypatch):
-    docker_ps = "holohub-app:latest\timg_id_1"
+    docker_ps = "project-app:latest\timg_id_1"
     docker_images = (
-        "img_id_1\tholohub-app:latest\t2 days ago\n"
-        "img_id_2\tholohub-tool:dev\t1 week ago\n"
+        "img_id_1\tproject-app:latest\t2 days ago\n"
+        "img_id_2\tproject-tool:dev\t1 week ago\n"
+        "img_id_4\texample-module:latest\t1 minute ago\n"
         "img_id_3\trandom/unrelated:1\t1 month ago"
     )
 
@@ -156,16 +172,15 @@ def test_collect_image_info_filters_by_prefix(monkeypatch):
         return ""
 
     monkeypatch.setattr(project_status, "run_info_command", fake_run)
-    monkeypatch.delenv("HOLOSCAN_CLI_REPO_PREFIX", raising=False)
+    monkeypatch.setenv("HOLOSCAN_CLI_REPO_PREFIX", "project")
+    monkeypatch.setenv("HOLOSCAN_CLI_CONTAINER_PREFIX", "example-module")
 
     images = project_status.collect_image_info()
-    names = [img.image for img in images]
-    statuses = {img.image: img.status for img in images}
-    assert "holohub-app:latest" in names
-    assert "holohub-tool:dev" in names
-    assert "random/unrelated:1" not in names
-    assert statuses["holohub-app:latest"] == "Running"
-    assert statuses["holohub-tool:dev"] == "Stopped"
+    assert {image.image: image.status for image in images} == {
+        "project-app:latest": "Running",
+        "project-tool:dev": "Stopped",
+        "example-module:latest": "Stopped",
+    }
 
 
 def test_collect_image_info_empty_when_no_images(monkeypatch):
@@ -272,11 +287,12 @@ def _sample_inputs():
 
 def test_format_status_includes_all_sections():
     platform, git, images, builds, build_folders, data_folders = _sample_inputs()
+    platform.target_arch = "aarch64"
     out = project_status.format_status(
         platform, git, images, builds, build_folders, data_folders, docker_disk="Images: 4GB"
     )
     assert "Platform" in out
-    assert "x86_64" in out
+    assert "host x86_64 -> target aarch64" in out
     assert "RTX 4090" in out
     assert "Git" in out
     assert "main" in out and "abc1234" in out

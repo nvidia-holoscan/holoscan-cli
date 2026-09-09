@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import os
+import shlex
 import shutil
 from argparse import Namespace
 from pathlib import Path
@@ -152,16 +153,37 @@ def test_effective_mode_config_applies_metadata_defaults():
 
     assert build_config == {
         "with_operators": "op_a;op_b",
-        "docker_opts": "--ipc=host --network=host",
-        "build_args": "--build-arg MODE=dev",
+        "docker_opts": "",
+        "mode_docker_opts": "--ipc=host --network=host",
+        "build_args": "",
+        "mode_build_args": "--build-arg MODE=dev",
         "configure_args": ["-DMODE=dev", "-DENABLE_TESTS=ON"],
     }
     assert run_config == {
         "run_args": "",
-        "docker_opts": "--ipc=host --network=host",
+        "docker_opts": "",
+        "mode_docker_opts": "--ipc=host --network=host",
         "command": "python app.py",
         "workdir": ".",
     }
+
+
+def test_metadata_docker_argument_arrays_preserve_shell_fragments(monkeypatch, tmp_path):
+    cache_dir = tmp_path / "module cache"
+    monkeypatch.setenv("MODULE_CACHE", str(cache_dir))
+
+    normalized = project_cli.normalize_args_str(
+        ["-u root", "-e ACCEPT_EULA=Y", "-v ${MODULE_CACHE}:/root/.cache:rw"]
+    )
+
+    assert shlex.split(normalized) == [
+        "-u",
+        "root",
+        "-e",
+        "ACCEPT_EULA=Y",
+        "-v",
+        f"{cache_dir}:/root/.cache:rw",
+    ]
 
 
 def test_effective_mode_config_preserves_cli_overrides(capsys):
@@ -192,12 +214,15 @@ def test_effective_mode_config_preserves_cli_overrides(capsys):
     assert build_config == {
         "with_operators": "cli_op",
         "docker_opts": "--cap-add SYS_PTRACE",
+        "mode_docker_opts": "--ipc=host",
         "build_args": "--build-arg CLI=1",
-        "configure_args": ["-DCLI=ON"],
+        "mode_build_args": "--build-arg MODE=1",
+        "configure_args": ["-DMODE=ON", "-DCLI=ON"],
     }
     assert run_config == {
         "run_args": "--frames 1",
         "docker_opts": "--cap-add SYS_PTRACE",
+        "mode_docker_opts": "--ipc=host",
         "command": "python app.py",
         "workdir": ".",
     }

@@ -219,33 +219,33 @@ def test_check_docker_ok_with_ctk(monkeypatch):
 
 def test_check_holoscan_found_at_default_path(monkeypatch, tmp_path):
     monkeypatch.setenv("HOLOSCAN_CLI_DEFAULT_HSDK_DIR", str(tmp_path))
-    monkeypatch.setattr(system_check, "is_valid_sdk_installation", lambda _p: True)
+    monkeypatch.setattr(system_check, "is_valid_sdk_directory", lambda _p: True)
     monkeypatch.setattr(system_check, "get_sdk_version", lambda _p: "3.4.0")
     result = system_check.check_holoscan()
     assert result.status == "OK"
     assert "3.4.0" in result.message
 
 
-def test_check_holoscan_falls_back_to_sdk_root(monkeypatch, tmp_path):
-    monkeypatch.setenv("HOLOSCAN_CLI_DEFAULT_HSDK_DIR", str(tmp_path / "missing"))
+def test_check_holoscan_prefers_sdk_root(monkeypatch, tmp_path):
+    legacy_root = tmp_path / "legacy-sdk"
+    legacy_root.mkdir()
+    monkeypatch.setenv("HOLOSCAN_CLI_DEFAULT_HSDK_DIR", str(legacy_root))
     real_root = tmp_path / "sdk-root"
     real_root.mkdir()
     monkeypatch.setenv("HOLOSCAN_SDK_ROOT", str(real_root))
 
-    def fake_valid(p):
-        return str(p) == str(real_root)
-
-    monkeypatch.setattr(system_check, "is_valid_sdk_installation", fake_valid)
+    monkeypatch.setattr(system_check, "is_valid_sdk_directory", lambda _p: True)
     monkeypatch.setattr(system_check, "get_sdk_version", lambda _p: "3.4.0")
     result = system_check.check_holoscan()
     assert result.status == "OK"
     assert "3.4.0" in result.message
+    assert str(real_root) in result.message
 
 
 def test_check_holoscan_not_found(monkeypatch, tmp_path):
     monkeypatch.setenv("HOLOSCAN_CLI_DEFAULT_HSDK_DIR", str(tmp_path / "nope"))
     monkeypatch.delenv("HOLOSCAN_SDK_ROOT", raising=False)
-    monkeypatch.setattr(system_check, "is_valid_sdk_installation", lambda _p: False)
+    monkeypatch.setattr(system_check, "is_valid_sdk_directory", lambda _p: False)
     result = system_check.check_holoscan()
     assert result.status == "WARN"
     assert "not found" in result.message
@@ -357,6 +357,7 @@ def test_check_cli_falls_back_to_git_sha(monkeypatch, tmp_path):
     result = system_check.check_cli()
     assert result.status == "OK"
     assert "abc1234" in result.message
+    assert f"{tmp_path.name} (commit abc1234)" in result.message
 
 
 # ---- check_container --------------------------------------------------------

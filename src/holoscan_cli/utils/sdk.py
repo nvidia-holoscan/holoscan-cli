@@ -13,13 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Holoscan SDK / GPU / CUDA detection helpers.
-
-These helpers only inspect the host (``nvidia-smi``, ``nvidia-ctk``,
-filesystem layout) — none of them mutate state. They underpin the
-container-tag selection in :mod:`holoscan_cli.container.core` and the
-SDK-discovery branches in the project ``run`` / ``test`` commands.
-"""
+"""Holoscan SDK selection and host GPU/CUDA detection helpers."""
 
 import functools
 import os
@@ -29,10 +23,49 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
-from typing import Optional, Union
+from typing import Callable, Mapping, Optional, Union
 
-from holoscan_cli.utils.io import fatal, run_info_command, warn
+from holoscan_cli.utils.io import fatal, resolve, run_info_command, warn
 from holoscan_cli.utils.text import parse_semantic_version
+
+_SDK_LAYOUT_RE = re.compile(
+    r"^(?P<kind>install|build)"
+    r"(?:(?:-cu(?P<cuda>[0-9]+))|"
+    r"(?:-(?P<build_type>debug|release|relwithdebinfo|minsizerel)))?"
+    r"-(?P<arch>x86_64|aarch64)(?:-(?P<gpu>igpu|dgpu))?$"
+)
+_SDK_CONFIG_NAMES = ("holoscan-config.cmake", "HoloscanConfig.cmake")
+_SDK_VERSION_CONFIG_NAMES = (
+    "holoscan-config-version.cmake",
+    "HoloscanConfigVersion.cmake",
+)
+
+
+def normalize_arch(value: str) -> str:
+    """Normalize common architecture aliases used by SDK layouts."""
+    machine = value.strip().lower()
+    base, separator, gpu = machine.partition("-")
+    if base in {"x86_64", "amd64"}:
+        base = "x86_64"
+    elif base in {"aarch64", "arm64"}:
+        base = "aarch64"
+    return f"{base}-{gpu}" if separator else base
+
+
+def resolve_target_arch(
+    environ: Mapping[str, str], host_arch: Optional[str] = None
+) -> tuple[str, str]:
+    """Resolve the target architecture and its source."""
+    configured = environ.get("HOLOSCAN_CLI_TARGET_ARCH")
+    if configured:
+        arch = normalize_arch(configured)
+        if arch not in {"x86_64", "aarch64"}:
+            raise ValueError(
+                "HOLOSCAN_CLI_TARGET_ARCH must be x86_64/amd64 or aarch64/arm64; "
+                f"got {configured!r}."
+            )
+        return arch, "HOLOSCAN_CLI_TARGET_ARCH"
+    return normalize_arch(host_arch or platform.machine()), "host"
 
 
 def check_nvidia_ctk(min_version: str = "1.12.0", recommended_version: str = "1.14.1") -> None:
@@ -186,12 +219,7 @@ def get_cuda_tag(
 @functools.cache
 def get_host_arch() -> str:
     """Get host architecture"""
-    machine = platform.machine().lower()
-    if machine in ["x86_64", "amd64"]:
-        return "x86_64"
-    if machine in ["aarch64", "arm64"]:
-        return "aarch64"
-    return machine
+    return normalize_arch(platform.machine())
 
 
 def get_arch_gpu_str() -> str:
@@ -204,91 +232,344 @@ def get_arch_gpu_str() -> str:
 
 
 def get_sdk_version(sdk_path: Path) -> str:
-    """Extract Holoscan SDK version from a valid SDK installation path."""
+    """Extract the Holoscan SDK version from an installation or build tree."""
     try:
         version_file = sdk_path / "VERSION"
-        if version_file.exists():
+        if version_file.is_file():
             return version_file.read_text().strip()
-        cmake_config = sdk_path / "lib" / "cmake" / "holoscan" / "holoscan-config-version.cmake"
-        if cmake_config.exists():
-            content = cmake_config.read_text()
-            match = re.search(r'PACKAGE_VERSION\s+"([^"]+)"', content)
-            if match:
-                return match.group(1)
+
+        for directory in (sdk_path, sdk_path / "lib" / "cmake" / "holoscan"):
+            for name in _SDK_VERSION_CONFIG_NAMES:
+                cmake_config = directory / name
+                if cmake_config.is_file():
+                    match = re.search(r'PACKAGE_VERSION\s+"([^"]+)"', cmake_config.read_text())
+                    if match:
+                        return match.group(1)
     except (OSError, UnicodeDecodeError):
         pass
     return "unknown"
 
 
 def is_valid_sdk_installation(path: Union[str, Path]) -> bool:
-    """
-    Validate if a directory contains a valid Holoscan SDK installation.
-    """
-    path = Path(path) if isinstance(path, str) else path
-    if not path.exists() or not path.is_dir() or not (path / "lib").exists():
-        return False
-    # Check for at least one of these to confirm it's a Holoscan SDK
-    return (path / "lib" / "cmake" / "holoscan" / "holoscan-config.cmake").exists() or (
-        path / "lib" / "cmake" / "holoscan" / "HoloscanConfig.cmake"
-    ).exists()
+    """Return whether a directory contains an installed Holoscan SDK."""
+    path = Path(path)
+    return path.is_dir() and _has_sdk_config(path / "lib" / "cmake" / "holoscan")
 
 
-def find_hsdk_build_rel_dir(local_sdk_root: Optional[Union[str, Path]] = None) -> str:
+def is_valid_sdk_build(path: Union[str, Path]) -> bool:
+    """Return whether a directory contains a configured Holoscan SDK build tree."""
+    path = Path(path)
+    return path.is_dir() and (path / "lib").is_dir() and _has_sdk_config(path)
+
+
+def _has_sdk_config(path: Path) -> bool:
+    """Return whether a directory contains a recognized SDK CMake config."""
+    return any((path / name).is_file() for name in _SDK_CONFIG_NAMES)
+
+
+def is_valid_sdk_directory(path: Union[str, Path]) -> bool:
+    """Return whether a path is a usable Holoscan SDK installation or build tree."""
+    return is_valid_sdk_installation(path) or is_valid_sdk_build(path)
+
+
+def get_sdk_cmake_prefix_path(path: Union[str, Path]) -> str:
+    """Return CMake prefixes that work for SDK install and source-build layouts."""
+    sdk_path = Path(path)
+    return ";".join((str(sdk_path), str(sdk_path / "lib")))
+
+
+def _cuda_major(value: Optional[str | int]) -> Optional[str]:
+    """Extract a CUDA major used in SDK source-tree directory names."""
+    if value is None:
+        return None
+    match = re.search(r"[0-9]+", str(value))
+    return match.group(0) if match else None
+
+
+def _target_arch_gpu(target_arch: str) -> str:
+    """Return the SDK layout architecture, including the host aarch64 GPU type."""
+    normalized = normalize_arch(target_arch)
+    if normalized == "aarch64":
+        return f"aarch64-{get_host_gpu()}"
+    return normalized
+
+
+def _prefers_cuda_qualified_layout(root: Path) -> Optional[bool]:
+    """Infer whether an SDK source checkout uses the 4.x CUDA-qualified layout."""
+    for version_file in (root / "VERSION", root / "public" / "VERSION"):
+        try:
+            match = re.match(r"\s*([0-9]+)", version_file.read_text())
+        except (OSError, UnicodeDecodeError):
+            continue
+        if match:
+            return int(match.group(1)) < 5
+    return None
+
+
+def _sdk_layout_rank(
+    *,
+    candidate_cuda: Optional[str],
+    build_type: Optional[str],
+    cuda_major: Optional[str],
+    prefer_cuda_qualified: Optional[bool],
+) -> int:
+    """Rank 4.x CUDA-qualified, 5.x architecture-only, and developer builds."""
+    if candidate_cuda is not None:
+        if cuda_major is not None and candidate_cuda != cuda_major:
+            return 3
+        return 2 if prefer_cuda_qualified is False else 0
+    if build_type is not None:
+        return 2 if prefer_cuda_qualified is None else 1
+    return {True: 2, False: 0, None: 1}[prefer_cuda_qualified]
+
+
+def _sdk_gpu_rank(candidate_gpu: str, expected_gpu: str) -> int:
+    """Rank an exact GPU layout ahead of generic and mismatched layouts."""
+    if not expected_gpu:
+        return 0 if not candidate_gpu else 1
+    if candidate_gpu == expected_gpu:
+        return 0
+    return 1 if not candidate_gpu else 2
+
+
+def _sdk_layout_entry_rank(
+    entry: Path,
+    *,
+    kind: str,
+    target_arch: str,
+    expected_gpu: str,
+    cuda_major: Optional[str],
+    prefer_cuda_qualified: Optional[bool],
+    validator: Callable[[Path], bool],
+) -> Optional[tuple[int, int]]:
+    """Validate and rank one architecture-specific SDK layout entry."""
+    if not entry.is_dir():
+        return None
+    match = _SDK_LAYOUT_RE.fullmatch(entry.name)
+    if match is None or match.group("kind") != kind:
+        return None
+
+    build_type = match.group("build_type")
+    if kind == "install" and build_type is not None:
+        return None
+    if match.group("arch") != target_arch or not validator(entry):
+        return None
+
+    gpu_rank = _sdk_gpu_rank(match.group("gpu") or "", expected_gpu)
+    layout_rank = _sdk_layout_rank(
+        candidate_cuda=match.group("cuda"),
+        build_type=build_type,
+        cuda_major=cuda_major,
+        prefer_cuda_qualified=prefer_cuda_qualified,
+    )
+    return gpu_rank, layout_rank
+
+
+def _sdk_layout_candidates(
+    root: Path,
+    *,
+    kind: str,
+    arch_gpu: str,
+    cuda_major: Optional[str],
+    allow_generic: bool,
+) -> list[Path]:
+    """Return valid matching SDK directories in compatibility order."""
+    target_arch, _, expected_gpu = arch_gpu.partition("-")
+    prefer_cuda_qualified = _prefers_cuda_qualified_layout(root)
+    validator = is_valid_sdk_installation if kind == "install" else is_valid_sdk_directory
+    ranked: list[tuple[tuple[int, int, int, str], Path]] = []
+    for root_priority, parent in enumerate((root, root / "public")):
+        if allow_generic:
+            generic = parent / kind
+            if validator(generic):
+                ranked.append(((3, 3, root_priority, generic.name), generic))
+        try:
+            entries = list(parent.glob(f"{kind}-*"))
+        except OSError:
+            continue
+        for entry in entries:
+            entry_rank = _sdk_layout_entry_rank(
+                entry,
+                kind=kind,
+                target_arch=target_arch,
+                expected_gpu=expected_gpu,
+                cuda_major=cuda_major,
+                prefer_cuda_qualified=prefer_cuda_qualified,
+                validator=validator,
+            )
+            if entry_rank is not None:
+                ranked.append(((*entry_rank, root_priority, entry.name), entry))
+
+    return [entry for _, entry in sorted(ranked)]
+
+
+def _resolve_sdk_path(
+    path: Path,
+    arch: str,
+    cuda_version: Optional[str | int],
+    *,
+    include_build: bool,
+) -> Optional[Path]:
+    """Resolve a concrete SDK directory from a direct path or source checkout."""
+    try:
+        resolved = resolve(path)
+    except OSError:
+        return None
+    roots = (resolved, resolved / "public")
+    validator = is_valid_sdk_directory if include_build else is_valid_sdk_installation
+    direct = next((root for root in roots if validator(root)), None)
+    if direct is not None:
+        return direct
+    arch_gpu = _target_arch_gpu(arch)
+    cuda_major = _cuda_major(cuda_version)
+    for kind in ("install", "build") if include_build else ("install",):
+        candidates = _sdk_layout_candidates(
+            resolved,
+            kind=kind,
+            arch_gpu=arch_gpu,
+            cuda_major=cuda_major,
+            allow_generic=False,
+        )
+        if candidates:
+            return candidates[0]
+    return None
+
+
+def resolve_sdk_installation(
+    path: Path,
+    arch: str,
+    cuda_version: Optional[str | int] = None,
+) -> Optional[Path]:
+    """Resolve an SDK installation from an install tree or SDK source checkout."""
+    return _resolve_sdk_path(path, arch, cuda_version, include_build=False)
+
+
+def resolve_sdk_directory(
+    path: Path,
+    arch: str,
+    cuda_version: Optional[str | int] = None,
+) -> Optional[Path]:
+    """Resolve an SDK installation or configured build from a path or source checkout."""
+    return _resolve_sdk_path(path, arch, cuda_version, include_build=True)
+
+
+def resolve_local_sdk_dir(
+    default_sdk_root: str | Path,
+    local_sdk_root: Optional[str | Path] = None,
+    environ: Optional[Mapping[str, str]] = None,
+    *,
+    cuda_version: Optional[str | int] = None,
+) -> Path:
+    """Resolve the SDK used by a local lifecycle command."""
+    # Import lazily because project_context imports SDK discovery helpers from
+    # this module while constructing the active project.
+    from holoscan_cli.project_context import get_active_project_context
+
+    source_environment = os.environ if environ is None else environ
+    context = get_active_project_context()
+    if local_sdk_root is None:
+        local_sdk_root = source_environment.get("HOLOSCAN_SDK_ROOT") or None
+        if local_sdk_root is None:
+            if context is not None and context.is_module and context.sdk_root is not None:
+                return context.sdk_root
+            return Path(default_sdk_root)
+        source_label = f"HOLOSCAN_SDK_ROOT={local_sdk_root}"
+    else:
+        source_label = f"--local-sdk-root {local_sdk_root}"
+
+    requested_root = resolve(local_sdk_root)
+    target_arch = source_environment.get("HOLOSCAN_CLI_TARGET_ARCH")
+    effective_cuda_version = cuda_version or source_environment.get(
+        "HOLOSCAN_CLI_DEFAULT_CUDA_VERSION"
+    )
+    if context is not None:
+        target_arch = target_arch or context.target_arch
+        effective_cuda_version = effective_cuda_version or context.cuda
+    sdk_dir = find_hsdk_dir(
+        requested_root,
+        target_arch=target_arch,
+        cuda_version=effective_cuda_version,
+    )
+    installation = Path(sdk_dir) if Path(sdk_dir).is_absolute() else requested_root / sdk_dir
+    if not is_valid_sdk_directory(installation):
+        fatal(
+            f"{source_label} does not contain a usable Holoscan SDK directory "
+            "(expected an installed config under lib/cmake/holoscan or a source-build "
+            "config at the build root, directly or under install-* or build-*)."
+        )
+    return installation
+
+
+def find_hsdk_dir(
+    local_sdk_root: Optional[Union[str, Path]] = None,
+    target_arch: Optional[str] = None,
+    cuda_version: Optional[str | int] = None,
+) -> str:
     """
     Find a suitable SDK installation or build directory.
     https://github.com/nvidia-holoscan/holoscan-sdk/blob/9c5b3c3d4831f2e65ebda6b79ae9b1c5517c6a7c/run#L226-L228
 
     Search order:
-    1. Direct SDK installation directory
-    2. Environment variable `HOLOSCAN_SDK_ROOT` SDK root directory
-    3. Assuming the direct or env var is the src code root, searching for immediate subdirectories:
-        3.1 Install directory (prefer)
-        3.2 Build directory (fallback)
+    1. When ``local_sdk_root`` is provided, use only that direct installation
+       or its install/build subdirectories, including the source tree's
+       ``public`` directory.
+    2. Otherwise, use ``HOLOSCAN_SDK_ROOT`` as the direct installation or
+       parent to search.
+    3. Within a parent directory, prefer an install directory over a build
+       directory and restrict fallbacks to the selected architecture. Current
+       4.x ``install/build-cu<major>-<arch>[-<gpu>]`` and developer
+       ``build-<type>-<arch>`` layouts are supported alongside 5.x
+       ``install/build-<arch>`` names. The source checkout's version selects
+       the preferred layout, and the host GPU variant is preferred for
+       ``aarch64``.
 
     Args:
         local_sdk_root: Path to SDK root directory, or direct SDK installation/build directory
+        target_arch: Optional target architecture; host architecture is used when omitted.
+        cuda_version: Optional CUDA major used to prioritize current SDK layouts.
 
     Returns:
         Relative path to the SDK directory from the root, or absolute path if passed directly
     """
-    search_paths = []
+    search_root: Optional[Path] = None
 
-    # Handle user-provided path
-    if local_sdk_root:
+    # An explicit argument is authoritative. Do not let an ambient SDK select a
+    # different installation while the caller later mounts local_sdk_root.
+    if local_sdk_root is not None:
         local_sdk_root = Path(local_sdk_root) if isinstance(local_sdk_root, str) else local_sdk_root
         if local_sdk_root.exists():
-            # Check if this is a direct SDK installation directory
-            if is_valid_sdk_installation(local_sdk_root):
+            if is_valid_sdk_directory(local_sdk_root):
                 return str(local_sdk_root)
-            else:
-                # Treat as SDK root directory to search
-                search_paths.append(local_sdk_root)
-
-    # Add environment variable path
-    if os.environ.get("HOLOSCAN_SDK_ROOT"):
+            search_root = local_sdk_root
+    elif os.environ.get("HOLOSCAN_SDK_ROOT"):
         env_path = Path(os.environ["HOLOSCAN_SDK_ROOT"])
         if env_path.exists():
-            if is_valid_sdk_installation(env_path):
+            if is_valid_sdk_directory(env_path):
                 return str(env_path)
-            else:
-                search_paths.append(env_path)
+            search_root = env_path
 
-    # Search within SDK root directories
-    arch_gpu = get_arch_gpu_str()
-    for sdk_path in search_paths:
-        for install_dir in [f"install-{arch_gpu}", "install"]:
-            if is_valid_sdk_installation(sdk_path / install_dir):
-                return install_dir
-        for install_dir in sorted([d.name for d in sdk_path.glob("install-*") if d.is_dir()]):
-            if is_valid_sdk_installation(sdk_path / install_dir):
-                return install_dir
-        for build_dir in [f"build-{arch_gpu}", "build"]:
-            if is_valid_sdk_installation(sdk_path / build_dir):
-                return build_dir
-        for build_dir in sorted([d.name for d in sdk_path.glob("build-*") if d.is_dir()]):
-            if is_valid_sdk_installation(sdk_path / build_dir):
-                return build_dir
-    return f"build-{arch_gpu}"
+    configured_target = target_arch or os.environ.get("HOLOSCAN_CLI_TARGET_ARCH")
+    arch_gpu = _target_arch_gpu(configured_target) if configured_target else get_arch_gpu_str()
+    cuda_major = _cuda_major(cuda_version or os.environ.get("HOLOSCAN_CLI_DEFAULT_CUDA_VERSION"))
+    if search_root is not None:
+        resolved_root = resolve(search_root)
+        for kind in ("install", "build"):
+            candidates = _sdk_layout_candidates(
+                resolved_root,
+                kind=kind,
+                arch_gpu=arch_gpu,
+                cuda_major=cuda_major,
+                allow_generic=configured_target is None,
+            )
+            if candidates:
+                return candidates[0].relative_to(resolved_root).as_posix()
+
+    prefer_cuda_qualified = (
+        _prefers_cuda_qualified_layout(resolve(search_root)) if search_root is not None else None
+    )
+    use_cuda_qualified = cuda_major is not None and prefer_cuda_qualified is not False
+    suffix = f"cu{cuda_major}-{arch_gpu}" if use_cuda_qualified else arch_gpu
+    return f"build-{suffix}"
 
 
 def get_compute_capacity() -> str:
