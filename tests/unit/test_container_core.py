@@ -636,6 +636,71 @@ def test_build_dryrun_omits_base_sdk_version_when_not_configured(tmp_path, monke
     assert not any(arg.startswith("BASE_SDK_VERSION=") for arg in first)
 
 
+@pytest.mark.parametrize("operation", ["build", "run"])
+@pytest.mark.parametrize("dryrun", [False, True])
+def test_configured_docker_options_stay_redacted_on_failure_and_dryrun(
+    tmp_path, monkeypatch, capsys, operation, dryrun
+):
+    c = _stub_container(tmp_path)
+    c.dryrun = dryrun
+    c.verbose = True
+    monkeypatch.setattr(container_core, "get_host_gpu", lambda: "dgpu")
+    monkeypatch.setattr(container_core, "get_compute_capacity", lambda: "90")
+    for method in (
+        "get_volume_args",
+        "get_display_options",
+        "get_pythonpath_options",
+        "get_device_mounts",
+    ):
+        monkeypatch.setattr(c, method, lambda *args, **kwargs: [])
+    calls = []
+
+    def fail_command(cmd, *, check, **kwargs):
+        calls.append(cmd)
+        if cmd[:3] == ["docker", "buildx", "version"]:
+            return subprocess.CompletedProcess(cmd, 0)
+        if check:
+            raise subprocess.CalledProcessError(7, cmd)
+        return subprocess.CompletedProcess(cmd, 7)
+
+    monkeypatch.setattr(container_core.subprocess, "run", fail_command)
+
+    def invoke():
+        if operation == "build":
+            c.build(
+                docker_file=str(tmp_path / "Dockerfile"),
+                base_img="example/base:latest",
+                img="example/app:latest",
+                cuda_version="13",
+                build_args="--build-arg TOKEN=docker-secret-value",
+            )
+        else:
+            c.run(
+                img="example/app:latest",
+                docker_opts="--runtime runc --env TOKEN=docker-secret-value",
+                extra_args=["holoscan", "build", "demo", "--configure-args=-DTOKEN=cmake-secret"],
+            )
+
+    if dryrun:
+        invoke()
+        assert not calls
+    else:
+        with pytest.raises(SystemExit) as exc:
+            invoke()
+        assert exc.value.code == 7
+        assert "TOKEN=docker-secret-value" in calls[-1]
+        if operation == "run":
+            assert "--configure-args=-DTOKEN=cmake-secret" in calls[-1]
+
+    captured = capsys.readouterr()
+    output = captured.out + captured.err
+    assert f"configured Docker {operation} option token(s) hidden>" in output
+    assert "docker-secret-value" not in output
+    assert "cmake-secret" not in output
+    if operation == "run":
+        assert "Launch command:" in output
+
+
 def test_run_assembles_docker_command_without_ctk_for_custom_runtime(tmp_path, monkeypatch):
     """A custom Docker runtime bypasses NVIDIA Container Toolkit validation."""
     project_dir = tmp_path / "applications" / "my_app"

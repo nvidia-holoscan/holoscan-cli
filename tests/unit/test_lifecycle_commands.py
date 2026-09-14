@@ -5,7 +5,10 @@ from __future__ import annotations
 
 import json
 import shlex
+import subprocess
 from argparse import Namespace
+
+import pytest
 
 from holoscan_cli.commands import build as build_cmd
 from holoscan_cli.commands import containers as containers_cmd
@@ -373,6 +376,32 @@ def test_build_project_locally_verbose_redacts_env_mapping(tmp_path, monkeypatch
     output = capsys.readouterr().out
     assert "export DEMO_VAR=<configured>" in output
     assert "secret-value" not in output
+
+
+def test_build_project_locally_failure_redacts_configure_args(tmp_path, monkeypatch, capsys):
+    cli = RecordingCLI(tmp_path)
+    monkeypatch.setattr(build_cmd.shutil, "which", lambda name: None)
+    monkeypatch.setenv("CONFIGURE_TOKEN", "cmake-secret-value")
+    calls = []
+
+    def fail_command(cmd, **kwargs):
+        calls.append(cmd)
+        raise subprocess.CalledProcessError(7, cmd)
+
+    monkeypatch.setattr(subprocess, "run", fail_command)
+
+    with pytest.raises(SystemExit) as exc:
+        build_cmd.build_project_locally(
+            cli, "smoke_app", verbose=True, configure_args=["-DTOKEN=$CONFIGURE_TOKEN"]
+        )
+
+    assert exc.value.code == 7
+    assert "-DTOKEN=cmake-secret-value" in calls[0]
+    captured = capsys.readouterr()
+    output = captured.out + captured.err
+    assert "Non-zero exit code running command:" in output
+    assert "configured CMake option(s) hidden>" in output
+    assert "cmake-secret-value" not in output
 
 
 def test_handle_build_container_branch_passes_recursive_local_command(tmp_path, monkeypatch):
