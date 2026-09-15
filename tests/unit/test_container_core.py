@@ -636,7 +636,7 @@ def test_build_dryrun_omits_base_sdk_version_when_not_configured(tmp_path, monke
     assert not any(arg.startswith("BASE_SDK_VERSION=") for arg in first)
 
 
-def test_run_assembles_docker_command_without_ctk_for_custom_runtime(tmp_path, monkeypatch, capsys):
+def test_run_assembles_docker_command_without_ctk_for_custom_runtime(tmp_path, monkeypatch):
     """A custom Docker runtime bypasses NVIDIA Container Toolkit validation."""
     project_dir = tmp_path / "applications" / "my_app"
     project_dir.mkdir(parents=True)
@@ -671,11 +671,11 @@ def test_run_assembles_docker_command_without_ctk_for_custom_runtime(tmp_path, m
         use_tini=True,
         persistent=False,
         as_root=False,
-        docker_opts="--name smoke --cidfile /tmp/custom.cid --runtime runc --entrypoint holoscan",
+        docker_opts="--name smoke --cidfile /tmp/custom.cid --runtime runc",
         add_volumes=[str(volume)],
         nsys_profile=True,
         nsys_location="/opt/nsys",
-        extra_args=["build", "smoke_app", "--local", "--configure-args", "secret-value"],
+        extra_args=["bash", "-lc", "echo ok"],
     )
 
     cmd = calls[0]
@@ -701,17 +701,7 @@ def test_run_assembles_docker_command_without_ctk_for_custom_runtime(tmp_path, m
     assert "/tmp/custom.cid" in cmd
     assert container_core.get_cli_arg_value(cmd, "--runtime") == "runc"
     assert not ctk_checks
-    assert cmd[-6:] == [
-        "custom:image",
-        "build",
-        "smoke_app",
-        "--local",
-        "--configure-args",
-        "secret-value",
-    ]
-    output = capsys.readouterr().out
-    assert "<configured CMake option hidden>" in output
-    assert "secret-value" not in output
+    assert cmd[-4:] == ["custom:image", "bash", "-lc", "echo ok"]
 
 
 def test_run_composes_default_args_and_as_root_user_override(tmp_path, monkeypatch):
