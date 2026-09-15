@@ -135,7 +135,7 @@
         },
         "ref": {
           "type": "string",
-          "description": "Git revision: commit SHA, tag, or branch. Commit SHAs are recommended for reproducibility; the resolver warns when ref looks like a moving target."
+          "description": "Immutable Git revision: a full 40-character commit SHA is required for remote resolution. Tags and branches are rejected; use a HOLOSCAN_CLI_LOCAL_<NAME> path override for local development."
         }
       },
       "required": [
