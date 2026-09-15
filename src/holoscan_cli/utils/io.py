@@ -246,8 +246,8 @@ def run_command(
     ``exec`` so the Python CLI cannot also receive terminal signals or overwrite
     the application's status. Do not use it for builds or the host Docker
     launch, where the caller must continue for cleanup. A dry run only prints.
-    ``display_override`` may provide a redacted command for logs while ``cmd``
-    remains the exact argv that is executed.
+    ``display_override`` may provide a redacted command for logs and command
+    diagnostics while ``cmd`` remains the exact argv that is executed.
     """
     if preserve_env is not None and not as_root:
         raise ValueError("preserve_env requires as_root=True")
@@ -257,6 +257,7 @@ def run_command(
         if kwargs.get("env") is None:
             raise ValueError("replace_process requires an explicit environment")
 
+    display_value = cmd if display_override is None else display_override
     elevate = as_root and os.geteuid() != 0
     sudo_prefix: List[str] = []
     sudo_display_prefix: List[str] = []
@@ -266,7 +267,11 @@ def run_command(
             if dry_run:
                 sudo = "sudo"  # display only; a dry run executes nothing
             else:
-                display = cmd if isinstance(cmd, str) else " ".join(str(x) for x in cmd)
+                display = (
+                    display_value
+                    if isinstance(display_value, str)
+                    else " ".join(str(x) for x in display_value)
+                )
                 fatal(
                     "This step needs root privileges but 'sudo' is not available:\n"
                     f"  {display}\n"
@@ -303,7 +308,6 @@ def run_command(
         argv = [str(x) for x in cmd]
         exec_cmd = [*sudo_prefix, *argv] if elevate else argv
 
-    display_value = cmd if display_override is None else display_override
     if isinstance(display_value, str):
         display_prefix = shlex.join(sudo_display_prefix)
         display_cmd = f"{display_prefix} {display_value}" if elevate else display_value
