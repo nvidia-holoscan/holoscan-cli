@@ -13,16 +13,17 @@ is intentionally named `CI.md` (not `README.md`) so it doesn't compete with the
 ├── CI.md                     ← you are here
 ├── copy-pr-bot.yaml          ← NVIDIA copy-pr-bot config
 ├── dependabot.yml            ← daily updates for pip + github-actions
-├── scripts/                  ← shell helpers shared by workflows
+├── scripts/                  ← release and smoke-test helpers
 │   ├── assert_wheel_contents.sh
 │   ├── cpu_cli_docker_smoke.sh
+│   ├── resolve_release_version.py
 │   ├── smoke_test.sh
 │   └── tool_runner_smoke.sh
 └── workflows/
     ├── codeql.yaml           ← CodeQL Advanced (Python)
     ├── dependency-review.yml ← Dependency review on PRs
     ├── main.yaml             ← Code Check — push and PR CI
-    └── release.yaml          ← Manual release flow (TestPyPI publish → K2 Kitmaker)
+    └── release.yaml          ← Manual release flow (TestPyPI → NVIDIA promotion)
 ```
 
 ## How CI runs before merge
@@ -46,211 +47,337 @@ exist purely to catch version-specific regressions across supported runtimes.
 `coveralls` itself is only pulled in for `python_version < '3.13'`; on Python
 3.13 the test job skips the upload step.
 
-## How a release publishes to TestPyPI / hands off to K2 Kitmaker
+## How a release publishes to TestPyPI and hands off for NVIDIA promotion
 
 `workflows/release.yaml` (the **Release** workflow) is manual
-(`workflow_dispatch`) and takes three inputs:
+(`workflow_dispatch`) and takes four inputs:
 
-| Input     | Notes                                                                              |
-| --------- | ---------------------------------------------------------------------------------- |
-| `version` | Tag name to use, e.g. `v4.3.0`. The workflow creates this tag at the dispatch SHA. |
-| `rc`      | Optional RC build number (used by the dynamic-versioning Jinja format).            |
-| `ga`      | `true` for an official GA dispatch; `false` otherwise. Both publish to TestPyPI.   |
+| Input     | Notes                                                                            |
+| --------- | -------------------------------------------------------------------------------- |
+| `version` | Base version, such as `v5.0.0`; also used for the workflow's temporary base tag. |
+| `alpha`   | Optional positive alpha number; `1` resolves exactly to `5.0.0a1`.               |
+| `rc`      | Optional positive RC number; `1` resolves exactly to `5.0.0rc1`.                 |
+| `ga`      | `true` resolves exactly to the final version; otherwise leave it `false`.        |
+
+`alpha`, `rc`, and `ga=true` are mutually exclusive. Explicit alpha, RC, and
+GA releases must be dispatched from `release/*`. The workflow resolves the
+exact PEP 440 version with `scripts/resolve_release_version.py` and passes it to
+the build through `POETRY_DYNAMIC_VERSIONING_BYPASS`. This separates branch
+lifecycle from package maturity: `release/5.0.0` can produce `5.0.0a1`, later
+`5.0.0rc1`, and finally `5.0.0` without renaming the branch.
 
 Pipeline:
 
-1. **`pre-commit` + `test`** — same as `main.yaml`, gated as `needs:`.
-2. **`build wheel`** — validates that `version` looks like `vX.Y.Z`, creates
-   the tag, runs `poetry build --clean`, validates package metadata with
-   `twine check`, asserts the wheel contents with
-   `scripts/assert_wheel_contents.sh`, uploads `dist/*` (both wheel and sdist)
-   as the `build-artifact`, and uploads the `.whl` separately as
-   `wheel-artifact`. The `wheel-artifact` upload is kept as a fallback path for
-   the K2 Kitmaker wheel-release flow (via its GitHub Actions artifact URL
-   shape); the preferred path is to consume the staged wheel from TestPyPI (see
-   step 4). Use the published wheel version from TestPyPI (for example,
-   `X.Y.ZrcN` for RCs) in the Kitmaker `--wheel-url`, not necessarily the
-   transient tag name. The tag is auto-removed at the end when `ga == false` so
-   RC dispatches do not leave stray refs.
-3. **`smoke-test`** — runs `scripts/smoke_test.sh` against clean installs of
-   both the wheel and sdist, and verifies the wheel's `create` extra resolves.
-4. **`publish-test-pypi`** — runs for both GA and non-GA dispatches.
-   Publishes via PyPA's trusted-publisher action
-   (`pypa/gh-action-pypi-publish@release/v1`), no API token. Trust is
-   configured on TestPyPI's side; the workflow filename (`release.yaml`)
-   must match what TestPyPI has registered. K2 Kitmaker then promotes the
-   staged wheel to Artifactory via
-   `release_kitmaker_wheel.py upload --wheel-url https://test.pypi.org/project/holoscan-cli/<v>/ --artifactory-repo-url …`.
-5. **GitHub Release / changelog** — remains an explicit maintainer step after
-   a successful **GA** workflow. RCs are validation artifacts recorded by
-   annotated `vX.Y.ZrcN` tags; they do not get separate GitHub Release pages.
-   The GA release notes compare the previous GA tag with the new retained
-   `vX.Y.Z` tag, giving users one cumulative changelog for the release line.
+1. **`pre-commit` + `test`** — run the same lint and test suites as
+   `main.yaml`.
+2. **`build wheel`** — validate inputs, create the temporary base tag at the
+   dispatch SHA, build the wheel and sdist, assert that explicit release
+   versions match the artifact filenames, validate metadata and contents, and
+   upload `build-artifact` plus the wheel-only `wheel-artifact`. The temporary
+   base tag is removed for non-GA dispatches.
+3. **`smoke-test`** — test clean wheel and sdist installs and the `create`
+   extra.
+4. **`publish-test-pypi`** — publish both distributions to TestPyPI with
+   trusted publishing. There is deliberately no public-PyPI deployment job.
+5. **`testpypi-installed smoke test`** — poll TestPyPI for the exact published
+   version, install it into a clean environment, and rerun the smoke checks.
+6. **NVIDIA promotion** — outside this workflow, use the approved NVIDIA
+   package-promotion process to copy the validated wheel to
+   `pypi.nvidia.com`. For alpha and RC builds, select its prerelease-only policy
+   and keep public PyPI disabled.
+
+Alpha and RC artifacts are recorded with permanent annotated tags only after
+staging, downstream validation, and NVIDIA promotion succeed. They do not need
+separate GitHub Release pages. The GA GitHub Release remains an explicit
+maintainer step and uses the previous GA tag as its changelog baseline.
 
 ### Dispatching a release from the CLI
 
+For the first 5.0 integration alpha:
+
 ```bash
-gh workflow run release.yaml --ref <branch> \
-  -f version=vX.Y.Z \
-  -f rc=<optional-rc-number> \
-  -f ga=false                                       # true only for an official GA
+gh workflow run release.yaml --ref release/5.0.0 \
+  -f version=v5.0.0 -f alpha=1 -f ga=false
 ```
 
-`gh run list --workflow release.yaml --limit 1` then `gh run view <id>` to
-watch progress. The `testpypi-installed smoke test` job at the end of the
-pipeline polls `https://test.pypi.org/simple/` for the just-published
-version, pip-installs it into a fresh venv, and re-runs `smoke_test.sh`, so
-a green release run is equivalent to "kitmaker can fetch this wheel and it
-passes the same checks CI runs on push."
+For later RC and GA stages, omit `alpha`:
 
-Branch naming feeds into the version string via
-`tool.poetry-dynamic-versioning.format-jinja` in `pyproject.toml`:
+```bash
+gh workflow run release.yaml --ref release/5.0.0 \
+  -f version=v5.0.0 -f rc=1 -f ga=false
+
+gh workflow run release.yaml --ref release/5.0.0 \
+  -f version=v5.0.0 -f ga=true
+```
+
+Use `gh run list --workflow release.yaml --branch release/5.0.0 --limit 5`, then
+`gh run watch <run-id> --exit-status` and `gh run view <run-id>` to inspect the
+result.
+
+Without an explicit release selector, the existing dynamic-versioning fallback
+still applies:
 
 * `main` → `serialize_pep440(base, stage, dev=distance)`
-* `release/*` → `serialize_pep440(base, stage="rc", revision=...)`
+* `release/*` → `serialize_pep440(base, stage="rc", revision=distance)`
 * anything else → `serialize_pep440(base, stage="alpha", revision=GITHUB_RUN_ID)`
 
-so dispatching from a feature branch always emits a unique alpha that cannot
-collide with a published RC.
+Do not use that fallback for a release artifact; pass an explicit `alpha`, `rc`,
+or `ga=true` so the published version is deterministic.
 
-## Release procedure (RC → GA runbook)
+## Release procedure (alpha → RC → GA runbook)
 
-End-to-end steps a maintainer follows to ship a release. Versions are **derived
-automatically** from the dispatch branch + inputs (see the format-jinja mapping
-above) — you never hand-edit a version. All versions are
-[PEP 440](https://peps.python.org/pep-0440/) (what PyPI requires), e.g. the RC
-is `4.3.0rc1`, the PEP 440 spelling of SemVer's `4.3.0-rc.1`.
+All versions use [PEP 440](https://peps.python.org/pep-0440/). In particular,
+`5.0.0a1` is an alpha earlier than `5.0.0rc1`; spell the package version and
+tag without a hyphen. The release branch represents the stabilized code line,
+not the maturity label.
 
 ### Version scheme at a glance
 
-| Dispatch `--ref` | `ga` | `rc` | Published version | Purpose |
-| --- | --- | --- | --- | --- |
-| `main` | – | – | `X.Y.Z.devN` | dev snapshots of `main` |
-| any feature branch | – | – | `X.Y.ZaNNN` (`NNN` = run id) | throwaway per-branch alphas |
-| `release/X.Y.0` | `false` | `N` | `X.Y.ZrcN` | release candidates |
-| `release/X.Y.0` | `false` | – | `X.Y.Zrc<distance>` | RC without an explicit number |
-| `release/X.Y.0` | `true` | – | `X.Y.Z` | official GA |
+| Dispatch `--ref`   | `alpha` | `rc` | `ga`    | Published version       | Purpose                         |
+| ------------------ | ------- | ---- | ------- | ----------------------- | ------------------------------- |
+| `main`             | –       | –    | –       | `X.Y.Za0.devN`          | routine development build       |
+| any feature branch | –       | –    | –       | `X.Y.ZaNNN`             | throwaway branch build          |
+| `release/X.Y.Z`    | `N`     | –    | `false` | `X.Y.ZaN`               | downstream integration alpha    |
+| `release/X.Y.Z`    | –       | `N`  | `false` | `X.Y.ZrcN`              | release candidate               |
+| `release/X.Y.Z`    | –       | –    | `false` | `X.Y.Zrc<distance>`     | legacy fallback; do not publish |
+| `release/X.Y.Z`    | –       | –    | `true`  | `X.Y.Z`                 | official GA                     |
 
-Every dispatch publishes to **TestPyPI**. Non-GA dispatches auto-remove the
-temporary `vX.Y.Z` tag; a **GA** dispatch keeps the `vX.Y.Z` tag and is the one
-K2 Kitmaker promotes to the release registry (Artifactory). The cutover to
-public PyPI happens out of band — until then, installs use the TestPyPI index.
-Before every dispatch or retry, confirm that the temporary base tag does not
-already exist on the remote: a failure before the cleanup step can leave it
-behind. Never delete or move a permanent `vX.Y.ZrcN` or published GA tag as
-part of that cleanup.
+Every workflow dispatch publishes to **TestPyPI**. The approved promotion step
+copies only the validated wheel to **pypi.nvidia.com**. An alpha or RC must not
+be sent to public PyPI. TestPyPI does not permit replacing a published file, so
+once any `X.Y.ZaN` artifact reaches it, never reuse that `N`; fix the release
+branch and increment to `a(N+1)`.
 
-The user-facing changelog is the GitHub Release attached to the retained GA
-tag. Generate it from the previous GA tag (for example,
-`v4.4.0...v4.5.0`), not from an RC tag, so it describes the complete upgrade
-for package users. Keep RC traceability in annotated RC tags and the linked
-workflow, TestPyPI, and Kitmaker records. A Git tag alone does not create the
-formatted GitHub Release page.
-
-Release-candidate fixes follow the normal review path first: create a PR
-against `main`, wait for it to merge, cherry-pick the merged commit onto
-`release/X.Y.0`, and only then dispatch the next RC from the release branch.
-Do not direct-push unreviewed fixes to `release/X.Y.0`, and do not submit an RC
-workflow or Kitmaker release before the fix has merged to `main` and has been
-picked onto the release branch.
+The workflow creates `vX.Y.Z` as a temporary version anchor. Non-GA runs remove
+it, but a failure before cleanup can leave it behind. Before dispatch or retry,
+inspect that exact tag and remove it only when it is the failed workflow's
+temporary base tag. Never delete or move permanent `vX.Y.ZaN`, `vX.Y.ZrcN`, or
+published GA tags.
 
 ### Steps
 
-1. **Land everything on `main`** and confirm it is green.
-2. **Cut the release branch (once per minor line):**
+1. **Choose the release commit.** Merge the release tooling and every intended
+   5.0 change to `main`, then confirm required CI and nightly validation are
+   green.
+2. **Create `release/5.0.0` at that exact `main` commit:**
 
    ```bash
-   git push origin origin/main:refs/heads/release/X.Y.0
+   (
+     set -euo pipefail
+     git fetch origin --tags --prune
+     release_sha=$(git rev-parse --verify origin/main)
+     git show --no-patch --oneline "${release_sha}"
+     git push origin "${release_sha}:refs/heads/release/5.0.0"
+     remote_release_sha=$(git ls-remote --refs origin \
+       refs/heads/release/5.0.0 | cut -f1)
+     test "${remote_release_sha}" = "${release_sha}"
+   )
    ```
 
-   This branch is what flips the version scheme from `.dev` to `rc`.
-3. **Cut RC1:**
+   Continue merging normal contributions to `main`. Release fixes also merge
+   to `main` first and are then cherry-picked to `release/5.0.0`.
+3. **Advance the development anchor on `main` separately.** The existing
+   `v5.0.0a0` tag remains fixed. After the first reviewed post-branch commit is
+   on `main`, tag it for the next planned line—for example `v5.1.0a0` if 5.1 is
+   next. That tag is a VCS development anchor, not the 5.0 integration alpha.
+   Later `main` commits then derive `5.1.0a0.devN`.
 
    ```bash
-   gh workflow run release.yaml --ref release/X.Y.0 \
-     -f version=vX.Y.Z -f rc=1 -f ga=false        # → X.Y.Zrc1 on TestPyPI
+   (
+     set -euo pipefail
+     git fetch origin --tags --prune
+     branch_point=$(git merge-base origin/main origin/release/5.0.0)
+     first_main_sha=$(git rev-list --first-parent --reverse \
+       "${branch_point}"..origin/main | sed -n '1p')
+     test -n "${first_main_sha}"
+     git show --no-patch --oneline "${first_main_sha}"
+     git tag -a v5.1.0a0 "${first_main_sha}" \
+       -m "start 5.1 development on main"
+     git push origin v5.1.0a0
+     remote_tag_sha=$(git ls-remote origin \
+       "refs/tags/v5.1.0a0^{}" | cut -f1)
+     test "${remote_tag_sha}" = "${first_main_sha}"
+   )
    ```
 
-   The run's `testpypi-installed smoke test` job installs the just-published
-   wheel from TestPyPI and re-runs the smoke checks, so a green run means the
-   RC is fetchable and passes the same checks CI runs on push.
-4. **Validate the RC** (e.g. against downstream HoloHub usage) in a throwaway venv:
+4. **Check for a stale temporary base tag, then dispatch alpha 1:**
 
    ```bash
-   python3 -m venv /tmp/rc && . /tmp/rc/bin/activate
-   pip install --pre --index-url https://test.pypi.org/simple/ \
-       --extra-index-url https://pypi.org/simple/ "holoscan-cli==X.Y.Zrc1"
+   (
+     set -euo pipefail
+     alpha=1
+     package_version="5.0.0a${alpha}"
+     git fetch origin --tags --prune
+     existing_tags=$(git ls-remote --refs origin \
+       refs/tags/v5.0.0 "refs/tags/v${package_version}")
+     if [[ -n "$existing_tags" ]]; then
+       echo "Stop: base or alpha tag already exists: $existing_tags" >&2
+       exit 1
+     fi
+     status=$(curl --silent --show-error --location --max-time 30 \
+       --output /dev/null --write-out '%{http_code}' \
+       "https://test.pypi.org/pypi/holoscan-cli/${package_version}/json")
+     if [[ "$status" != 404 ]]; then
+       echo "Stop: version exists or availability is unknown (HTTP $status)" >&2
+       exit 1
+     fi
+     gh workflow run release.yaml --ref release/5.0.0 \
+       -f version=v5.0.0 -f alpha="$alpha" -f ga=false
+   )
    ```
 
-5. **Record the successful RC** after TestPyPI validation and the Kitmaker
-   handoff. Point a permanent annotated RC tag at the exact release-branch
-   commit; do not reuse or move it:
+   If `v5.0.0` exists, stop and determine whether it is a retained GA tag or a
+   failed workflow's temporary tag before doing anything to it.
+   If the alpha tag or TestPyPI version exists, select the next unused alpha
+   number and repeat the preflight. Use that number consistently in the
+   installation, promotion, and tagging steps below. Only HTTP 404 establishes
+   that the TestPyPI version is absent; network errors and other responses stop
+   the sequence.
+5. **Watch the run and validate the TestPyPI package:**
 
    ```bash
-   git tag -a vX.Y.ZrcN <release-sha> \
-     -m "holoscan-cli X.Y.ZrcN" \
-     -m "Release workflow: <workflow-url>" \
-     -m "TestPyPI: https://test.pypi.org/project/holoscan-cli/X.Y.ZrcN/" \
-     -m "Kitmaker release: <release-id>"
-   git push origin vX.Y.ZrcN
+   gh run list --workflow release.yaml --branch release/5.0.0 --limit 5
+   gh run watch <run-id> --exit-status
+   gh run view <run-id>
+
+   python3 -m venv /tmp/holoscan-cli-5.0.0a1
+   . /tmp/holoscan-cli-5.0.0a1/bin/activate
+   python -m pip install --only-binary=holoscan-cli \
+     --index-url https://test.pypi.org/simple/ \
+     --extra-index-url https://pypi.org/simple/ "holoscan-cli==5.0.0a1"
+   holoscan version
    ```
 
-6. **Iterate** if fixes are needed: merge the fix to `main`, cherry-pick the
-   merged commit onto `release/X.Y.0`, then dispatch with `-f rc=2`,
-   `-f rc=3`, … (bump each time).
-7. **Cut GA** once an RC is accepted:
+6. **Run downstream integration tests** against the exact installed
+   `holoscan-cli==5.0.0a1` wheel. Record enough public-safe evidence to identify
+   the tested commit and package version.
+7. **Promote only the wheel** with the approved NVIDIA release tooling. Select
+   the prerelease-only destination for `pypi.nvidia.com` and leave public PyPI
+   disabled. Verify the promoted package independently:
 
    ```bash
-   gh workflow run release.yaml --ref release/X.Y.0 \
-     -f version=vX.Y.Z -f ga=true                 # → X.Y.Z, keeps the vX.Y.Z tag
+   python3 -m venv /tmp/holoscan-cli-nvidia-5.0.0a1
+   /tmp/holoscan-cli-nvidia-5.0.0a1/bin/pip install \
+     --only-binary=holoscan-cli --index-url https://pypi.nvidia.com \
+     "holoscan-cli==5.0.0a1"
+   /tmp/holoscan-cli-nvidia-5.0.0a1/bin/holoscan version
    ```
 
-8. **Publish the cumulative GA changelog** only after the GA workflow,
-   downstream validation, and Kitmaker promotion have succeeded. Use the
-   previous **GA** tag as the release-note baseline:
+   Verify that promotion preserved the exact wheel bytes. Stop if the digests
+   differ; publishing different source under the same version breaks provenance.
 
    ```bash
-   gh release create vX.Y.Z \
-     --repo nvidia-holoscan/holoscan-cli \
-     --verify-tag \
-     --draft \
-     --title "holoscan-cli X.Y.Z" \
-     --generate-notes \
-     --notes-start-tag vPREVIOUS.GA
+   (
+     set -euo pipefail
+     audit_dir=$(mktemp -d /tmp/holoscan-cli-promotion.XXXXXX)
+     python -m pip --isolated download --no-cache-dir --no-deps \
+       --only-binary=:all: --index-url https://test.pypi.org/simple/ \
+       --dest "$audit_dir/testpypi" "holoscan-cli==5.0.0a1"
+     python -m pip --isolated download --no-cache-dir --no-deps \
+       --only-binary=:all: --index-url https://pypi.nvidia.com \
+       --dest "$audit_dir/nvidia" "holoscan-cli==5.0.0a1"
+     wheel_name=holoscan_cli-5.0.0a1-py3-none-any.whl
+     sha256sum "$audit_dir/testpypi/$wheel_name" "$audit_dir/nvidia/$wheel_name"
+     cmp "$audit_dir/testpypi/$wheel_name" "$audit_dir/nvidia/$wheel_name"
+   )
    ```
 
-   Review the draft before publishing it. Curate generated notes into
-   user-facing **Highlights**, **Added**, **Changed**, **Fixed**, **Upgrade
-   notes**, and **Release validation** sections. Include the accepted RC,
-   release workflow, TestPyPI, Kitmaker, and downstream HoloHub validation
-   references. Check that cherry-picked fixes link back to their original PRs
-   and remove internal-only or security-sensitive details. The published pages
-   are:
+8. **Record the successful alpha** at the exact release-branch commit. Do this
+   only after TestPyPI, downstream validation, and NVIDIA promotion succeed:
 
-   ```text
-   https://github.com/nvidia-holoscan/holoscan-cli/releases/tag/vX.Y.Z
-   https://github.com/nvidia-holoscan/holoscan-cli/compare/vPREVIOUS.GA...vX.Y.Z
+   ```bash
+   (
+     set -euo pipefail
+     git fetch origin --tags --prune
+     release_sha=$(gh run view <run-id> --json headSha --jq .headSha)
+     git rev-parse --verify "${release_sha}^{commit}"
+     git tag -a v5.0.0a1 "${release_sha}" \
+       -m "holoscan-cli 5.0.0a1" \
+       -m "TestPyPI: https://test.pypi.org/project/holoscan-cli/5.0.0a1/"
+     git push origin v5.0.0a1
+     remote_tag_sha=$(git ls-remote origin \
+       "refs/tags/v5.0.0a1^{}" | cut -f1)
+     test "${remote_tag_sha}" = "${release_sha}"
+   )
    ```
 
-### Worked example (4.3.0)
+   Select the successful **Release** run that built the validated alpha, and
+   verify its branch, version inputs, and conclusion before using its run ID.
+   The branch may have advanced since the build; always tag the run's `headSha`.
 
-```bash
-git push origin origin/main:refs/heads/release/4.3.0          # cut the branch
-gh workflow run release.yaml --ref release/4.3.0 \
-    -f version=v4.3.0 -f rc=1 -f ga=false                     # → 4.3.0rc1 (TestPyPI)
-# …validate, iterate -f rc=2 as needed… then:
-gh workflow run release.yaml --ref release/4.3.0 \
-    -f version=v4.3.0 -f ga=true                              # → 4.3.0 (GA)
-gh release create v4.3.0 \
-    --repo nvidia-holoscan/holoscan-cli \
-    --verify-tag --draft --title "holoscan-cli 4.3.0" \
-    --generate-notes --notes-start-tag v4.2.0                 # → cumulative GA changelog
-```
+9. **Iterate with `a2`, `a3`, …** when fixes are needed. Merge each fix to
+   `main`, cherry-pick its single-parent commit to `release/5.0.0`, push the
+   branch, rerun branch CI, and repeat step 4 with the next unused alpha number:
 
-## Shared shell scripts
+   ```bash
+   git switch release/5.0.0
+   git pull --ff-only origin release/5.0.0
+   git cherry-pick <single-parent-fix-sha>
+   git push origin release/5.0.0
+   ```
+
+   Do not pass a merge commit to plain `git cherry-pick <sha>`.
+10. **Advance to RC and GA without changing branches** when maturity warrants
+    it:
+
+    ```bash
+    gh workflow run release.yaml --ref release/5.0.0 \
+      -f version=v5.0.0 -f rc=1 -f ga=false
+
+    gh workflow run release.yaml --ref release/5.0.0 \
+      -f version=v5.0.0 -f ga=true
+    ```
+
+    Apply the same validation, promotion, and permanent-tag rules to
+    `v5.0.0rcN`, using the successful RC run's `headSha` for its annotated tag.
+    A successful GA dispatch retains `v5.0.0`; verify that existing tag against
+    the successful GA run's `headSha` instead of recreating or moving it:
+
+    ```bash
+    (
+      set -euo pipefail
+      git fetch origin --tags --prune
+      ga_sha=$(gh run view <ga-run-id> --json headSha --jq .headSha)
+      test "$(git rev-parse --verify 'refs/tags/v5.0.0^{commit}')" = "$ga_sha"
+    )
+    ```
+
+11. **Publish the cumulative GA changelog** only after the GA workflow,
+    downstream validation, and approved promotion have succeeded. Compare the
+    previous GA tag with the new GA tag, not with an alpha or RC tag:
+
+    ```bash
+    git fetch origin --tags --prune
+    git rev-parse --verify 'refs/tags/vPREVIOUS.GA^{commit}'
+    git rev-parse --verify 'refs/tags/v5.0.0^{commit}'
+    git diff --stat vPREVIOUS.GA..v5.0.0
+    git log --cherry-pick --right-only --no-merges --oneline \
+      vPREVIOUS.GA...v5.0.0
+
+    gh release create v5.0.0 \
+      --repo nvidia-holoscan/holoscan-cli \
+      --verify-tag \
+      --draft \
+      --title "holoscan-cli 5.0.0" \
+      --generate-notes \
+      --notes-start-tag vPREVIOUS.GA
+    ```
+
+    Review and curate the draft before publishing it. Check cherry-picked fixes
+    against their original pull requests, and remove private or
+    security-sensitive validation details.
+
+## Shared release and smoke-test helpers
 
 These live under `.github/scripts/` so `main.yaml` and `release.yaml` can call
 the same logic and never drift.
+
+### `resolve_release_version.py`
+
+Validates the base version, maturity inputs, and release branch and returns an
+exact PEP 440 version for an explicit alpha, RC, or GA build. The workflow also
+runs equivalent fail-fast checks before creating its temporary tag. Unit tests
+cover each maturity and reject ambiguous or invalid input combinations.
 
 ### `assert_wheel_contents.sh <wheel-dir>`
 

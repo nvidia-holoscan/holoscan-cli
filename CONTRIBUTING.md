@@ -132,16 +132,17 @@ without publishing a wheel first.
   (`.github/workflows/release.yaml`). Dispatch it via the CLI:
 
   ```bash
-  gh workflow run release.yaml --ref <branch> \
-    -f version=vX.Y.Z \
-    -f rc=<optional-rc-number> \
-    -f ga=false                                   # true only for an official GA
+  gh workflow run release.yaml --ref release/X.Y.Z \
+    -f version=vX.Y.Z -f alpha=1 -f ga=false     # produces X.Y.Za1
   ```
 
   The dispatch creates `refs/tags/vX.Y.Z` at the dispatch SHA, builds, smokes,
   publishes to TestPyPI, re-installs from `test.pypi.org/simple/` and re-smokes,
-  and deletes the tag when `ga=false` (so RC dispatches leave no stray refs).
-  See [`.github/CI.md`](./.github/CI.md) for the full pipeline.
+  and deletes the temporary base tag when `ga=false`. Use `alpha=N` for
+  integration alphas, `rc=N` for release candidates, or `ga=true` for the final
+  version; those selectors are mutually exclusive. The workflow never publishes
+  to public PyPI. See [`.github/CI.md`](./.github/CI.md) for the full release
+  branch, promotion, and tagging runbook.
 
 If you need to introduce or bump a third-party Action, see
 [`.github/CI.md`](./.github/CI.md#github-actions-allowlist) — the repo's
