@@ -31,6 +31,30 @@ from typing import Iterable
 from holoscan_cli.utils.external_resolver import ModuleDep, _require_immutable_ref
 
 
+def _cmake_bracket_argument(value: str) -> str:
+    """Encode ``value`` as one literal CMake bracket argument."""
+    delimiter = ""
+    # Include the closing bracket's first character to catch boundary overlaps.
+    while f"]{delimiter}]" in value + "]":
+        delimiter += "="
+    # CMake discards one newline immediately after the opening bracket.
+    prefix = "\n" if value.startswith(("\n", "\r\n")) else ""
+    return f"[{delimiter}[{prefix}{value}]{delimiter}]"
+
+
+def _cmake_fetchcontent_argument(value: str, label: str) -> str:
+    """Validate values that FetchContent serializes into further CMake code."""
+    # FetchContent uses fixed [==[...]==] delimiters in EVAL, while generated
+    # Git scripts use quoted strings. List separators can introduce options.
+    if (
+        any(char in value for char in '\\"$;')
+        or any(ord(char) < 32 for char in value)
+        or "]==" in value
+    ):
+        raise ValueError(f"External module {label} contains unsupported CMake syntax")
+    return _cmake_bracket_argument(value)
+
+
 def _provider_id(module_name: str) -> str:
     """Sanitise a module name into a CMake-friendly identifier.
 
@@ -65,6 +89,11 @@ def write_external_operators_manifest(
     ``MakeAvailable``, no ``add_holohub_operator``. CMake decides what to
     fetch based on which ``OP_<x>`` survives configure-time gating.
 
+    Metadata-derived values are emitted as literal CMake bracket arguments or
+    bracket comments. The delimiter is selected so the value cannot close its
+    own argument and inject CMake syntax. Values forwarded to FetchContent
+    are also validated because it serializes them into further CMake code.
+
     Provider lookups are NORMAL variables (no ``CACHE INTERNAL``), so they
     don't survive across configure runs. This matters when a build dir is
     reused across consumers with different external Module needs (e.g.
@@ -97,12 +126,14 @@ def write_external_operators_manifest(
             # In-tree modules are already part of the consuming source tree.
             # The tree's normal CMake options enable their operators, so this
             # manifest must not emit a FetchContent declaration for them.
-            lines.append(f"# {dep.name} (in-tree: {dep.override_path})")
+            in_tree_comment = f"{dep.name} (in-tree: {dep.override_path})"
+            lines.append("#" + _cmake_bracket_argument(in_tree_comment))
             if dep.provides_operators:
-                lines.append(
-                    f"# Operators {dep.provides_operators} are built by the source tree "
+                comment = (
+                    f"Operators {dep.provides_operators} are built by the source tree "
                     "when the corresponding OP_* flags are ON."
                 )
+                lines.append("#" + _cmake_bracket_argument(comment))
             lines.append("")
             continue
 
@@ -117,7 +148,8 @@ def write_external_operators_manifest(
         provider_upper = provider.upper()
         ref_note = f", ref {dep.ref}" if dep.ref else ""
         origin = "local-override" if dep.override_path else "fetch"
-        lines.append(f"# {dep.name} ({origin}{ref_note})")
+        origin_comment = f"{dep.name} ({origin}{ref_note})"
+        lines.append("#" + _cmake_bracket_argument(origin_comment))
 
         override_str = None
         if dep.override_path is not None:
@@ -125,9 +157,11 @@ def write_external_operators_manifest(
             # FETCHCONTENT_SOURCE_DIR_<UPPER> is a cache variable (global scope) that
             # redirects FetchContent_MakeAvailable at the local tree. Emitted as a
             # separate set() before the function call so it's visible to readers.
+            override_arg = _cmake_fetchcontent_argument(override_str, "local override path")
+            description_arg = _cmake_bracket_argument(f"Local override for {dep.name}")
             lines.append(
-                f'set(FETCHCONTENT_SOURCE_DIR_{provider_upper} "{override_str}" '
-                f'CACHE PATH "Local override for {dep.name}" FORCE)'
+                f"set(FETCHCONTENT_SOURCE_DIR_{provider_upper} {override_arg} "
+                f"CACHE PATH {description_arg} FORCE)"
             )
 
         # Build holohub_declare_external_module(...) call, forwarding FetchContent
@@ -136,11 +170,12 @@ def write_external_operators_manifest(
         # directory scope).
         call_parts = [f"holohub_declare_external_module({provider}"]
         if override_str is not None:
-            call_parts.append(f'    SOURCE_DIR  "{override_str}"')
+            call_parts.append(f"    SOURCE_DIR  {override_arg}")
         elif dep.git_url and dep.ref:
             _require_immutable_ref(dep.name, dep.ref)
-            call_parts.append(f'    GIT_REPOSITORY  "{dep.git_url}"')
-            call_parts.append(f'    GIT_TAG         "{dep.ref}"')
+            git_url_arg = _cmake_fetchcontent_argument(dep.git_url, "Git URL")
+            call_parts.append(f"    GIT_REPOSITORY  {git_url_arg}")
+            call_parts.append(f"    GIT_TAG         {_cmake_bracket_argument(dep.ref)}")
 
         for op in dep.provides_operators:
             prior = seen_op_provider.get(op)
@@ -153,7 +188,8 @@ def write_external_operators_manifest(
             seen_op_provider[op] = provider
 
         if dep.provides_operators:
-            call_parts.append(f"    PROVIDES_OPERATORS {' '.join(dep.provides_operators)}")
+            operators = " ".join(_cmake_bracket_argument(op) for op in dep.provides_operators)
+            call_parts.append(f"    PROVIDES_OPERATORS {operators}")
 
         call_parts.append(")")
         lines.append("\n".join(call_parts))

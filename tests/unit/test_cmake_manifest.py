@@ -72,8 +72,8 @@ def test_emits_git_repository_and_tag(tmp_path):
         tmp_path,
         [ModuleDep(name="mymod", git_url="https://example.com/foo.git", ref="abc" + "0" * 37)],
     )
-    assert 'GIT_REPOSITORY  "https://example.com/foo.git"' in text
-    assert 'GIT_TAG         "' + "abc" + "0" * 37 + '"' in text
+    assert "GIT_REPOSITORY  [[https://example.com/foo.git]]" in text
+    assert "GIT_TAG         [[" + "abc" + "0" * 37 + "]]" in text
 
 
 def test_rejects_mutable_git_ref(tmp_path):
@@ -108,7 +108,7 @@ def test_emits_provides_operators_in_function_call(tmp_path):
     # The function (defined in the consumer's CMake helpers) sets
     # HOLOHUB_EXT_OP_<op>_PROVIDER as normal variables at PARENT_SCOPE.
     # The manifest must NOT emit them as raw set() calls.
-    assert "PROVIDES_OPERATORS bigmod_signal_op bigmod_render_op" in text
+    assert "PROVIDES_OPERATORS [[bigmod_signal_op]] [[bigmod_render_op]]" in text
     assert not re.search(r"set\(HOLOHUB_EXT_OP_\S+_PROVIDER\b", text)
 
 
@@ -136,7 +136,7 @@ def test_local_override_emits_source_dir_var(tmp_path):
     # The override line must precede the function call so the override is
     # visible at MakeAvailable time.
     assert idx_src < idx_decl
-    assert '"/abs/path/to/mymod"' in text
+    assert "[[/abs/path/to/mymod]]" in text
     assert "FORCE" in text
 
 
@@ -153,7 +153,7 @@ def test_local_override_only_forwards_source_dir(tmp_path):
         ],
     )
     assert "holohub_declare_external_module(mymod" in text
-    assert 'SOURCE_DIR  "/abs/local"' in text
+    assert "SOURCE_DIR  [[/abs/local]]" in text
     assert "GIT_REPOSITORY" not in text
     assert "GIT_TAG" not in text
 
