@@ -200,8 +200,10 @@ def redact_cli_option_values(args: List[str], option: str, replacement: str) -> 
             index += 1
         return redacted, changed
 
+    # Handle separate option/value argv entries before shell-joined commands.
+    redacted_args, _ = redact_tokens(args)
     result: List[str] = []
-    for arg in args:
+    for arg in redacted_args:
         if option not in arg:
             result.append(arg)
             continue
