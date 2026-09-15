@@ -5,6 +5,8 @@ from __future__ import annotations
 
 import subprocess
 
+import pytest
+
 from holoscan_cli.utils import io
 
 
@@ -25,6 +27,21 @@ def test_run_command_display_override_hides_value_without_changing_execution(mon
     assert calls == [["tool", "--token", "secret-value"]]
     output = capsys.readouterr().out
     assert "<configured options hidden>" in output
+    assert "secret-value" not in output
+
+
+def test_run_command_missing_sudo_respects_display_override(monkeypatch, capsys):
+    monkeypatch.setattr(io.os, "geteuid", lambda: 1000)
+    monkeypatch.setattr(io.shutil, "which", lambda _: None)
+    cmd = ["tool", "--token", "secret-value"]
+
+    with pytest.raises(SystemExit) as exc:
+        io.run_command(cmd, as_root=True, display_override=["tool", "<hidden>"])
+
+    assert exc.value.code == 1
+    output = capsys.readouterr().err
+    assert "'sudo' is not available" in output
+    assert "tool <hidden>" in output
     assert "secret-value" not in output
 
 
