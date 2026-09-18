@@ -97,6 +97,32 @@ pass on the same Python version locally (CI also runs 3.11 / 3.12 / 3.13;
 for full matrix coverage either use the Python you don't normally use,
 or rely on CI).
 
+### Check documentation links
+
+The `Check URLs` workflow runs on pull requests, pushes to `main`, and weekly.
+It scans all Markdown documentation, including `.github/`, so renaming a file
+or heading also checks unchanged pages linking to it. Raw Cookiecutter output
+is excluded because its paths and headings require rendering first.
+
+Run the same local file and heading checks with Lychee 0.24.2:
+
+```bash
+lychee --config .github/lychee.toml --root-dir "$PWD" \
+  --offline --include-fragments '**/*.md' '.github/**/*.md'
+```
+
+Check external URLs separately:
+
+```bash
+lychee --config .github/lychee.toml --root-dir "$PWD" \
+  --scheme https --scheme http '**/*.md' '.github/**/*.md'
+```
+
+Local files and anchors must resolve. External checks follow HoloHub's policy
+of accepting HTTP 403 and 429 for bot restrictions and rate limits; these
+statuses do not prove that the destination content is accessible. Add only
+narrow, explained exclusions when a link cannot be checked automatically.
+
 ### Smoke-test the installed wheel
 
 The `smoke-test` job in `Code Check` rebuilds the wheel, installs it into a
