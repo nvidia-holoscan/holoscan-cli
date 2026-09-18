@@ -41,7 +41,7 @@ surface is exercised before merge. Jobs run in this order:
 | `installed artifact smoke`    | Test clean wheel and sdist installs, the `create` extra, uvx, and pipx.    |
 | `CPU CLI + Docker smoke test` | Installed-wheel source-project dry-runs plus a tiny CPU Docker build.      |
 
-The installed-artifact smoke matrix runs on Python 3.12 and 3.14, using the
+The installed-artifact smoke matrix runs on Python 3.12, 3.13, and 3.14, using the
 same wheel and sdist built on Python 3.12.
 
 The 3.12 `test` entry uploads coverage to Coveralls; the other matrix entries
@@ -79,11 +79,11 @@ Pipeline:
    upload `build-artifact` plus the wheel-only `wheel-artifact`. The temporary
    base tag is removed for non-GA dispatches.
 3. **`smoke-test`** — test clean wheel and sdist installs and the `create`
-   extra on Python 3.12 and 3.14.
+   extra on Python 3.12, 3.13, and 3.14.
 4. **`publish-test-pypi`** — publish both distributions to TestPyPI with
    trusted publishing. There is deliberately no public-PyPI deployment job.
 5. **`testpypi-installed smoke test`** — poll TestPyPI for the exact published
-   version, install it into clean Python 3.12 and 3.14 environments, and rerun
+   version, install it into clean Python 3.12, 3.13, and 3.14 environments, and rerun
    the smoke checks.
 6. **NVIDIA promotion** — outside this workflow, use the approved NVIDIA
    package-promotion process to copy the validated wheel to

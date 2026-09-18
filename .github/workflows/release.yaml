@@ -309,7 +309,7 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest]
-        python-version: ["3.12", "3.14"]
+        python-version: ["3.12", "3.13", "3.14"]
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v6
@@ -373,7 +373,7 @@ jobs:
     needs: [testpypi-deploy]
     strategy:
       matrix:
-        python-version: ["3.12", "3.14"]
+        python-version: ["3.12", "3.13", "3.14"]
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v6

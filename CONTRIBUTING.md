@@ -88,7 +88,7 @@ or rely on CI).
 ### Smoke-test the installed wheel
 
 The `smoke-test` job in `Code Check` rebuilds the wheel, installs it into a
-fresh venv on Python 3.12 and 3.14, and runs `.github/scripts/smoke_test.sh`.
+fresh venv on Python 3.12, 3.13, and 3.14, and runs `.github/scripts/smoke_test.sh`.
 To reproduce locally:
 
 ```bash
