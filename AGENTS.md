@@ -22,10 +22,7 @@ then follow that project's own guidance. Generated modules have their own
 ## Validation
 
 Follow [local development](CONTRIBUTING.md#local-development) for setup and
-checks. Run `pre-commit run --all-files` before committing. Run the affected
-unit tests for code changes; use the installed-wheel smoke test for packaging
-or console-entry-point changes. Documentation-only changes need command/source
-verification and lint, not unrelated GPU workloads.
+validation requirements.
 
 Preserve unrelated work and inspect formatter changes before staging them.
 Keep generated environments, caches, and build outputs out of commits. Preview
