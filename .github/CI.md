@@ -35,17 +35,20 @@ surface is exercised before merge. Jobs run in this order:
 | Job                           | Purpose                                                                    |
 | ----------------------------- | -------------------------------------------------------------------------- |
 | `pre-commit`                  | Run all hooks listed in `.pre-commit-config.yaml` on Python 3.12.          |
-| `test` matrix                 | `poetry run pytest` on Python 3.11, 3.12, and 3.13 (Ubuntu).               |
+| `test` matrix                 | `poetry run pytest` on Python 3.11, 3.12, 3.13, and 3.14 (Ubuntu).         |
 | `HoloHub project integration` | Test current CLI against HoloHub's real project tree and wrapper suite.    |
 | `build wheel + sdist`         | `poetry build` + `twine check` + `assert_wheel_contents.sh`.               |
 | `installed artifact smoke`    | Test clean wheel and sdist installs, the `create` extra, uvx, and pipx.    |
 | `CPU CLI + Docker smoke test` | Installed-wheel source-project dry-runs plus a tiny CPU Docker build.      |
 
+The installed-artifact smoke matrix runs on Python 3.12 and 3.14, using the
+same wheel and sdist built on Python 3.12.
+
 The 3.12 `test` entry uploads coverage to Coveralls; the other matrix entries
 exist purely to catch version-specific regressions across supported runtimes.
 
 `coveralls` itself is only pulled in for `python_version < '3.13'`; on Python
-3.13 the test job skips the upload step.
+3.13 and 3.14 the test job skips the upload step.
 
 ## How a release publishes to TestPyPI and hands off for NVIDIA promotion
 
@@ -76,11 +79,12 @@ Pipeline:
    upload `build-artifact` plus the wheel-only `wheel-artifact`. The temporary
    base tag is removed for non-GA dispatches.
 3. **`smoke-test`** — test clean wheel and sdist installs and the `create`
-   extra.
+   extra on Python 3.12 and 3.14.
 4. **`publish-test-pypi`** — publish both distributions to TestPyPI with
    trusted publishing. There is deliberately no public-PyPI deployment job.
 5. **`testpypi-installed smoke test`** — poll TestPyPI for the exact published
-   version, install it into a clean environment, and rerun the smoke checks.
+   version, install it into clean Python 3.12 and 3.14 environments, and rerun
+   the smoke checks.
 6. **NVIDIA promotion** — outside this workflow, use the approved NVIDIA
    package-promotion process to copy the validated wheel to
    `pypi.nvidia.com`. For alpha and RC builds, select its prerelease-only policy

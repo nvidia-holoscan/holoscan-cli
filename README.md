@@ -209,7 +209,7 @@ untagged environment repository uses the SDK/CUDA-derived tag.
 
 ## Build from source
 
-Python 3.11+ and [Poetry 2.0+](https://python-poetry.org/docs/#installation) required.
+Python 3.11–3.14 and [Poetry 2.0+](https://python-poetry.org/docs/#installation) required.
 
 ```bash
 # Create + activate a virtual environment

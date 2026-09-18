@@ -82,8 +82,9 @@ jobs:
         python:
           [
             { version: "3.11", coveralls: false },
-            { version: "3.12", coveralls: true }, # publish coverage with latest version of Python
+            { version: "3.12", coveralls: true }, # publish coverage from one supported runtime
             { version: "3.13", coveralls: false },
+            { version: "3.14", coveralls: false },
           ]
     env:
       PYTHON_VERSION: ${{ matrix.python.version }}
@@ -228,7 +229,7 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest]
-        python-version: ["3.12"]
+        python-version: ["3.12", "3.14"]
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v6
