@@ -51,6 +51,18 @@ we request that you [fork](https://docs.github.com/en/pull-requests/collaboratin
 
 **Note**: We recommend that new GitHub users read GitHub's [Getting Started](https://docs.github.com/en/get-started/start-your-journey) guide before opening their first pull request.
 
+## Documentation ownership
+
+`README.md` introduces standalone usage; `CLI_REFERENCE.md` describes command
+behavior; `CONFIGURATION.md` owns configuration and precedence. Keep those
+references consistent with the installed CLI's help and implementation.
+`AGENTS.md` provides contributor instructions for agents working in this repo.
+Generated modules use the developer documentation in the packaged template;
+downstream wrappers document their own repository-specific behavior.
+
+Documentation-only changes should pass pre-commit and have their commands and
+links checked. They do not require unrelated SDK/GPU builds.
+
 ## Local development
 
 Verifying changes locally before pushing keeps the CI feedback loop short and
