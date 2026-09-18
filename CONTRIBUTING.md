@@ -102,12 +102,15 @@ or rely on CI).
 The `Check URLs` workflow runs on pull requests, pushes to `main`, and weekly.
 It scans all Markdown documentation, including `.github/`, so renaming a file
 or heading also checks unchanged pages linking to it. Raw Cookiecutter output
-is excluded because its paths and headings require rendering first.
+is excluded because its paths and headings require rendering first. Absolute
+links to files in this repository are checked against the current checkout,
+so new documentation can be validated before it reaches `main`.
 
 Run the same local file and heading checks with Lychee 0.24.2:
 
 ```bash
 lychee --config .github/lychee.toml --root-dir "$PWD" \
+  --remap "^https://github\.com/nvidia-holoscan/holoscan-cli/blob/main/(.*)$ file://$PWD/\$1" \
   --offline --include-fragments '**/*.md' '.github/**/*.md'
 ```
 
@@ -115,6 +118,7 @@ Check external URLs separately:
 
 ```bash
 lychee --config .github/lychee.toml --root-dir "$PWD" \
+  --remap "^https://github\.com/nvidia-holoscan/holoscan-cli/blob/main/(.*)$ file://$PWD/\$1" \
   --scheme https --scheme http '**/*.md' '.github/**/*.md'
 ```
 

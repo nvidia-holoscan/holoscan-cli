@@ -39,6 +39,7 @@ jobs:
           args: >-
             --config .github/lychee.toml
             --root-dir '${{ github.workspace }}'
+            --remap '^https://github\.com/nvidia-holoscan/holoscan-cli/blob/main/(.*)$ file://${{ github.workspace }}/$1'
             ${{ matrix.args }}
             '**/*.md' '.github/**/*.md'
           fail: true

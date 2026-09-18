@@ -141,9 +141,9 @@ a pip environment. Follow its `README.md` and `DEVELOPER.md` for implementation,
 tests, packaging, and consumer verification. No HoloHub checkout or copied
 wrapper is needed.
 
-See the [CLI reference](CLI_REFERENCE.md) for project selection, command
+See the [CLI reference](https://github.com/nvidia-holoscan/holoscan-cli/blob/main/CLI_REFERENCE.md) for project selection, command
 semantics, previews, diagnostics, and cleanup. For contributing to the CLI
-itself, see [CONTRIBUTING.md](CONTRIBUTING.md).
+itself, see [CONTRIBUTING.md](https://github.com/nvidia-holoscan/holoscan-cli/blob/main/CONTRIBUTING.md).
 
 ### Project configuration
 
