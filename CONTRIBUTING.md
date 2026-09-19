@@ -58,7 +58,7 @@ avoids tying up shared runners.
 
 ### Set up the development environment
 
-Python 3.11+ and [Poetry 2.0+](https://python-poetry.org/docs/#installation)
+Python 3.11–3.14 and [Poetry 2.0+](https://python-poetry.org/docs/#installation)
 are required. From a fresh clone:
 
 ```bash
@@ -81,14 +81,15 @@ poetry run pytest -q                       # run the unit test suite.
 
 If `pre-commit run --all-files` passes locally, `Code Check`'s `pre-commit`
 job will pass on push. If `poetry run pytest` passes, the `test` matrix will
-pass on the same Python version locally (CI also runs 3.11 / 3.12 / 3.13;
+pass on the same Python version locally (CI also runs 3.11 / 3.12 / 3.13 / 3.14;
 for full matrix coverage either use the Python you don't normally use,
 or rely on CI).
 
 ### Smoke-test the installed wheel
 
 The `smoke-test` job in `Code Check` rebuilds the wheel, installs it into a
-fresh venv, and runs `.github/scripts/smoke_test.sh`. To reproduce locally:
+fresh venv on Python 3.12, 3.13, and 3.14, and runs `.github/scripts/smoke_test.sh`.
+To reproduce locally:
 
 ```bash
 poetry build                                          # writes dist/*.whl, dist/*.tar.gz
