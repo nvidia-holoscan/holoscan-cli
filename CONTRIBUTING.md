@@ -51,6 +51,18 @@ we request that you [fork](https://docs.github.com/en/pull-requests/collaboratin
 
 **Note**: We recommend that new GitHub users read GitHub's [Getting Started](https://docs.github.com/en/get-started/start-your-journey) guide before opening their first pull request.
 
+## Documentation ownership
+
+`README.md` introduces standalone usage; `CLI_REFERENCE.md` describes command
+behavior; `CONFIGURATION.md` owns configuration and precedence. Keep those
+references consistent with the installed CLI's help and implementation.
+`AGENTS.md` provides contributor instructions for agents working in this repo.
+Generated modules use the developer documentation in the packaged template;
+downstream wrappers document their own repository-specific behavior.
+
+Documentation-only changes should pass pre-commit and have their commands and
+links checked. They do not require unrelated SDK/GPU builds.
+
 ## Local development
 
 Verifying changes locally before pushing keeps the CI feedback loop short and
@@ -84,6 +96,36 @@ job will pass on push. If `poetry run pytest` passes, the `test` matrix will
 pass on the same Python version locally (CI also runs 3.11 / 3.12 / 3.13 / 3.14;
 for full matrix coverage either use the Python you don't normally use,
 or rely on CI).
+
+### Check documentation links
+
+The `Check URLs` workflow runs on pull requests, pushes to `main`, and weekly.
+It scans all Markdown documentation, including `.github/`, so renaming a file
+or heading also checks unchanged pages linking to it. Raw Cookiecutter output
+is excluded because its paths and headings require rendering first. Absolute
+links to files in this repository are checked against the current checkout,
+so new documentation can be validated before it reaches `main`.
+
+Run the same local file and heading checks with Lychee 0.24.2:
+
+```bash
+lychee --config .github/lychee.toml --root-dir "$PWD" \
+  --remap "^https://github\.com/nvidia-holoscan/holoscan-cli/blob/main/(.*)$ file://$PWD/\$1" \
+  --offline --include-fragments '**/*.md' '.github/**/*.md'
+```
+
+Check external URLs separately:
+
+```bash
+lychee --config .github/lychee.toml --root-dir "$PWD" \
+  --remap "^https://github\.com/nvidia-holoscan/holoscan-cli/blob/main/(.*)$ file://$PWD/\$1" \
+  --scheme https --scheme http '**/*.md' '.github/**/*.md'
+```
+
+Local files and anchors must resolve. External checks follow HoloHub's policy
+of accepting HTTP 403 and 429 for bot restrictions and rate limits; these
+statuses do not prove that the destination content is accessible. Add only
+narrow, explained exclusions when a link cannot be checked automatically.
 
 ### Smoke-test the installed wheel
 

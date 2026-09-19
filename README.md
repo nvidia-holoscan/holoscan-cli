@@ -3,7 +3,7 @@
 
 # Holoscan CLI
 
-Command-line tool for discovering, building, running, testing, and linting HoloHub-style Holoscan source projects. Published as the [`holoscan-cli`](https://pypi.org/project/holoscan-cli/) PyPI package and installs the `holoscan` console script.
+Command-line tool for creating, discovering, building, running, testing, and packaging Holoscan Modules and applications. Published as the [`holoscan-cli`](https://pypi.org/project/holoscan-cli/) PyPI package and installs the `holoscan` console script.
 
 ## Overview
 
@@ -91,43 +91,59 @@ A platform supported by the [NVIDIA Holoscan SDK](https://docs.nvidia.com/holosc
 
 ## Installation
 
-```bash
-pip install holoscan-cli
-holoscan --help
-```
+Python 3.12 or 3.13 is recommended for this walkthrough. Check the selected
+release's Python requirement before using another interpreter.
 
-For transient use without keeping an installed environment, package-name based
-tool runners can use the compatibility alias:
+With [uv](https://docs.astral.sh/uv/), try the CLI without a persistent install:
 
 ```bash
 uvx holoscan-cli --help
-pipx run holoscan-cli --help
 ```
 
-The primary CLI command remains `holoscan`. Explicit package/command forms also
-work when you want the canonical command name from a transient runner:
+The package also provides the canonical `holoscan` command. For a persistent
+pip environment:
 
 ```bash
-uvx --from holoscan-cli holoscan --help
-pipx run --spec holoscan-cli holoscan --help
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install holoscan-cli
+holoscan --help
 ```
 
-Creating a standalone Module needs the optional creation dependencies. NVIDIA's
-index is included so release candidates are available too. This command requires
-`uv` 0.4.23 or later for `uvx --index` support:
+### Create and work on a standalone module
+
+Creating a module requires the `create` extra. For the CLI 5.0.0a1 integration
+release, use NVIDIA's package index (`uv` 0.4.23 or later):
 
 ```bash
-uvx --index https://pypi.nvidia.com \
-  --from 'holoscan-cli[create]' holoscan create my-sensor
+uvx --index https://pypi.nvidia.com --from 'holoscan-cli[create]==5.0.0a1' holoscan create my-sensor --language python --interactive false --context holoscan_version=4.6.0 --dryrun
+uvx --index https://pypi.nvidia.com --from 'holoscan-cli[create]==5.0.0a1' holoscan create my-sensor --language python --interactive false --context holoscan_version=4.6.0
+cd holoscan-my-sensor
+uv run holoscan list --json
+uv run holoscan build my_sensor_pipeline --dryrun --verbose
 ```
 
-To run any command against a project outside the current directory, pass the
-global `--project-root PATH` before the subcommand (equivalent to setting
-`HOLOSCAN_CLI_ROOT`):
+Replace `4.6.0` with the module's intended minimum SDK version. CLI and SDK
+versions are independent. Review the preview before running the build without
+`--dryrun`; builds require the module's documented SDK/container prerequisites.
+The generated project records the creating CLI version, and `uv run` prepares
+its development environment without installing the module itself.
+
+For the pip alternative, install the same creation extra in the activated
+`.venv`, then run `holoscan create` with the same arguments:
 
 ```bash
-holoscan --project-root ~/holoscan-my-sensor list
+python -m pip install --extra-index-url https://pypi.nvidia.com 'holoscan-cli[create]==5.0.0a1'
 ```
+
+In an existing generated module, use its `requirements-cli.txt` to provision
+a pip environment. Follow its `README.md` and `DEVELOPER.md` for implementation,
+tests, packaging, and consumer verification. No HoloHub checkout or copied
+wrapper is needed.
+
+See the [CLI reference](https://github.com/nvidia-holoscan/holoscan-cli/blob/main/CLI_REFERENCE.md) for project selection, command
+semantics, previews, diagnostics, and cleanup. For contributing to the CLI
+itself, see [CONTRIBUTING.md](https://github.com/nvidia-holoscan/holoscan-cli/blob/main/CONTRIBUTING.md).
 
 ### Project configuration
 
