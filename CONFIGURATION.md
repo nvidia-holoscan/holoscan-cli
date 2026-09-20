@@ -1,5 +1,9 @@
 # Configuring Holoscan CLI
 
+For installation and a standalone walkthrough, see [README.md](README.md).
+For command behavior, previews, and diagnostics, see the
+[CLI reference](CLI_REFERENCE.md).
+
 Run `holoscan` inside a source project. To select another project, put the
 global option before the command:
 
