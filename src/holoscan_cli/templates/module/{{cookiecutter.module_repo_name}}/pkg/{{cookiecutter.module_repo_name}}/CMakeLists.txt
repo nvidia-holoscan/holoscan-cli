@@ -11,6 +11,7 @@ holohub_configure_deb(
     VERSION     "${PROJECT_VERSION}"
     VENDOR      "{% if cookiecutter.affiliation %}{{ cookiecutter.affiliation }}{% else %}NVIDIA{% endif %}"
     CONTACT     "{{ cookiecutter.contact_email }}"
-    DEPENDS     "holoscan (>= {{ cookiecutter.holoscan_version }})"
+    # Match the CUDA 13 Holoscan SDK image selected by the generated Dockerfile.
+    DEPENDS     "holoscan-cuda-13 (>= {{ cookiecutter.holoscan_version }})"
 {% if cookiecutter.language == 'cpp' %}    EXPORT_NAME "holoscan_{{ cookiecutter.module_slug }}_targets"
 {% endif %})

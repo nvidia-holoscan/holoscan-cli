@@ -95,6 +95,20 @@ jobs:
           PYTHONPATH=build/python/lib${PYTHONPATH:+:$PYTHONPATH} \
           python -m pytest tests/python/ -v --tb=short
 
+      - name: Build and install Debian package
+        run: |
+          cpack \
+            --config build/pkg/CPackConfig-{{ cookiecutter.module_repo_name }}.cmake \
+            -B build/packages \
+            -G DEB
+          package=$(find build/packages -maxdepth 1 -type f -name '*.deb' -print -quit)
+          test -n "$package"
+          test "$(dpkg-deb --field "$package" Depends)" = \
+            "holoscan-cuda-13 (>= {{ cookiecutter.holoscan_version }})"
+          apt-get install -y "./$package"
+          dpkg-query --show --showformat='${Status}\n' \
+            {{ cookiecutter.module_repo_name }} | grep -Fx 'install ok installed'
+
       - uses: actions/upload-artifact@v4
         if: always()
         with:
