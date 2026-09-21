@@ -240,11 +240,17 @@ def test_packaged_template_creates_a_standalone_module(
     assert "--extra-index-url https://pypi.nvidia.com" in dockerfile
     assert "python3 -m venv .venv" in readme
     assert "uv run holoscan" in readme
-    assert 'DEPENDS     "holoscan-cuda-13 (>= 4.5.0)"' in deb_cmake
-    assert 'DEPENDS     "holoscan (>= 4.5.0)"' not in deb_cmake
+    assert 'set(HOLOSCAN_DEB_DEPENDENCY "holoscan-cuda-13 (>= 4.5.0)")' in deb_cmake
+    assert 'set(HOLOSCAN_DEB_DEPENDENCY "holoscan (>= 4.5.0)")' in deb_cmake
+    assert 'DEPENDS     "${HOLOSCAN_DEB_DEPENDENCY}"' in deb_cmake
+    assert "CMAKE_SYSTEM_PROCESSOR" in deb_cmake
+    assert "aarch64|arm64" in deb_cmake
+    assert "x86_64|amd64" in deb_cmake
     assert "holoscan-cuda-12 (>= 4.5.0)" in deb_readme
+    assert "aarch64 (Jetson Thor)" in deb_readme
     assert "holohub_configure_deb()" in deb_readme
     assert 'dpkg-deb --field "$package" Depends' in ci_workflow
+    assert "tr ',' '\\n'" in ci_workflow
     assert '"holoscan-cuda-13 (>= 4.5.0)"' in ci_workflow
     assert 'apt-get install -y "./$package"' in ci_workflow
     assert not (project / "holohub").exists()
