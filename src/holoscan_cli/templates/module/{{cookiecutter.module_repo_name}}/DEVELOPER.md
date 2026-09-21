@@ -14,22 +14,42 @@ distributing this Holoscan Module.
 ├── requirements-cli.txt            # Tested holoscan-cli development version
 ├── Dockerfile                      # Development container image
 ├── CMakeLists.txt                  # Root CMake — orchestrates operators/applications/tests
-├── pyproject.toml                  # Python packaging metadata (scikit-build-core)
+├── pyproject.toml                  # Development tooling (CLI pin, ruff); no wheel build
 ├── metadata.json                   # Module-level metadata (schema: urn:holohub:module:v2)
 ├── operators/
 │   └── {{ cookiecutter.operator_slug }}/
-│       ├── {{ cookiecutter.operator_slug }}.{% if cookiecutter.language == 'cpp' %}cpp / .hpp{% else %}py{% endif %}  # Operator implementation
+│       ├── {{ cookiecutter.operator_slug }}.cpp / .hpp  # Operator implementation (typed ports)
 │       └── metadata.json           # Operator-level metadata
 ├── applications/
 │   └── {{ cookiecutter.module_slug }}_pipeline/
-│       ├── python/                 # Python pipeline + metadata.json (every module)
-│       └── cpp/                    # C++ pipeline + metadata.json (cpp-language modules)
-├── python/holoscan/{{ cookiecutter.module_slug }}/
-│   └── __init__.py                 # Re-exports operators for `from holoscan.{{ cookiecutter.module_slug }} import ...`
+│       └── cpp/                    # C++ pipeline (compose → compile → run) + metadata.json
+├── pkg/{{ cookiecutter.module_repo_name }}/  # Debian package (CPack) configuration
 └── tests/
-    ├── cpp/                        # GTest suite (C++ modules only)
-    └── python/                     # pytest suite
+    └── cpp/                        # GTest suite: compile-plan + SyntheticClock graph tests
 ```
+
+Holoscan SDK 5.0 is C++-first, so this scaffold contains no Python operator, pipeline, or
+binding layer. Python support returns in a later release; until then the `pyproject.toml` only
+provisions development tooling.
+
+---
+
+## Holoscan SDK 5.0 API cheat sheet
+
+| 4.x | 5.0 |
+| --- | --- |
+| `class Op : public holoscan::Operator` | `class Op final : public holoscan::Operator<>` (or `Operator<ParamsStruct>`) |
+| `spec.input<T>("in")` in `setup()` | `holoscan::Input<T> in;` member + `spec.input(in, "in")` |
+| `compute(InputContext&, OutputContext&, ExecutionContext&)` | `expected<void, Error> compute(ExecutionContext&)` |
+| `op_input.receive<T>("in").value()` | `HOLOSCAN_TRY(auto v, in.receive_data());` |
+| `op_output.emit(v, "out")` | `return out.emit(v);` |
+| `Application::compose()` + `make_operator` | `holoscan::Graph` + `graph.op<Op>("name")` |
+| `add_flow(a, b, {{ '{{' }}"out", "in"{{ '}}' }})` | `graph.add_flow(a->out, b->in)` (typed) |
+| `app->run()` | `compile(graph)` → check `plan.ok()` → `run(plan)` / `run_async(plan)` |
+| Conditions (`PeriodicCondition`, ...) | `contract()` returning a `holoscan::Contract` (`OnClock`, `OnEach`, ...) |
+
+Sources must opt into time: add a clock (`graph.add_clock<RealtimeClock>`) and make it the default
+(`graph.set_default_clock`) before compiling a graph that uses `OnClock`.
 
 ---
 
@@ -56,27 +76,8 @@ Run a lifecycle command with `--verbose` to see what was selected.
 | `holoscan run-container` | Build and start the development container |
 | `holoscan build {{ cookiecutter.module_slug }}_pipeline` | CMake configure + build inside the container |
 | `holoscan run {{ cookiecutter.module_slug }}_pipeline` | Run the example pipeline |
-| `holoscan test` | Run CTest (C++ unit tests) and pytest |
-| `holoscan install --dev` | Build the Module if needed and install its `.pth` import hook in the development container |
-
-From a fresh scaffold, run `holoscan install --dev` at the Module root. It builds the
-development image and, if the hook has not been staged yet, builds the Module inside the
-container. The hook is installed for that container's Python. To verify it, enter the
-same development container and import there:
-
-```bash
-holoscan install --dev
-holoscan run-container {{ cookiecutter.module_repo_name }} --no-docker-build
-# Inside the container:
-python -c "import holoscan.{{ cookiecutter.module_slug }}; print(holoscan.{{ cookiecutter.module_slug }}.__file__)"
-```
-
-Run `holoscan install --dev --uninstall` from the host to remove the container hook.
-If you have a compatible SDK and toolchain on the host, use
-`HOLOSCAN_CLI_BUILD_PARENT_DIR="$PWD/build-native" holoscan install --dev --local`
-to build and install a separate host-native hook. Use `--local` with
-`--uninstall` to remove that host hook. A container hook is installed for
-container Python; host-native imports require a compatible host SDK.
+| `holoscan test` | Run CTest (C++ unit tests) |
+| `holoscan package {{ cookiecutter.module_repo_name }} --pkg-generator DEB` | Build the Debian package |
 
 The scaffold intentionally ships no launcher wrapper. Projects that need custom environment or
 bootstrap policy can add a thin wrapper as an advanced customization, keep it outside the Module's
@@ -104,85 +105,82 @@ cmake -S . -B build -DBUILD_ALL=ON -D{{ cookiecutter.module_slug | upper }}_BUIL
 cmake --build build -j"$(nproc)"
 ```
 
+Requirements on the host: Holoscan SDK ≥ {{ cookiecutter.holoscan_version }} (`apt install holoscan`,
+the `holoscan-cuda-13` alias), CMake ≥ 4.0, a C++20 compiler and GoogleTest. The development
+container (`Dockerfile`) provides all of these.
+
 `{{ cookiecutter.module_slug | upper }}_BUILD_TESTING` defaults to `ON` for a standalone build
 and `OFF` when this module is included by a parent project. To build without
 tests, configure with `-D{{ cookiecutter.module_slug | upper }}_BUILD_TESTING:BOOL=OFF`.
 The standard `-DBUILD_TESTING=OFF` does not control this module's tests.
-{% if cookiecutter.language == 'cpp' -%}
-C++ tests require GTest (`libgtest-dev` on Debian/Ubuntu). If GTest is missing
-while module tests are enabled, CMake stops with an error that names the test
-option. Install GTest to run the C++ tests, or disable module tests for a
-build without GTest.
-{% endif -%}
+The C++ tests use an installed GoogleTest CMake package (1.14 or newer) when CMake
+finds one; otherwise CMake downloads GoogleTest while configuring, which needs network access.
 
-{% if cookiecutter.language == 'cpp' -%}
-The default SDK 4 search prefix is `/opt/nvidia/holoscan`. For another installation,
-configure with `-DCMAKE_PREFIX_PATH=/path/to/sdk` or point directly to its config
-with `-Dholoscan_DIR=/path/to/sdk/lib/cmake/holoscan`. Use a fresh build directory
-when switching SDK installations because CMake caches `holoscan_DIR`.
-
-{% endif -%}
-
-{% if cookiecutter.language == 'cpp' -%}
 Run C++ tests:
 
 ```bash
 ctest --test-dir build --output-on-failure -L unit
 ```
 
-{% endif -%}
-Run Python tests:
-
-```bash
-{{ cookiecutter.module_slug | upper }}_BUILD_DIR=build \
-PYTHONPATH=build/python/lib${PYTHONPATH:+:$PYTHONPATH} \
-pytest tests/python/ -v
-```
-
-`PYTHONPATH` is **prepended via `${PYTHONPATH:+:$PYTHONPATH}`** so that an existing entry on the variable is kept while an unset/empty variable doesn't yield a trailing colon. Two failure modes the shorter forms invite:
-
-- **`PYTHONPATH=build/python/lib`** (replace): drops any ambient holoscan SDK install on `PYTHONPATH`. The module-level `importorskip("holoscan")` then fires, pytest exits with code 5, and CTest marks the run as Skipped.
-- **`PYTHONPATH=build/python/lib:$PYTHONPATH`** (naive prepend): on a fresh shell or CI runner where `$PYTHONPATH` is unset, this expands to `PYTHONPATH=build/python/lib:` — Python treats the trailing empty entry as the current directory, silently shadowing installed packages with whatever happens to live in the test CWD.
-
 ---
 
 ## `pyproject.toml`
 
-`pyproject.toml` configures [scikit-build-core](https://scikit-build-core.readthedocs.io/) for
-wheel packaging and records an optional PEP 735 development dependency group. Key fields to
-update before publishing:
+`pyproject.toml` records a PEP 735 development dependency group and the ruff configuration for the
+repository's helper scripts. It does not build a Python package (`[tool.uv].package = false`).
 
 | Field | Purpose |
 | --- | --- |
-| `[project].name` | PyPI package name — should match `metadata.json:module.binary_packages.pypi` |
 | `[project].version` | Sync with `metadata.json:module.version` |
-| `[project].description` | Short description shown on PyPI |
-| `[project].authors` | Your name / organisation |
-| `[project].dependencies` | Installs `holoscan-cu13` from the configured minimum SDK version through SDK 4.x with the Module wheel |
 | `[dependency-groups].dev` | Exact CLI convenience pin; keep synchronized with `requirements-cli.txt` |
-| `[tool.uv]` | UV development environment and NVIDIA index selection for `holoscan-cli` |
-| `[tool.holoscan]` | Optional Module-wide CUDA, CTest, Docker, environment, and base-image defaults |
-| `[tool.scikit-build].cmake.args` | Extra CMake flags passed during `pip install` |
+| `[tool.uv]` | NVIDIA index selection for the pinned `holoscan-cli` development dependency |
+| `[tool.holoscan]` | Optional Module-wide CUDA, CTest, Docker, environment, and base-image defaults consumed by the CLI |
+| `[tool.ruff]` | Lint configuration used by `.pre-commit-config.yaml` and CI |
 
-The supported keys are `tool.holoscan.cuda`, `tool.holoscan.ctest-script`,
-`tool.holoscan.docker-build-args`, `tool.holoscan.docker-run-args`,
-`tool.holoscan.forward-env`, `tool.holoscan.search-paths`, and
-`tool.holoscan.base-images.{x86_64,aarch64}`. Docker argument arrays contain one command token
-per element. `search-paths` lists the folders searched for projects, replacing the defaults
-(`applications`, `operators`, `pkg`, and other conventional folders); for example,
-`search-paths = ["operators", "examples"]`. Do not store credentials or machine paths here; use `HOLOSCAN_SDK_ROOT` or
-`--local-sdk-root` for a machine-specific SDK.
+The supported `[tool.holoscan]` keys are `cuda`, `ctest-script`, `docker-build-args`,
+`docker-run-args`, `forward-env`, `search-paths`, and `base-images.{x86_64,aarch64}`.
+Docker argument arrays contain one command token per element. `search-paths` lists the folders
+searched for projects, replacing the defaults (`applications`, `operators`, `pkg`, and other
+conventional folders); for example, `search-paths = ["operators", "examples"]`.
+Do not store credentials or machine paths here; use `HOLOSCAN_SDK_ROOT` or `--local-sdk-root`
+for a machine-specific SDK.
 
-Build a wheel:
+---
 
-```bash
-pip install build
-python -m build --wheel
+## Depending on operators from other Modules
+
+`metadata.json:module.dependencies` declares other Holoscan Modules whose operators this Module
+uses. Its `source` block is consumed by `holoscan build`, which emits a `FetchContent_Declare`
+for each dependency and lets the consuming project's root `CMakeLists.txt` call
+`FetchContent_MakeAvailable` only when one of the advertised operators is enabled. Example — an
+imaginary `holoscan-example-utils` Module that supplies a `FrameCounterOp`:
+
+```json
+"dependencies": [
+  {
+    "name": "holoscan-example-utils",
+    "version": "1.2.0",
+    "source": {
+      "git_url": "https://github.com/example/holoscan-example-utils.git",
+      "ref": "0123456789abcdef0123456789abcdef01234567"
+    },
+    "provides_operators": ["FrameCounterOp"]
+  }
+]
 ```
 
-Install the built wheel in a CUDA 13 environment to resolve its Holoscan SDK
-runtime dependency. The development-only `uv sync --only-dev` command above
-does not install the Module wheel or its runtime dependencies.
+| Field | Purpose |
+| --- | --- |
+| `name` | Module name as declared in the dependency's `metadata.json:module.name` |
+| `source.git_url` / `source.ref` | Where to fetch the Module; `ref` must be an immutable full 40-character commit SHA (tags and branches are not accepted) |
+| `provides_operators` | Operators the dependency supplies; the Module is fetched only when one of them is being built |
+
+Then link the dependency's operator target (Modules alias each operator as
+`holoscan::<operator_slug>`) from the consuming operator or application, e.g.
+`target_link_libraries({{ cookiecutter.operator_slug }} PUBLIC holoscan::frame_counter)`.
+While iterating on both Modules locally, set `HOLOSCAN_CLI_LOCAL_HOLOSCAN_EXAMPLE_UTILS=/path/to/checkout`
+to use a working tree instead of fetching `source`. Binary, Python and system dependencies are not
+declared here — install them from the `Dockerfile` or the Debian package's `DEPENDS` list.
 
 ---
 
@@ -190,10 +188,9 @@ does not install the Module wheel or its runtime dependencies.
 
 | Context | Convention | Example |
 | --- | --- | --- |
-| Python import / C++ namespace | `snake_case` | `holoscan.{{ cookiecutter.module_slug }}` |
+| C++ namespace | `snake_case` | `holoscan::{{ cookiecutter.module_slug }}` |
 | Repository folder | `holoscan-<slug>` (kebab) | `{{ cookiecutter.module_repo_name }}` |
 | Debian package | `holoscan-<slug>` (kebab) | `holoscan-{{ cookiecutter.module_slug.replace('_', '-') }}` |
-| PyPI package | `holoscan-<slug>` (kebab) | `holoscan-{{ cookiecutter.module_slug.replace('_', '-') }}` |
 | CMake option prefix | `UPPER_SNAKE` | `{{ cookiecutter.module_slug | upper }}_BUILD_TESTING` |
 
 ---

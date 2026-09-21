@@ -27,7 +27,6 @@ jobs:
         run: |
           pip install 'holoscan-cli[create]' -c requirements-cli.txt
           python .github/workflows/scripts/validate_metadata.py
-{% if cookiecutter.language == 'cpp' %}
       - name: Install clang-format
         run: sudo apt-get update && sudo apt-get install -y clang-format
       - name: C++ format check
@@ -35,25 +34,19 @@ jobs:
           find operators applications tests \
                -name '*.cpp' -o -name '*.hpp' \
             | xargs clang-format --dry-run --Werror
-{% endif %}
 
   build-only:
-    name: CMake configure (CPU, no GPU required)
-    # Verifies the CMake graph and Python packaging without a GPU runner.
-    # holoscan is installed from PyPI (CPU wheel) solely to satisfy find_package(holoscan).
+    name: CMake configure (Holoscan {{ cookiecutter.holoscan_version }} container, no GPU required)
+    # Verifies the CMake graph without a GPU runner. The Holoscan SDK 5.0 C++
+    # headers and CMake package are taken from the SDK container image.
     runs-on: ubuntu-latest
+    container:
+      image: nvcr.io/nvidia/clara-holoscan/holoscan:v{{ cookiecutter.holoscan_version }}-cuda13
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.13"
-      - name: Install holoscan (CPU wheel) + CMake
-        run: |
-          pip install holoscan cmake ninja
       - name: CMake configure
         run: |
           cmake -S . -B build \
-            -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
             -D{{ cookiecutter.module_slug | upper }}_BUILD_TESTING=OFF \
             -DBUILD_ALL=ON
@@ -73,9 +66,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install Python test dependencies
-        run: python -m pip install 'pytest>=8.2' build
-
       - name: Configure
         run: |
           cmake -S . -B build \
@@ -85,65 +75,9 @@ jobs:
 
       - name: Build
         run: cmake --build build -j"$(nproc)"
-{% if cookiecutter.language == 'cpp' %}
+
       - name: C++ tests (CTest)
         run: ctest --test-dir build --output-on-failure -L unit
-{% endif %}
-      - name: Python tests (pytest)
-        run: |
-          {{ cookiecutter.module_slug | upper }}_BUILD_DIR=build \
-          PYTHONPATH=build/python/lib${PYTHONPATH:+:$PYTHONPATH} \
-          python -m pytest tests/python/ -v --tb=short
-
-      - name: Build and install Debian package
-        run: |
-          cpack \
-            --config build/pkg/CPackConfig-{{ cookiecutter.module_repo_name }}.cmake \
-            -B build/packages \
-            -G DEB
-          package=$(find build/packages -maxdepth 1 -type f -name '*.deb' -print -quit)
-          test -n "$package"
-          dpkg-deb --field "$package" Depends \
-            | tr ',' '\n' \
-            | sed 's/^[[:space:]]*//; s/[[:space:]]*$//' \
-            | grep -Fx "holoscan-cuda-13 (>= {{ cookiecutter.holoscan_version }})"
-          apt-get install -y "./$package"
-          dpkg-query --show --showformat='${Status}\n' \
-            {{ cookiecutter.module_repo_name }} | grep -Fx 'install ok installed'
-      - name: Build and install wheel in a clean environment
-        run: |
-          python -m build --wheel
-          wheel=$(find dist -maxdepth 1 -name '*.whl' -print -quit)
-          test -n "$wheel"
-          python - "$wheel" <<'PY'
-          import re
-          import sys
-          import zipfile
-          from email.parser import Parser
-
-          with zipfile.ZipFile(sys.argv[1]) as archive:
-              metadata_path = next(
-                  name for name in archive.namelist() if name.endswith(".dist-info/METADATA")
-              )
-              metadata = Parser().parsestr(archive.read(metadata_path).decode())
-          assert any(
-              re.fullmatch(r"holoscan-cu13\s*>=\s*{{ cookiecutter.holoscan_version }}", spec)
-              for spec in metadata.get_all("Requires-Dist", [])
-          ), metadata.get_all("Requires-Dist", [])
-          PY
-          python -m venv /tmp/holoscan-module-wheel-check
-          /tmp/holoscan-module-wheel-check/bin/python -m pip install "$wheel"
-          /tmp/holoscan-module-wheel-check/bin/python -m pip check
-          /tmp/holoscan-module-wheel-check/bin/python - <<'PY'
-          from importlib.metadata import distribution
-          from holoscan.core import Operator
-          from holoscan.{{ cookiecutter.module_slug }} import {{ cookiecutter.operator_slug.split('_')|map('capitalize')|join('') }}
-
-          assert distribution("holoscan-cu13").version
-          assert issubclass({{ cookiecutter.operator_slug.split('_')|map('capitalize')|join('') }}, Operator)
-          PY
-          /tmp/holoscan-module-wheel-check/bin/python \
-            applications/{{ cookiecutter.module_slug }}_pipeline/python/{{ cookiecutter.module_slug }}_pipeline.py
 
       - uses: actions/upload-artifact@v4
         if: always()

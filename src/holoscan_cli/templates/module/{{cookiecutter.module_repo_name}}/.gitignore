@@ -19,9 +19,8 @@ _CPack_Packages/
 .ngc/
 .nv/
 
-# Python packaging artifacts
+# Packaging artifacts and helper-script caches
 dist/
-*.egg-info/
 __pycache__/
 *.py[cod]
 
