@@ -19,7 +19,7 @@ Covers ``write_external_operators_manifest``: emits FetchContent
 declarations through ``holohub_declare_external_module`` calls, supports
 ``FETCHCONTENT_SOURCE_DIR_<UPPER>`` overrides, warns on operator
 collisions, and is idempotent on identical input. Also covers the
-``_provider_id`` string helper.
+``_cmake_bracket_argument`` and ``_provider_id`` string helpers.
 """
 
 from __future__ import annotations
@@ -30,6 +30,7 @@ from pathlib import Path
 import pytest
 
 from holoscan_cli.utils.cmake_manifest import (
+    _cmake_bracket_argument,
     _provider_id,
     write_external_operators_manifest,
 )
@@ -38,7 +39,12 @@ from holoscan_cli.utils.external_resolver import ModuleDep
 FULL_SHA = "0" * 40
 
 
-# ---- _provider_id ------------------------------------------------------------
+# ---- string helpers ----------------------------------------------------------
+
+
+def test_cmake_bracket_argument_uses_noncolliding_delimiter():
+    value = 'repo]]and]=]")\nmessage(FATAL_ERROR "injected")'
+    assert _cmake_bracket_argument(value) == f"[==[{value}]==]"
 
 
 def test_provider_id_sanitises_hyphens():
@@ -82,6 +88,28 @@ def test_rejects_mutable_git_ref(tmp_path):
             tmp_path,
             [ModuleDep(name="mymod", git_url="https://example.com/foo.git", ref="main")],
         )
+
+
+@pytest.mark.parametrize(
+    ("field", "error"),
+    [
+        ("git_url", "Git URL contains unsupported CMake syntax"),
+        ("ref", "full 40-character commit SHA"),
+    ],
+)
+def test_git_values_cannot_break_out_of_manifest(tmp_path, field, error):
+    payload = "\n".join(
+        [
+            'https://example.invalid/repo.git]]")',
+            'message(FATAL_ERROR "injected")',
+            'set(dummy "',
+        ]
+    )
+    source = {"git_url": "https://example.invalid/repo.git", "ref": FULL_SHA}
+    source[field] = payload
+    with pytest.raises(ValueError, match=error):
+        _emit(tmp_path, [ModuleDep(name="mymod", **source)])
+    assert not (tmp_path / "external_operators_manifest.cmake").exists()
 
 
 def test_provider_id_sanitised_in_declare(tmp_path):

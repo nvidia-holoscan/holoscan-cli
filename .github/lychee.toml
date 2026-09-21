@@ -1,0 +1,12 @@
+# Scan all documentation, including unchanged files that link to a renamed
+# file or heading. Raw Cookiecutter output is not a rendered module checkout.
+exclude_path = ['(^|/)src/holoscan_cli/templates/module/\{\{cookiecutter\.module_repo_name\}\}/']
+
+no_progress = true
+max_concurrency = 8
+max_retries = 2
+timeout = 30
+
+# Match HoloHub's treatment of sites that deny bots or rate-limit requests.
+# Missing pages (404), missing local files, and bad local anchors still fail.
+accept = ['200..=299', '403', '429']

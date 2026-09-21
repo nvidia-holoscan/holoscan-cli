@@ -51,6 +51,18 @@ we request that you [fork](https://docs.github.com/en/pull-requests/collaboratin
 
 **Note**: We recommend that new GitHub users read GitHub's [Getting Started](https://docs.github.com/en/get-started/start-your-journey) guide before opening their first pull request.
 
+## Documentation ownership
+
+`README.md` introduces standalone usage; `CLI_REFERENCE.md` describes command
+behavior; `CONFIGURATION.md` owns configuration and precedence. Keep those
+references consistent with the installed CLI's help and implementation.
+`AGENTS.md` provides contributor instructions for agents working in this repo.
+Generated modules use the developer documentation in the packaged template;
+downstream wrappers document their own repository-specific behavior.
+
+Documentation-only changes should pass pre-commit and have their commands and
+links checked. They do not require unrelated SDK/GPU builds.
+
 ## Local development
 
 Verifying changes locally before pushing keeps the CI feedback loop short and
@@ -58,7 +70,7 @@ avoids tying up shared runners.
 
 ### Set up the development environment
 
-Python 3.11+ and [Poetry 2.0+](https://python-poetry.org/docs/#installation)
+Python 3.11–3.14 and [Poetry 2.0+](https://python-poetry.org/docs/#installation)
 are required. From a fresh clone:
 
 ```bash
@@ -81,14 +93,45 @@ poetry run pytest -q                       # run the unit test suite.
 
 If `pre-commit run --all-files` passes locally, `Code Check`'s `pre-commit`
 job will pass on push. If `poetry run pytest` passes, the `test` matrix will
-pass on the same Python version locally (CI also runs 3.11 / 3.12 / 3.13;
+pass on the same Python version locally (CI also runs 3.11 / 3.12 / 3.13 / 3.14;
 for full matrix coverage either use the Python you don't normally use,
 or rely on CI).
+
+### Check documentation links
+
+The `Check URLs` workflow runs on pull requests, pushes to `main`, and weekly.
+It scans all Markdown documentation, including `.github/`, so renaming a file
+or heading also checks unchanged pages linking to it. Raw Cookiecutter output
+is excluded because its paths and headings require rendering first. Absolute
+links to files in this repository are checked against the current checkout,
+so new documentation can be validated before it reaches `main`.
+
+Run the same local file and heading checks with Lychee 0.24.2:
+
+```bash
+lychee --config .github/lychee.toml --root-dir "$PWD" \
+  --remap "^https://github\.com/nvidia-holoscan/holoscan-cli/blob/main/(.*)$ file://$PWD/\$1" \
+  --offline --include-fragments '**/*.md' '.github/**/*.md'
+```
+
+Check external URLs separately:
+
+```bash
+lychee --config .github/lychee.toml --root-dir "$PWD" \
+  --remap "^https://github\.com/nvidia-holoscan/holoscan-cli/blob/main/(.*)$ file://$PWD/\$1" \
+  --scheme https --scheme http '**/*.md' '.github/**/*.md'
+```
+
+Local files and anchors must resolve. External checks follow HoloHub's policy
+of accepting HTTP 403 and 429 for bot restrictions and rate limits; these
+statuses do not prove that the destination content is accessible. Add only
+narrow, explained exclusions when a link cannot be checked automatically.
 
 ### Smoke-test the installed wheel
 
 The `smoke-test` job in `Code Check` rebuilds the wheel, installs it into a
-fresh venv, and runs `.github/scripts/smoke_test.sh`. To reproduce locally:
+fresh venv on Python 3.12, 3.13, and 3.14, and runs `.github/scripts/smoke_test.sh`.
+To reproduce locally:
 
 ```bash
 poetry build                                          # writes dist/*.whl, dist/*.tar.gz
@@ -132,16 +175,17 @@ without publishing a wheel first.
   (`.github/workflows/release.yaml`). Dispatch it via the CLI:
 
   ```bash
-  gh workflow run release.yaml --ref <branch> \
-    -f version=vX.Y.Z \
-    -f rc=<optional-rc-number> \
-    -f ga=false                                   # true only for an official GA
+  gh workflow run release.yaml --ref release/X.Y.Z \
+    -f version=vX.Y.Z -f alpha=1 -f ga=false     # produces X.Y.Za1
   ```
 
   The dispatch creates `refs/tags/vX.Y.Z` at the dispatch SHA, builds, smokes,
   publishes to TestPyPI, re-installs from `test.pypi.org/simple/` and re-smokes,
-  and deletes the tag when `ga=false` (so RC dispatches leave no stray refs).
-  See [`.github/CI.md`](./.github/CI.md) for the full pipeline.
+  and deletes the temporary base tag when `ga=false`. Use `alpha=N` for
+  integration alphas, `rc=N` for release candidates, or `ga=true` for the final
+  version; those selectors are mutually exclusive. The workflow never publishes
+  to public PyPI. See [`.github/CI.md`](./.github/CI.md) for the full release
+  branch, promotion, and tagging runbook.
 
 If you need to introduce or bump a third-party Action, see
 [`.github/CI.md`](./.github/CI.md#github-actions-allowlist) — the repo's
