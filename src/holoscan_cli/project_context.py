@@ -552,7 +552,7 @@ def _selected_context(
         # Keep malformed metadata recoverable for `holoscan lint`.
         warnings = (*warnings, str(exc))
         return ProjectContext(root=root, kind="source", discovery=discovery, warnings=warnings)
-    if not _is_source_root(root) and _is_standalone_application(raw):
+    if _is_standalone_application(raw):
         env = os.environ if environ is None else environ
         application_name = env.get("HOLOSCAN_CLI_APP_NAME", root.name)
         if (
@@ -605,21 +605,59 @@ def discover_project_context(
                 environ=env,
             )
 
-    module_fallback: Optional[Path] = None
+    source_roots: list[Path] = []
+    module_roots: list[Path] = []
+    application_roots: list[Path] = []
+    metadata_fallback: Optional[Path] = None
     for candidate in (original_cwd, *original_cwd.parents):
         if _is_source_root(candidate):
+            source_roots.append(candidate)
+        if not (candidate / MODULE_METADATA_FILENAME).is_file():
+            continue
+        if metadata_fallback is None:
+            metadata_fallback = candidate
+        try:
+            raw = _read_project_metadata(candidate)
+            if _is_standalone_application(raw):
+                application_roots.append(candidate)
+            elif raw is not None and isinstance(raw.get("module"), dict):
+                _module_identity(raw["module"], candidate / MODULE_METADATA_FILENAME)
+                module_roots.append(candidate)
+        except ModuleMetadataError:
+            continue
+
+    for candidate in source_roots:
+        # App-local components do not establish a new owning source root. A
+        # conventional ancestor must contain the app in a component directory.
+        if candidate in application_roots:
+            continue
+        if candidate not in module_roots and (
+            any(parent in candidate.parents for parent in module_roots)
+            or any(
+                parent / name in candidate.parents
+                for parent in source_roots
+                for name in METADATA_DIRS
+            )
+        ):
+            continue
+        if (
+            not application_roots
+            or candidate in module_roots
+            or any(candidate / name in application_roots[0].parents for name in METADATA_DIRS)
+        ):
             return _selected_context(
                 candidate,
                 discovery="ancestor",
                 warnings=warnings,
                 environ=env,
             )
-        if module_fallback is None and (candidate / MODULE_METADATA_FILENAME).is_file():
-            module_fallback = candidate
 
-    if module_fallback is not None:
+    # Prefer owning projects over component metadata encountered in a subfolder.
+    project_roots = module_roots or application_roots
+    root = project_roots[0] if project_roots else metadata_fallback
+    if root is not None:
         return _selected_context(
-            module_fallback,
+            root,
             discovery="module-fallback",
             warnings=warnings,
             environ=env,

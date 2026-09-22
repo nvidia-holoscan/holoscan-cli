@@ -178,7 +178,7 @@ class HoloscanCLI:
             if not normalized_language and len(available_lang) > 1:
                 msg = f"'{project_name}' has multiple languages: {', '.join(available_lang)}.\n"
                 msg += f"Defaulting to '{target_lang}'. Use --language to select explicitly.\n\n"
-                print(Color.green(msg))
+                print(Color.green(msg), file=sys.stderr)
             for p in candidates:
                 if target_lang in list_normalized_languages(
                     p.get("metadata", {}).get("language", None), strict=True

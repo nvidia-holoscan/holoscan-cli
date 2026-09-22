@@ -50,8 +50,9 @@ remains its display name. The CLI preserves the selector when entering a
 container whose workspace directory has a different name. Builds and runs
 still require the application's build files, run configuration, and SDK.
 
-Discovery includes only the root `metadata.json` and follows the existing
-root-selection rules. Use `--project-root` to select the application explicitly.
+Standalone discovery includes only the root `metadata.json`. Nested applications
+retain their enclosing Module's context; use `--project-root` to select the
+application explicitly.
 See [metadata discovery](CONFIGURATION.md#metadata-discovery) for recognition
 rules, file-size limits, and search-path overrides.
 

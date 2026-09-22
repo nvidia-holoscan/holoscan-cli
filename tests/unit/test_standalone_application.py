@@ -29,11 +29,19 @@ def _application(root):
     return root
 
 
+def _component(root, kind):
+    path = root / f"{kind}s/helper"
+    path.mkdir(parents=True)
+    (path / "metadata.json").write_text(json.dumps({kind: {"name": "helper"}}), encoding="utf-8")
+    return path
+
+
 def _list(root, **overrides):
     env = {k: v for k, v in os.environ.items() if not k.startswith("HOLOSCAN_CLI_")}
     env.update(PYTHONPATH=str(Path(__file__).resolve().parents[2] / "src"), **overrides)
     result = subprocess.run(
-        [sys.executable, "-S", "-m", "holoscan_cli", "--project-root", str(root), "list", "--json"],
+        [sys.executable, "-S", "-m", "holoscan_cli", "list", "--json"],
+        cwd=root,
         env=env,
         capture_output=True,
         text=True,
@@ -43,14 +51,58 @@ def _list(root, **overrides):
     return json.loads(result.stdout)["projects"]
 
 
-def test_standalone_discovery_and_override(tmp_path):
+@pytest.mark.parametrize("component", [None, "operator", "module"])
+def test_standalone_discovery_and_override(tmp_path, component):
     root = _application(tmp_path / "my_app")
+    if component:
+        component_root = _component(root, component)
     _application(root / "build/copied_app")
     child = root / "src"
     child.mkdir()
     assert discover_project_context(cwd=child, environ={}).root == root
     assert [p["name"] for p in _list(root)] == ["my_app"]
+    assert _list(child) == _list(root)
+    if component == "operator":
+        assert _list(component_root) == _list(root)
     assert [p["name"] for p in _list(root, HOLOSCAN_CLI_SEARCH_PATH="build")] == ["copied_app"]
+
+
+@pytest.mark.parametrize(
+    "layout, local_component",
+    [
+        ("applications/my_app", None),
+        ("applications/my_app/python", None),
+        ("applications/my_app/cpp", None),
+        ("examples/my_app", None),
+        ("applications/my_app/python", "operator"),
+        ("examples/my_app", "module"),
+    ],
+)
+@pytest.mark.parametrize("with_operator", [False, True])
+def test_nested_application_keeps_module_context(tmp_path, layout, local_component, with_operator):
+    app = _application(tmp_path / layout)
+    (tmp_path / "metadata.json").write_text(
+        '{"module": {"name": "parent-module"}}', encoding="utf-8"
+    )
+    if with_operator:
+        _component(tmp_path, "operator")
+    if local_component:
+        _component(app.parent if app.name in {"python", "cpp"} else app, local_component)
+
+    child = app / "src/deep"
+    child.mkdir(parents=True)
+    expected = discover_project_context(cwd=tmp_path, environ={})
+    projects = _list(tmp_path)
+    app_dir = app.parent if app.name in {"python", "cpp"} else app
+    for cwd in (app_dir, app, child):
+        context = discover_project_context(cwd=cwd, environ={})
+        assert context.root == tmp_path and context.is_module
+        assert context.profile_environment() == expected.profile_environment()
+        assert _list(cwd) == projects
+    names = [p["name"] for p in projects]
+    assert ("my_app" in names) == layout.startswith("applications/")
+    explicit = discover_project_context(cwd=app, explicit_root=app, environ={})
+    assert explicit.root == app and explicit.kind == "application"
 
 
 def test_container_preserves_standalone_name(tmp_path, monkeypatch):
@@ -73,12 +125,15 @@ def test_container_preserves_standalone_name(tmp_path, monkeypatch):
         '{"application": null}',
         '{"application": {}}',
         '{"application": {"name": "unrelated"}}',
+        '{"module": {}}',
         "{invalid",
     ],
 )
 def test_unrelated_or_malformed_metadata_is_not_discovered(tmp_path, contents):
     (tmp_path / "metadata.json").write_text(contents, encoding="utf-8")
     assert _list(tmp_path) == []
+    app = _application(tmp_path / "child")
+    assert discover_project_context(cwd=app, environ={}).root == app
 
 
 @pytest.mark.parametrize("kind", ["large", "fifo", "symlink", "nested", "invalid_utf8"])
@@ -100,6 +155,8 @@ def test_unsafe_metadata_is_rejected_in_root_and_component_discovery(tmp_path, k
     # Both paths run in subprocesses with timeouts, so a blocking open fails the test.
     assert _list(tmp_path) == []
     assert _list(tmp_path, HOLOSCAN_CLI_SEARCH_PATH=".") == []
+    app = _application(tmp_path / "child")
+    assert discover_project_context(cwd=app, environ={}).root == app
 
 
 def test_metadata_read_stays_bounded_if_stat_underreports_size(tmp_path, monkeypatch):

@@ -18,11 +18,15 @@ directory and its ancestors.
 
 HoloHub-style roots search conventional component directories such as
 `applications/` and `operators/`. Standalone Modules also include their root
-`metadata.json`. The existing root-selection rules are unchanged: after checking
-for a conventional source layout, discovery falls back to the nearest ancestor
-with a `metadata.json`. An application descriptor at that selected root enables
-standalone discovery. `--project-root` and `HOLOSCAN_CLI_ROOT` select a root
-explicitly.
+`metadata.json`. Discovery keeps a project's root, application directories,
+language folders, and deeper component folders in the same owning context.
+App-local `operators/` or `modules/` do not hide the application or displace its
+enclosing project. Conventional owning source layouts take precedence, followed
+by recognized Module and application roots; other metadata is a final fallback
+for diagnostics. A nested Module can establish its own project context.
+`--project-root` and `HOLOSCAN_CLI_ROOT` select a root explicitly, including an
+application inside a Module. Nonstandard component directories such as
+`examples/` still require `HOLOSCAN_CLI_SEARCH_PATH` to be listed from the Module.
 
 Application recognition requires a JSON object with `application` as its only
 recognized project-type key, an object-valued `application`, and non-empty
@@ -31,6 +35,9 @@ strings for `application.name` and
 recognition checks, not full JSON Schema validation; discovery needs no optional
 creation dependencies. Unrelated or incomplete application descriptors are
 ignored. Unreadable or malformed metadata produces a diagnostic.
+Older application descriptors must add the required recognition fields for
+standalone discovery. Older `[tool.holoscan]` settings must be migrated to the
+supported settings below; unknown keys are rejected, not silently ignored.
 
 Discovery and build-time Module dependency parsing read only regular,
 non-symlink metadata files of at most 1 MiB, including `modules/module-sites.json`.

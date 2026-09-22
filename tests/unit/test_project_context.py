@@ -93,6 +93,10 @@ def test_source_project_precedes_nested_module(tmp_path):
 
     assert discover_project_context(cwd=module, environ={}).root == source_root
     assert discover_project_context(explicit_root=module, environ={}).root == module
+    nested_app = module / "applications/pipeline/python"
+    nested_app.mkdir(parents=True)
+    (nested_app / "metadata.json").write_text('{"application": {}}', encoding="utf-8")
+    assert discover_project_context(cwd=nested_app, environ={}).root == source_root
 
 
 def test_root_precedence_and_invalid_environment_fallback(tmp_path):

@@ -169,12 +169,22 @@ def test_list_json_emits_schema_and_project_fields(capsys):
 
 
 def test_modes_json_emits_resolved_modes(capsys):
-    project = {"metadata": {"language": "python", "modes": {"default": {"description": "d"}}}}
-    cli = SimpleNamespace(find_project=lambda name, language=None: project)
+    from holoscan_cli.cli import HoloscanCLI
+
+    cli = HoloscanCLI()
+    cli.projects = [
+        {
+            "project_name": "smoke_app",
+            "metadata": {"language": language, "modes": {"default": {"description": "d"}}},
+        }
+        for language in ("cpp", "python")
+    ]
 
     info.handle_modes(cli, SimpleNamespace(project="smoke_app", language=None, json=True))
 
-    data = json.loads(capsys.readouterr().out)
+    captured = capsys.readouterr()
+    data = json.loads(captured.out)
+    assert "Defaulting to 'python'" in captured.err
     assert data["schema_version"] == 1
     assert data["language"] == ["python"]  # parity with list --json
     assert data["modes"] == {"default": {"description": "d"}}
