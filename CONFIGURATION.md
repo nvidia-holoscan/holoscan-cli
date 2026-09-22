@@ -14,6 +14,34 @@ holoscan --project-root /path/to/module list
 The root is selected from `--project-root`, `HOLOSCAN_CLI_ROOT`, then the current
 directory and its ancestors.
 
+## Metadata discovery
+
+HoloHub-style roots search conventional component directories such as
+`applications/` and `operators/`. Standalone Modules also include their root
+`metadata.json`. When no containing source repository or Module is found, an
+application descriptor at the selected root enables standalone application
+discovery, including when invoked from a child directory. Explicitly selecting
+an application with `--project-root` or `HOLOSCAN_CLI_ROOT` also works.
+
+Application recognition requires a JSON object with `application` as its only
+recognized project-type key, an object-valued `application`, and non-empty
+strings for `application.name` and
+`application.holoscan_sdk.minimum_required_version`. These are lightweight
+recognition checks, not full JSON Schema validation; discovery needs no optional
+creation dependencies. Unrelated metadata is ignored. Malformed JSON produces
+a warning, and invalid application descriptors report the offending field.
+
+Only the application's root `metadata.json` is added, so build directories,
+dependency copies, and other descendants are not recursively discovered.
+`HOLOSCAN_CLI_SEARCH_PATH` replaces the default search paths with comma-separated
+directories or exact `metadata.json` files. Relative paths resolve from the
+selected root. An explicitly empty value retains the conventional-directory
+search. `HOLOSCAN_CLI_APP_NAME` overrides the standalone application's directory
+name as its project selector; the CLI forwards this value automatically to
+preserve the host selector across a renamed container mount.
+
+## Module defaults
+
 For standalone Modules, `metadata.json` supplies the identity, minimum SDK
 version, Dockerfile, and modes. The CLI otherwise uses these defaults:
 

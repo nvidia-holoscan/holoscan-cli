@@ -44,6 +44,7 @@ from holoscan_cli.metadata.utils import (
     list_normalized_languages,
     normalize_language,
 )
+from holoscan_cli.project_context import get_active_project_context
 from holoscan_cli.utils.docker import resolve_cli_docker_opts
 from holoscan_cli.utils.holohub import (
     get_component_search_paths,
@@ -132,7 +133,20 @@ class HoloscanCLI:
         # Known exceptions: templates that don't represent a standalone project.
         EXCLUDE_PATHS = ["applications/holoviz/template", "applications/template"]
         app_paths = get_component_search_paths(self.HOLOHUB_ROOT)
-        return metadata_util.gather_metadata(app_paths, exclude_paths=EXCLUDE_PATHS)
+        projects = metadata_util.gather_metadata(app_paths, exclude_paths=EXCLUDE_PATHS)
+        context = get_active_project_context()
+        if (
+            context is not None
+            and context.kind == "application"
+            and context.root == self.HOLOHUB_ROOT
+        ):
+            for project in projects:
+                if (
+                    project["project_type"] == "application"
+                    and Path(project["source_folder"]) == context.root
+                ):
+                    project["project_name"] = context.application_name
+        return projects
 
     def find_project(self, project_name: str, language: Optional[str] = None) -> dict:
         """Find a project by name"""

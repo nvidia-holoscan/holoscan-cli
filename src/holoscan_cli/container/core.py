@@ -1038,6 +1038,16 @@ class HoloscanContainer:
         # These values are CLI-owned container invariants. A project allowlist
         # must not append ``-e NAME`` later and replace them with host values.
         forwarded_names = set(RESERVED_CONTAINER_ENV_NAMES)
+        context = get_active_project_context()
+        if (
+            context is not None
+            and context.kind == "application"
+            and context.root == self.HOLOHUB_ROOT
+        ):
+            # The container mount may rename the root directory. Preserve the
+            # host's project selector for recursive build/run commands.
+            args.extend(["-e", f"HOLOSCAN_CLI_APP_NAME={context.application_name}"])
+            forwarded_names.add("HOLOSCAN_CLI_APP_NAME")
         # Pass CMAKE_BUILD_PARALLEL_LEVEL to container if set on host
         cmake_parallel_level = os.environ.get("CMAKE_BUILD_PARALLEL_LEVEL")
         if cmake_parallel_level:

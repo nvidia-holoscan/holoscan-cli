@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Lightweight source-project discovery and standalone Module contracts.
+"""Lightweight source-project discovery and standalone project contracts.
 
 This module is safe to import from :mod:`holoscan_cli.__main__` before the
 project CLI and container classes.
@@ -31,6 +31,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Mapping, Optional
 
+from holoscan_cli.metadata.utils import METADATA_DIRECTORY_CONFIG
 from holoscan_cli.utils.docker import RESERVED_CONTAINER_ENV_NAMES
 from holoscan_cli.utils.project import (
     ProjectContextError,
@@ -92,6 +93,7 @@ class ProjectContext:
     warnings: tuple[str, ...] = ()
     container_prefix: Optional[str] = None
     workspace_name: Optional[str] = None
+    application_name: Optional[str] = None
 
     @property
     def is_module(self) -> bool:
@@ -99,7 +101,12 @@ class ProjectContext:
         return self.kind == "module"
 
     def profile_environment(self) -> dict[str, str]:
-        """Return Module-derived defaults consumed by existing CLI classes."""
+        """Return project-derived defaults consumed by existing CLI classes."""
+        if self.kind == "application":
+            return {
+                "HOLOSCAN_CLI_ROOT": str(self.root),
+                "HOLOSCAN_CLI_SEARCH_PATH": MODULE_METADATA_FILENAME,
+            }
         if not self.is_module:
             return {"HOLOSCAN_CLI_ROOT": str(self.root)}
 
@@ -177,20 +184,48 @@ def _is_source_root(path: Path) -> bool:
     )
 
 
-def _read_module_metadata(root: Path) -> Optional[dict]:
-    """Read the root Module descriptor from ecosystem ``metadata.json``."""
+def _read_project_metadata(root: Path) -> Optional[dict]:
+    """Read a root descriptor without requiring schema-validation dependencies."""
     metadata_path = root / MODULE_METADATA_FILENAME
     if not metadata_path.is_file():
         return None
     try:
         raw = json.loads(metadata_path.read_text(encoding="utf-8"))
     except (OSError, UnicodeError, json.JSONDecodeError) as exc:
-        raise ModuleMetadataError(f"Invalid Module metadata at {metadata_path}: {exc}") from exc
-    if not isinstance(raw, dict) or "module" not in raw:
-        return None
-    if not isinstance(raw["module"], dict):
-        raise ModuleMetadataError(f"Module metadata at {metadata_path} must contain an object.")
-    return raw["module"]
+        raise ModuleMetadataError(f"Invalid project metadata at {metadata_path}: {exc}") from exc
+    return raw if isinstance(raw, dict) else None
+
+
+def _is_standalone_application(root: Path, raw: Optional[dict]) -> bool:
+    """Recognize an application without requiring the optional schema validator."""
+    metadata_path = root / MODULE_METADATA_FILENAME
+    if raw is None or "application" not in raw:
+        return False
+    envelopes = [config["schema"] for config in METADATA_DIRECTORY_CONFIG.values()]
+    if sum(key in raw for key in envelopes) != 1:
+        raise ProjectContextError(
+            f"Invalid application metadata at {metadata_path}: "
+            "expected exactly one project type (application)."
+        )
+    application = raw["application"]
+    if not isinstance(application, dict):
+        raise ProjectContextError(
+            f"Invalid application metadata at {metadata_path}: application must be an object."
+        )
+    name = application.get("name")
+    sdk = application.get("holoscan_sdk")
+    sdk_version = sdk.get("minimum_required_version") if isinstance(sdk, dict) else None
+    if not isinstance(name, str) or not name.strip():
+        raise ProjectContextError(
+            f"Invalid application metadata at {metadata_path}: "
+            "application.name must be a non-empty string."
+        )
+    if not isinstance(sdk_version, str) or not sdk_version.strip():
+        raise ProjectContextError(
+            f"Invalid application metadata at {metadata_path}: "
+            "application.holoscan_sdk.minimum_required_version must be a non-empty string."
+        )
+    return True
 
 
 def _read_holoscan_project_config(root: Path) -> tuple[Optional[Path], dict]:
@@ -515,10 +550,15 @@ def _selected_context(
     warnings: tuple[str, ...] = (),
     environ: Optional[Mapping[str, str]] = None,
 ) -> ProjectContext:
-    """Build a selected context without making metadata validity a root requirement."""
+    """Classify a selected root and derive its standalone discovery defaults."""
     try:
-        descriptor = _read_module_metadata(root)
-        if descriptor is not None:
+        raw = _read_project_metadata(root)
+        if raw is not None and "module" in raw:
+            descriptor = raw["module"]
+            if not isinstance(descriptor, dict):
+                raise ModuleMetadataError(
+                    f"Module metadata at {root / MODULE_METADATA_FILENAME} must contain an object."
+                )
             return _build_module_context(
                 root,
                 descriptor,
@@ -529,6 +569,24 @@ def _selected_context(
     except ModuleMetadataError as exc:
         # Keep malformed metadata recoverable for `holoscan lint`.
         warnings = (*warnings, str(exc))
+        return ProjectContext(root=root, kind="source", discovery=discovery, warnings=warnings)
+    if not _is_source_root(root) and _is_standalone_application(root, raw):
+        env = os.environ if environ is None else environ
+        application_name = env.get("HOLOSCAN_CLI_APP_NAME", root.name)
+        if (
+            not application_name
+            or application_name in {".", ".."}
+            or "/" in application_name
+            or "\x00" in application_name
+        ):
+            raise ProjectContextError("HOLOSCAN_CLI_APP_NAME must be a directory name.")
+        return ProjectContext(
+            root=root,
+            kind="application",
+            discovery=discovery,
+            application_name=application_name,
+            warnings=warnings,
+        )
     return ProjectContext(root=root, kind="source", discovery=discovery, warnings=warnings)
 
 
@@ -565,7 +623,7 @@ def discover_project_context(
                 environ=env,
             )
 
-    module_fallback: Optional[Path] = None
+    metadata_candidates: list[Path] = []
     for candidate in (original_cwd, *original_cwd.parents):
         if _is_source_root(candidate):
             return _selected_context(
@@ -574,12 +632,24 @@ def discover_project_context(
                 warnings=warnings,
                 environ=env,
             )
-        if module_fallback is None and (candidate / MODULE_METADATA_FILENAME).is_file():
-            module_fallback = candidate
+        if (candidate / MODULE_METADATA_FILENAME).is_file():
+            metadata_candidates.append(candidate)
 
-    if module_fallback is not None:
+    # A nested application's descriptor must not hide its containing Module,
+    # including Modules without conventional component subdirectories.
+    for candidate in metadata_candidates:
+        try:
+            raw = _read_project_metadata(candidate)
+        except ModuleMetadataError:
+            continue
+        if raw is not None and "module" in raw:
+            return _selected_context(
+                candidate, discovery="module-fallback", warnings=warnings, environ=env
+            )
+
+    if metadata_candidates:
         return _selected_context(
-            module_fallback,
+            metadata_candidates[0],
             discovery="module-fallback",
             warnings=warnings,
             environ=env,
