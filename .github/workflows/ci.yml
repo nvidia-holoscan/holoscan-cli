@@ -1,0 +1,37 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# Registration only. On module-ci/* branches this path is supplied verbatim by
+# holoscan create. Never maintain a second copy of the generated test jobs here.
+name: Module CI
+run-name: 'Module CI / ${{ inputs.e2e_id || github.ref_name }}'
+on:
+  workflow_dispatch:
+    inputs:
+      e2e_id:
+        description: Optional parent-run correlation ID
+        type: string
+      cli_run_id:
+        description: Optional same-repository run containing the candidate CLI artifact
+        type: string
+      cli_artifact_id:
+        description: Optional candidate CLI artifact ID
+        type: string
+      cli_wheel_sha256:
+        description: SHA256 of the candidate wheel (required with an artifact)
+        type: string
+      cli_version:
+        description: Candidate CLI version (required with an artifact)
+        type: string
+      run_gpu:
+        description: Run GPU tests on a configured self-hosted runner
+        type: boolean
+        default: false
+permissions: {}
+jobs:
+  select-generated-branch:
+    runs-on: ubuntu-24.04
+    steps:
+      - run: |
+          echo 'Select a generated module-ci/* branch; this file only registers dispatch.'
+          exit 1

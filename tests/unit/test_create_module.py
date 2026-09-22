@@ -224,6 +224,9 @@ def test_packaged_template_creates_a_standalone_module(
     deb_cmake = (project / "pkg/holoscan-my-mod/CMakeLists.txt").read_text(encoding="utf-8")
     deb_readme = (project / "pkg/holoscan-my-mod/README.md").read_text(encoding="utf-8")
     ci_workflow = (project / ".github/workflows/ci.yml").read_text(encoding="utf-8")
+    deb_check = (project / ".github/workflows/scripts/verify_debian_package.sh").read_text(
+        encoding="utf-8"
+    )
     active_requirements = [
         line for line in requirement.splitlines() if line and not line.startswith("#")
     ]
@@ -249,10 +252,11 @@ def test_packaged_template_creates_a_standalone_module(
     assert "holoscan-cuda-12 (>= 4.5.0)" in deb_readme
     assert "aarch64 (Jetson Thor)" in deb_readme
     assert "holohub_configure_deb()" in deb_readme
-    assert 'dpkg-deb --field "$package" Depends' in ci_workflow
-    assert "tr ',' '\\n'" in ci_workflow
-    assert '"holoscan-cuda-13 (>= 4.5.0)"' in ci_workflow
-    assert 'apt-get install -y "./$package"' in ci_workflow
+    assert 'dpkg-deb --field "$package" Depends' in deb_check
+    assert "tr ',' '\\n'" in deb_check
+    assert "'holoscan-cuda-13 (>= 4.5.0)'" in deb_check
+    assert "verify_debian_package.sh" in ci_workflow
+    assert "apt-get install -y --no-install-recommends ./packages/*.deb" in ci_workflow
     assert not (project / "holohub").exists()
     assert not (project / "holoscan").exists()
 

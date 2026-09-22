@@ -1,0 +1,18 @@
+# SPDX-FileCopyrightText: Copyright (c) {% now 'utc', '%Y' %} {{ cookiecutter.full_name }}. All rights reserved.
+# SPDX-License-Identifier: {{ cookiecutter._license }}
+
+# The SDK wheel does not provide the C++ headers/CMake package. Use the Debian
+# development package without the large optional inference/visualization stack.
+FROM ubuntu:24.04
+ARG HOLOSCAN_VERSION={{ cookiecutter.holoscan_version }}
+COPY scripts/install_ci_sdk.sh /tmp/install_ci_sdk.sh
+RUN bash /tmp/install_ci_sdk.sh "$HOLOSCAN_VERSION" \
+    && apt-get install -y --no-install-recommends \
+        build-essential ninja-build git python3-dev python3-venv \
+        libegl1 libvulkan1 libv4l-0 \
+    && python3 -m venv /opt/ci-tools \
+    && /opt/ci-tools/bin/pip install --no-cache-dir 'cmake>=3.30.4,<4' \
+    && rm -rf /var/lib/apt/lists/* /tmp/install_ci_sdk.sh
+ENV PATH=/opt/ci-tools/bin:$PATH
+ENV CMAKE_PREFIX_PATH=/opt/nvidia/holoscan
+WORKDIR /work

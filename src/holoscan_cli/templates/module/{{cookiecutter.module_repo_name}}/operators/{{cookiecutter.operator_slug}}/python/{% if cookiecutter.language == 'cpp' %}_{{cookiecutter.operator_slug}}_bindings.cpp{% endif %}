@@ -29,15 +29,15 @@ static void add_conditions_and_resources(holoscan::Operator* op, const py::args&
     try {
       op->add_arg(obj.cast<std::shared_ptr<holoscan::Condition>>());
       continue;
-    } catch (const py::cast_error&) {}
+    } catch (const py::cast_error&) {
+    }
     try {
       op->add_arg(obj.cast<std::shared_ptr<holoscan::Resource>>());
     } catch (const py::cast_error&) {
       HOLOSCAN_LOG_WARN(
           "Operator '{}': positional arg of type '{}' is neither a Condition nor a Resource — "
           "add_arg skipped.",
-          op->name(),
-          py::str(obj.get_type()).cast<std::string>());
+          op->name(), py::str(obj.get_type()).cast<std::string>());
     }
   }
 }
@@ -47,9 +47,9 @@ class Py{{ op_class }} : public {{ op_class }} {
   using {{ op_class }}::{{ op_class }};
 
   Py{{ op_class }}(holoscan::Fragment* fragment, const py::args& args,
-                  // TODO: add keyword parameters here, e.g.:
-                  // int my_param = 1,
-                  const std::string& name = "{{ cookiecutter.operator_slug }}")
+{{ ' ' * (op_class|length + 5) }}// TODO: add keyword parameters here, e.g.:
+{{ ' ' * (op_class|length + 5) }}// int my_param = 1,
+{{ ' ' * (op_class|length + 5) }}const std::string& name = "{{ cookiecutter.operator_slug }}")
       : {{ op_class }}() {
     name_ = name;
     fragment_ = fragment;
@@ -80,7 +80,6 @@ PYBIND11_MODULE(_{{ cookiecutter.operator_slug }}, m) {
       "name : str, optional\n"
       "    Operator name (default '{{ cookiecutter.operator_slug }}').\n")
       .def(py::init<holoscan::Fragment*, const py::args&, const std::string&>(),
-           py::arg("fragment"),
-           py::arg("name") = "{{ cookiecutter.operator_slug }}")
+           py::arg("fragment"), py::arg("name") = "{{ cookiecutter.operator_slug }}")
       .def("setup", &{{ op_class }}::setup, py::arg("spec"));
 }

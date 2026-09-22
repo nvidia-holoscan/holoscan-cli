@@ -10,6 +10,7 @@
 {%- set app_class = cookiecutter.module_slug.split('_')|map('capitalize')|join('') + 'PipelineApp' %}
 
 #include <holoscan/holoscan.hpp>
+
 #include <{{ cookiecutter.operator_slug }}/{{ cookiecutter.operator_slug }}.hpp>
 
 namespace mm = holoscan::{{ cookiecutter.module_slug }};
