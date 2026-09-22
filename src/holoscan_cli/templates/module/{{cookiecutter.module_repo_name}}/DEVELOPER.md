@@ -89,7 +89,9 @@ against `main`, and manual dispatch. Its required hosted jobs are:
 - **Debian install**: verify the package name, version, architecture, and SDK
   dependency, then install it in a fresh Ubuntu container.
 
-The build environment is described in `.github/workflows/Dockerfile.cpu`. It uses
+The commands are shared in `.github/workflows/scripts/cpu_ci.sh` with the CLI's
+default PR tests. The build environment is described in
+`.github/workflows/Dockerfile.cpu`. It uses
 Debian packages because the SDK Python wheel does not include C++ headers or its
 CMake package. No GPU is requested by the hosted jobs, and they do not execute
 GPU graphs. The dependency test expects the x86_64 CUDA 13 variant; additional
@@ -104,14 +106,11 @@ runs use the input value rather than the repository default.
 For local CPU build/package reproduction from this module's root:
 
 ```bash
-docker build -f .github/workflows/Dockerfile.cpu -t module-ci-build .github/workflows
-docker run --rm -v "$PWD:/work" module-ci-build \
-  cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release \
-  -D{{ cookiecutter.module_slug | upper }}_BUILD_TESTING=OFF -DBUILD_ALL=ON
-docker run --rm -v "$PWD:/work" module-ci-build cmake --build build --parallel 2
-docker run --rm -v "$PWD:/work" module-ci-build \
-  cpack --config build/pkg/CPackConfig-{{ cookiecutter.module_repo_name }}.cmake \
-  -B build/packages -G DEB
+for phase in image configure build package; do
+  bash .github/workflows/scripts/cpu_ci.sh "$phase" || exit
+done
+bash .github/workflows/scripts/cpu_ci.sh verify build/packages
+bash .github/workflows/scripts/cpu_ci.sh install-clean build/packages
 ```
 
 The workflow supports optional candidate CLI artifact inputs for CLI development:

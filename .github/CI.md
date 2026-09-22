@@ -24,7 +24,8 @@ is intentionally named `CI.md` (not `README.md`) so it doesn't compete with the
     ├── codeql.yaml           ← CodeQL Advanced (Python)
     ├── dependency-review.yml ← Dependency review on PRs
     ├── main.yaml             ← Code Check — push and PR CI
-    ├── module-e2e.yaml       ← Generated Module workflow validation
+    ├── module-e2e.yaml       ← Default generated Module CPU E2E
+    ├── module-e2e-dispatch.yaml ← Additional generated GitHub workflow validation
     ├── module-e2e-cleanup.yaml ← Abandoned test-branch cleanup
     ├── ci.yml                ← Generated workflow dispatch registration
     └── release.yaml          ← Manual release flow (TestPyPI → NVIDIA promotion)
@@ -36,14 +37,16 @@ is intentionally named `CI.md` (not `README.md`) so it doesn't compete with the
 pull requests targeting `main` or `release/*`, so the full lint/test/build/smoke
 surface is exercised before merge. Jobs run in this order:
 
-| Job                           | Purpose                                                                    |
-| ----------------------------- | -------------------------------------------------------------------------- |
-| `pre-commit`                  | Run all hooks listed in `.pre-commit-config.yaml` on Python 3.12.          |
-| `test` matrix                 | `poetry run pytest` on Python 3.11, 3.12, 3.13, and 3.14 (Ubuntu).         |
-| `HoloHub project integration` | Test current CLI against HoloHub's real project tree and wrapper suite.    |
-| `build wheel + sdist`         | `poetry build` + `twine check` + `assert_wheel_contents.sh`.               |
-| `installed artifact smoke`    | Test clean wheel and sdist installs, the `create` extra, uvx, and pipx.    |
-| `CPU CLI + Docker smoke test` | Installed-wheel source-project dry-runs plus a tiny CPU Docker build.      |
+| Job                           | Purpose                                                                  |
+| ----------------------------- | ------------------------------------------------------------------------ |
+| `pre-commit`                  | Run all hooks listed in `.pre-commit-config.yaml` on Python 3.12.        |
+| `test` matrix                 | `poetry run pytest` on Python 3.11, 3.12, 3.13, and 3.14 (Ubuntu).       |
+| `HoloHub project integration` | Test current CLI against HoloHub's real project tree and wrapper suite.  |
+| `build wheel + sdist`         | `poetry build` + `twine check` + `assert_wheel_contents.sh`.             |
+| `installed artifact smoke`    | Test clean wheel and sdist installs, the `create` extra, uvx, and pipx.  |
+| `CPU CLI + Docker smoke test` | Installed-wheel source-project dry-runs plus a tiny CPU Docker build.    |
+| `Generated Module E2E`        | Generate Python/C++ modules, lint, compile, package, and install on CPU. |
+| `Generated Module GitHub CI`  | Optional generated-workflow dispatch validation.                         |
 
 The installed-artifact smoke matrix runs on Python 3.12, 3.13, and 3.14, using the
 same wheel and sdist built on Python 3.12.
@@ -84,8 +87,9 @@ Pipeline:
    base tag is removed for non-GA dispatches.
 3. **`smoke-test`** — test clean wheel and sdist installs and the `create`
    extra on Python 3.12, 3.13, and 3.14.
-4. **`module-e2e`** — require generated Python/C++ workflows, including Debian
-   package installation, to pass against the release wheel. See
+4. **`module-e2e` + `module-github-ci`** — require both direct CPU validation and
+   generated GitHub workflows, including Debian package installation, to pass
+   against the release wheel. See
    [activation and ownership](#generated-module-end-to-end-validation).
 5. **`publish-test-pypi`** — after smoke and Module E2E succeed, publish both distributions to TestPyPI with
    trusted publishing. There is deliberately no public-PyPI deployment job.
@@ -444,31 +448,51 @@ Runs only in `main.yaml` against the built wheel. It is intentionally CPU-only:
 
 ## Generated Module end-to-end validation
 
-`module-e2e.yaml` validates the packaged template by running its generated GitHub
-workflow on disposable branches in this repository. Normal CI calls it after
-building the candidate wheel when `MODULE_E2E_ENABLED=true`. Release CI always
-requires it before TestPyPI publication; missing configuration fails that gate.
+`module-e2e.yaml` runs **by default on every PR and push** after the candidate
+wheel builds, including fork PRs. It needs no repository variables, App, secrets,
+environment approval, or files already merged onto the default branch. Its
+`CPU E2E (python)` and `CPU E2E (cpp)` jobs check out the candidate, install the
+candidate wheel, and generate standalone modules from its packaged template.
+They run Python lint, metadata validation, C++ formatting, CPU compilation,
+Debian packaging, metadata checks, and installation in a fresh Ubuntu container.
+The aggregate `Module E2E` check requires both variants to succeed.
 
-The controller on the default branch is resolved once to an immutable commit.
-Both generation and publishing use that controller revision. The wheel under
-test still comes from the caller's exact PR, push, or release run. Controller
-changes receive unit coverage before merge and become active after reaching the
-default branch.
+These jobs have read-only repository permissions and do not publish branches.
+They invoke the generated `cpu_ci.sh` helper also used by the generated module's
+own workflow, so the build and package commands have one source. Source archives,
+provenance, packages, and build logs are retained for 14 days. Workflow step logs
+remain available in the parent run. GPU execution is outside this CPU baseline.
+
+`module-e2e-dispatch.yaml` adds **Generated Module GitHub CI** when
+`MODULE_E2E_DISPATCH=true` and a PR comes from the same repository. That check
+publishes disposable branches and dispatches their actual workflows. It tests
+GitHub event handling, workflow job conditions, permissions, artifact transfers,
+and run correlation that direct CPU execution cannot validate. Skipping this
+additional check does not skip the default CPU E2E jobs.
+
+The publisher's controller is resolved from the default branch once to an
+immutable commit. Generation and publication in the dispatch check use that
+trusted revision, while their wheel comes from the caller's exact run. Changes
+to the privileged controller become active after reaching the default branch.
+Release CI requires both CPU E2E and live GitHub CI before TestPyPI publication;
+missing dispatch configuration fails the release gate.
 
 ### Files and branch ownership
 
-* `workflows/module-e2e.yaml`: generation, publication, dispatch, evidence, and
+* `workflows/module-e2e.yaml`: default CPU generation/build/install checks and
   the aggregate `Module E2E` result.
+* `workflows/module-e2e-dispatch.yaml`: optional PR branch publication, dispatch,
+  evidence, and the aggregate `Module GitHub CI` result.
 * `scripts/module_e2e.py`: the corresponding commands, also usable for diagnosis.
 * `workflows/ci.yml`: dispatch registration only. Dispatching this copy on the
   default branch fails intentionally. Generated branches contain the actual
   workflow at the same path, without rewriting its contents.
 * `workflows/module-e2e-cleanup.yaml`: daily cleanup of abandoned branches.
-* `src/holoscan_cli/templates/module/`: the only source of generated test jobs,
-  SDK provisioning, and Debian verification.
+* `src/holoscan_cli/templates/module/`: the source of generated test jobs,
+  shared `cpu_ci.sh` commands, SDK provisioning, and Debian verification.
 
 The CLI maintainers own the controller, automation App, and branch namespace.
-Each run creates `module-ci/<run-id>-<attempt>/python` and
+Each dispatch run creates `module-ci/<run-id>-<attempt>/python` and
 `module-ci/<run-id>-<attempt>/cpp`. These are orphan branches containing only
 fresh module source; never open PRs from them or merge them into a source branch.
 The generated Git index determines the source archive, excluding Git state and
@@ -480,6 +504,9 @@ mismatches, and publishes it through the Git data API. It never executes the
 candidate's files. Existing branch names are not overwritten.
 
 ### One-time setup and activation
+
+Only the additional GitHub dispatch check needs this setup. Default CPU E2E
+already runs on the PR introducing these files.
 
 1. Merge the controller, dispatch registration, and template changes onto the
    default branch before enabling dispatch. Apply the caller integration to any
@@ -501,22 +528,26 @@ candidate's files. Existing branch names are not overwritten.
    the controller also needs Actions write access to dispatch and cancel runs.
    Ensure repository rulesets permit the automation App to create and delete
    refs in the generated `module-ci/` namespace.
-5. Set `MODULE_E2E_ENABLED=true`, then rerun normal CI for a vetted source
+5. Set `MODULE_E2E_DISPATCH=true`, then rerun normal CI for a vetted source
    revision. Confirm both generated workflows complete, the parent result
    succeeds, evidence is available, and the two branches are removed.
-6. Select the emitted `Generated Module E2E / Module E2E` check as a required PR
-   check. Verify the displayed name against the first live run. A skipped
-   controller before activation is not E2E validation.
+6. After successful activation, optionally require the emitted
+   `Generated Module GitHub CI / Module GitHub CI` check on eligible PRs.
+   Verify its displayed name against the first live run. The default
+   `Generated Module E2E / Module E2E` check can be required independently.
+
+CPU E2E has no opt-in switch. `MODULE_E2E_DISPATCH` controls the additional
+branch workflows.
 
 Same-repository branches share repository settings, secrets, and runner access.
 Do not publish unreviewed fork-generated workflows into this namespace. Direct
-fork PR calls fail the controller's trust check; use the repository's vetted
+fork PR calls to the publisher fail its trust check; use the repository's vetted
 same-repository contribution path for that exact revision. Never substitute
 `pull_request_target` execution of untrusted code. The publishing environment
 also gates same-repository candidates: changing a template changes executable
 workflow code.
 
-### What runs and what constitutes success
+### What the additional dispatch check validates
 
 1. Download the caller's wheel artifact by ID, install its `create` extra in a
    clean venv, and generate Python and C++ modules with the packaged template.
@@ -572,7 +603,21 @@ python .github/scripts/module_e2e.py prepare \
 Use a missing output directory and repeat with `--language cpp` and another
 output path. The numeric IDs above are local placeholders; publication requires
 an existing artifact belonging to the real parent run. Network access is needed
-to install creation dependencies. The `publish`, `dispatch`, `cleanup`, and
+to install creation dependencies. To run the same CPU commands as PR CI:
+
+```bash
+python .github/scripts/module_e2e.py unpack \
+  --manifest /tmp/module-e2e-python/manifest.json \
+  --archive /tmp/module-e2e-python/module.tar --output /tmp/module-e2e-project
+cd /tmp/module-e2e-project
+for phase in image configure build package; do
+  bash .github/workflows/scripts/cpu_ci.sh "$phase" || exit
+done
+bash .github/workflows/scripts/cpu_ci.sh verify build/packages
+bash .github/workflows/scripts/cpu_ci.sh install-clean build/packages
+```
+
+The `publish`, `dispatch`, `cleanup`, and
 `sweep` commands write to GitHub and should only run for authorized validation.
 
 For a failed live run, start with the original CLI job summary and its evidence

@@ -94,6 +94,33 @@ def test_archive_rejects_links(tmp_path):
         e2e.archive_tree(make_archive(tmp_path / "module.tar", entry))
 
 
+def test_unpack_materializes_validated_source_without_git_state(tmp_path, manifest):
+    archive = make_archive(tmp_path / "module.tar")
+    manifest["archive_sha256"] = hashlib.sha256(archive.read_bytes()).hexdigest()
+    output = tmp_path / "project"
+    e2e.unpack(manifest, archive, output)
+    assert (output / e2e.WORKFLOW).read_text() == "x"
+    assert not (output / ".git").exists()
+    with pytest.raises(FileExistsError):
+        e2e.unpack(manifest, archive, output)
+
+
+def test_unpack_rejects_tampering_before_writing_source(tmp_path, manifest):
+    output = tmp_path / "project"
+    with pytest.raises(ValueError, match="digest"):
+        e2e.unpack(manifest, make_archive(tmp_path / "module.tar"), output)
+    assert not output.exists()
+
+
+def test_unpack_rejects_unsafe_paths_before_writing_source(tmp_path, manifest):
+    archive = make_archive(tmp_path / "module.tar", tarfile.TarInfo("../escape"))
+    manifest["archive_sha256"] = hashlib.sha256(archive.read_bytes()).hexdigest()
+    output = tmp_path / "project"
+    with pytest.raises(ValueError, match="Unsafe"):
+        e2e.unpack(manifest, archive, output)
+    assert not output.exists()
+
+
 def test_publish_uses_exact_generated_tree_and_persists_ownership(tmp_path, manifest):
     archive = make_archive(tmp_path / "module.tar")
     manifest.pop("commit")
@@ -393,6 +420,61 @@ def test_actual_debian_metadata_rejects_old_dependency(generated, tmp_path):
         )
         result = subprocess.run(["bash", str(script), str(deb)], capture_output=True)
         assert (result.returncode == 0) is expected
+        shared = generated / ".github/workflows/scripts/cpu_ci.sh"
+        result = subprocess.run(["bash", str(shared), "verify", str(tmp_path)], capture_output=True)
+        assert (result.returncode == 0) is expected
+
+
+def test_pr_e2e_runs_without_opt_in_or_publisher_permissions():
+    workflow = yaml.load((ROOT / ".github/workflows/main.yaml").read_text(), Loader=yaml.BaseLoader)
+    caller = workflow["jobs"]["module-e2e"]
+    assert "if" not in caller
+    assert caller["permissions"] == {"contents": "read"}
+    assert "secrets" not in caller
+    cpu = yaml.load(
+        (ROOT / ".github/workflows/module-e2e.yaml").read_text(), Loader=yaml.BaseLoader
+    )
+    assert cpu["permissions"] == {"contents": "read"}
+    job = cpu["jobs"]["cpu"]
+    assert job["strategy"]["matrix"]["language"] == ["python", "cpp"]
+    assert "environment" not in job
+    assert "if" not in job
+    text = (ROOT / ".github/workflows/module-e2e.yaml").read_text()
+    assert "secrets." not in text
+    assert "vars." not in text
+    assert "default_branch" not in text
+    assert cpu["jobs"]["result"]["if"] == "always()"
+    assert cpu["jobs"]["result"]["needs"] == "cpu"
+
+
+def test_pr_and_generated_workflow_use_the_same_cpu_commands(generated):
+    candidate = yaml.load((generated / e2e.WORKFLOW).read_text(), Loader=yaml.BaseLoader)
+    baseline = yaml.load(
+        (ROOT / ".github/workflows/module-e2e.yaml").read_text(), Loader=yaml.BaseLoader
+    )
+    steps = {step.get("name"): step for step in baseline["jobs"]["cpu"]["steps"]}
+    for step in candidate["jobs"]["build-only"]["steps"]:
+        if "run" in step:
+            assert step["run"] == steps[step["name"]]["run"]
+            assert "if" not in steps[step["name"]]
+    for name in ("Verify Debian metadata", "Install Debian package in a fresh container"):
+        assert "if" not in steps[name]
+    install = steps["Install Debian package in a fresh container"]["run"]
+    assert install.endswith("cpu_ci.sh install-clean build/packages")
+
+
+def test_shared_cpu_helper_preserves_build_failure(generated, tmp_path, monkeypatch):
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    docker = fake_bin / "docker"
+    docker.write_text("#!/bin/sh\nexit 23\n")
+    docker.chmod(0o755)
+    monkeypatch.setenv("PATH", f"{fake_bin}:/usr/bin:/bin")
+    result = subprocess.run(
+        ["bash", str(generated / ".github/workflows/scripts/cpu_ci.sh"), "build"],
+        capture_output=True,
+    )
+    assert result.returncode == 23
 
 
 def test_sweep_preserves_active_parent_attempt(manifest):
@@ -434,9 +516,10 @@ def test_release_publication_requires_module_e2e():
     workflow = yaml.load(
         (ROOT / ".github/workflows/release.yaml").read_text(), Loader=yaml.BaseLoader
     )
-    assert "module-e2e" in workflow["jobs"]["testpypi-deploy"]["needs"]
-    assert "if" not in workflow["jobs"]["module-e2e"]
-    assert workflow["jobs"]["module-e2e"]["needs"] == "build"
+    for job in ("module-e2e", "module-github-ci"):
+        assert job in workflow["jobs"]["testpypi-deploy"]["needs"]
+        assert "if" not in workflow["jobs"][job]
+        assert workflow["jobs"][job]["needs"] == "build"
 
 
 @pytest.mark.parametrize("bad_field", ["CLI_WHEEL_SHA256", "CLI_VERSION"])

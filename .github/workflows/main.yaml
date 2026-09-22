@@ -227,12 +227,21 @@ jobs:
 
   module-e2e:
     name: Generated Module E2E
-    if: ${{ vars.MODULE_E2E_ENABLED == 'true' }}
+    needs: build
+    permissions:
+      contents: read
+    uses: ./.github/workflows/module-e2e.yaml
+    with:
+      cli-artifact-id: ${{ needs.build.outputs.cli-artifact-id }}
+
+  module-github-ci:
+    name: Generated Module GitHub CI
+    if: ${{ vars.MODULE_E2E_DISPATCH == 'true' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
     needs: build
     permissions:
       contents: read
       actions: write
-    uses: ./.github/workflows/module-e2e.yaml
+    uses: ./.github/workflows/module-e2e-dispatch.yaml
     with:
       cli-artifact-id: ${{ needs.build.outputs.cli-artifact-id }}
 

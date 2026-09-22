@@ -10,7 +10,7 @@ permissions:
   contents: read
 jobs:
   cleanup:
-    if: ${{ vars.MODULE_E2E_ENABLED == 'true' && github.ref_name == github.event.repository.default_branch }}
+    if: ${{ vars.MODULE_E2E_DISPATCH == 'true' && github.ref_name == github.event.repository.default_branch }}
     runs-on: ubuntu-24.04
     # Default-branch-only credentials let scheduled cleanup run without approval.
     environment: module-e2e-cleanup

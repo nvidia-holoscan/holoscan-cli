@@ -88,21 +88,13 @@ jobs:
         with:
           persist-credentials: false
       - name: Prepare SDK build environment
-        run: docker build -f .github/workflows/Dockerfile.cpu -t module-ci-build .github/workflows
+        run: bash .github/workflows/scripts/cpu_ci.sh image
       - name: CMake configure
-        run: |
-          docker run --rm -v "$PWD:/work" module-ci-build \
-            cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release \
-            -D{{ cookiecutter.module_slug | upper }}_BUILD_TESTING=OFF -DBUILD_ALL=ON
+        run: bash .github/workflows/scripts/cpu_ci.sh configure
       - name: Build
-        run: |
-          docker run --rm -v "$PWD:/work" module-ci-build \
-            cmake --build build --parallel 2
+        run: bash .github/workflows/scripts/cpu_ci.sh build
       - name: Build Debian package
-        run: |
-          docker run --rm -v "$PWD:/work" module-ci-build \
-            cpack --config build/pkg/CPackConfig-{{ cookiecutter.module_repo_name }}.cmake \
-            -B build/packages -G DEB
+        run: bash .github/workflows/scripts/cpu_ci.sh package
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: module-deb
@@ -134,18 +126,10 @@ jobs:
           path: packages
       - name: Verify Debian metadata
         shell: bash
-        run: |
-          packages=(packages/*.deb)
-          test "{% raw %}${#packages[@]}{% endraw %}" = 1
-          bash .github/workflows/scripts/verify_debian_package.sh "${packages[0]}"
+        run: bash .github/workflows/scripts/cpu_ci.sh verify packages
       - name: Install Debian package
         shell: bash
-        run: |
-          bash .github/workflows/scripts/install_ci_sdk.sh '{{ cookiecutter.holoscan_version }}'
-          apt-get install -y --no-install-recommends ./packages/*.deb
-          dpkg-query --show --showformat='${Status}\n' \
-            {{ cookiecutter.module_repo_name }} | grep -Fx 'install ok installed'
-          dpkg --audit
+        run: bash .github/workflows/scripts/cpu_ci.sh install packages
 
   build-and-test:
     name: GPU build and test

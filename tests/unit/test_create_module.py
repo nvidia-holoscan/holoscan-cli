@@ -255,8 +255,11 @@ def test_packaged_template_creates_a_standalone_module(
     assert 'dpkg-deb --field "$package" Depends' in deb_check
     assert "tr ',' '\\n'" in deb_check
     assert "'holoscan-cuda-13 (>= 4.5.0)'" in deb_check
-    assert "verify_debian_package.sh" in ci_workflow
-    assert "apt-get install -y --no-install-recommends ./packages/*.deb" in ci_workflow
+    assert "cpu_ci.sh verify packages" in ci_workflow
+    cpu_ci = (project / ".github/workflows/scripts/cpu_ci.sh").read_text(encoding="utf-8")
+    assert "verify_debian_package.sh" in cpu_ci
+    assert "cpu_ci.sh install packages" in ci_workflow
+    assert "apt-get install -y --no-install-recommends" in cpu_ci
     assert not (project / "holohub").exists()
     assert not (project / "holoscan").exists()
 

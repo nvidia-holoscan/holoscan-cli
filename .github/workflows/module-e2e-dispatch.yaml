@@ -1,0 +1,185 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+name: Generated Module GitHub CI
+on:
+  workflow_call:
+    inputs:
+      cli-artifact-id:
+        description: Candidate build artifact from this caller run
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  actions: write
+
+jobs:
+  configuration:
+    runs-on: ubuntu-24.04
+    outputs:
+      controller-sha: ${{ steps.controller.outputs.sha }}
+    steps:
+      - name: Check activation and candidate trust
+        env:
+          ENABLED: ${{ vars.MODULE_E2E_DISPATCH }}
+          APP_ID: ${{ vars.MODULE_E2E_APP_ID }}
+          FORK: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository }}
+        run: |
+          test "$ENABLED" = true || { echo 'Configure Module E2E as described in .github/CI.md'; exit 1; }
+          test -n "$APP_ID" || { echo 'MODULE_E2E_APP_ID is required'; exit 1; }
+          test "$FORK" != true || { echo 'Fork candidates require a vetted same-repository run'; exit 1; }
+      - name: Resolve trusted controller revision
+        id: controller
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          revision=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/$DEFAULT_BRANCH" --jq '.object.sha')
+          [[ "$revision" =~ ^[0-9a-f]{40}$ ]]
+          echo "sha=$revision" >> "$GITHUB_OUTPUT"
+
+  prepare:
+    needs: configuration
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [python, cpp]
+    steps:
+      - name: Checkout trusted controller
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v6
+        with:
+          ref: ${{ needs.configuration.outputs.controller-sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.12'
+      - uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3 # v8.0.0
+        with:
+          artifact-ids: ${{ inputs.cli-artifact-id }}
+          path: dist
+          merge-multiple: true
+      - name: Generate from installed candidate wheel
+        env:
+          SOURCE_SHA: ${{ github.sha }}
+          LANGUAGE: ${{ matrix.language }}
+          ARTIFACT_ID: ${{ inputs.cli-artifact-id }}
+        run: |
+          python .github/scripts/module_e2e.py prepare \
+            --wheel-dir dist --output generated --repository "$GITHUB_REPOSITORY" \
+            --source-sha "$SOURCE_SHA" --parent-run-id "$GITHUB_RUN_ID" \
+            --parent-attempt "$GITHUB_RUN_ATTEMPT" --cli-artifact-id "$ARTIFACT_ID" \
+            --language "$LANGUAGE"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: generated-module-${{ github.run_attempt }}-${{ matrix.language }}
+          path: generated/
+          if-no-files-found: error
+          retention-days: 14
+
+  execute:
+    needs: [configuration, prepare]
+    name: Execute generated ${{ matrix.language }} workflow
+    runs-on: ubuntu-24.04
+    timeout-minutes: 65
+    # Configure required reviewers and allowed source branches before activation.
+    # The publisher only reads archives as data; no candidate code executes here.
+    environment: module-e2e
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [python, cpp]
+    steps:
+      - name: Checkout trusted controller
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v6
+        with:
+          ref: ${{ needs.configuration.outputs.controller-sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.12'
+      - uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3 # v8.0.0
+        with:
+          name: generated-module-${{ github.run_attempt }}-${{ matrix.language }}
+          path: generated
+      - name: Create publisher token
+        id: token
+        uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349 # v2
+        with:
+          app-id: ${{ vars.MODULE_E2E_APP_ID }}
+          private-key: ${{ secrets.MODULE_E2E_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: ${{ github.event.repository.name }}
+          permission-contents: write
+          permission-workflows: write
+          permission-actions: write
+      - name: Publish generated branch
+        id: publish
+        env:
+          GH_TOKEN: ${{ steps.token.outputs.token }}
+          SOURCE_SHA: ${{ github.sha }}
+          LANGUAGE: ${{ matrix.language }}
+          ARTIFACT_ID: ${{ inputs.cli-artifact-id }}
+        run: |
+          python .github/scripts/module_e2e.py publish \
+            --manifest generated/manifest.json --archive generated/module.tar --state state.json \
+            --repository "$GITHUB_REPOSITORY" --source-sha "$SOURCE_SHA" \
+            --parent-run-id "$GITHUB_RUN_ID" --parent-attempt "$GITHUB_RUN_ATTEMPT" \
+            --language "$LANGUAGE" --cli-artifact-id "$ARTIFACT_ID"
+      - name: Dispatch generated workflow
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python .github/scripts/module_e2e.py dispatch --state state.json
+      - name: Require generated workflow results
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python .github/scripts/module_e2e.py wait --state state.json --evidence evidence
+      - name: Refresh cleanup token
+        if: ${{ always() && steps.token.outcome == 'success' }}
+        id: cleanup-token
+        uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349 # v2
+        with:
+          app-id: ${{ vars.MODULE_E2E_APP_ID }}
+          private-key: ${{ secrets.MODULE_E2E_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: ${{ github.event.repository.name }}
+          permission-contents: write
+          permission-actions: write
+      - name: Clean up generated branch
+        if: ${{ always() && steps.cleanup-token.outcome == 'success' }}
+        env:
+          GH_TOKEN: ${{ steps.cleanup-token.outputs.token }}
+        run: |
+          if test -f state.json; then
+            python .github/scripts/module_e2e.py cleanup --state state.json
+          fi
+      - name: Retain evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: module-e2e-evidence-${{ github.run_attempt }}-${{ matrix.language }}
+          path: |
+            evidence/
+            state.json
+          retention-days: 14
+
+  result:
+    name: Module GitHub CI
+    if: always()
+    needs: [configuration, prepare, execute]
+    runs-on: ubuntu-24.04
+    permissions: {}
+    steps:
+      - name: Require both languages
+        env:
+          CONFIGURATION: ${{ needs.configuration.result }}
+          PREPARE: ${{ needs.prepare.result }}
+          EXECUTE: ${{ needs.execute.result }}
+        run: |
+          test "$CONFIGURATION" = success
+          test "$PREPARE" = success
+          test "$EXECUTE" = success

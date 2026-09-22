@@ -4,8 +4,8 @@
 
 """Exercise generated Module workflows using disposable branches in this repository.
 
-prepare executes the candidate in an unprivileged job. All other commands use
-only this controller and the GitHub API; they never execute generated files.
+prepare executes the candidate and unpack materializes its source for an
+unprivileged job. Publishing commands never execute generated files.
 """
 
 from __future__ import annotations
@@ -235,6 +235,20 @@ def prepare(args):
     save(output / "manifest.json", validate_manifest(manifest))
 
 
+def unpack(data, archive, output):
+    """Materialize validated source for CPU checks without credentials or Git state."""
+    if hashlib.sha256(Path(archive).read_bytes()).hexdigest() != data["archive_sha256"]:
+        raise ValueError("Generated archive digest mismatch")
+    entries = archive_tree(archive)
+    output = Path(output)
+    output.mkdir(parents=True, exist_ok=False)
+    for entry in entries:
+        path = output / entry["path"]
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(entry["content"], encoding="utf-8")
+        path.chmod(int(entry["mode"], 8) & 0o777)
+
+
 def provenance(data):
     return (
         f"Generated Module CI: {data['branch']}\n\n"
@@ -462,6 +476,10 @@ def main():
     generate.add_argument("--parent-attempt", type=int, required=True)
     generate.add_argument("--cli-artifact-id", type=int, required=True)
     generate.add_argument("--language", choices=["python", "cpp"], required=True)
+    extract = commands.add_parser("unpack")
+    extract.add_argument("--manifest", required=True)
+    extract.add_argument("--archive", required=True)
+    extract.add_argument("--output", required=True)
     publish_parser = commands.add_parser("publish")
     publish_parser.add_argument("--manifest", required=True)
     publish_parser.add_argument("--archive", required=True)
@@ -484,6 +502,8 @@ def main():
     args = parser.parse_args()
     if args.command == "prepare":
         prepare(args)
+    elif args.command == "unpack":
+        unpack(load(args.manifest), args.archive, args.output)
     elif args.command == "sweep":
         if args.older_than_hours < 24:
             raise ValueError("Cleanup grace period must be at least 24 hours")
