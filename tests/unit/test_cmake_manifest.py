@@ -27,6 +27,8 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+import pytest
+
 from holoscan_cli.utils.cmake_manifest import (
     _cmake_bracket_argument,
     _provider_id,
@@ -80,7 +82,22 @@ def test_emits_git_repository_and_tag(tmp_path):
     assert "GIT_TAG         [[" + "abc" + "0" * 37 + "]]" in text
 
 
-def test_git_values_cannot_break_out_of_manifest(tmp_path):
+def test_rejects_mutable_git_ref(tmp_path):
+    with pytest.raises(ValueError, match="full 40-character commit SHA"):
+        _emit(
+            tmp_path,
+            [ModuleDep(name="mymod", git_url="https://example.com/foo.git", ref="main")],
+        )
+
+
+@pytest.mark.parametrize(
+    ("field", "error"),
+    [
+        ("git_url", "Git URL contains unsupported CMake syntax"),
+        ("ref", "full 40-character commit SHA"),
+    ],
+)
+def test_git_values_cannot_break_out_of_manifest(tmp_path, field, error):
     payload = "\n".join(
         [
             'https://example.invalid/repo.git]]")',
@@ -88,13 +105,11 @@ def test_git_values_cannot_break_out_of_manifest(tmp_path):
             'set(dummy "',
         ]
     )
-    literal = _cmake_bracket_argument(payload)
-    text = _emit(
-        tmp_path,
-        [ModuleDep(name="mymod", git_url=payload, ref=payload)],
-    )
-    assert f"GIT_REPOSITORY  {literal}" in text
-    assert f"GIT_TAG         {literal}" in text
+    source = {"git_url": "https://example.invalid/repo.git", "ref": FULL_SHA}
+    source[field] = payload
+    with pytest.raises(ValueError, match=error):
+        _emit(tmp_path, [ModuleDep(name="mymod", **source)])
+    assert not (tmp_path / "external_operators_manifest.cmake").exists()
 
 
 def test_provider_id_sanitised_in_declare(tmp_path):
@@ -154,9 +169,21 @@ def test_local_override_emits_source_dir_var(tmp_path):
 
 
 def test_local_override_only_forwards_source_dir(tmp_path):
-    text = _emit(tmp_path, [ModuleDep(name="mymod", override_path=Path("/abs/local"))])
+    text = _emit(
+        tmp_path,
+        [
+            ModuleDep(
+                name="mymod",
+                git_url="https://example.com/foo.git",
+                ref="main",
+                override_path=Path("/abs/local"),
+            )
+        ],
+    )
     assert "holohub_declare_external_module(mymod" in text
     assert "SOURCE_DIR  [[/abs/local]]" in text
+    assert "GIT_REPOSITORY" not in text
+    assert "GIT_TAG" not in text
 
 
 def test_operator_collision_warns_and_keeps_latter(tmp_path, capsys):
