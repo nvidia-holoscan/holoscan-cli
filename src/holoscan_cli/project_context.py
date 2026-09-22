@@ -217,7 +217,6 @@ def _read_holoscan_project_config(root: Path) -> tuple[Optional[Path], dict]:
             "container-prefix",
             "ctest-script",
             "cuda",
-            "discover-sdk",
             "docker-build-args",
             "docker-run-args",
             "forward-env",
@@ -264,9 +263,6 @@ def _resolve_project_profile(
                 )
             resolved[key.replace("-", "_")] = value
 
-    discover_sdk = config.get("discover-sdk", True)
-    if not isinstance(discover_sdk, bool):
-        raise ProjectContextError(f"{config_source}: tool.holoscan.discover-sdk must be a boolean.")
     host_arch = normalize_arch(platform.machine())
     if arch_source != "host" and host_arch in _SUPPORTED_ARCHITECTURES and arch != host_arch:
         resolved["warnings"].append(
@@ -358,10 +354,9 @@ def _resolve_project_profile(
         automatic_candidates.append(
             (Path("/workspace/holoscan-sdk"), "container:/workspace/holoscan-sdk")
         )
-    if discover_sdk:
-        for candidate in (root / "holoscan-sdk", root.parent / "holoscan-sdk"):
-            if all(candidate != path for path, _source in automatic_candidates):
-                automatic_candidates.append((candidate, f"automatic:{candidate}"))
+    for candidate in (root / "holoscan-sdk", root.parent / "holoscan-sdk"):
+        if all(candidate != path for path, _source in automatic_candidates):
+            automatic_candidates.append((candidate, f"automatic:{candidate}"))
 
     sdk_root = None
     sdk_source = None

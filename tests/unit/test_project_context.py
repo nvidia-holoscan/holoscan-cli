@@ -194,32 +194,11 @@ def test_module_environment_resolves_4x_sdk_build_tree(tmp_path, monkeypatch, ma
     assert context.warnings == ()
 
 
-def test_module_can_disable_nearby_sdk_discovery(tmp_path, monkeypatch, make_sdk_directory):
-    root = _module(tmp_path / "module", pyproject="[tool.holoscan]\ndiscover-sdk = false\n")
-    sdk = make_sdk_directory(tmp_path / "holoscan-sdk/install-x86_64")
-    monkeypatch.setattr("holoscan_cli.project_context.platform.machine", lambda: "x86_64")
-
-    context = discover_project_context(cwd=root, environ={})
-    assert context.sdk_root is None
-    assert "HOLOSCAN_SDK_ROOT" not in context.profile_environment()
-    explicit = discover_project_context(cwd=root, environ={"HOLOSCAN_SDK_ROOT": str(sdk)})
-    assert explicit.sdk_root == sdk
-
-    # A deliberate host mount must still be found by the in-container CLI.
-    monkeypatch.setattr(
-        "holoscan_cli.project_context.resolve_sdk_directory",
-        lambda path, *args, **kwargs: sdk if path == Path("/workspace/holoscan-sdk") else None,
-    )
-    mounted = discover_project_context(cwd=root, environ={"HOLOSCAN_CLI_BUILD_LOCAL": "1"})
-    assert mounted.sdk_root == sdk
-
-
 @pytest.mark.parametrize(
     ("pyproject", "error"),
     [
         ("[tool.holoscan]\ncdua = 13\n", "unknown field.*cdua"),
         ("[tool.holoscan]\ncuda = '13'\n", "cuda"),
-        ("[tool.holoscan]\ndiscover-sdk = 'false'\n", "discover-sdk"),
         ("[tool.holoscan]\nworkspace-name = '../outside'\n", "workspace-name"),
         ("[tool.holoscan]\ncontainer-prefix = 'invalid image'\n", "container-prefix"),
         ("[tool.holoscan]\nctest-script = '../container.ctest'\n", "ctest-script"),

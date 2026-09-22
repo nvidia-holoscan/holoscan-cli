@@ -31,11 +31,8 @@ version, Dockerfile, and modes. The CLI otherwise uses these defaults:
   `install-x86_64` are supported; installs are preferred over builds. An invalid
   `HOLOSCAN_SDK_ROOT` warns and does not fall back.
 
-Set `tool.holoscan.discover-sdk = false` to disable nearby SDK discovery and
-use the container image's SDK by default. Explicit SDK overrides and an SDK
-already mounted at `/workspace/holoscan-sdk` still take precedence. `holoscan test`
-passes the selected SDK to CMake through `CMAKE_PREFIX_PATH`, preserving existing
-environment prefixes; explicit CMake options can override it.
+`holoscan test` passes the selected SDK to CMake through `CMAKE_PREFIX_PATH`,
+preserving existing environment prefixes; explicit CMake options can override it.
 
 ## `pyproject.toml` settings
 
@@ -48,7 +45,6 @@ These are all currently supported Holoscan CLI settings:
 | --- | --- | --- |
 | `tool.holoscan.cuda` | Integer; default detected from the host | Module-wide CUDA major version. |
 | `tool.holoscan.ctest-script` | Relative path; default is the bundled script | Module-specific CTest driver. |
-| `tool.holoscan.discover-sdk` | Boolean; default `true` | Discover SDKs inside or beside the Module root. |
 | `tool.holoscan.repo-prefix` | String; default derived from Module metadata | Override the repository naming prefix. |
 | `tool.holoscan.container-prefix` | String; default derived from the repository prefix | Override the Docker image prefix. |
 | `tool.holoscan.workspace-name` | String; default is the repository prefix | Directory name under `/workspace` in containers. |
