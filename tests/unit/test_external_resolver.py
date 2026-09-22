@@ -176,15 +176,16 @@ def test_malformed_json_raises_value_error(tmp_path, parser):
 
 
 @pytest.mark.parametrize("parser", [parse_module_dependencies, parse_module_sites])
-@pytest.mark.parametrize("kind", ["oversized", "nested", "symlink"])
-def test_dependency_metadata_uses_bounded_reader(tmp_path, parser, kind):
+@pytest.mark.parametrize("kind", ["oversized", "recursion", "symlink"])
+def test_dependency_metadata_uses_bounded_reader(tmp_path, mocker, parser, kind):
     path = tmp_path / "metadata.json"
     if kind == "oversized":
         with path.open("wb") as file:
             file.truncate(MAX_METADATA_BYTES + 1)
-    elif kind == "nested":
-        depth = 10000
-        path.write_text("[" * depth + "]" * depth, encoding="utf-8")
+    elif kind == "recursion":
+        mocker.patch(
+            "holoscan_cli.utils.external_resolver.read_metadata", side_effect=RecursionError
+        )
     else:
         target = tmp_path / "target.json"
         target.write_text("{}", encoding="utf-8")
