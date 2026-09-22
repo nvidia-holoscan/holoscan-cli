@@ -26,10 +26,28 @@ version, Dockerfile, and modes. The CLI otherwise uses these defaults:
 - Build type: `--build-type`, `CMAKE_BUILD_TYPE`, the selected mode, then release.
 - Local SDK: `--local-sdk-root`, `HOLOSCAN_SDK_ROOT`, `/workspace/holoscan-sdk`
   for local container builds, a nearby `holoscan-sdk` install or configured source
-  build, then `/opt/nvidia/holoscan`. Both 4.x CUDA-qualified directories such as
-  `install-cu13-x86_64` and 5.x architecture-only directories such as
+  build supported by the SDK, then `/opt/nvidia/holoscan`. Both 4.x CUDA-qualified
+  directories such as `install-cu13-x86_64` and 5.x architecture-only directories such as
   `install-x86_64` are supported; installs are preferred over builds. An invalid
   `HOLOSCAN_SDK_ROOT` warns and does not fall back.
+
+`holoscan test` passes the selected SDK to CMake through `CMAKE_PREFIX_PATH`,
+preserving existing environment prefixes; explicit CMake options can override it.
+
+For a locally compiled HSDK 5, use its completed installation prefix. With a
+compatible development image already built:
+
+```bash
+export HOLOSCAN_SDK_ROOT=/path/to/holoscan-sdk/install-x86_64
+holoscan build my_app --img my-sdk-dev:local --no-docker-build
+holoscan test my_app --img my-sdk-dev:local --no-docker-build
+holoscan run my_app --img my-sdk-dev:local --no-docker-build
+```
+
+The CLI mounts the selected SDK at `/workspace/holoscan-sdk`; the image supplies
+compatible build tools and runtime dependencies. Python applications also need
+the SDK's Python bindings in that installation. Use `--local-sdk-root` to override
+the selection for one command, or add `--local` to execute on the host.
 
 ## `pyproject.toml` settings
 
@@ -42,6 +60,9 @@ These are all currently supported Holoscan CLI settings:
 | --- | --- | --- |
 | `tool.holoscan.cuda` | Integer; default detected from the host | Module-wide CUDA major version. |
 | `tool.holoscan.ctest-script` | Relative path; default is the bundled script | Module-specific CTest driver. |
+| `tool.holoscan.repo-prefix` | String; default derived from Module metadata | Override the repository naming prefix. |
+| `tool.holoscan.container-prefix` | String; default derived from the repository prefix | Override the Docker image prefix. |
+| `tool.holoscan.workspace-name` | String; default is the repository prefix | Directory name under `/workspace` in containers. |
 | `tool.holoscan.forward-env` | Array of strings; default `[]` | Names of host environment variables allowed into project containers. |
 | `tool.holoscan.docker-build-args` | Array of non-empty string tokens; default `[]` | Module-wide Docker build options. |
 | `tool.holoscan.docker-run-args` | Array of non-empty string tokens; default `[]` | Module-wide Docker run options. |
@@ -67,6 +88,12 @@ aarch64 = "registry.example.com/holoscan/sdk-build-aarch64:5.0.0-cuda13"
 `cuda` selects the Module-wide CUDA major.
 `ctest-script` must stay within the Module and is resolved from its root.
 Environment variables and command options override both project defaults.
+
+Naming settings accept lowercase letters, digits, `.`, `_`, and `-`, starting
+with a letter or digit. Their corresponding `HOLOSCAN_CLI_REPO_PREFIX`,
+`HOLOSCAN_CLI_CONTAINER_PREFIX`, and `HOLOSCAN_CLI_WORKSPACE_NAME` environment
+variables take precedence. Use `docker-run-args = ["--hostname=my-module"]`
+to set a container hostname.
 
 `forward-env` entries must be valid environment variable names. Values are
 never stored in the file or placed on the Docker command line; Docker inherits

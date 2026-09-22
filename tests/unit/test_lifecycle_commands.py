@@ -4,7 +4,9 @@
 from __future__ import annotations
 
 import json
+import os
 import shlex
+import subprocess
 from argparse import Namespace
 
 from holoscan_cli.commands import build as build_cmd
@@ -662,6 +664,18 @@ def test_handle_test_container_adds_coverage_build_args_and_ctest_options(tmp_pa
     assert '-DCTEST_SOURCE_DIRECTORY="$PWD"' in ctest_command
     assert "command -v xvfb-run" not in ctest_command
     assert "xvfb-run" not in ctest_command
+    result = subprocess.run(
+        ["bash", "-c", 'ctest() { printf "%s" "$CMAKE_PREFIX_PATH"; }; ' + ctest_command],
+        env={
+            **os.environ,
+            "HOLOSCAN_LIB_PATH": "/workspace/holoscan-sdk/lib",
+            "CMAKE_PREFIX_PATH": "/extra",
+        },
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    assert result.stdout == "/workspace/holoscan-sdk:/workspace/holoscan-sdk/lib:/extra"
 
 
 def test_handle_test_container_detects_optional_xvfb(tmp_path):
@@ -679,14 +693,19 @@ def test_handle_test_container_detects_optional_xvfb(tmp_path):
     assert '-DCTEST_SOURCE_DIRECTORY="$PWD"' in command
 
 
-def test_handle_test_local_runs_ctest_in_repo_with_environment(tmp_path, monkeypatch):
+def test_handle_test_local_runs_ctest_in_repo_with_environment(
+    tmp_path, monkeypatch, make_sdk_directory
+):
     cli = RecordingCLI(tmp_path)
+    sdk = make_sdk_directory(tmp_path / "sdk build", build=True)
+    monkeypatch.setenv("CMAKE_PREFIX_PATH", "/extra")
     calls = []
     monkeypatch.setattr(test_cmd, "run_command", lambda cmd, **kwargs: calls.append((cmd, kwargs)))
     args = _container_args(
         local=True,
         ctest_script="local.ctest",
         build_name_suffix="manual",
+        local_sdk_root=str(sdk),
     )
 
     test_cmd.handle_test(cli, args)
@@ -700,3 +719,8 @@ def test_handle_test_local_runs_ctest_in_repo_with_environment(tmp_path, monkeyp
     assert "-S local.ctest" in command[2]
     assert kwargs["dry_run"] is True
     assert str(cli.HOLOHUB_ROOT) in kwargs["env"]["PYTHONPATH"]
+    assert kwargs["env"]["CMAKE_PREFIX_PATH"].split(os.pathsep) == [
+        str(sdk),
+        str(sdk / "lib"),
+        "/extra",
+    ]

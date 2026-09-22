@@ -90,6 +90,8 @@ class ProjectContext:
     docker_run_args: Optional[str] = None
     forward_env: tuple[str, ...] = ()
     warnings: tuple[str, ...] = ()
+    container_prefix: Optional[str] = None
+    workspace_name: Optional[str] = None
 
     @property
     def is_module(self) -> bool:
@@ -109,9 +111,9 @@ class ProjectContext:
         }
         optional_values = {
             "HOLOSCAN_CLI_REPO_PREFIX": self.repo_prefix,
-            "HOLOSCAN_CLI_CONTAINER_PREFIX": (
-                self.repo_prefix.replace("_", "-") if self.repo_prefix else None
-            ),
+            "HOLOSCAN_CLI_CONTAINER_PREFIX": self.container_prefix
+            or (self.repo_prefix.replace("_", "-") if self.repo_prefix else None),
+            "HOLOSCAN_CLI_WORKSPACE_NAME": self.workspace_name,
             "HOLOSCAN_CLI_BASE_SDK_VERSION": self.base_sdk_version,
             "HOLOSCAN_CLI_DEFAULT_DOCKERFILE": str(self.dockerfile) if self.dockerfile else None,
             "HOLOSCAN_CLI_DEFAULT_CUDA_VERSION": self.cuda,
@@ -212,11 +214,14 @@ def _read_holoscan_project_config(root: Path) -> tuple[Optional[Path], dict]:
         path="tool.holoscan",
         allowed={
             "base-images",
+            "container-prefix",
             "ctest-script",
             "cuda",
             "docker-build-args",
             "docker-run-args",
             "forward-env",
+            "repo-prefix",
+            "workspace-name",
         },
         source_path=config_path,
     )
@@ -248,6 +253,16 @@ def _resolve_project_profile(
         "target_arch": arch,
         "warnings": [],
     }
+    for key in ("repo-prefix", "container-prefix", "workspace-name"):
+        if key in config:
+            value = config[key]
+            if not isinstance(value, str) or not re.fullmatch(r"[a-z0-9][a-z0-9_.-]*", value):
+                raise ProjectContextError(
+                    f"{config_source}: tool.holoscan.{key} must start with a lowercase "
+                    "letter or digit and contain only lowercase letters, digits, '.', '_', or '-'."
+                )
+            resolved[key.replace("-", "_")] = value
+
     host_arch = normalize_arch(platform.machine())
     if arch_source != "host" and host_arch in _SUPPORTED_ARCHITECTURES and arch != host_arch:
         resolved["warnings"].append(
@@ -475,7 +490,9 @@ def _build_module_context(
         root=root,
         kind="module",
         discovery=discovery,
-        repo_prefix=derived_repo_prefix,
+        repo_prefix=profile.get("repo_prefix", derived_repo_prefix),
+        container_prefix=profile.get("container_prefix"),
+        workspace_name=profile.get("workspace_name"),
         base_sdk_version=metadata_sdk_version,
         dockerfile=dockerfile,
         target_arch=profile.get("target_arch"),
