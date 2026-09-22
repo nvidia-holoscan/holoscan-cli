@@ -26,13 +26,28 @@ version, Dockerfile, and modes. The CLI otherwise uses these defaults:
 - Build type: `--build-type`, `CMAKE_BUILD_TYPE`, the selected mode, then release.
 - Local SDK: `--local-sdk-root`, `HOLOSCAN_SDK_ROOT`, `/workspace/holoscan-sdk`
   for local container builds, a nearby `holoscan-sdk` install or configured source
-  build, then `/opt/nvidia/holoscan`. Both 4.x CUDA-qualified directories such as
-  `install-cu13-x86_64` and 5.x architecture-only directories such as
+  build supported by the SDK, then `/opt/nvidia/holoscan`. Both 4.x CUDA-qualified
+  directories such as `install-cu13-x86_64` and 5.x architecture-only directories such as
   `install-x86_64` are supported; installs are preferred over builds. An invalid
   `HOLOSCAN_SDK_ROOT` warns and does not fall back.
 
 `holoscan test` passes the selected SDK to CMake through `CMAKE_PREFIX_PATH`,
 preserving existing environment prefixes; explicit CMake options can override it.
+
+For a locally compiled HSDK 5, use its completed installation prefix. With a
+compatible development image already built:
+
+```bash
+export HOLOSCAN_SDK_ROOT=/path/to/holoscan-sdk/install-x86_64
+holoscan build my_app --img my-sdk-dev:local --no-docker-build
+holoscan test my_app --img my-sdk-dev:local --no-docker-build
+holoscan run my_app --img my-sdk-dev:local --no-docker-build
+```
+
+The CLI mounts the selected SDK at `/workspace/holoscan-sdk`; the image supplies
+compatible build tools and runtime dependencies. Python applications also need
+the SDK's Python bindings in that installation. Use `--local-sdk-root` to override
+the selection for one command, or add `--local` to execute on the host.
 
 ## `pyproject.toml` settings
 
