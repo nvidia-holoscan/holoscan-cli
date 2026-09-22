@@ -38,6 +38,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 
+from holoscan_cli.metadata.utils import read_metadata
+
 _SHA_RE = re.compile(r"[0-9a-f]{40}")
 
 
@@ -83,8 +85,15 @@ def _require_immutable_ref(module_name: str, ref: str) -> None:
 
 
 def _read_metadata(path: Path) -> dict:
-    with path.open() as f:
-        return json.load(f)
+    """Apply discovery's read limits to build-time dependency metadata too."""
+    try:
+        return read_metadata(path)
+    except FileNotFoundError:
+        return {}
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"Malformed JSON in {path}: {exc}") from exc
+    except (OSError, ValueError, RecursionError) as exc:
+        raise ValueError(f"Cannot read dependency metadata {path}: {exc}") from exc
 
 
 def _module_dependencies_raw(metadata: dict) -> list[dict]:
@@ -120,12 +129,7 @@ def parse_module_dependencies(
     file-doesn't-exist path with the file-vanished-between-exists-and-open
     race window.
     """
-    try:
-        metadata = _read_metadata(metadata_path)
-    except FileNotFoundError:
-        return []
-    except json.JSONDecodeError as e:
-        raise ValueError(f"Malformed JSON in {metadata_path}: {e}") from e
+    metadata = _read_metadata(metadata_path)
     _env = env if env is not None else os.environ
     raw = _module_dependencies_raw(metadata)
     out: list[ModuleDep] = []
@@ -206,13 +210,7 @@ def parse_module_sites(
     environment for override lookups (defaults to ``os.environ``). A missing
     ``sites_path`` is treated as no module sites rather than an error.
     """
-    try:
-        with sites_path.open() as f:
-            data = json.load(f)
-    except FileNotFoundError:
-        return []
-    except json.JSONDecodeError as e:
-        raise ValueError(f"Malformed JSON in {sites_path}: {e}") from e
+    data = _read_metadata(sites_path)
 
     _env = env if env is not None else os.environ
     out: list[ModuleDep] = []

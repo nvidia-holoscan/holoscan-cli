@@ -28,6 +28,7 @@ import json
 
 import pytest
 
+from holoscan_cli.metadata.utils import MAX_METADATA_BYTES
 from holoscan_cli.utils.external_resolver import (
     ModuleDep,
     _override_env_name,
@@ -166,11 +167,31 @@ def test_dependencies_without_modules_subfield(tmp_path):
     assert parse_module_dependencies(meta) == []
 
 
-def test_malformed_json_raises_value_error(tmp_path):
+@pytest.mark.parametrize("parser", [parse_module_dependencies, parse_module_sites])
+def test_malformed_json_raises_value_error(tmp_path, parser):
     p = tmp_path / "metadata.json"
     p.write_text("{ not json", encoding="utf-8")
     with pytest.raises(ValueError, match="Malformed JSON"):
-        parse_module_dependencies(p)
+        parser(p)
+
+
+@pytest.mark.parametrize("parser", [parse_module_dependencies, parse_module_sites])
+@pytest.mark.parametrize("kind", ["oversized", "nested", "symlink"])
+def test_dependency_metadata_uses_bounded_reader(tmp_path, parser, kind):
+    path = tmp_path / "metadata.json"
+    if kind == "oversized":
+        with path.open("wb") as file:
+            file.truncate(MAX_METADATA_BYTES + 1)
+    elif kind == "nested":
+        depth = 10000
+        path.write_text("[" * depth + "]" * depth, encoding="utf-8")
+    else:
+        target = tmp_path / "target.json"
+        target.write_text("{}", encoding="utf-8")
+        path.symlink_to(target)
+    with pytest.raises(ValueError, match="Cannot read dependency metadata") as error:
+        parser(path)
+    assert str(path) in str(error.value)
 
 
 def test_entry_without_name_is_skipped(tmp_path):

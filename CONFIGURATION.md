@@ -32,8 +32,9 @@ recognition checks, not full JSON Schema validation; discovery needs no optional
 creation dependencies. Unrelated or incomplete application descriptors are
 ignored. Unreadable or malformed metadata produces a diagnostic.
 
-Root and component discovery read only regular, non-symlink metadata files of
-at most 1 MiB. The read itself is bounded even if a file grows during discovery.
+Discovery and build-time Module dependency parsing read only regular,
+non-symlink metadata files of at most 1 MiB, including `modules/module-sites.json`.
+The read itself is bounded even if a file grows after its size check.
 Special files such as FIFOs are rejected without waiting for a writer; oversized
 files and JSON nesting that exceeds the parser's limit are also rejected.
 
