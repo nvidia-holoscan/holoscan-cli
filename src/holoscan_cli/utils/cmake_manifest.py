@@ -28,15 +28,31 @@ import sys
 from pathlib import Path
 from typing import Iterable
 
-from holoscan_cli.utils.external_resolver import ModuleDep
+from holoscan_cli.utils.external_resolver import ModuleDep, _require_immutable_ref
 
 
 def _cmake_bracket_argument(value: str) -> str:
     """Encode ``value`` as one literal CMake bracket argument."""
     delimiter = ""
-    while f"]{delimiter}]" in value:
+    # Include the closing bracket's first character to catch boundary overlaps.
+    while f"]{delimiter}]" in value + "]":
         delimiter += "="
-    return f"[{delimiter}[{value}]{delimiter}]"
+    # CMake discards one newline immediately after the opening bracket.
+    prefix = "\n" if value.startswith(("\n", "\r\n")) else ""
+    return f"[{delimiter}[{prefix}{value}]{delimiter}]"
+
+
+def _cmake_fetchcontent_argument(value: str, label: str) -> str:
+    """Validate values that FetchContent serializes into further CMake code."""
+    # FetchContent uses fixed [==[...]==] delimiters in EVAL, while generated
+    # Git scripts use quoted strings. List separators can introduce options.
+    if (
+        any(char in value for char in '\\"$;')
+        or any(ord(char) < 32 for char in value)
+        or "]==" in value
+    ):
+        raise ValueError(f"External module {label} contains unsupported CMake syntax")
+    return _cmake_bracket_argument(value)
 
 
 def _provider_id(module_name: str) -> str:
@@ -61,9 +77,9 @@ def write_external_operators_manifest(
 
     * ``FetchContent_Declare(<provider_id> GIT_REPOSITORY <url> GIT_TAG <ref>)``.
       Pure declaration; no fetch.
-    * For ``HOLOSCAN_CLI_LOCAL_<NAME>`` overrides: also emit
+    * For ``HOLOSCAN_CLI_LOCAL_<NAME>`` overrides: emit
       ``FETCHCONTENT_SOURCE_DIR_<UPPER>=<path>`` so ``MakeAvailable`` uses the
-      local tree instead of cloning.
+      local tree instead of cloning, and omit remote Git coordinates.
     * One ``set(HOLOHUB_EXT_OP_<op>_PROVIDER <provider_id>)`` per advertised
       operator (a normal variable, not a cache entry — see below). The root
       post-step iterates these and calls ``MakeAvailable`` on the modules
@@ -75,7 +91,8 @@ def write_external_operators_manifest(
 
     Metadata-derived values are emitted as literal CMake bracket arguments or
     bracket comments. The delimiter is selected so the value cannot close its
-    own argument and inject CMake syntax.
+    own argument and inject CMake syntax. Values forwarded to FetchContent
+    are also validated because it serializes them into further CMake code.
 
     Provider lookups are NORMAL variables (no ``CACHE INTERNAL``), so they
     don't survive across configure runs. This matters when a build dir is
@@ -140,7 +157,7 @@ def write_external_operators_manifest(
             # FETCHCONTENT_SOURCE_DIR_<UPPER> is a cache variable (global scope) that
             # redirects FetchContent_MakeAvailable at the local tree. Emitted as a
             # separate set() before the function call so it's visible to readers.
-            override_arg = _cmake_bracket_argument(override_str)
+            override_arg = _cmake_fetchcontent_argument(override_str, "local override path")
             description_arg = _cmake_bracket_argument(f"Local override for {dep.name}")
             lines.append(
                 f"set(FETCHCONTENT_SOURCE_DIR_{provider_upper} {override_arg} "
@@ -152,11 +169,13 @@ def write_external_operators_manifest(
         # as a normal variable inside the function (PARENT_SCOPE → root CMakeLists.txt
         # directory scope).
         call_parts = [f"holohub_declare_external_module({provider}"]
-        if dep.git_url and dep.ref:
-            call_parts.append(f"    GIT_REPOSITORY  {_cmake_bracket_argument(dep.git_url)}")
+        if override_str is not None:
+            call_parts.append(f"    SOURCE_DIR  {override_arg}")
+        elif dep.git_url and dep.ref:
+            _require_immutable_ref(dep.name, dep.ref)
+            git_url_arg = _cmake_fetchcontent_argument(dep.git_url, "Git URL")
+            call_parts.append(f"    GIT_REPOSITORY  {git_url_arg}")
             call_parts.append(f"    GIT_TAG         {_cmake_bracket_argument(dep.ref)}")
-        elif override_str is not None:
-            call_parts.append(f"    SOURCE_DIR  {_cmake_bracket_argument(override_str)}")
 
         for op in dep.provides_operators:
             prior = seen_op_provider.get(op)
