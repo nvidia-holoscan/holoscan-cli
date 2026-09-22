@@ -167,10 +167,11 @@ def test_standalone_name_override_cannot_escape_build_directory(tmp_path, name):
 
 @pytest.mark.parametrize("name", ["my_app", "python"])
 def test_standalone_build_and_run_previews_resolve_root_paths(tmp_path, name):
-    root = _application(tmp_path / name)
+    root = _application(tmp_path / "long_parent_directory_for_wrapped_command_previews" / name)
     build = _cli(root, "build", name, "--local", "--dryrun", "--verbose")
     assert build.returncode == 0, build.stderr
-    assert f"-S {root}" in build.stdout
+    build_output = " ".join(build.stdout.replace("\\\n", " ").split())
+    assert f"-S {root}" in build_output
     assert str(root / "build" / name) in build.stdout
 
     run = _cli(root, "run", name, "--local", "--dryrun", "--verbose")
