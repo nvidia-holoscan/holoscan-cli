@@ -18,18 +18,24 @@ directory and its ancestors.
 
 HoloHub-style roots search conventional component directories such as
 `applications/` and `operators/`. Standalone Modules also include their root
-`metadata.json`. When no containing source repository or Module is found, an
-application descriptor at the selected root enables standalone application
-discovery, including when invoked from a child directory. Explicitly selecting
-an application with `--project-root` or `HOLOSCAN_CLI_ROOT` also works.
+`metadata.json`. The existing root-selection rules are unchanged: after checking
+for a conventional source layout, discovery falls back to the nearest ancestor
+with a `metadata.json`. An application descriptor at that selected root enables
+standalone discovery. `--project-root` and `HOLOSCAN_CLI_ROOT` select a root
+explicitly.
 
 Application recognition requires a JSON object with `application` as its only
 recognized project-type key, an object-valued `application`, and non-empty
 strings for `application.name` and
 `application.holoscan_sdk.minimum_required_version`. These are lightweight
 recognition checks, not full JSON Schema validation; discovery needs no optional
-creation dependencies. Unrelated metadata is ignored. Malformed JSON produces
-a warning, and invalid application descriptors report the offending field.
+creation dependencies. Unrelated or incomplete application descriptors are
+ignored. Unreadable or malformed metadata produces a diagnostic.
+
+Root and component discovery read only regular, non-symlink metadata files of
+at most 1 MiB. The read itself is bounded even if a file grows during discovery.
+Special files such as FIFOs are rejected without waiting for a writer; oversized
+files and JSON nesting that exceeds the parser's limit are also rejected.
 
 Only the application's root `metadata.json` is added, so build directories,
 dependency copies, and other descendants are not recursively discovered.
