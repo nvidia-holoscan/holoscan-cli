@@ -35,7 +35,7 @@ from holoscan_cli.utils.holohub import (
 )
 from holoscan_cli.utils.io import format_cmd, run_command
 from holoscan_cli.utils.project import report_effective_configuration
-from holoscan_cli.utils.sdk import resolve_local_sdk_dir
+from holoscan_cli.utils.sdk import get_sdk_cmake_prefix_path, resolve_local_sdk_dir
 
 
 def register_test_parser(
@@ -251,6 +251,10 @@ def handle_test(cli, args: argparse.Namespace) -> None:
         env = os.environ.copy()
         sdk_dir = resolve_local_sdk_dir(cli.DEFAULT_SDK_DIR, getattr(args, "local_sdk_root", None))
         env["PYTHONPATH"] = f"{env.get('PYTHONPATH', '')}:{sdk_dir}/python/lib:{cli.HOLOHUB_ROOT}"
+        sdk_prefixes = get_sdk_cmake_prefix_path(sdk_dir).replace(";", os.pathsep)
+        env["CMAKE_PREFIX_PATH"] = os.pathsep.join(
+            filter(None, (sdk_prefixes, env.get("CMAKE_PREFIX_PATH")))
+        )
         env["HOLOSCAN_CLI_DATA_PATH"] = str(cli.DEFAULT_DATA_DIR)
         env.setdefault("HOLOSCAN_INPUT_PATH", str(cli.DEFAULT_DATA_DIR))
 
@@ -260,6 +264,12 @@ def handle_test(cli, args: argparse.Namespace) -> None:
     cli_docker_opts = resolve_cli_docker_opts(args)
     docker_opts = container.compose_run_args(docker_opts=cli_docker_opts)
     docker_opts = shlex.join(shlex.split(docker_opts) + ["--entrypoint=bash"])
+    # Use the mounted SDK's container paths, preserving the image's other prefixes.
+    ctest_cmd = (
+        'if [ -n "${HOLOSCAN_LIB_PATH:-}" ]; then '
+        'export CMAKE_PREFIX_PATH="${HOLOSCAN_LIB_PATH%/lib}:${HOLOSCAN_LIB_PATH}'
+        '${CMAKE_PREFIX_PATH:+:${CMAKE_PREFIX_PATH}}"; fi; ' + ctest_cmd
+    )
     container.run(
         img=container.resolve_run_image(getattr(args, "img", None)),
         local_sdk_root=getattr(args, "local_sdk_root", None),
