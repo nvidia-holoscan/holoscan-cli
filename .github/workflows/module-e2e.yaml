@@ -1,0 +1,124 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+name: Generated Module E2E
+on:
+  workflow_call:
+    inputs:
+      cli-artifact-id:
+        description: Candidate build artifact from this caller run
+        required: true
+        type: string
+
+# The default PR path executes candidate code without publisher credentials.
+permissions:
+  contents: read
+
+jobs:
+  cpu:
+    name: CPU E2E (${{ matrix.language }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [python, cpp]
+    steps:
+      - name: Checkout candidate
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.12'
+      - name: Download candidate CLI
+        uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3 # v8.0.0
+        with:
+          artifact-ids: ${{ inputs.cli-artifact-id }}
+          path: dist
+          merge-multiple: true
+      - name: Generate from installed candidate wheel
+        id: generate
+        env:
+          SOURCE_SHA: ${{ github.sha }}
+          LANGUAGE: ${{ matrix.language }}
+          ARTIFACT_ID: ${{ inputs.cli-artifact-id }}
+        run: |
+          python .github/scripts/module_e2e.py prepare \
+            --wheel-dir dist --output generated --repository "$GITHUB_REPOSITORY" \
+            --source-sha "$SOURCE_SHA" --parent-run-id "$GITHUB_RUN_ID" \
+            --parent-attempt "$GITHUB_RUN_ATTEMPT" --cli-artifact-id "$ARTIFACT_ID" \
+            --language "$LANGUAGE"
+          python .github/scripts/module_e2e.py unpack \
+            --manifest generated/manifest.json --archive generated/module.tar --output module
+          jq -r '"cli-version=\(.cli_version)\nwheel-sha256=\(.wheel_sha256)"' \
+            generated/manifest.json >> "$GITHUB_OUTPUT"
+      - name: Install lint tools
+        run: |
+          python -m pip install ruff
+          if test "$LANGUAGE" = cpp; then
+            sudo apt-get update
+            sudo apt-get install -y clang-format
+          fi
+        env:
+          LANGUAGE: ${{ matrix.language }}
+      - name: Python lint
+        working-directory: module
+        run: ruff check .
+      - name: Validate metadata
+        working-directory: module
+        env:
+          CLI_WHEEL_DIR: ${{ github.workspace }}/dist
+          CLI_WHEEL_SHA256: ${{ steps.generate.outputs.wheel-sha256 }}
+          CLI_VERSION: ${{ steps.generate.outputs.cli-version }}
+        run: |
+          python .github/workflows/scripts/install_cli.py
+          python .github/workflows/scripts/validate_metadata.py
+      - name: C++ format check
+        if: matrix.language == 'cpp'
+        working-directory: module
+        run: |
+          find operators applications tests \( -name '*.cpp' -o -name '*.hpp' \) \
+            -print0 | xargs -0 clang-format --dry-run --Werror
+      - name: Prepare SDK build environment
+        working-directory: module
+        run: bash .github/workflows/scripts/cpu_ci.sh image
+      - name: CMake configure
+        working-directory: module
+        run: bash .github/workflows/scripts/cpu_ci.sh configure
+      - name: Build
+        working-directory: module
+        run: bash .github/workflows/scripts/cpu_ci.sh build
+      - name: Build Debian package
+        working-directory: module
+        run: bash .github/workflows/scripts/cpu_ci.sh package
+      - name: Verify Debian metadata
+        working-directory: module
+        run: bash .github/workflows/scripts/cpu_ci.sh verify build/packages
+      - name: Install Debian package in a fresh container
+        working-directory: module
+        run: bash .github/workflows/scripts/cpu_ci.sh install-clean build/packages
+      - name: Retain generated source, packages, and build evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: module-e2e-cpu-${{ github.run_attempt }}-${{ matrix.language }}
+          path: |
+            generated/
+            module/build/packages/*.deb
+            module/build/CMakeCache.txt
+            module/build/CMakeFiles/CMakeConfigureLog.yaml
+            module/build/_CPack_Packages/**/*.log
+          retention-days: 14
+
+  result:
+    name: Module E2E
+    if: always()
+    needs: cpu
+    runs-on: ubuntu-24.04
+    permissions: {}
+    steps:
+      - name: Require both language variants
+        env:
+          CPU: ${{ needs.cpu.result }}
+        run: test "$CPU" = success

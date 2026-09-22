@@ -1,88 +1,155 @@
 # SPDX-FileCopyrightText: Copyright (c) {% now 'utc', '%Y' %} {{ cookiecutter.full_name }}{% if cookiecutter.affiliation %} / {{ cookiecutter.affiliation }}{% endif %}. All rights reserved.
 # SPDX-License-Identifier: {{ cookiecutter._license }}
 
-name: CI
+name: Module CI
+run-name: {% raw %}"Module CI / ${{ inputs.e2e_id || github.ref_name }}"{% endraw %}
 
 on:
   push:
     branches: [main]
   pull_request:
     branches: [main]
+  workflow_dispatch:
+    inputs:
+      e2e_id:
+        description: 'Optional parent-run correlation ID'
+        type: string
+      cli_run_id:
+        description: 'Optional same-repository run containing the candidate CLI artifact'
+        type: string
+      cli_artifact_id:
+        description: 'Optional candidate CLI artifact ID'
+        type: string
+      cli_wheel_sha256:
+        description: 'SHA256 of the candidate wheel (required with an artifact)'
+        type: string
+      cli_version:
+        description: 'Candidate CLI version (required with an artifact)'
+        type: string
+      run_gpu:
+        description: 'Run GPU tests on a configured self-hosted runner'
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
 
 jobs:
   lint:
     name: Lint
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      actions: read
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v6
         with:
-          python-version: "3.13"
-      - run: pip install ruff
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.12'
+      - name: Download candidate CLI
+        if: {% raw %}${{ inputs.cli_artifact_id != '' }}{% endraw %}
+        uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3 # v8.0.0
+        with:
+          artifact-ids: {% raw %}${{ inputs.cli_artifact_id }}{% endraw %}
+          run-id: {% raw %}${{ inputs.cli_run_id }}{% endraw %}
+          github-token: {% raw %}${{ github.token }}{% endraw %}
+          path: {% raw %}${{ runner.temp }}/cli-wheel{% endraw %}
+          merge-multiple: true
+      - run: python -m pip install ruff
       - name: Python lint
         run: ruff check .
-      - name: Validate metadata.json against the Holoscan CLI schema
+      - name: Validate metadata
         env:
           PIP_EXTRA_INDEX_URL: https://pypi.nvidia.com
+          CLI_WHEEL_DIR: {% raw %}${{ inputs.cli_artifact_id != '' && format('{0}/cli-wheel', runner.temp) || '' }}{% endraw %}
+          CLI_WHEEL_SHA256: {% raw %}${{ inputs.cli_wheel_sha256 }}{% endraw %}
+          CLI_VERSION: {% raw %}${{ inputs.cli_version }}{% endraw %}
         run: |
-          pip install 'holoscan-cli[create]' -c requirements-cli.txt
+          python .github/workflows/scripts/install_cli.py
           python .github/workflows/scripts/validate_metadata.py
 {% if cookiecutter.language == 'cpp' %}
       - name: Install clang-format
         run: sudo apt-get update && sudo apt-get install -y clang-format
       - name: C++ format check
         run: |
-          find operators applications tests \
-               -name '*.cpp' -o -name '*.hpp' \
-            | xargs clang-format --dry-run --Werror
+          find operators applications tests \( -name '*.cpp' -o -name '*.hpp' \) \
+            -print0 | xargs -0 clang-format --dry-run --Werror
 {% endif %}
 
   build-only:
-    name: CMake configure (CPU, no GPU required)
-    # Verifies the CMake graph and Python packaging without a GPU runner.
-    # holoscan is installed from PyPI (CPU wheel) solely to satisfy find_package(holoscan).
-    runs-on: ubuntu-latest
+    name: CPU build and package
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v6
         with:
-          python-version: "3.13"
-      - name: Install holoscan (CPU wheel) + CMake
-        run: |
-          pip install holoscan cmake ninja
+          persist-credentials: false
+      - name: Prepare SDK build environment
+        run: bash .github/workflows/scripts/cpu_ci.sh image
       - name: CMake configure
-        run: |
-          cmake -S . -B build \
-            -G Ninja \
-            -DCMAKE_BUILD_TYPE=Release \
-            -D{{ cookiecutter.module_slug | upper }}_BUILD_TESTING=OFF \
-            -DBUILD_ALL=ON
+        run: bash .github/workflows/scripts/cpu_ci.sh configure
+      - name: Build
+        run: bash .github/workflows/scripts/cpu_ci.sh build
+      - name: Build Debian package
+        run: bash .github/workflows/scripts/cpu_ci.sh package
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: module-deb
+          path: build/packages/*.deb
+          if-no-files-found: error
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: cmake-logs
+          path: |
+            build/CMakeCache.txt
+            build/CMakeFiles/CMakeConfigureLog.yaml
+            build/_CPack_Packages/**/*.log
+
+  package-install:
+    name: Debian install
+    needs: build-only
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    # A fresh container has no build-tree state or previously installed Module.
+    container: ubuntu:24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3 # v8.0.0
+        with:
+          name: module-deb
+          path: packages
+      - name: Verify Debian metadata
+        shell: bash
+        run: bash .github/workflows/scripts/cpu_ci.sh verify packages
+      - name: Install Debian package
+        shell: bash
+        run: bash .github/workflows/scripts/cpu_ci.sh install packages
 
   build-and-test:
-    name: Build and Test (Holoscan {{ cookiecutter.holoscan_version }})
-    # Requires a self-hosted GPU runner and the Holoscan container image.
-    # To set up a self-hosted runner see:
-    #   https://docs.github.com/en/actions/hosting-your-own-runners/managing-self-hosted-runners/about-self-hosted-runners
-    # TODO: update the runner label and container image for your CI environment.
+    name: GPU build and test
+    # Manual dispatch overrides the repository default, so E2E always disables GPU.
+    if: {% raw %}${{ (github.event_name == 'workflow_dispatch' && inputs.run_gpu) || (github.event_name != 'workflow_dispatch' && vars.MODULE_CI_RUN_GPU == 'true') }}{% endraw %}
     runs-on: [self-hosted, linux, x86_64, gpu]
-
+    timeout-minutes: 30
     container:
       image: nvcr.io/nvidia/clara-holoscan/holoscan:v{{ cookiecutter.holoscan_version }}-cuda13
       options: --gpus all
-
     steps:
-      - uses: actions/checkout@v4
-
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v6
+        with:
+          persist-credentials: false
       - name: Install Python test dependencies
         run: python -m pip install 'pytest>=8.2'
-
       - name: Configure
         run: |
-          cmake -S . -B build \
-            -DCMAKE_BUILD_TYPE=Release \
-            -D{{ cookiecutter.module_slug | upper }}_BUILD_TESTING=ON \
-            -DBUILD_ALL=ON
-
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release \
+            -D{{ cookiecutter.module_slug | upper }}_BUILD_TESTING=ON -DBUILD_ALL=ON
       - name: Build
         run: cmake --build build -j"$(nproc)"
 {% if cookiecutter.language == 'cpp' %}
@@ -94,24 +161,7 @@ jobs:
           {{ cookiecutter.module_slug | upper }}_BUILD_DIR=build \
           PYTHONPATH=build/python/lib${PYTHONPATH:+:$PYTHONPATH} \
           python -m pytest tests/python/ -v --tb=short
-
-      - name: Build and install Debian package
-        run: |
-          cpack \
-            --config build/pkg/CPackConfig-{{ cookiecutter.module_repo_name }}.cmake \
-            -B build/packages \
-            -G DEB
-          package=$(find build/packages -maxdepth 1 -type f -name '*.deb' -print -quit)
-          test -n "$package"
-          dpkg-deb --field "$package" Depends \
-            | tr ',' '\n' \
-            | sed 's/^[[:space:]]*//; s/[[:space:]]*$//' \
-            | grep -Fx "holoscan-cuda-13 (>= {{ cookiecutter.holoscan_version }})"
-          apt-get install -y "./$package"
-          dpkg-query --show --showformat='${Status}\n' \
-            {{ cookiecutter.module_repo_name }} | grep -Fx 'install ok installed'
-
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
           name: test-results

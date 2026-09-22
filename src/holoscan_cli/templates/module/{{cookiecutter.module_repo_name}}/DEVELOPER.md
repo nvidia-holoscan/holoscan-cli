@@ -78,6 +78,51 @@ To upgrade the tested development environment, update the CLI pin in both
 
 ---
 
+## GitHub CI
+
+The generated `.github/workflows/ci.yml` runs on pushes to `main`, pull requests
+against `main`, and manual dispatch. Its required hosted jobs are:
+
+- **Lint**: Python lint, metadata schema validation, and C++ formatting when applicable.
+- **CPU build and package**: configure and compile with the CUDA 13 SDK Debian
+  development package in an Ubuntu 24.04 amd64 container, then build a `.deb`.
+- **Debian install**: verify the package name, version, architecture, and SDK
+  dependency, then install it in a fresh Ubuntu container.
+
+The commands are shared in `.github/workflows/scripts/cpu_ci.sh` with the CLI's
+default PR tests. The build environment is described in
+`.github/workflows/Dockerfile.cpu`. It uses
+Debian packages because the SDK Python wheel does not include C++ headers or its
+CMake package. No GPU is requested by the hosted jobs, and they do not execute
+GPU graphs. The dependency test expects the x86_64 CUDA 13 variant; additional
+platforms and CUDA variants need their own build/install matrix.
+
+**GPU build and test** is disabled by default. Configure a self-hosted runner with
+`self-hosted`, `linux`, `x86_64`, and `gpu` labels, Docker GPU support, and access to
+the selected SDK image. Enable `run_gpu` when manually dispatching the workflow,
+or set repository variable `MODULE_CI_RUN_GPU=true` for push/PR events. Manual
+runs use the input value rather than the repository default.
+
+For local CPU build/package reproduction from this module's root:
+
+```bash
+for phase in image configure build package; do
+  bash .github/workflows/scripts/cpu_ci.sh "$phase" || exit
+done
+bash .github/workflows/scripts/cpu_ci.sh verify build/packages
+bash .github/workflows/scripts/cpu_ci.sh install-clean build/packages
+```
+
+The workflow supports optional candidate CLI artifact inputs for CLI development:
+`cli_run_id`, `cli_artifact_id`, `cli_wheel_sha256`, and `cli_version`. Supply all
+four together, using an artifact in the same repository; the wheel must match
+`requirements-cli.txt`. Leave them empty for normal published-CLI installation.
+`e2e_id` only identifies the upstream validation run. Neither path changes the
+module's generated version pin. Build logs and Debian packages are available in
+the workflow's artifacts.
+
+---
+
 ## Building without the Holoscan CLI
 
 ```bash
