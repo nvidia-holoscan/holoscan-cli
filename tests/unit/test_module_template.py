@@ -5,6 +5,8 @@
 
 import importlib.util
 import json
+import shutil
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -71,3 +73,59 @@ def test_generated_gitutils_handles_untracked_files_and_safe_revisions(monkeypat
 def test_direct_cookiecutter_use_cannot_pin_an_arbitrary_cli_release():
     defaults = json.loads((TEMPLATE / "cookiecutter.json").read_text(encoding="utf-8"))
     assert defaults["_holoscan_cli_version"] == "0"
+
+
+@pytest.mark.skipif(shutil.which("cmake") is None, reason="CMake is required")
+@pytest.mark.parametrize(
+    "tests_enabled,gtest_available", [(False, False), (True, False), (True, True)]
+)
+def test_cpp_test_configuration_explains_missing_gtest(tmp_path, tests_enabled, gtest_available):
+    """Exercise the generated CMake test logic with and without GTest discovery."""
+    cpp_template = next(
+        (TEMPLATE / "{{cookiecutter.module_repo_name}}/tests/cpp").glob("*CMakeLists.txt*")
+    )
+    cpp_cmake = "\n".join(cpp_template.read_text(encoding="utf-8").splitlines()[2:])
+    cpp_cmake = cpp_cmake.replace("{{ cookiecutter.module_slug | upper }}", "MY_MOD")
+    cpp_cmake = cpp_cmake.replace("{{ cookiecutter.operator_slug }}", "my_mod_op")
+
+    tests_dir = tmp_path / "tests/cpp"
+    tests_dir.mkdir(parents=True)
+    (tests_dir / "CMakeLists.txt").write_text(cpp_cmake, encoding="utf-8")
+    (tests_dir / "test_operators.cpp").write_text("int main() { return 0; }\n", encoding="utf-8")
+    (tmp_path / "operators").mkdir()
+    (tmp_path / "CMakeLists.txt").write_text(
+        "cmake_minimum_required(VERSION 3.24)\n"
+        "project(module_test_config LANGUAGES CXX)\n"
+        "add_library(op INTERFACE)\n"
+        "add_library(holoscan::my_mod_op ALIAS op)\n"
+        "add_library(holoscan::core ALIAS op)\n"
+        'option(MY_MOD_BUILD_TESTING "Build module tests" ON)\n'
+        "if(MY_MOD_BUILD_TESTING)\n"
+        "  enable_testing()\n"
+        "  add_subdirectory(tests/cpp)\n"
+        "endif()\n",
+        encoding="utf-8",
+    )
+
+    cmake_args = ["cmake", "-S", str(tmp_path), "-B", str(tmp_path / "build")]
+    if not tests_enabled:
+        cmake_args.append("-DMY_MOD_BUILD_TESTING:BOOL=OFF")
+    if gtest_available:
+        cmake_modules = tmp_path / "cmake"
+        cmake_modules.mkdir()
+        (cmake_modules / "FindGTest.cmake").write_text(
+            "set(GTest_FOUND TRUE)\nadd_library(GTest::gtest_main INTERFACE IMPORTED)\n",
+            encoding="utf-8",
+        )
+        cmake_args.append(f"-DCMAKE_MODULE_PATH={cmake_modules}")
+    else:
+        cmake_args.append("-DCMAKE_DISABLE_FIND_PACKAGE_GTest=TRUE")
+
+    result = subprocess.run(cmake_args, capture_output=True, text=True, check=False)
+    output = result.stdout + result.stderr
+    if tests_enabled and not gtest_available:
+        assert result.returncode != 0
+        assert "GTest is required when MY_MOD_BUILD_TESTING is ON" in output
+        assert "-DMY_MOD_BUILD_TESTING:BOOL=OFF" in output
+    else:
+        assert result.returncode == 0, output

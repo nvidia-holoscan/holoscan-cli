@@ -85,6 +85,17 @@ cmake -S . -B build -DBUILD_ALL=ON -D{{ cookiecutter.module_slug | upper }}_BUIL
 cmake --build build -j"$(nproc)"
 ```
 
+`{{ cookiecutter.module_slug | upper }}_BUILD_TESTING` defaults to `ON` for a standalone build
+and `OFF` when this module is included by a parent project. To build without
+tests, configure with `-D{{ cookiecutter.module_slug | upper }}_BUILD_TESTING:BOOL=OFF`.
+The standard `-DBUILD_TESTING=OFF` does not control this module's tests.
+{% if cookiecutter.language == 'cpp' -%}
+C++ tests require GTest (`libgtest-dev` on Debian/Ubuntu). If GTest is missing
+while module tests are enabled, CMake stops with an error that names the test
+option. Install GTest to run the C++ tests, or disable module tests for a
+build without GTest.
+{% endif -%}
+
 {% if cookiecutter.language == 'cpp' -%}
 Run C++ tests:
 

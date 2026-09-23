@@ -105,6 +105,7 @@ int main() { holoscan::make_application<MyApp>()->run(); }
 | CMake | ≥ 3.24 |
 {%- if cookiecutter.language == 'cpp' %}
 | C++ compiler | C++17-capable |
+| GTest | Required only when C++ tests are enabled (`libgtest-dev` on Debian/Ubuntu) |
 {%- endif %}
 | Python | ≥ 3.11 |
 
@@ -112,6 +113,14 @@ int main() { holoscan::make_application<MyApp>()->run(); }
 cmake -S . -B build -DBUILD_ALL=ON -D{{ cookiecutter.module_slug | upper }}_BUILD_TESTING=ON
 cmake --build build -j$(nproc)
 ```
+
+The module's `{{ cookiecutter.module_slug | upper }}_BUILD_TESTING` option defaults to `ON` in a
+standalone build. For a build without tests, set
+`-D{{ cookiecutter.module_slug | upper }}_BUILD_TESTING:BOOL=OFF` when configuring.
+{% if cookiecutter.language == 'cpp' -%}
+With tests enabled, CMake requires GTest and reports how to disable tests if it
+cannot find it. The standard `-DBUILD_TESTING=OFF` does not control this module's tests.
+{% endif -%}
 
 ---
 
