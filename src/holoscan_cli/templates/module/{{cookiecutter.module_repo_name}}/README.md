@@ -100,7 +100,7 @@ int main() { holoscan::make_application<MyApp>()->run(); }
 
 | Requirement | Version |
 | --- | --- |
-| Holoscan SDK | ≥ {{ cookiecutter.holoscan_version }} |
+| Holoscan SDK | ≥ {{ cookiecutter.holoscan_version }}, < 5.0 |
 | CUDA Toolkit | 13.x (matches the Holoscan SDK CUDA pin; the dev `Dockerfile` uses `cuda13`) |
 | CMake | ≥ 3.24 |
 {%- if cookiecutter.language == 'cpp' %}
@@ -112,6 +112,21 @@ int main() { holoscan::make_application<MyApp>()->run(); }
 cmake -S . -B build -DBUILD_ALL=ON -D{{ cookiecutter.module_slug | upper }}_BUILD_TESTING=ON
 cmake --build build -j$(nproc)
 ```
+
+{% if cookiecutter.language == 'cpp' -%}
+The CMake project searches `/opt/nvidia/holoscan` by default. If the SDK is installed
+elsewhere, select its installation prefix explicitly:
+
+```bash
+cmake -S . -B build -DCMAKE_PREFIX_PATH=/path/to/sdk \
+  -DBUILD_ALL=ON -D{{ cookiecutter.module_slug | upper }}_BUILD_TESTING=ON
+```
+
+You can instead point CMake directly to the package config with
+`-Dholoscan_DIR=/path/to/sdk/lib/cmake/holoscan`. Use a fresh build directory
+when changing SDK installations so a cached `holoscan_DIR` cannot select the old SDK.
+
+{% endif -%}
 
 ---
 

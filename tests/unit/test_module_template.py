@@ -35,7 +35,7 @@ def test_cmake_support_keeps_export_and_pybind_contracts():
     initializer = (CMAKE / "pybind11/__init__.py.in").read_text(encoding="utf-8")
 
     assert "PUBLIC holoscan::core" in operator
-    assert "find_dependency(holoscan REQUIRED COMPONENTS core)" in config
+    assert "find_dependency(holoscan REQUIRED)" in config
     assert "holoscan::pybind11" in pybind
     assert "${CMAKE_SUBMODULE_OUT_DIR}" in pybind
     assert "${CMAKE_BINARY_DIR}/${HOLOSCAN_INSTALL_LIB_DIR}" in pybind
