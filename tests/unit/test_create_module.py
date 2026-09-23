@@ -7,8 +7,10 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import shutil
 import subprocess
+import sys
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -261,6 +263,24 @@ def test_packaged_template_creates_a_standalone_module(
     assert 'apt-get install -y "./$package"' in ci_workflow
     assert not (project / "holohub").exists()
     assert not (project / "holoscan").exists()
+
+    # A new scaffold must accept the development-install command before a build exists.
+    env = dict(
+        os.environ,
+        HOLOSCAN_CLI_ROOT=str(project),
+        PYTHONPATH=str(Path(__file__).resolve().parents[2] / "src"),
+    )
+    preview = subprocess.run(
+        [sys.executable, "-m", "holoscan_cli", "install", "--dev", "--dryrun"],
+        cwd=project,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    assert "build 'holoscan-my-mod' if its dev hook is not staged" in preview.stdout
+    assert "holoscan install --dev --local --dryrun" in preview.stdout
+    assert not (project / "build").exists()
 
 
 def test_parser_leaves_template_and_directory_contextual():
