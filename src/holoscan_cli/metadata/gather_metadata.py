@@ -13,12 +13,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import json
 import logging
 import os
 from pathlib import Path
 
-from holoscan_cli.metadata.utils import iter_metadata_paths, resolve_module_name
+from holoscan_cli.metadata.utils import iter_metadata_paths, read_metadata, resolve_module_name
 
 logger = logging.getLogger(__name__)
 
@@ -70,37 +69,31 @@ def gather_metadata(repo_paths: list[str], exclude_paths: list[str] | None = Non
 
     # Iterate over the found metadata files
     for file_path in iter_metadata_paths(repo_paths, exclude_patterns=exclude_paths):
-        with open(file_path, "r") as file:
-            try:
-                entries = json.load(file)
-                entries = entries if type(entries) is list else [entries]
-
-                for data in entries:
-                    try:
-                        schema_type = next(key for key in data.keys() if key in SCHEMA_TYPES)
-                    except StopIteration:
-                        logger.error(
-                            'No valid schema type found in metadata file "%s". Available keys: %s',
-                            file_path,
-                            ", ".join(data.keys()),
-                        )
-                        continue
-
-                    data["project_type"] = schema_type
-                    data["metadata"] = data.pop(schema_type)
-
-                    project_name = extract_project_name(file_path)
-                    if schema_type == "module":
-                        # A Module may be checked out or mounted under a normalized
-                        # workspace path. Its declared identity must not change with
-                        # that directory name.
-                        project_name = resolve_module_name(data["metadata"], project_name)
-                    source_folder = Path(file_path).parent
-                    data["project_name"] = project_name
-                    data["source_folder"] = str(source_folder)
-                    metadata.append(data)
-            except json.decoder.JSONDecodeError as e:
-                logger.error('Error parsing JSON file "%s": %s', file_path, e)
+        try:
+            entries = read_metadata(file_path)
+        except (OSError, ValueError, RecursionError) as exc:
+            logger.error('Invalid metadata file "%s": %s', file_path, exc)
+            continue
+        entries = entries if isinstance(entries, list) else [entries]
+        for data in entries:
+            schema_type = (
+                next((key for key in data if key in SCHEMA_TYPES), None)
+                if isinstance(data, dict)
+                else None
+            )
+            if schema_type is None or not isinstance(data[schema_type], dict):
+                logger.error('No valid project object in metadata file "%s"', file_path)
                 continue
+
+            data["project_type"] = schema_type
+            data["metadata"] = data.pop(schema_type)
+
+            project_name = extract_project_name(file_path)
+            if schema_type == "module":
+                # Module identity must survive renamed checkouts and container mounts.
+                project_name = resolve_module_name(data["metadata"], project_name)
+            data["project_name"] = project_name
+            data["source_folder"] = str(Path(file_path).parent)
+            metadata.append(data)
 
     return metadata

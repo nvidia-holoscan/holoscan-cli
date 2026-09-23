@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Lightweight source-project discovery and standalone Module contracts.
+"""Lightweight source-project discovery and standalone project contracts.
 
 This module is safe to import from :mod:`holoscan_cli.__main__` before the
 project CLI and container classes.
@@ -21,7 +21,6 @@ project CLI and container classes.
 
 from __future__ import annotations
 
-import json
 import os
 import platform
 import re
@@ -31,6 +30,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Mapping, Optional
 
+from holoscan_cli.metadata.utils import METADATA_DIRECTORY_CONFIG, read_metadata
 from holoscan_cli.utils.docker import RESERVED_CONTAINER_ENV_NAMES
 from holoscan_cli.utils.project import (
     ProjectContextError,
@@ -92,6 +92,7 @@ class ProjectContext:
     warnings: tuple[str, ...] = ()
     container_prefix: Optional[str] = None
     workspace_name: Optional[str] = None
+    application_name: Optional[str] = None
 
     @property
     def is_module(self) -> bool:
@@ -99,7 +100,12 @@ class ProjectContext:
         return self.kind == "module"
 
     def profile_environment(self) -> dict[str, str]:
-        """Return Module-derived defaults consumed by existing CLI classes."""
+        """Return project-derived defaults consumed by existing CLI classes."""
+        if self.kind == "application":
+            return {
+                "HOLOSCAN_CLI_ROOT": str(self.root),
+                "HOLOSCAN_CLI_SEARCH_PATH": MODULE_METADATA_FILENAME,
+            }
         if not self.is_module:
             return {"HOLOSCAN_CLI_ROOT": str(self.root)}
 
@@ -177,20 +183,31 @@ def _is_source_root(path: Path) -> bool:
     )
 
 
-def _read_module_metadata(root: Path) -> Optional[dict]:
-    """Read the root Module descriptor from ecosystem ``metadata.json``."""
+def _read_project_metadata(root: Path) -> Optional[dict]:
+    """Read a root descriptor without requiring schema-validation dependencies."""
     metadata_path = root / MODULE_METADATA_FILENAME
-    if not metadata_path.is_file():
-        return None
     try:
-        raw = json.loads(metadata_path.read_text(encoding="utf-8"))
-    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
-        raise ModuleMetadataError(f"Invalid Module metadata at {metadata_path}: {exc}") from exc
-    if not isinstance(raw, dict) or "module" not in raw:
+        raw = read_metadata(metadata_path)
+    except FileNotFoundError:
         return None
-    if not isinstance(raw["module"], dict):
-        raise ModuleMetadataError(f"Module metadata at {metadata_path} must contain an object.")
-    return raw["module"]
+    except (OSError, ValueError, RecursionError) as exc:
+        raise ModuleMetadataError(f"Invalid project metadata at {metadata_path}: {exc}") from exc
+    return raw if isinstance(raw, dict) else None
+
+
+def _is_standalone_application(raw: Optional[dict]) -> bool:
+    """Recognize an application without requiring the optional schema validator."""
+    if raw is None:
+        return False
+    types = {config["schema"] for config in METADATA_DIRECTORY_CONFIG.values()} & raw.keys()
+    application = raw.get("application")
+    if types != {"application"} or not isinstance(application, dict):
+        return False
+    sdk = application.get("holoscan_sdk")
+    return isinstance(sdk, dict) and all(
+        isinstance(value, str) and value.strip()
+        for value in (application.get("name"), sdk.get("minimum_required_version"))
+    )
 
 
 def _read_holoscan_project_config(root: Path) -> tuple[Optional[Path], dict]:
@@ -515,10 +532,15 @@ def _selected_context(
     warnings: tuple[str, ...] = (),
     environ: Optional[Mapping[str, str]] = None,
 ) -> ProjectContext:
-    """Build a selected context without making metadata validity a root requirement."""
+    """Classify a selected root and derive its standalone discovery defaults."""
     try:
-        descriptor = _read_module_metadata(root)
-        if descriptor is not None:
+        raw = _read_project_metadata(root)
+        if raw is not None and "module" in raw:
+            descriptor = raw["module"]
+            if not isinstance(descriptor, dict):
+                raise ModuleMetadataError(
+                    f"Module metadata at {root / MODULE_METADATA_FILENAME} must contain an object."
+                )
             return _build_module_context(
                 root,
                 descriptor,
@@ -529,6 +551,24 @@ def _selected_context(
     except ModuleMetadataError as exc:
         # Keep malformed metadata recoverable for `holoscan lint`.
         warnings = (*warnings, str(exc))
+        return ProjectContext(root=root, kind="source", discovery=discovery, warnings=warnings)
+    if _is_standalone_application(raw):
+        env = os.environ if environ is None else environ
+        application_name = env.get("HOLOSCAN_CLI_APP_NAME", root.name)
+        if (
+            not application_name
+            or application_name in {".", ".."}
+            or "/" in application_name
+            or "\x00" in application_name
+        ):
+            raise ProjectContextError("HOLOSCAN_CLI_APP_NAME must be a directory name.")
+        return ProjectContext(
+            root=root,
+            kind="application",
+            discovery=discovery,
+            application_name=application_name,
+            warnings=warnings,
+        )
     return ProjectContext(root=root, kind="source", discovery=discovery, warnings=warnings)
 
 
@@ -565,21 +605,59 @@ def discover_project_context(
                 environ=env,
             )
 
-    module_fallback: Optional[Path] = None
+    source_roots: list[Path] = []
+    module_roots: list[Path] = []
+    application_roots: list[Path] = []
+    metadata_fallback: Optional[Path] = None
     for candidate in (original_cwd, *original_cwd.parents):
         if _is_source_root(candidate):
+            source_roots.append(candidate)
+        if not (candidate / MODULE_METADATA_FILENAME).is_file():
+            continue
+        if metadata_fallback is None:
+            metadata_fallback = candidate
+        try:
+            raw = _read_project_metadata(candidate)
+            if _is_standalone_application(raw):
+                application_roots.append(candidate)
+            elif raw is not None and isinstance(raw.get("module"), dict):
+                _module_identity(raw["module"], candidate / MODULE_METADATA_FILENAME)
+                module_roots.append(candidate)
+        except ModuleMetadataError:
+            continue
+
+    for candidate in source_roots:
+        # App-local components do not establish a new owning source root. A
+        # conventional ancestor must contain the app in a component directory.
+        if candidate in application_roots:
+            continue
+        if candidate not in module_roots and (
+            any(parent in candidate.parents for parent in module_roots)
+            or any(
+                parent / name in candidate.parents
+                for parent in source_roots
+                for name in METADATA_DIRS
+            )
+        ):
+            continue
+        if (
+            not application_roots
+            or candidate in module_roots
+            or any(candidate / name in application_roots[0].parents for name in METADATA_DIRS)
+        ):
             return _selected_context(
                 candidate,
                 discovery="ancestor",
                 warnings=warnings,
                 environ=env,
             )
-        if module_fallback is None and (candidate / MODULE_METADATA_FILENAME).is_file():
-            module_fallback = candidate
 
-    if module_fallback is not None:
+    # Prefer owning projects over component metadata encountered in a subfolder.
+    project_roots = module_roots or application_roots
+    root = project_roots[0] if project_roots else metadata_fallback
+    if root is not None:
         return _selected_context(
-            module_fallback,
+            root,
             discovery="module-fallback",
             warnings=warnings,
             environ=env,

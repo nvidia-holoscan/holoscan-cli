@@ -26,7 +26,7 @@ Per-repo wrappers install this package and delegate to `holoscan`, layering on t
 Common env vars:
 
 - `HOLOSCAN_CLI_ROOT` — repo root
-- `HOLOSCAN_CLI_SEARCH_PATH` — subdirs to scan for `metadata.json`
+- `HOLOSCAN_CLI_SEARCH_PATH` — directories or exact `metadata.json` files to discover
 - `HOLOSCAN_CLI_PATH_PREFIX` — placeholder prefix in metadata templates
 - `HOLOSCAN_CLI_REPO_PREFIX` — container image name prefix
 - `HOLOSCAN_CLI_CONTAINER_PREFIX` — standalone Module image name prefix
