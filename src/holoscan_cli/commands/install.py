@@ -16,6 +16,7 @@
 """``holoscan install`` — install a built source project (locally or in a container)."""
 
 import argparse
+import json
 import os
 import shlex
 from pathlib import Path
@@ -27,7 +28,11 @@ from holoscan_cli.container.parsers import (
     add_docker_build_args,
     add_local_container_args,
 )
-from holoscan_cli.utils.docker import apply_container_cli_overrides, get_entrypoint_command_args
+from holoscan_cli.utils.docker import (
+    apply_container_cli_overrides,
+    get_entrypoint_command_args,
+    resolve_cli_docker_opts,
+)
 from holoscan_cli.utils.holohub import (
     build_holohub_path_mapping,
     check_skip_builds,
@@ -61,9 +66,9 @@ def register_install_parser(
         "--dev",
         action="store_true",
         help=(
-            "Install the dev hook staged by a Holoscan Module build, so "
+            "Build a standalone Module if needed and install its dev hook, so "
             "`import holoscan.<module>` resolves to the live build tree without "
-            "a wheel install."
+            "a wheel install. Container Python is the default; use --local for host Python."
         ),
     )
     parser.add_argument(
@@ -117,6 +122,15 @@ def handle_install(cli, args: argparse.Namespace) -> None:
     from holoscan_cli.cli import in_container_cli_command
 
     if args.dev:
+        module_name = _standalone_module_name(cli)
+        if (
+            module_name
+            and not getattr(args, "local", False)
+            and not is_env_request_local_build()
+            and getattr(args, "site_dir", None) is None
+        ):
+            _handle_install_dev_in_container(cli, args, module_name)
+            return
         _handle_install_dev(cli, args)
         return
 
@@ -289,6 +303,108 @@ def _dev_hook_slug(project: str) -> str:
     return slug
 
 
+def _standalone_module_name(cli) -> str | None:
+    """Return the identity of a standalone Module source root, if any."""
+    root = getattr(cli, "HOLOHUB_ROOT", None)
+    if root is None:
+        return None
+    try:
+        metadata = json.loads((Path(root) / "metadata.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    module = metadata.get("module") if isinstance(metadata, dict) else None
+    name = module.get("name") if isinstance(module, dict) else None
+    return name if isinstance(name, str) and name else None
+
+
+def _handle_install_dev_in_container(cli, args: argparse.Namespace, module_name: str) -> None:
+    """Run the Module dev-hook operation in the default development container."""
+    from holoscan_cli.cli import in_container_cli_command
+
+    if args.project and _dev_hook_slug(args.project) != _dev_hook_slug(module_name):
+        fatal(f"Module '{args.project}' is not the current standalone Module '{module_name}'.")
+
+    if args.dryrun and not args.uninstall:
+        print(
+            f"In container: build '{module_name}' if its dev hook is not staged, "
+            "then install it."
+        )
+
+    container = cli.make_project_container(project_name=module_name)
+    apply_container_cli_overrides(args, container)
+    container.dryrun = args.dryrun
+    container.verbose = args.verbose
+    command = [*shlex.split(in_container_cli_command()), "install", "--dev", "--local"]
+    if args.project:
+        command.append(args.project)
+    if args.uninstall:
+        command.append("--uninstall")
+    if args.dryrun:
+        command.append("--dryrun")
+    if args.verbose:
+        command.append("--verbose")
+    for option, value in (
+        ("--build-type", resolve_effective_build_type(getattr(args, "build_type", None))),
+        ("--language", getattr(args, "language", None)),
+        ("--parallel", getattr(args, "parallel", None)),
+    ):
+        if value is not None:
+            command.extend([option, str(value)])
+    if getattr(args, "with_operators", None) is not None:
+        command.append(f"--build-with={args.with_operators}")
+    for configure_arg in getattr(args, "configure_args", None) or []:
+        command.append(f"--configure-args={configure_arg}")
+    if args.build_dir is not None and not args.uninstall:
+        root = Path(cli.HOLOHUB_ROOT).resolve()
+        build_dir = args.build_dir.resolve()
+        try:
+            relative = build_dir.relative_to(root)
+        except ValueError:
+            fatal(
+                f"--build-dir {build_dir} is outside the Module source mount. "
+                "Use --local for a host build directory."
+            )
+        command.extend(
+            ["--build-dir", str(Path("/workspace") / container.WORKSPACE_NAME / relative)]
+        )
+
+    skip_docker_build, _ = check_skip_builds(args)
+    if not skip_docker_build:
+        container.build(
+            docker_file=getattr(args, "docker_file", None),
+            base_img=getattr(args, "base_img", None),
+            img=getattr(args, "img", None),
+            no_cache=getattr(args, "no_cache", False),
+            build_args=getattr(args, "build_args", None),
+            mode_build_args=None,
+            cuda_version=getattr(args, "cuda", None),
+            extra_scripts=getattr(args, "extra_scripts", []),
+        )
+    image = container.resolve_run_image(getattr(args, "img", None))
+    docker_opts = container.compose_run_args(docker_opts=resolve_cli_docker_opts(args))
+    docker_opts_extra, extra_args = get_entrypoint_command_args(
+        image, shlex.join(command), docker_opts, dry_run=args.dryrun
+    )
+    if docker_opts_extra:
+        docker_opts = f"{docker_opts} {docker_opts_extra}".strip()
+    container.run(
+        img=image,
+        local_sdk_root=getattr(args, "local_sdk_root", None),
+        enable_x11=getattr(args, "enable_x11", True),
+        ssh_x11=getattr(args, "ssh_x11", False),
+        use_tini=getattr(args, "init", False),
+        persistent=getattr(args, "persistent", False),
+        nsys_profile=getattr(args, "nsys_profile", False),
+        nsys_location=getattr(args, "nsys_location", ""),
+        as_root=getattr(args, "as_root", False),
+        effective_docker_opts=docker_opts,
+        forward_env=getattr(args, "forward_env", None),
+        add_volumes=getattr(args, "add_volume", None),
+        enable_mps=getattr(args, "mps", False),
+        extra_args=extra_args,
+    )
+
+
 def _handle_install_dev(cli, args: argparse.Namespace) -> None:
     """Install or remove staged Holoscan Module namespace dev hooks."""
     import shutil as _shutil
@@ -346,30 +462,43 @@ def _handle_install_dev(cli, args: argparse.Namespace) -> None:
                 print(f"No dev hook installed for '{slug}'.")
         return
 
+    module_name = _standalone_module_name(cli)
     if args.build_dir is not None:
         search_dirs = [args.build_dir.resolve()]
         if not search_dirs[0].is_dir():
             fatal(f"--build-dir {search_dirs[0]} is not a directory.")
     else:
         build_parent = cli.DEFAULT_BUILD_PARENT_DIR
-        if not build_parent.is_dir():
-            fatal(f"No build directory at {build_parent}. Run a build first, or pass --build-dir.")
-        search_dirs = [d for d in build_parent.iterdir() if d.is_dir()]
+        search_dirs = (
+            [d for d in build_parent.iterdir() if d.is_dir()] if build_parent.is_dir() else []
+        )
 
-    by_slug: dict[str, tuple[Path, float]] = {}
-    for build_dir in search_dirs:
-        for helper in build_dir.glob("holoscan_*_dev.py"):
-            if not helper.is_file():
-                continue
-            slug = helper.stem.removeprefix("holoscan_").removesuffix("_dev")
-            if not slug:
-                continue
-            pth = build_dir / f"holoscan-{slug.replace('_', '-')}-dev.pth"
-            if not pth.exists():
-                continue
-            mtime = helper.stat().st_mtime
-            if slug not in by_slug or by_slug[slug][1] < mtime:
-                by_slug[slug] = (build_dir, mtime)
+    by_slug = _find_dev_hooks(search_dirs)
+    module_slug = _dev_hook_slug(module_name) if module_name else None
+    requested_slug = _dev_hook_slug(args.project) if args.project else module_slug
+    if (
+        module_name
+        and requested_slug == module_slug
+        and module_slug not in by_slug
+        and args.build_dir is None
+    ):
+        build_dir, _ = build_project_locally(
+            cli,
+            project_name=module_name,
+            language=getattr(args, "language", None),
+            dryrun=dryrun,
+            verbose=getattr(args, "verbose", False),
+            build_type=getattr(args, "build_type", None),
+            with_operators=getattr(args, "with_operators", None),
+            parallel=getattr(args, "parallel", None),
+            configure_args=getattr(args, "configure_args", None),
+            local_sdk_root=getattr(args, "local_sdk_root", None),
+        )
+        if dryrun:
+            print(f"Would build '{module_name}' and install its staged dev hook from {build_dir}")
+            return
+        search_dirs = [d for d in cli.DEFAULT_BUILD_PARENT_DIR.iterdir() if d.is_dir()]
+        by_slug = _find_dev_hooks(search_dirs)
 
     if args.project:
         target = _dev_hook_slug(args.project)
@@ -382,6 +511,11 @@ def _handle_install_dev(cli, args: argparse.Namespace) -> None:
             )
 
     if not by_slug:
+        if not search_dirs:
+            fatal(
+                f"No build directory at {cli.DEFAULT_BUILD_PARENT_DIR}. "
+                "Run a Module build first, or pass --build-dir."
+            )
         fatal(
             f"No staged dev hooks (holoscan_*_dev.py) found under "
             f"{', '.join(str(d) for d in search_dirs)}. Run a build of a "
@@ -440,3 +574,21 @@ def _handle_install_dev(cli, args: argparse.Namespace) -> None:
         else:
             print('Verify with: python -c "import holoscan; print(holoscan.__path__)"')
         print(f"To remove: {Path(cli.script_name).name} install --dev --uninstall")
+
+
+def _find_dev_hooks(search_dirs: list[Path]) -> dict[str, tuple[Path, float]]:
+    by_slug: dict[str, tuple[Path, float]] = {}
+    for build_dir in search_dirs:
+        for helper in build_dir.glob("holoscan_*_dev.py"):
+            if not helper.is_file():
+                continue
+            slug = helper.stem.removeprefix("holoscan_").removesuffix("_dev")
+            if not slug:
+                continue
+            pth = build_dir / f"holoscan-{slug.replace('_', '-')}-dev.pth"
+            if not pth.exists():
+                continue
+            mtime = helper.stat().st_mtime
+            if slug not in by_slug or by_slug[slug][1] < mtime:
+                by_slug[slug] = (build_dir, mtime)
+    return by_slug
