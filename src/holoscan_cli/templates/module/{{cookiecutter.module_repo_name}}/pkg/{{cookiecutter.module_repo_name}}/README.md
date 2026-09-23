@@ -26,12 +26,12 @@ The generated Debian package selects the dependency matching the target
 architecture and the CUDA 13 Holoscan SDK image selected by the project
 `Dockerfile`:
 
-- x86_64: `holoscan-cuda-13 (>= {{ cookiecutter.holoscan_version }})`
-- aarch64 (Jetson Thor): `holoscan (>= {{ cookiecutter.holoscan_version }})`
+- x86_64: `holoscan-cuda-13 (>= {{ cookiecutter.holoscan_version }}), holoscan-cuda-13 (<< 5.0)`
+- aarch64 (Jetson Thor): `holoscan (>= {{ cookiecutter.holoscan_version }}), holoscan (<< 5.0)`
 
 Holoscan SDK 4.x also supports CUDA 12 on compatible platforms. To target CUDA
 12 on x86_64, change `HOLOSCAN_DEB_DEPENDENCY` in this directory's
-`CMakeLists.txt` to `holoscan-cuda-12 (>= {{ cookiecutter.holoscan_version }})`
+`CMakeLists.txt` to `holoscan-cuda-12 (>= {{ cookiecutter.holoscan_version }}), holoscan-cuda-12 (<< 5.0)`
 and select a matching CUDA 12 SDK image and CLI `--cuda 12` configuration. Keep
 these settings aligned so package installation cannot select a different SDK
 variant from the one used to build and test the module. Add any other runtime
