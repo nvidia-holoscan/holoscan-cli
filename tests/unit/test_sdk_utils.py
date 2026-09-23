@@ -4,11 +4,164 @@
 from __future__ import annotations
 
 import subprocess
+from io import BytesIO
 from types import SimpleNamespace
+from urllib.error import URLError
 
 import pytest
 
 from holoscan_cli.utils import sdk
+
+
+@pytest.mark.parametrize(
+    "minimum,maximum,cuda,expected",
+    [
+        ("4.0", None, "13", "4.10.0"),
+        ("4.0.0", "4.10.0", "13", "4.9.0"),
+        ("4.0", "4.9", "13", "4.2.0"),
+        ("4.0.0.0", "4.9.0.0", "13", "4.2.0"),
+        ("4.0.0", None, "12", "4.1.0"),
+        ("3.5", "3.6.1", "12", "3.6.0"),
+    ],
+)
+def test_select_sdk_version_uses_latest_published_compatible_image(
+    monkeypatch, minimum, maximum, cuda, expected
+):
+    monkeypatch.setattr(sdk, "get_host_gpu", lambda: "dgpu")
+    monkeypatch.setattr(
+        sdk,
+        "get_holoscan_image_tags",
+        lambda: (
+            "v4.9.0-cuda13",
+            "v4.10.0-cuda13",
+            "v4.0.0-cuda13",
+            "v4.2.0-cuda13",
+            "v4.1.0-cuda12-dgpu",
+            "v3.6.0-dgpu",
+            "v5.0.0-rc1-cuda13",
+            "latest",
+            "sha256-example.sig",
+            "v04.12.0-cuda13",
+        ),
+        raising=False,
+    )
+    assert sdk.select_sdk_version(minimum, maximum, cuda) == expected
+
+
+@pytest.mark.parametrize("minimum,maximum", [("4.0", "4.2"), ("4.2", None)])
+def test_select_sdk_version_excludes_both_boundaries(monkeypatch, minimum, maximum):
+    monkeypatch.setattr(
+        sdk,
+        "get_holoscan_image_tags",
+        lambda: ("v4.0.0-cuda13", "v4.2.0-cuda13"),
+        raising=False,
+    )
+    with pytest.raises(ValueError, match="No published Holoscan SDK image"):
+        sdk.select_sdk_version(minimum, maximum, "13")
+
+
+@pytest.mark.parametrize(
+    "cuda,gpu,maximum,expected",
+    [
+        ("12", "igpu", "3.7", "3.6.0"),
+        ("12", "dgpu", "3.7", "3.6.0"),
+        ("13", "dgpu", "3.7", "3.6.1"),
+        ("13", "igpu", "3.7", None),
+        ("13", "dgpu", "3.6.1", None),
+    ],
+)
+def test_automatic_legacy_images_match_requested_cuda_and_gpu(
+    monkeypatch, cuda, gpu, maximum, expected
+):
+    monkeypatch.setattr(sdk, "get_host_gpu", lambda: gpu)
+    monkeypatch.setattr(
+        sdk, "get_holoscan_image_tags", lambda: ("v3.6.0-igpu", "v3.6.0-dgpu", "v3.6.1-cuda13-dgpu")
+    )
+    if expected is None:
+        with pytest.raises(ValueError, match="No published Holoscan SDK image"):
+            sdk.select_sdk_version("3.5", maximum, cuda)
+    else:
+        assert sdk.select_sdk_version("3.5", maximum, cuda) == expected
+
+
+@pytest.mark.parametrize(
+    "minimum,maximum",
+    [("4.2", "4.2"), ("4.2", "4.0"), ("bad", None), ("4.0", "bad"), ("4.0", 5)],
+)
+def test_select_sdk_version_rejects_invalid_bounds_without_network(monkeypatch, minimum, maximum):
+    monkeypatch.setattr(
+        sdk,
+        "get_holoscan_image_tags",
+        lambda: pytest.fail("unexpected registry lookup"),
+        raising=False,
+    )
+    with pytest.raises(ValueError, match="version"):
+        sdk.select_sdk_version(minimum, maximum, "13")
+
+
+def test_get_holoscan_image_tags_uses_anonymous_auth_and_caches(monkeypatch):
+    import json
+
+    def urlopen(request, *, timeout):
+        assert timeout > 0
+        if isinstance(request, str):
+            assert request.startswith("https://nvcr.io/proxy_auth?")
+            return BytesIO(b'{"token": "anonymous-token"}')
+        assert request.get_header("Authorization") == "Bearer anonymous-token"
+        assert request.full_url == "https://nvcr.io/v2/nvidia/clara-holoscan/holoscan/tags/list"
+        result = BytesIO(json.dumps({"tags": ["v4.2.0-cuda13", "v4.0.0-cuda13"]}).encode())
+        result.headers = {}
+        return result
+
+    monkeypatch.setattr(sdk, "urlopen", urlopen, raising=False)
+    sdk.get_holoscan_image_tags.cache_clear()
+    try:
+        assert sdk.get_holoscan_image_tags() == ("v4.2.0-cuda13", "v4.0.0-cuda13")
+        monkeypatch.setattr(sdk, "urlopen", lambda *a, **k: pytest.fail("lookup was not cached"))
+        assert sdk.get_holoscan_image_tags() == ("v4.2.0-cuda13", "v4.0.0-cuda13")
+    finally:
+        sdk.get_holoscan_image_tags.cache_clear()
+
+
+def test_registry_failure_reports_how_to_pin_an_image(monkeypatch):
+    def unavailable(*args, **kwargs):
+        raise URLError("offline")
+
+    monkeypatch.setattr(sdk, "urlopen", unavailable, raising=False)
+    sdk.get_holoscan_image_tags.cache_clear()
+    with pytest.raises(ValueError, match="--base-img"):
+        sdk.select_sdk_version("4.0", "5.0", "13")
+
+
+def test_registry_pagination_includes_newer_versions(monkeypatch):
+    def urlopen(request, *, timeout):
+        if isinstance(request, str):
+            return BytesIO(b'{"token": "anonymous-token"}')
+        if "?last=" not in request.full_url:
+            result = BytesIO(b'{"tags": ["v4.0.0-cuda13"]}')
+            result.headers = {"Link": '<?last=v4.0.0-cuda13>; rel="next"'}
+        else:
+            assert request.full_url.endswith("/tags/list?last=v4.0.0-cuda13")
+            result = BytesIO(b'{"tags": ["v4.2.0-cuda13"]}')
+            result.headers = {}
+        return result
+
+    monkeypatch.setattr(sdk, "urlopen", urlopen)
+    assert sdk.select_sdk_version("4.0", "5.0", "13") == "4.2.0"
+
+
+@pytest.mark.parametrize("payload", [b"not json", b"{}", b'{"tags": null}', b'{"tags": [1]}'])
+def test_malformed_registry_response_reports_actionable_error(monkeypatch, payload):
+    def urlopen(request, *, timeout):
+        if isinstance(request, str):
+            return BytesIO(b'{"token": "anonymous-token"}')
+        result = BytesIO(payload)
+        result.headers = {}
+        return result
+
+    monkeypatch.setattr(sdk, "urlopen", urlopen)
+    with pytest.raises(ValueError, match="Unable to list published Holoscan SDK images"):
+        sdk.get_holoscan_image_tags()
 
 
 @pytest.fixture(autouse=True)
@@ -18,6 +171,7 @@ def _clear_sdk_caches():
         sdk.get_host_gpu,
         sdk.get_default_cuda_version,
         sdk.get_host_arch,
+        sdk.get_holoscan_image_tags,
     ):
         fn.cache_clear()
     yield
@@ -26,6 +180,7 @@ def _clear_sdk_caches():
         sdk.get_host_gpu,
         sdk.get_default_cuda_version,
         sdk.get_host_arch,
+        sdk.get_holoscan_image_tags,
     ):
         fn.cache_clear()
 

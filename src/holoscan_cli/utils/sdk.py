@@ -16,6 +16,7 @@
 """Holoscan SDK selection and host GPU/CUDA detection helpers."""
 
 import functools
+import json
 import os
 import platform
 import re
@@ -24,6 +25,8 @@ import subprocess
 import sys
 from pathlib import Path
 from typing import Callable, Mapping, Optional, Union
+from urllib.parse import urljoin
+from urllib.request import Request, urlopen
 
 from holoscan_cli.utils.io import fatal, resolve, run_info_command, warn
 from holoscan_cli.utils.text import parse_semantic_version
@@ -39,6 +42,93 @@ _SDK_VERSION_CONFIG_NAMES = (
     "holoscan-config-version.cmake",
     "HoloscanConfigVersion.cmake",
 )
+
+
+@functools.cache
+def get_holoscan_image_tags() -> tuple[str, ...]:
+    """Read public NGC tags once per invocation, without requiring credentials."""
+    endpoint = "https://nvcr.io/v2/nvidia/clara-holoscan/holoscan/tags/list"
+    try:
+        with urlopen(
+            "https://nvcr.io/proxy_auth?scope=repository:nvidia/clara-holoscan/holoscan:pull",
+            timeout=10,
+        ) as response:
+            token = json.load(response)["token"]
+        tags = []
+        url = endpoint
+        visited = set()
+        while url:
+            if url in visited or url.split("?", 1)[0] != endpoint:
+                raise ValueError("Invalid registry pagination link")
+            visited.add(url)
+            request = Request(url, headers={"Authorization": f"Bearer {token}"})
+            with urlopen(request, timeout=10) as response:
+                page = json.load(response)["tags"]
+                if not isinstance(page, list) or not all(isinstance(tag, str) for tag in page):
+                    raise ValueError("Invalid registry tags")
+                tags.extend(page)
+                link = re.search(r'<([^>]+)>;\s*rel="next"', response.headers.get("Link", ""))
+                url = urljoin(endpoint, link[1]) if link else ""
+        return tuple(tags)
+    except (OSError, ValueError, KeyError, TypeError) as exc:
+        raise ValueError(
+            "Unable to list published Holoscan SDK images. Check registry access or pin "
+            "an image with --base-img or a version with HOLOSCAN_CLI_BASE_SDK_VERSION."
+        ) from exc
+
+
+def parse_sdk_version(value: str) -> tuple[int, ...]:
+    """Compare numeric metadata versions, including the supported MAJOR.MINOR form."""
+    if not isinstance(value, str) or not re.fullmatch(r"(0|[1-9]\d*)(\.(0|[1-9]\d*))+", value):
+        raise ValueError(f"Invalid Holoscan SDK version: {value!r}.")
+    parts = tuple(map(int, value.split(".")))
+    while len(parts) > 3 and parts[-1] == 0:
+        parts = parts[:-1]
+    return parts + (0,) * (3 - len(parts))
+
+
+def select_sdk_version(
+    minimum_required_version: str,
+    maximum_required_version: Optional[str] = None,
+    cuda_version: Optional[Union[str, int]] = None,
+) -> str:
+    """Select the newest published stable image strictly inside the metadata bounds."""
+    minimum = parse_sdk_version(minimum_required_version)
+    maximum = (
+        parse_sdk_version(maximum_required_version)
+        if maximum_required_version is not None
+        else None
+    )
+    if maximum is not None and maximum <= minimum:
+        raise ValueError("maximum_required_version must exceed minimum_required_version.")
+    candidates = []
+    cuda_major = str(cuda_version if cuda_version is not None else get_default_cuda_version())
+    for tag in get_holoscan_image_tags():
+        match = re.fullmatch(r"v(\d+\.\d+\.\d+)-(.+)", tag)
+        if not match:
+            continue
+        version, cuda_tag = match.groups()
+        try:
+            key = parse_sdk_version(version)
+        except ValueError:
+            continue
+        if key <= minimum or (maximum is not None and key >= maximum):
+            continue
+        # Legacy unqualified tags use CUDA 12; SDK 3.6.1 only ships CUDA 13/dGPU.
+        # https://docs.nvidia.com/holoscan/archive/3.6.1/sdk_installation.html
+        if key < (3, 6, 1) and cuda_major != "12":
+            continue
+        if key == (3, 6, 1) and (cuda_major != "13" or get_host_gpu() != "dgpu"):
+            continue
+        if cuda_tag == get_cuda_tag(cuda_version, version):
+            candidates.append(version)
+    if not candidates:
+        upper = f" < {maximum_required_version}" if maximum is not None else ""
+        raise ValueError(
+            f"No published Holoscan SDK image satisfies {minimum_required_version} < SDK{upper} "
+            "for the selected CUDA/GPU variant. Adjust the metadata bounds or pass --base-img."
+        )
+    return max(candidates, key=parse_sdk_version)
 
 
 def normalize_arch(value: str) -> str:

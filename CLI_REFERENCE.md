@@ -100,6 +100,11 @@ Build and run use containers by default. `--local` selects native execution;
 `--no-docker-build` reuses an existing image. `run --no-local-build` also skips
 building the application, so use it only when the required artifacts exist.
 
+Automatic SDK base images use the latest published release inside the metadata's
+minimum and optional maximum version bounds. See
+[SDK base image selection](CONFIGURATION.md#automatic-sdk-base-images) for
+boundary semantics, registry access, and explicit overrides.
+
 For dash-leading values, use `=`, for example `--configure-args=-DFEATURE=ON`.
 `--build-with` replaces the mode's operator selection; `--configure-args`
 appends to its CMake options. Docker argument layers are described in

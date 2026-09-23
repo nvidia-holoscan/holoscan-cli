@@ -22,6 +22,7 @@ in ``commands/create.py``.
 """
 
 import json
+from pathlib import Path
 
 import pytest
 
@@ -45,6 +46,19 @@ def test_validate_json_rejects_violations():
     # `msg` here is a `jsonschema.exceptions.ValidationError`; str-ifying
     # it gives the violation summary.
     assert "required" in str(msg).lower() or "validation" in str(msg).lower()
+
+
+@pytest.mark.parametrize(
+    "maximum,valid", [("5.0", True), ("5.0.0", True), (5, False), ("bad", False)]
+)
+def test_maximum_sdk_version_uses_the_version_schema(maximum, valid):
+    fixture = (
+        Path(__file__).parents[1] / "fixtures/holohub_smoke/applications/smoke_app/metadata.json"
+    )
+    metadata = json.loads(fixture.read_text())
+    metadata["application"]["holoscan_sdk"]["maximum_required_version"] = maximum
+    ok, message = metadata_validator.validate_json(metadata, "applications")
+    assert ok is valid, str(message)
 
 
 def test_validate_json_rejects_invalid_schema_file(tmp_path, monkeypatch):

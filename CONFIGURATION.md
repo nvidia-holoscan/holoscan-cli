@@ -70,6 +70,38 @@ dependencies. Python apps also need the SDK's Python bindings. Add `--local` to
 run on the host. `holoscan test` adds the SDK to `CMAKE_PREFIX_PATH`, preserving
 existing prefixes unless explicit CMake options override them.
 
+### Automatic SDK base images
+
+The `holoscan_sdk` object in `metadata.json` accepts an optional
+`maximum_required_version`, using the same numeric version format as
+`minimum_required_version`:
+
+```json
+"holoscan_sdk": {
+  "minimum_required_version": "4.0.0",
+  "maximum_required_version": "5.0.0",
+  "tested_versions": ["4.6.0"]
+}
+```
+
+When no image or SDK version is pinned, container builds select the newest
+published stable Holoscan SDK image for the selected CUDA/GPU variant satisfying
+`minimum_required_version < SDK < maximum_required_version`. Omitting the maximum
+removes the upper bound. `tested_versions` does not restrict selection.
+The selected project's requirements and its owning Module's requirements both
+apply when present.
+
+Selection queries NGC and caches its tags for the current CLI process. An
+unavailable registry or a range with no matching image produces an error.
+`--base-img`, `HOLOSCAN_CLI_BASE_SDK_VERSION`, configured base images, and base
+image format overrides preserve their existing precedence and skip this lookup.
+Use these overrides for pinned or offline workflows. Metadata without SDK
+requirements retains the existing behavior.
+
+Existing metadata remains valid. Automatic defaults now select the latest
+compatible image instead of using the minimum version as an exact pin; strict
+bounds exclude releases equal to either endpoint.
+
 ## `pyproject.toml` settings
 
 Standalone Modules can set defaults in `[tool.holoscan]`. Other TOML tables are

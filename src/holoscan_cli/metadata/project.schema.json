@@ -84,6 +84,9 @@
         "minimum_required_version": {
           "$ref": "#/$defs/version"
         },
+        "maximum_required_version": {
+          "$ref": "#/$defs/version"
+        },
         "tested_versions": {
           "$ref": "#/$defs/version_list"
         }

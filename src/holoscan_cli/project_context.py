@@ -93,6 +93,7 @@ class ProjectContext:
     container_prefix: Optional[str] = None
     workspace_name: Optional[str] = None
     application_name: Optional[str] = None
+    sdk_requirements: Optional[dict] = None
 
     @property
     def is_module(self) -> bool:
@@ -511,6 +512,7 @@ def _build_module_context(
         container_prefix=profile.get("container_prefix"),
         workspace_name=profile.get("workspace_name"),
         base_sdk_version=metadata_sdk_version,
+        sdk_requirements=descriptor.get("holoscan_sdk"),
         dockerfile=dockerfile,
         target_arch=profile.get("target_arch"),
         cuda=profile.get("cuda"),
@@ -567,6 +569,7 @@ def _selected_context(
             kind="application",
             discovery=discovery,
             application_name=application_name,
+            sdk_requirements=raw["application"]["holoscan_sdk"],
             warnings=warnings,
         )
     return ProjectContext(root=root, kind="source", discovery=discovery, warnings=warnings)
