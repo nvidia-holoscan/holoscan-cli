@@ -25,6 +25,37 @@ holoscan --project-root /path/to/holoscan-my-sensor list --json
 See [configuration](CONFIGURATION.md) for root selection, project settings,
 SDK discovery, environment variables, and option precedence.
 
+### Standalone applications
+
+An application can keep its Holoscan `metadata.json` directly in its project
+directory, without an `applications/` parent or a Module descriptor:
+
+```text
+my_app/
+├── metadata.json
+├── CMakeLists.txt
+└── ...
+```
+
+From `my_app/` or one of its child directories:
+
+```bash
+holoscan list --json
+holoscan build my_app --local --dryrun --verbose
+holoscan run my_app --local --dryrun --verbose
+```
+
+The project selector is the directory name (`my_app`), while `application.name`
+remains its display name. The CLI preserves the selector when entering a
+container whose workspace directory has a different name. Builds and runs
+still require the application's build files, run configuration, and SDK.
+
+Standalone discovery includes only the root `metadata.json`. Nested applications
+retain their enclosing Module's context; use `--project-root` to select the
+application explicitly.
+See [metadata discovery](CONFIGURATION.md#metadata-discovery) for recognition
+rules, file-size limits, and search-path overrides.
+
 ## Commands
 
 | Command | Purpose |

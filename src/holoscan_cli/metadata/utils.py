@@ -14,7 +14,9 @@
 # limitations under the License.
 # Utility helpers shared across metadata consumers.
 
+import json
 import os
+import stat
 from collections.abc import Iterable, Iterator, Sequence
 from pathlib import Path
 
@@ -52,6 +54,24 @@ SCHEMA_DIR = Path(__file__).resolve().parent
 BASE_SCHEMA_PATH = SCHEMA_DIR / "project.schema.json"
 
 DEFAULT_INCLUDE_PATHS = tuple(METADATA_DIRECTORY_CONFIG.keys())
+MAX_METADATA_BYTES = 1024 * 1024
+
+
+def read_metadata(path: str | os.PathLike):
+    """Read at most 1 MiB of JSON from a regular, non-symlink metadata file."""
+    # Nonblocking open prevents a substituted FIFO from hanging discovery.
+    flags = os.O_RDONLY | os.O_NONBLOCK | os.O_NOFOLLOW
+    with os.fdopen(os.open(path, flags), "rb") as file:
+        info = os.fstat(file.fileno())
+        if not stat.S_ISREG(info.st_mode):
+            raise ValueError("metadata must be a regular file")
+        if info.st_size > MAX_METADATA_BYTES:
+            raise ValueError("metadata exceeds the 1 MiB limit")
+        # Bound the read too: the file may grow after fstat().
+        content = file.read(MAX_METADATA_BYTES + 1)
+        if len(content) > MAX_METADATA_BYTES:
+            raise ValueError("metadata exceeds the 1 MiB limit")
+    return json.loads(content.decode("utf-8"))
 
 
 def get_schema_path(directory: str | os.PathLike) -> Path:
