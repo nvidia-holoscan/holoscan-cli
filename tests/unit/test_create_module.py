@@ -12,6 +12,11 @@ import subprocess
 from pathlib import Path
 from types import SimpleNamespace
 
+try:
+    import tomllib
+except ModuleNotFoundError:  # Python 3.10
+    import tomli as tomllib
+
 import pytest
 
 from holoscan_cli.commands import create
@@ -231,6 +236,7 @@ def test_packaged_template_creates_a_standalone_module(
     assert (project / generated_source).is_file()
     assert (project / "cmake/HoloHubConfigHelpers.cmake").is_file()
     assert active_requirements == [f"holoscan-cli=={create.__version__}"]
+    assert tomllib.loads(pyproject)["project"]["dependencies"] == ["holoscan-cu13>=4.5.0"]
     assert "--extra-index-url https://pypi.nvidia.com" in requirement
     assert 'requires-python = ">=3.11"' in pyproject
     assert 'holoscan-cli = { index = "nvidia" }' in pyproject

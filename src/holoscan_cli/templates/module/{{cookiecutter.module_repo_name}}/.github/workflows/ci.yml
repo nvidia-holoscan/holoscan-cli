@@ -74,7 +74,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Install Python test dependencies
-        run: python -m pip install 'pytest>=8.2'
+        run: python -m pip install 'pytest>=8.2' build
 
       - name: Configure
         run: |
@@ -110,6 +110,40 @@ jobs:
           apt-get install -y "./$package"
           dpkg-query --show --showformat='${Status}\n' \
             {{ cookiecutter.module_repo_name }} | grep -Fx 'install ok installed'
+      - name: Build and install wheel in a clean environment
+        run: |
+          python -m build --wheel
+          wheel=$(find dist -maxdepth 1 -name '*.whl' -print -quit)
+          test -n "$wheel"
+          python - "$wheel" <<'PY'
+          import re
+          import sys
+          import zipfile
+          from email.parser import Parser
+
+          with zipfile.ZipFile(sys.argv[1]) as archive:
+              metadata_path = next(
+                  name for name in archive.namelist() if name.endswith(".dist-info/METADATA")
+              )
+              metadata = Parser().parsestr(archive.read(metadata_path).decode())
+          assert any(
+              re.fullmatch(r"holoscan-cu13\s*>=\s*{{ cookiecutter.holoscan_version }}", spec)
+              for spec in metadata.get_all("Requires-Dist", [])
+          ), metadata.get_all("Requires-Dist", [])
+          PY
+          python -m venv /tmp/holoscan-module-wheel-check
+          /tmp/holoscan-module-wheel-check/bin/python -m pip install "$wheel"
+          /tmp/holoscan-module-wheel-check/bin/python -m pip check
+          /tmp/holoscan-module-wheel-check/bin/python - <<'PY'
+          from importlib.metadata import distribution
+          from holoscan.core import Operator
+          from holoscan.{{ cookiecutter.module_slug }} import {{ cookiecutter.operator_slug.split('_')|map('capitalize')|join('') }}
+
+          assert distribution("holoscan-cu13").version
+          assert issubclass({{ cookiecutter.operator_slug.split('_')|map('capitalize')|join('') }}, Operator)
+          PY
+          /tmp/holoscan-module-wheel-check/bin/python \
+            applications/{{ cookiecutter.module_slug }}_pipeline/python/{{ cookiecutter.module_slug }}_pipeline.py
 
       - uses: actions/upload-artifact@v4
         if: always()
