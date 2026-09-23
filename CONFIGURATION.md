@@ -24,9 +24,10 @@ can establish its own context. Use `--project-root` to select just an applicatio
 inside a Module.
 
 Standalone recognition requires an `application` object as the only recognized
-project type, with non-empty strings for `name` and
-`holoscan_sdk.minimum_required_version`. Incomplete or unrelated descriptors are
-ignored; this is not full schema validation and needs no optional dependencies.
+project type, a non-empty `name`, and either `holoscan_sdk.minimum_required_version`
+or `holoscan_sdk.required_versions` (a non-empty string or list of non-empty
+strings). Incomplete or unrelated descriptors are ignored; this is not full
+schema validation and needs no optional dependencies.
 
 Use `HOLOSCAN_CLI_SEARCH_PATH` for custom directories such as `examples/`.
 It replaces defaults with comma-separated directories or exact `metadata.json`
@@ -41,7 +42,7 @@ including excessive nesting, are reported.
 
 ## Module defaults
 
-Module `metadata.json` supplies the identity, minimum SDK version, Dockerfile,
+Module `metadata.json` supplies the identity, SDK requirements, Dockerfile,
 and modes. Other settings resolve in this order, highest priority first:
 
 | Setting | Precedence |
@@ -69,6 +70,47 @@ The SDK mounts at `/workspace/holoscan-sdk`; the image provides tools and runtim
 dependencies. Python apps also need the SDK's Python bindings. Add `--local` to
 run on the host. `holoscan test` adds the SDK to `CMAKE_PREFIX_PATH`, preserving
 existing prefixes unless explicit CMake options override them.
+
+### Automatic SDK base images
+
+Set `holoscan_sdk.required_versions` in `metadata.json` to select the newest
+published stable SDK image matching your requirements and CUDA/GPU variant:
+
+```json
+{
+  "holoscan_sdk": {
+    "required_versions": ">=4.1,<5",
+    "tested_versions": ["4.6.0"]
+  }
+}
+```
+
+Use [Python version specifiers](https://packaging.python.org/en/latest/specifications/version-specifiers/).
+A bare version or wildcard is shorthand for `==`. Commas combine conditions
+with **AND**; list entries are alternatives (**OR**).
+
+| `required_versions` | Matching versions |
+| --- | --- |
+| `">=4.1,<5"` | At least 4.1, below 5. |
+| `">4.1,<=4.6"` | Above 4.1, through 4.6 inclusive. |
+| `"4.1.*"` | Any 4.1 patch release. |
+| `["4.1.0", "4.3.*"]` | Exactly 4.1.0 or any 4.3 patch release. |
+| `"~=4.1.0,!=4.1.2"` | Compatible 4.1 releases, excluding 4.1.2. |
+
+`required_versions` replaces `minimum_required_version` in the same SDK object
+when both are present. The owning Module's requirements also apply; a legacy
+minimum in another object becomes an inclusive lower bound during selection.
+`tested_versions` records testing history and does not restrict selection.
+
+Selection queries NGC and caches its tags for the current CLI process. Invalid
+specifiers, unavailable registry access, or no matching image produce an error.
+`holoscan lint` validates specifier syntax. Install the CLI normally to include
+its `packaging` dependency, which interprets the version expressions.
+
+Existing metadata without `required_versions` keeps its original defaults and
+does not query the registry. `--base-img`, `HOLOSCAN_CLI_BASE_SDK_VERSION`,
+configured base images, and base image format overrides retain their precedence
+and skip automatic selection. These remain available for pinned or offline use.
 
 ## `pyproject.toml` settings
 

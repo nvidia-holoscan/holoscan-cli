@@ -16,6 +16,7 @@
 """Holoscan SDK selection and host GPU/CUDA detection helpers."""
 
 import functools
+import json
 import os
 import platform
 import re
@@ -23,10 +24,15 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
-from typing import Callable, Mapping, Optional, Union
+from typing import TYPE_CHECKING, Callable, Mapping, Optional, Union
+from urllib.parse import urljoin
+from urllib.request import Request, urlopen
 
 from holoscan_cli.utils.io import fatal, resolve, run_info_command, warn
 from holoscan_cli.utils.text import parse_semantic_version
+
+if TYPE_CHECKING:
+    from packaging.specifiers import SpecifierSet
 
 _SDK_LAYOUT_RE = re.compile(
     r"^(?P<kind>install|build)"
@@ -39,6 +45,118 @@ _SDK_VERSION_CONFIG_NAMES = (
     "holoscan-config-version.cmake",
     "HoloscanConfigVersion.cmake",
 )
+
+
+@functools.cache
+def get_holoscan_image_tags() -> tuple[str, ...]:
+    """Read public NGC tags once per invocation, without requiring credentials."""
+    endpoint = "https://nvcr.io/v2/nvidia/clara-holoscan/holoscan/tags/list"
+    try:
+        with urlopen(
+            "https://nvcr.io/proxy_auth?scope=repository:nvidia/clara-holoscan/holoscan:pull",
+            timeout=10,
+        ) as response:
+            token = json.load(response)["token"]
+        tags = []
+        url = endpoint
+        visited = set()
+        while url:
+            if url in visited or url.split("?", 1)[0] != endpoint:
+                raise ValueError("Invalid registry pagination link")
+            visited.add(url)
+            request = Request(url, headers={"Authorization": f"Bearer {token}"})
+            with urlopen(request, timeout=10) as response:
+                page = json.load(response)["tags"]
+                if not isinstance(page, list) or not all(isinstance(tag, str) for tag in page):
+                    raise ValueError("Invalid registry tags")
+                tags.extend(page)
+                link = re.search(r'<([^>]+)>;\s*rel="next"', response.headers.get("Link", ""))
+                url = urljoin(endpoint, link[1]) if link else ""
+        return tuple(tags)
+    except (OSError, ValueError, KeyError, TypeError) as exc:
+        raise ValueError(
+            "Unable to list published Holoscan SDK images. Check registry access or pin "
+            "an image with --base-img or a version with HOLOSCAN_CLI_BASE_SDK_VERSION."
+        ) from exc
+
+
+def parse_sdk_version(value: str) -> tuple[int, ...]:
+    """Compare numeric metadata versions, including the supported MAJOR.MINOR form."""
+    if not isinstance(value, str) or not re.fullmatch(r"(0|[1-9]\d*)(\.(0|[1-9]\d*))+", value):
+        raise ValueError(f"Invalid Holoscan SDK version: {value!r}.")
+    parts = tuple(map(int, value.split(".")))
+    while len(parts) > 3 and parts[-1] == 0:
+        parts = parts[:-1]
+    return parts + (0,) * (3 - len(parts))
+
+
+def parse_required_versions(value: Union[str, list[str]]) -> tuple["SpecifierSet", ...]:
+    """Parse OR alternatives, each containing Python-style ANDed version clauses."""
+    # Keep discovery and minimum-only workflows usable without importing packaging.
+    from packaging.specifiers import InvalidSpecifier, SpecifierSet
+
+    alternatives = [value] if isinstance(value, str) else value
+    if not isinstance(alternatives, list) or not alternatives:
+        raise ValueError("required_versions must be a non-empty string or list of strings.")
+    result = []
+    for alternative in alternatives:
+        if not isinstance(alternative, str) or not alternative.strip():
+            raise ValueError("required_versions entries must be non-empty strings.")
+        clauses = []
+        for clause in alternative.split(","):
+            clause = clause.strip()
+            if not clause:
+                raise ValueError("required_versions cannot contain an empty version clause.")
+            clauses.append(clause if clause[0] in "<>=!~" else f"=={clause}")
+        try:
+            result.append(SpecifierSet(",".join(clauses)))
+        except InvalidSpecifier as exc:
+            raise ValueError(f"Invalid required_versions specifier: {alternative!r}.") from exc
+    return tuple(result)
+
+
+def select_sdk_version(
+    sdk_requirements: list[dict], cuda_version: Optional[Union[str, int]] = None
+) -> str:
+    """Select the newest stable image satisfying every project's SDK requirements."""
+    constraints = []
+    for requirement in sdk_requirements:
+        if "required_versions" in requirement:
+            value = requirement["required_versions"]
+        else:
+            minimum = requirement.get("minimum_required_version")
+            parse_sdk_version(minimum)
+            value = f">={minimum}"
+        constraints.append(parse_required_versions(value))
+    if not constraints:
+        raise ValueError("No required_versions constraints were provided.")
+    candidates = []
+    cuda_major = str(cuda_version if cuda_version is not None else get_default_cuda_version())
+    for tag in get_holoscan_image_tags():
+        match = re.fullmatch(r"v(\d+\.\d+\.\d+)-(.+)", tag)
+        if not match:
+            continue
+        version, cuda_tag = match.groups()
+        try:
+            key = parse_sdk_version(version)
+        except ValueError:
+            continue
+        if not all(any(version in specifier for specifier in group) for group in constraints):
+            continue
+        # Legacy unqualified tags use CUDA 12; SDK 3.6.1 only ships CUDA 13/dGPU.
+        # https://docs.nvidia.com/holoscan/archive/3.6.1/sdk_installation.html
+        if key < (3, 6, 1) and cuda_major != "12":
+            continue
+        if key == (3, 6, 1) and (cuda_major != "13" or get_host_gpu() != "dgpu"):
+            continue
+        if cuda_tag == get_cuda_tag(cuda_version, version):
+            candidates.append(version)
+    if not candidates:
+        raise ValueError(
+            "No published Holoscan SDK image satisfies required_versions "
+            "for the selected CUDA/GPU variant. Adjust the requirements or pass --base-img."
+        )
+    return max(candidates, key=parse_sdk_version)
 
 
 def normalize_arch(value: str) -> str:

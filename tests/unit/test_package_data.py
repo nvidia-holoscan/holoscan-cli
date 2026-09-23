@@ -319,13 +319,13 @@ def _dep_names(specs: list[str]) -> set[str]:
     }
 
 
-def test_pyproject_has_no_runtime_dependencies():
-    """``pip install holoscan-cli`` must install with zero runtime deps.
+def test_pyproject_runtime_dependencies_only_include_version_parser():
+    """Version specifiers use packaging; schema/scaffolding dependencies stay optional.
 
     Schema validation moved to the ``create`` extra; see
     ``test_pyproject_create_extra_bundles_validator_deps``.
     """
-    assert _pyproject()["project"]["dependencies"] == []
+    assert _dep_names(_pyproject()["project"]["dependencies"]) == {"packaging"}
 
 
 def test_pyproject_create_extra_bundles_validator_deps():

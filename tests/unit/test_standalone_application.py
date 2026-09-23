@@ -36,6 +36,20 @@ def _component(root, kind):
     return path
 
 
+@pytest.mark.parametrize("required_versions", ["4.1.*", ">=4.1,<5", ["4.1.0", "4.3.*"]])
+def test_required_versions_application_is_discovered_without_optional_dependencies(
+    tmp_path, required_versions
+):
+    root = _application(tmp_path / "my_app")
+    path = root / "metadata.json"
+    metadata = json.loads(path.read_text())
+    metadata["application"]["holoscan_sdk"] = {"required_versions": required_versions}
+    path.write_text(json.dumps(metadata))
+
+    assert discover_project_context(cwd=root, environ={}).kind == "application"
+    assert [project["name"] for project in _list(root)] == ["my_app"]
+
+
 def _list(root, **overrides):
     env = {k: v for k, v in os.environ.items() if not k.startswith("HOLOSCAN_CLI_")}
     env.update(PYTHONPATH=str(Path(__file__).resolve().parents[2] / "src"), **overrides)
@@ -125,6 +139,7 @@ def test_container_preserves_standalone_name(tmp_path, monkeypatch):
         '{"application": null}',
         '{"application": {}}',
         '{"application": {"name": "unrelated"}}',
+        '{"application": {"name": "unrelated", "holoscan_sdk": {"minimum_required_version": ["4.1"]}}}',
         '{"module": {}}',
         "{invalid",
     ],
