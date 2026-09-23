@@ -19,26 +19,8 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 # Dependencies
 # ---------------------------------------------------------------------------
 {% if cookiecutter.language == 'cpp' %}
-find_package(holoscan 4.0 QUIET CONFIG COMPONENTS core PATHS /opt/nvidia/holoscan)
-if(NOT holoscan_FOUND)
-    message(FATAL_ERROR
-        "Holoscan SDK CMake config was not found. For a custom SDK installation, "
-        "configure with -DCMAKE_PREFIX_PATH=/path/to/sdk or "
-        "-Dholoscan_DIR=/path/to/sdk/lib/cmake/holoscan. "
-        "The standard installation is /opt/nvidia/holoscan.")
-endif()
-if(NOT DEFINED holoscan_VERSION OR holoscan_VERSION VERSION_LESS 4.0
-   OR holoscan_VERSION VERSION_GREATER_EQUAL 5.0)
-    message(FATAL_ERROR
-        "This Module requires Holoscan SDK 4.x; found version '${holoscan_VERSION}'. "
-        "Select an SDK 4 installation with -DCMAKE_PREFIX_PATH=/path/to/sdk or "
-        "-Dholoscan_DIR=/path/to/sdk/lib/cmake/holoscan.")
-endif()
-if(holoscan_VERSION VERSION_LESS {{ cookiecutter.holoscan_version }})
-    message(FATAL_ERROR
-        "This Module requires Holoscan SDK {{ cookiecutter.holoscan_version }} or later "
-        "within major version 4; found '${holoscan_VERSION}'.")
-endif()
+find_package(holoscan {{ cookiecutter.holoscan_version }} REQUIRED COMPONENTS core
+    PATHS /opt/nvidia/holoscan)
 {% endif %}
 
 # ---------------------------------------------------------------------------

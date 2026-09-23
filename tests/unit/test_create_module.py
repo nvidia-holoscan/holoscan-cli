@@ -267,8 +267,8 @@ def test_packaged_template_creates_a_standalone_module(
     "sdk_version,expected_message",
     [
         ("4.5.0", None),
-        ("4.2.0", "requires Holoscan SDK 4.5.0"),
-        ("5.0.0", "requires Holoscan SDK 4.x"),
+        ("4.2.0", "version: 4.2.0"),
+        ("5.0.0", None),
     ],
 )
 def test_generated_cpp_module_checks_sdk_version(
@@ -286,7 +286,12 @@ def test_generated_cpp_module_checks_sdk_version(
         "set(holoscan_FOUND TRUE)\n", encoding="utf-8"
     )
     (config_dir / "holoscan-config-version.cmake").write_text(
-        f'set(PACKAGE_VERSION "{sdk_version}")\nset(PACKAGE_VERSION_COMPATIBLE TRUE)\n',
+        f'set(PACKAGE_VERSION "{sdk_version}")\n'
+        "if(PACKAGE_VERSION VERSION_LESS PACKAGE_FIND_VERSION)\n"
+        "  set(PACKAGE_VERSION_COMPATIBLE FALSE)\n"
+        "else()\n"
+        "  set(PACKAGE_VERSION_COMPATIBLE TRUE)\n"
+        "endif()\n",
         encoding="utf-8",
     )
     result = subprocess.run(
@@ -307,6 +312,7 @@ def test_generated_cpp_module_checks_sdk_version(
     assert (result.returncode == 0) is (expected_message is None), result.stdout + result.stderr
     if expected_message:
         assert expected_message in result.stderr
+        assert "4.5.0" in result.stderr
 
 
 def test_generated_cpp_module_reports_sdk_discovery_remedy(cli, tmp_path, monkeypatch):
@@ -333,8 +339,9 @@ def test_generated_cpp_module_reports_sdk_discovery_remedy(cli, tmp_path, monkey
         check=False,
     )
     assert result.returncode != 0
-    assert "-DCMAKE_PREFIX_PATH=/path/to/sdk" in result.stderr
-    assert "-Dholoscan_DIR=/path/to/sdk/lib/cmake/holoscan" in result.stderr
+    assert "CMAKE_PREFIX_PATH" in result.stderr
+    assert "holoscan_DIR" in result.stderr
+    assert "requested version 4.5.0" in result.stderr
 
 
 def test_generated_cpp_module_finds_standard_sdk_prefix(cli, tmp_path, monkeypatch):
