@@ -86,6 +86,14 @@ cmake --build build -j"$(nproc)"
 ```
 
 {% if cookiecutter.language == 'cpp' -%}
+The default SDK 4 search prefix is `/opt/nvidia/holoscan`. For another installation,
+configure with `-DCMAKE_PREFIX_PATH=/path/to/sdk` or point directly to its config
+with `-Dholoscan_DIR=/path/to/sdk/lib/cmake/holoscan`. Use a fresh build directory
+when switching SDK installations because CMake caches `holoscan_DIR`.
+
+{% endif -%}
+
+{% if cookiecutter.language == 'cpp' -%}
 Run C++ tests:
 
 ```bash
@@ -120,7 +128,7 @@ update before publishing:
 | `[project].version` | Sync with `metadata.json:module.version` |
 | `[project].description` | Short description shown on PyPI |
 | `[project].authors` | Your name / organisation |
-| `[project].dependencies` | Installs `holoscan-cu13` at or above the configured minimum SDK version with the Module wheel |
+| `[project].dependencies` | Installs `holoscan-cu13` from the configured minimum SDK version through SDK 4.x with the Module wheel |
 | `[dependency-groups].dev` | Exact CLI convenience pin; keep synchronized with `requirements-cli.txt` |
 | `[tool.uv]` | UV development environment and NVIDIA index selection for `holoscan-cli` |
 | `[tool.holoscan]` | Optional Module-wide CUDA, CTest, Docker, environment, and base-image defaults |

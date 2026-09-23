@@ -13,6 +13,7 @@ MODULE_SLUG = {{ cookiecutter.module_slug | tojson }}
 MODULE_REPO_NAME = {{ cookiecutter.module_repo_name | tojson }}
 OPERATOR_SLUG = {{ cookiecutter.operator_slug | tojson }}
 LANGUAGE = {{ cookiecutter.language | tojson }}
+HOLOSCAN_VERSION = {{ cookiecutter.holoscan_version | tojson }}
 LICENSE = {{ cookiecutter._license | tojson }}
 
 _PROJECT_NAME = re.compile(r"[A-Za-z0-9]+(?:[ _-][A-Za-z0-9]+)*")
@@ -27,6 +28,9 @@ def reject(message: str) -> None:
 
 if LANGUAGE not in {"cpp", "python"}:
     reject("language must be 'cpp' or 'python'.")
+
+if not re.fullmatch(r"4\.[0-9]+\.[0-9]+", HOLOSCAN_VERSION):
+    reject("holoscan_version must be a Holoscan SDK 4.x release (4.MINOR.PATCH).")
 
 if not _PROJECT_NAME.fullmatch(PROJECT_NAME):
     reject("project_name must contain alphanumeric words separated by spaces, '-' or '_'.")

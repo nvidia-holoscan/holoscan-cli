@@ -236,7 +236,7 @@ def test_packaged_template_creates_a_standalone_module(
     assert (project / generated_source).is_file()
     assert (project / "cmake/HoloHubConfigHelpers.cmake").is_file()
     assert active_requirements == [f"holoscan-cli=={create.__version__}"]
-    assert tomllib.loads(pyproject)["project"]["dependencies"] == ["holoscan-cu13>=4.5.0"]
+    assert tomllib.loads(pyproject)["project"]["dependencies"] == ["holoscan-cu13>=4.5.0,<5.0"]
     assert "--extra-index-url https://pypi.nvidia.com" in requirement
     assert 'requires-python = ">=3.11"' in pyproject
     assert 'holoscan-cli = { index = "nvidia" }' in pyproject
@@ -246,13 +246,13 @@ def test_packaged_template_creates_a_standalone_module(
     assert "--extra-index-url https://pypi.nvidia.com" in dockerfile
     assert "python3 -m venv .venv" in readme
     assert "uv run holoscan" in readme
-    assert 'set(HOLOSCAN_DEB_DEPENDENCY "holoscan-cuda-13 (>= 4.5.0)")' in deb_cmake
-    assert 'set(HOLOSCAN_DEB_DEPENDENCY "holoscan (>= 4.5.0)")' in deb_cmake
+    assert "holoscan-cuda-13 (>= 4.5.0), holoscan-cuda-13 (<< 5.0)" in deb_cmake
+    assert "holoscan (>= 4.5.0), holoscan (<< 5.0)" in deb_cmake
     assert 'DEPENDS     "${HOLOSCAN_DEB_DEPENDENCY}"' in deb_cmake
     assert "CMAKE_SYSTEM_PROCESSOR" in deb_cmake
     assert "aarch64|arm64" in deb_cmake
     assert "x86_64|amd64" in deb_cmake
-    assert "holoscan-cuda-12 (>= 4.5.0)" in deb_readme
+    assert "holoscan-cuda-12 (>= 4.5.0), holoscan-cuda-12 (<< 5.0)" in deb_readme
     assert "aarch64 (Jetson Thor)" in deb_readme
     assert "holohub_configure_deb()" in deb_readme
     assert 'dpkg-deb --field "$package" Depends' in ci_workflow
@@ -261,6 +261,132 @@ def test_packaged_template_creates_a_standalone_module(
     assert 'apt-get install -y "./$package"' in ci_workflow
     assert not (project / "holohub").exists()
     assert not (project / "holoscan").exists()
+
+
+@pytest.mark.parametrize(
+    "sdk_version,expected_message",
+    [
+        ("4.5.0", None),
+        ("4.2.0", "requires Holoscan SDK 4.5.0"),
+        ("5.0.0", "requires Holoscan SDK 4.x"),
+    ],
+)
+def test_generated_cpp_module_checks_sdk_version(
+    cli, tmp_path, monkeypatch, sdk_version, expected_message
+):
+    pytest.importorskip("cookiecutter")
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    (tmp_path / "home").mkdir()
+    monkeypatch.setattr(create, "_initialize_module_git", lambda _path: False)
+    create.handle_create(cli, _args(language="cpp", dryrun=False, directory=tmp_path / "projects"))
+    project = tmp_path / "projects/holoscan-my-mod"
+    config_dir = tmp_path / "sdk/lib/cmake/holoscan"
+    config_dir.mkdir(parents=True)
+    (config_dir / "holoscan-config.cmake").write_text(
+        "set(holoscan_FOUND TRUE)\n", encoding="utf-8"
+    )
+    (config_dir / "holoscan-config-version.cmake").write_text(
+        f'set(PACKAGE_VERSION "{sdk_version}")\nset(PACKAGE_VERSION_COMPATIBLE TRUE)\n',
+        encoding="utf-8",
+    )
+    result = subprocess.run(
+        [
+            "cmake",
+            "-S",
+            str(project),
+            "-B",
+            str(tmp_path / "build"),
+            f"-Dholoscan_DIR={config_dir}",
+            "-DBUILD_ALL=OFF",
+            "-DMY_MOD_BUILD_TESTING=OFF",
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert (result.returncode == 0) is (expected_message is None), result.stdout + result.stderr
+    if expected_message:
+        assert expected_message in result.stderr
+
+
+def test_generated_cpp_module_reports_sdk_discovery_remedy(cli, tmp_path, monkeypatch):
+    pytest.importorskip("cookiecutter")
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    (tmp_path / "home").mkdir()
+    monkeypatch.setattr(create, "_initialize_module_git", lambda _path: False)
+    create.handle_create(cli, _args(language="cpp", dryrun=False, directory=tmp_path / "projects"))
+
+    result = subprocess.run(
+        [
+            "cmake",
+            "-S",
+            str(tmp_path / "projects/holoscan-my-mod"),
+            "-B",
+            str(tmp_path / "build"),
+            "-DBUILD_ALL=OFF",
+            "-DMY_MOD_BUILD_TESTING=OFF",
+            "-DCMAKE_FIND_ROOT_PATH_MODE_PACKAGE=ONLY",
+            f"-DCMAKE_FIND_ROOT_PATH={tmp_path / 'empty-root'}",
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode != 0
+    assert "-DCMAKE_PREFIX_PATH=/path/to/sdk" in result.stderr
+    assert "-Dholoscan_DIR=/path/to/sdk/lib/cmake/holoscan" in result.stderr
+
+
+def test_generated_cpp_module_finds_standard_sdk_prefix(cli, tmp_path, monkeypatch):
+    pytest.importorskip("cookiecutter")
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    (tmp_path / "home").mkdir()
+    monkeypatch.setattr(create, "_initialize_module_git", lambda _path: False)
+    create.handle_create(cli, _args(language="cpp", dryrun=False, directory=tmp_path / "projects"))
+    config_dir = tmp_path / "sysroot/opt/nvidia/holoscan/lib/cmake/holoscan"
+    config_dir.mkdir(parents=True)
+    (config_dir / "holoscan-config.cmake").write_text(
+        "set(holoscan_FOUND TRUE)\n", encoding="utf-8"
+    )
+    (config_dir / "holoscan-config-version.cmake").write_text(
+        'set(PACKAGE_VERSION "4.5.0")\nset(PACKAGE_VERSION_COMPATIBLE TRUE)\n',
+        encoding="utf-8",
+    )
+
+    result = subprocess.run(
+        [
+            "cmake",
+            "-S",
+            str(tmp_path / "projects/holoscan-my-mod"),
+            "-B",
+            str(tmp_path / "build"),
+            "-DBUILD_ALL=OFF",
+            "-DMY_MOD_BUILD_TESTING=OFF",
+            "-DCMAKE_FIND_ROOT_PATH_MODE_PACKAGE=ONLY",
+            f"-DCMAKE_FIND_ROOT_PATH={tmp_path / 'sysroot'}",
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_module_template_rejects_sdk_5_context(cli, tmp_path, monkeypatch):
+    pytest.importorskip("cookiecutter")
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    (tmp_path / "home").mkdir()
+    with pytest.raises(SystemExit):
+        create.handle_create(
+            cli,
+            _args(
+                language="cpp",
+                dryrun=False,
+                directory=tmp_path / "projects",
+                context=["holoscan_version=5.0.0"],
+            ),
+        )
+    assert not (tmp_path / "projects/holoscan-my-mod").exists()
 
 
 def test_parser_leaves_template_and_directory_contextual():
