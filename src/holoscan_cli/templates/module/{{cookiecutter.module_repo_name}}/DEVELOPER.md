@@ -120,6 +120,7 @@ update before publishing:
 | `[project].version` | Sync with `metadata.json:module.version` |
 | `[project].description` | Short description shown on PyPI |
 | `[project].authors` | Your name / organisation |
+| `[project].dependencies` | Installs `holoscan-cu13` at or above the configured minimum SDK version with the Module wheel |
 | `[dependency-groups].dev` | Exact CLI convenience pin; keep synchronized with `requirements-cli.txt` |
 | `[tool.uv]` | UV development environment and NVIDIA index selection for `holoscan-cli` |
 | `[tool.holoscan]` | Optional Module-wide CUDA, CTest, Docker, environment, and base-image defaults |
@@ -137,6 +138,10 @@ Build a wheel:
 pip install build
 python -m build --wheel
 ```
+
+Install the built wheel in a CUDA 13 environment to resolve its Holoscan SDK
+runtime dependency. The development-only `uv sync --only-dev` command above
+does not install the Module wheel or its runtime dependencies.
 
 ---
 

@@ -15,10 +15,7 @@ authors = [
     { name = "{{ cookiecutter.full_name }}" },
 ]
 requires-python = ">=3.11"
-
-# NOTE: holoscan SDK is not declared as a runtime dependency here because the
-# wheel cannot guarantee binary compatibility across CUDA variants (cu12/cu13).
-# Document the install command in the README.
+dependencies = ["holoscan-cu13>={{ cookiecutter.holoscan_version }}"]
 
 [dependency-groups]
 dev = [
