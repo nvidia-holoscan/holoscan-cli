@@ -19,7 +19,7 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 # Dependencies
 # ---------------------------------------------------------------------------
 {% if cookiecutter.language == 'cpp' %}
-find_package(holoscan {{ cookiecutter.holoscan_version }} REQUIRED COMPONENTS core
+find_package(holoscan {{ cookiecutter.holoscan_version }} REQUIRED
     PATHS /opt/nvidia/holoscan)
 {% endif %}
 
