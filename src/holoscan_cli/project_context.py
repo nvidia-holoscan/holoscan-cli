@@ -93,6 +93,7 @@ class ProjectContext:
     container_prefix: Optional[str] = None
     workspace_name: Optional[str] = None
     application_name: Optional[str] = None
+    sdk_requirements: Optional[dict] = None
 
     @property
     def is_module(self) -> bool:
@@ -204,9 +205,17 @@ def _is_standalone_application(raw: Optional[dict]) -> bool:
     if types != {"application"} or not isinstance(application, dict):
         return False
     sdk = application.get("holoscan_sdk")
-    return isinstance(sdk, dict) and all(
-        isinstance(value, str) and value.strip()
-        for value in (application.get("name"), sdk.get("minimum_required_version"))
+    name = application.get("name")
+    if not isinstance(sdk, dict) or not isinstance(name, str) or not name.strip():
+        return False
+    versions = sdk.get("required_versions", sdk.get("minimum_required_version"))
+    if isinstance(versions, str):
+        return bool(versions.strip())
+    return (
+        "required_versions" in sdk
+        and isinstance(versions, list)
+        and bool(versions)
+        and all(isinstance(value, str) and value.strip() for value in versions)
     )
 
 
@@ -511,6 +520,7 @@ def _build_module_context(
         container_prefix=profile.get("container_prefix"),
         workspace_name=profile.get("workspace_name"),
         base_sdk_version=metadata_sdk_version,
+        sdk_requirements=descriptor.get("holoscan_sdk"),
         dockerfile=dockerfile,
         target_arch=profile.get("target_arch"),
         cuda=profile.get("cuda"),
@@ -567,6 +577,7 @@ def _selected_context(
             kind="application",
             discovery=discovery,
             application_name=application_name,
+            sdk_requirements=raw["application"]["holoscan_sdk"],
             warnings=warnings,
         )
     return ProjectContext(root=root, kind="source", discovery=discovery, warnings=warnings)

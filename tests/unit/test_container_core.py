@@ -36,6 +36,7 @@ import pytest
 from holoscan_cli.container import core as container_core
 from holoscan_cli.container.core import HoloscanContainer
 from holoscan_cli.project_context import ProjectContext
+from holoscan_cli.utils import sdk
 
 # ---- helpers ----------------------------------------------------------------
 
@@ -87,6 +88,170 @@ def _project_metadata(project_dir, **metadata):
         "source_folder": str(project_dir),
         "metadata": {"language": "python", **metadata},
     }
+
+
+def _automatic_sdk_container(tmp_path, monkeypatch, requirements):
+    for name in (
+        "HOLOSCAN_CLI_BASE_SDK_VERSION",
+        "HOLOSCAN_CLI_BASE_IMAGE",
+        "HOLOSCAN_CLI_BASE_IMAGE_FORMAT",
+    ):
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setattr(HoloscanContainer, "BASE_SDK_VERSION", None)
+    monkeypatch.setattr(HoloscanContainer, "BASE_IMAGE_FORMAT", None)
+    monkeypatch.setattr(HoloscanContainer, "DEFAULT_IMAGE_FORMAT", None)
+    monkeypatch.setattr(HoloscanContainer, "DEFAULT_DOCKERFILE", tmp_path / "Dockerfile")
+    (tmp_path / "Dockerfile").write_text("ARG BASE_IMAGE\nFROM ${BASE_IMAGE}\n")
+    monkeypatch.setattr(container_core, "get_host_gpu", lambda: "dgpu")
+    monkeypatch.setattr(container_core, "get_compute_capacity", lambda: "90")
+    monkeypatch.setattr(sdk, "get_holoscan_image_tags", lambda: ("v4.9.0-cuda13", "v4.10.0-cuda13"))
+    container = _stub_container(tmp_path, {"metadata": {"holoscan_sdk": requirements}})
+    container.dryrun = True
+    container.cuda_version = "13"
+    return container
+
+
+@pytest.mark.parametrize(
+    "required_versions,expected",
+    [
+        (">=4.0", "4.10.0"),
+        (">=4.0,<4.10", "4.9.0"),
+        ("4.9.*", "4.9.0"),
+        (["4.9.0", "4.10.0"], "4.10.0"),
+    ],
+)
+def test_required_versions_select_base_image_and_build_version(
+    tmp_path, monkeypatch, required_versions, expected
+):
+    requirements = {"required_versions": required_versions}
+    container = _automatic_sdk_container(tmp_path, monkeypatch, requirements)
+    calls = []
+    monkeypatch.setattr(container_core, "run_command", lambda cmd, **kwargs: calls.append(cmd))
+
+    container.build()
+
+    assert f"BASE_IMAGE=nvcr.io/x/holoscan:v{expected}-cuda13" in calls[0]
+    assert f"BASE_SDK_VERSION={expected}" in calls[0]
+    assert f"holohub:ngc-v{expected}-cuda13" in calls[0]
+    assert HoloscanContainer.BASE_SDK_VERSION is None
+
+
+@pytest.mark.parametrize("override", ["cli", "version", "repository", "image", "format", "project"])
+def test_explicit_base_image_settings_skip_sdk_lookup(tmp_path, monkeypatch, override):
+    container = _automatic_sdk_container(
+        tmp_path,
+        monkeypatch,
+        {"required_versions": ">=4.0,<4.10"},
+    )
+    monkeypatch.setattr(
+        sdk, "get_holoscan_image_tags", lambda: pytest.fail("unexpected registry lookup")
+    )
+    expected = "example.com/sdk:pinned"
+    arguments = {}
+    if override == "cli":
+        arguments["base_img"] = expected
+    elif override == "version":
+        monkeypatch.setattr(HoloscanContainer, "BASE_SDK_VERSION", "4.0.0")
+        monkeypatch.setenv("HOLOSCAN_CLI_BASE_SDK_VERSION", "4.0.0")
+        expected = "nvcr.io/x/holoscan:v4.0.0-cuda13"
+    elif override == "repository":
+        expected = "example.com/sdk"
+        monkeypatch.setattr(HoloscanContainer, "BASE_IMAGE_NAME", expected)
+    elif override == "image":
+        monkeypatch.setattr(HoloscanContainer, "BASE_IMAGE_NAME", expected)
+    elif override == "format":
+        monkeypatch.setattr(HoloscanContainer, "BASE_IMAGE_FORMAT", expected)
+    else:
+        from holoscan_cli.project_context import activate_project_context
+
+        activate_project_context(
+            ProjectContext(root=tmp_path, kind="module", discovery="test", base_image=expected)
+        )
+        monkeypatch.setattr(HoloscanContainer, "BASE_IMAGE_NAME", expected)
+    calls = []
+    monkeypatch.setattr(container_core, "run_command", lambda cmd, **kwargs: calls.append(cmd))
+
+    container.build(**arguments)
+
+    assert f"BASE_IMAGE={expected}" in calls[0]
+
+
+@pytest.mark.parametrize(
+    "application_requirements",
+    [
+        {},
+        {"minimum_required_version": "4.0"},
+        {"required_versions": ["4.9.*", "4.10.*"]},
+        {"minimum_required_version": "99.0", "required_versions": ">=4.9"},
+    ],
+)
+def test_required_versions_respect_owning_module(tmp_path, monkeypatch, application_requirements):
+    import json
+
+    from holoscan_cli.project_context import activate_project_context, discover_project_context
+
+    container = _automatic_sdk_container(tmp_path, monkeypatch, application_requirements)
+    (tmp_path / "metadata.json").write_text(
+        json.dumps(
+            {
+                "module": {
+                    "name": "example",
+                    "holoscan_sdk": {
+                        "required_versions": ">=4.0,<4.10",
+                    },
+                }
+            }
+        )
+    )
+    activate_project_context(discover_project_context(cwd=tmp_path, environ={}))
+    calls = []
+    monkeypatch.setattr(container_core, "run_command", lambda cmd, **kwargs: calls.append(cmd))
+
+    container.build()
+
+    assert "BASE_IMAGE=nvcr.io/x/holoscan:v4.9.0-cuda13" in calls[0]
+    assert "BASE_SDK_VERSION=4.9.0" in calls[0]
+
+
+def test_automatic_sdk_preserves_legacy_default_image_dispatch(tmp_path, monkeypatch):
+    class LegacyContainer(HoloscanContainer):
+        @classmethod
+        def default_image(cls, cuda_version=None):
+            return "custom:legacy"
+
+    configured = _automatic_sdk_container(tmp_path, monkeypatch, {"required_versions": ">=4.0"})
+    container = LegacyContainer(configured.project_metadata)
+    container.cuda_version = "13"
+    container.resolve_base_image("13")
+    assert container.image_name == "holohub:ngc-v4.10.0-cuda13"
+
+
+def test_minimum_only_module_keeps_pinned_version_without_registry(tmp_path, monkeypatch):
+    from holoscan_cli.project_context import activate_project_context
+
+    container = _automatic_sdk_container(
+        tmp_path, monkeypatch, {"minimum_required_version": "4.0.0"}
+    )
+    activate_project_context(
+        ProjectContext(
+            root=tmp_path,
+            kind="module",
+            discovery="test",
+            base_sdk_version="4.0.0",
+            sdk_requirements={"minimum_required_version": "4.0.0"},
+        )
+    )
+    monkeypatch.setattr(HoloscanContainer, "BASE_SDK_VERSION", "4.0.0")
+    monkeypatch.setattr(
+        sdk, "get_holoscan_image_tags", lambda: pytest.fail("unexpected registry lookup")
+    )
+    calls = []
+    monkeypatch.setattr(container_core, "run_command", lambda cmd, **kwargs: calls.append(cmd))
+
+    container.build()
+
+    assert "BASE_IMAGE=nvcr.io/x/holoscan:v4.0.0-cuda13" in calls[0]
+    assert "BASE_SDK_VERSION=4.0.0" in calls[0]
 
 
 # ---- get_project_name -------------------------------------------------------

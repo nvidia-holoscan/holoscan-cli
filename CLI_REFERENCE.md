@@ -100,6 +100,11 @@ Build and run use containers by default. `--local` selects native execution;
 `--no-docker-build` reuses an existing image. `run --no-local-build` also skips
 building the application, so use it only when the required artifacts exist.
 
+Set `holoscan_sdk.required_versions` in metadata to choose the latest published
+SDK matching a range, wildcard, or list of alternatives. See
+[SDK base image selection](CONFIGURATION.md#automatic-sdk-base-images) for
+syntax, registry access, and explicit overrides.
+
 For dash-leading values, use `=`, for example `--configure-args=-DFEATURE=ON`.
 `--build-with` replaces the mode's operator selection; `--configure-args`
 appends to its CMake options. Docker argument layers are described in
