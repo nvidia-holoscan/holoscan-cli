@@ -1,7 +1,13 @@
 # SPDX-FileCopyrightText: Copyright (c) {% now 'utc', '%Y' %} {{ cookiecutter.full_name }}{% if cookiecutter.affiliation %} / {{ cookiecutter.affiliation }}{% endif %}. All rights reserved.
 # SPDX-License-Identifier: {{ cookiecutter._license }}
 
-find_package(GTest REQUIRED)
+find_package(GTest QUIET)
+if(NOT GTest_FOUND)
+    message(FATAL_ERROR
+        "GTest is required when {{ cookiecutter.module_slug | upper }}_BUILD_TESTING is ON. "
+        "Install GTest (libgtest-dev on Debian/Ubuntu), or configure with "
+        "-D{{ cookiecutter.module_slug | upper }}_BUILD_TESTING:BOOL=OFF to build without tests.")
+endif()
 
 add_executable(test_operators test_operators.cpp)
 
