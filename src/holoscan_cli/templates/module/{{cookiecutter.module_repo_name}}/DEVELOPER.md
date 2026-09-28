@@ -57,7 +57,26 @@ Run a lifecycle command with `--verbose` to see what was selected.
 | `holoscan build {{ cookiecutter.module_slug }}_pipeline` | CMake configure + build inside the container |
 | `holoscan run {{ cookiecutter.module_slug }}_pipeline` | Run the example pipeline |
 | `holoscan test` | Run CTest (C++ unit tests) and pytest |
-| `holoscan install --dev` | Install a `.pth` hook for live Module imports in the current Python environment |
+| `holoscan install --dev` | Build the Module if needed and install its `.pth` import hook in the development container |
+
+From a fresh scaffold, run `holoscan install --dev` at the Module root. It builds the
+development image and, if the hook has not been staged yet, builds the Module inside the
+container. The hook is installed for that container's Python. To verify it, enter the
+same development container and import there:
+
+```bash
+holoscan install --dev
+holoscan run-container {{ cookiecutter.module_repo_name }} --no-docker-build
+# Inside the container:
+python -c "import holoscan.{{ cookiecutter.module_slug }}; print(holoscan.{{ cookiecutter.module_slug }}.__file__)"
+```
+
+Run `holoscan install --dev --uninstall` from the host to remove the container hook.
+If you have a compatible SDK and toolchain on the host, use
+`HOLOSCAN_CLI_BUILD_PARENT_DIR="$PWD/build-native" holoscan install --dev --local`
+to build and install a separate host-native hook. Use `--local` with
+`--uninstall` to remove that host hook. A container hook is installed for
+container Python; host-native imports require a compatible host SDK.
 
 The scaffold intentionally ships no launcher wrapper. Projects that need custom environment or
 bootstrap policy can add a thin wrapper as an advanced customization, keep it outside the Module's
