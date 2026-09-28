@@ -270,6 +270,8 @@ def test_packaged_template_creates_a_standalone_module(
         HOLOSCAN_CLI_ROOT=str(project),
         PYTHONPATH=str(Path(__file__).resolve().parents[2] / "src"),
     )
+    for name in ("HOLOSCAN_CLI_BUILD_LOCAL", "HOLOSCAN_CLI_IN_CONTAINER_CMD"):
+        env.pop(name, None)
     preview = subprocess.run(
         [sys.executable, "-m", "holoscan_cli", "install", "--dev", "--dryrun"],
         cwd=project,

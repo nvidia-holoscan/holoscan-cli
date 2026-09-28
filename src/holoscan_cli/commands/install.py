@@ -16,7 +16,6 @@
 """``holoscan install`` — install a built source project (locally or in a container)."""
 
 import argparse
-import json
 import os
 import shlex
 from pathlib import Path
@@ -28,6 +27,7 @@ from holoscan_cli.container.parsers import (
     add_docker_build_args,
     add_local_container_args,
 )
+from holoscan_cli.metadata.utils import read_metadata
 from holoscan_cli.utils.docker import (
     apply_container_cli_overrides,
     get_entrypoint_command_args,
@@ -309,8 +309,8 @@ def _standalone_module_name(cli) -> str | None:
     if root is None:
         return None
     try:
-        metadata = json.loads((Path(root) / "metadata.json").read_text(encoding="utf-8"))
-    except (OSError, ValueError):
+        metadata = read_metadata(Path(root) / "metadata.json")
+    except (OSError, ValueError, RecursionError):
         return None
     module = metadata.get("module") if isinstance(metadata, dict) else None
     name = module.get("name") if isinstance(module, dict) else None

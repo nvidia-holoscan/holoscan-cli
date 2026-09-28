@@ -6,7 +6,10 @@ from __future__ import annotations
 import json
 import os
 import shlex
+import subprocess
+import sys
 from argparse import Namespace
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -40,6 +43,37 @@ def _standalone_cli(tmp_path):
         DEFAULT_BUILD_PARENT_DIR=root / "build",
         script_name="holoscan",
     )
+
+
+def test_install_dev_invalid_fifo_metadata_exits_without_hanging(tmp_path):
+    root = tmp_path / "module"
+    root.mkdir()
+    os.mkfifo(root / "metadata.json")
+    env = {key: value for key, value in os.environ.items() if not key.startswith("HOLOSCAN_CLI_")}
+    env["PYTHONPATH"] = str(Path(__file__).resolve().parents[2] / "src")
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "holoscan_cli",
+            "--project-root",
+            str(root),
+            "install",
+            "--dev",
+            "--local",
+            "--uninstall",
+            "--dryrun",
+            "--site-dir",
+            str(tmp_path / "site"),
+        ],
+        cwd=tmp_path,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=5,
+    )
+    assert result.returncode == 0, result.stderr
 
 
 def test_install_dev_copies_staged_hook_pair(tmp_path):
