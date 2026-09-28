@@ -15,7 +15,7 @@ authors = [
     { name = "{{ cookiecutter.full_name }}" },
 ]
 requires-python = ">=3.11"
-dependencies = ["holoscan-cu13>={{ cookiecutter.holoscan_version }}"]
+dependencies = ["holoscan-cu13>={{ cookiecutter.holoscan_version }},<5.0"]
 
 [dependency-groups]
 dev = [
