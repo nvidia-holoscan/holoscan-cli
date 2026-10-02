@@ -63,6 +63,7 @@ from ..utils.sdk import (
     get_host_gpu,
     is_valid_sdk_directory,
     resolve_local_sdk_dir,
+    select_sdk_version,
 )
 from ..utils.text import (
     get_cli_arg_value,
@@ -239,18 +240,56 @@ class HoloscanContainer:
         )
 
     @classmethod
-    def default_image(cls, cuda_version: Optional[Union[str, int]] = None) -> str:
-        cuda_tag = get_cuda_tag(cuda_version, cls.BASE_SDK_VERSION)
+    def default_image(
+        cls, cuda_version: Optional[Union[str, int]] = None, *, sdk_version: Optional[str] = None
+    ) -> str:
+        sdk_version = sdk_version or cls.BASE_SDK_VERSION
+        cuda_tag = get_cuda_tag(cuda_version, sdk_version)
         if cls.DEFAULT_IMAGE_FORMAT:
             return cls._format_image_template(
                 cls.DEFAULT_IMAGE_FORMAT,
                 container_prefix=cls.CONTAINER_PREFIX,
-                sdk_version=cls.BASE_SDK_VERSION,
+                sdk_version=sdk_version,
                 cuda_tag=cuda_tag,
             )
-        if cls.BASE_SDK_VERSION:
-            return f"{cls.CONTAINER_PREFIX}:ngc-v{cls.BASE_SDK_VERSION}-{cuda_tag}"
+        if sdk_version:
+            return f"{cls.CONTAINER_PREFIX}:ngc-v{sdk_version}-{cuda_tag}"
         return f"{cls.CONTAINER_PREFIX}:ngc-{cuda_tag}"
+
+    def resolve_base_image(self, cuda_version: Optional[Union[str, int]] = None) -> str:
+        """Resolve required_versions while preserving legacy defaults and explicit pins."""
+        self._resolved_sdk_version = None
+        if (
+            self.BASE_IMAGE_FORMAT
+            or self.BASE_IMAGE_NAME != self.DEFAULT_BASE_IMAGE_NAME
+            or activated_environment_source("HOLOSCAN_CLI_BASE_IMAGE") == "project"
+            or (
+                self.BASE_SDK_VERSION
+                and activated_environment_source("HOLOSCAN_CLI_BASE_SDK_VERSION") != "project"
+            )
+        ):
+            return self.default_base_image(cuda_version)
+        context = get_active_project_context()
+        requirements = [
+            value
+            for value in (
+                (self.project_metadata or {}).get("metadata", {}).get("holoscan_sdk"),
+                context.sdk_requirements if context is not None else None,
+            )
+            if value
+        ]
+        if not requirements:
+            return self.default_base_image(cuda_version)
+        try:
+            if not all(isinstance(value, dict) for value in requirements):
+                raise ValueError("holoscan_sdk metadata must be an object.")
+            if not any("required_versions" in value for value in requirements):
+                return self.default_base_image(cuda_version)
+            version = select_sdk_version(requirements, cuda_version)
+        except ValueError as exc:
+            fatal(str(exc))
+        self._resolved_sdk_version = version
+        return f"{self.BASE_IMAGE_NAME}:v{version}-{get_cuda_tag(cuda_version, version)}"
 
     @classmethod
     def default_dockerfile(cls) -> Path:
@@ -384,6 +423,10 @@ class HoloscanContainer:
             if project_tag:
                 return f"{self.CONTAINER_PREFIX}:{project_tag}"
             return self.CONTAINER_PREFIX
+        if self._resolved_sdk_version:
+            return HoloscanContainer.default_image(
+                self.cuda_version, sdk_version=self._resolved_sdk_version
+            )
         return HoloscanContainer.default_image(self.cuda_version)
 
     @property
@@ -519,6 +562,7 @@ class HoloscanContainer:
             print("No project provided, proceeding with default container")
 
         self.project_metadata = project_metadata
+        self._resolved_sdk_version: Optional[str] = None
         # Get first language from project metadata if not provided.
         if language is None and self.project_metadata:
             language = self.project_metadata.get("metadata", {}).get("language", "")
@@ -602,7 +646,8 @@ class HoloscanContainer:
 
         # Get Dockerfile path
         docker_file_path = docker_file or self.dockerfile_path
-        base_img = base_img or self.default_base_image(self.cuda_version)
+        self._resolved_sdk_version = None
+        base_img = base_img or self.resolve_base_image(self.cuda_version)
         tags = [img] if img else self.image_names
         gpu_type = get_host_gpu()
         compute_capacity = get_compute_capacity()
@@ -693,8 +738,9 @@ class HoloscanContainer:
                 f"CUDA_MAJOR={cuda_major}",
             ]
         )
-        if self.BASE_SDK_VERSION:
-            cmd.extend(["--build-arg", f"BASE_SDK_VERSION={self.BASE_SDK_VERSION}"])
+        sdk_version = self._resolved_sdk_version or self.BASE_SDK_VERSION
+        if sdk_version:
+            cmd.extend(["--build-arg", f"BASE_SDK_VERSION={sdk_version}"])
 
         if no_cache:
             cmd.append("--no-cache")

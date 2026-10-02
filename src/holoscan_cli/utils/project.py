@@ -210,7 +210,7 @@ def _reported_base_image(
     environment_image = _explicit_environment_value("HOLOSCAN_CLI_BASE_IMAGE")
     project_image = context.base_image if context is not None else None
     if container is not None:
-        value = container.default_base_image(container.cuda_version)
+        value = container.resolve_base_image(container.cuda_version)
     elif environment_image is not None:
         value = environment_image
     elif project_image is not None:

@@ -57,6 +57,8 @@ class RecordingContainer:
     def default_base_image(self, _cuda_version=None):
         return "nvcr.io/nvidia/holoscan:v4.2.0-cuda13"
 
+    resolve_base_image = default_base_image
+
     def resolve_run_image(self, img=None):
         return img or self.image_names[0]
 

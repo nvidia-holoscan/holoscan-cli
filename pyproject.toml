@@ -52,7 +52,7 @@ classifiers = [
     "Topic :: Software Development :: Libraries :: Python Modules",
     "Typing :: Typed",
 ]
-dependencies = []
+dependencies = ["packaging>=24.2"]
 
 [project.optional-dependencies]
 # ``pip install 'holoscan-cli[create]'`` enables the entire ``holoscan create``
