@@ -9,6 +9,8 @@ target_include_directories({{ cookiecutter.operator_slug }} PUBLIC
     $<INSTALL_INTERFACE:include>)
 
 target_link_libraries({{ cookiecutter.operator_slug }} PUBLIC holoscan::core)
+target_link_libraries(holoscan_{{ cookiecutter.module_slug }} INTERFACE
+    holoscan::{{ cookiecutter.operator_slug }})
 
 install(FILES {{ cookiecutter.operator_slug }}.hpp DESTINATION include/{{ cookiecutter.operator_slug }})
 

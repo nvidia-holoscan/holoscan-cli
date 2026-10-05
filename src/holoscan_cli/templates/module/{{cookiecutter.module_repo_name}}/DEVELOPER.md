@@ -192,6 +192,24 @@ declared here — install them from the `Dockerfile` or the Debian package's `DE
 | Repository folder | `holoscan-<slug>` (kebab) | `{{ cookiecutter.module_repo_name }}` |
 | Debian package | `holoscan-<slug>` (kebab) | `holoscan-{{ cookiecutter.module_slug.replace('_', '-') }}` |
 | CMake option prefix | `UPPER_SNAKE` | `{{ cookiecutter.module_slug | upper }}_BUILD_TESTING` |
+| CMake module target | `holoscan::<slug>` | `holoscan::{{ cookiecutter.module_slug }}` |
+
+## Installed CMake package
+
+Link the module aggregate to use all enabled operators:
+
+```cmake
+find_package({{ cookiecutter.module_repo_name }} CONFIG REQUIRED)
+target_link_libraries(my_pipeline PRIVATE holoscan::{{ cookiecutter.module_slug }})
+```
+
+The individual `holoscan::{{ cookiecutter.operator_slug }}` target remains available.
+When adding an operator, install it in `holoscan_{{ cookiecutter.module_slug }}_targets`
+and register it with the aggregate inside its gated operator directory:
+
+```cmake
+target_link_libraries(holoscan_{{ cookiecutter.module_slug }} INTERFACE holoscan::my_new_op)
+```
 
 ---
 

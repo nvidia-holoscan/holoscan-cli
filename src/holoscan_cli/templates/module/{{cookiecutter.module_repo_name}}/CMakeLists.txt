@@ -70,6 +70,13 @@ option(HOLOSCAN_{{ cookiecutter.module_slug | upper }}_BUILD_CPP "Build C++ appl
 list(PREPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 include(HoloHubConfigHelpers)
 
+add_library(holoscan_{{ cookiecutter.module_slug }} INTERFACE)
+add_library(holoscan::{{ cookiecutter.module_slug }} ALIAS holoscan_{{ cookiecutter.module_slug }})
+set_target_properties(holoscan_{{ cookiecutter.module_slug }} PROPERTIES
+    EXPORT_NAME {{ cookiecutter.module_slug }})
+install(TARGETS holoscan_{{ cookiecutter.module_slug }}
+    EXPORT holoscan_{{ cookiecutter.module_slug }}_targets)
+
 # ---------------------------------------------------------------------------
 # Subprojects
 # ---------------------------------------------------------------------------

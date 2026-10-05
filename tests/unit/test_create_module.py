@@ -284,6 +284,9 @@ def test_packaged_template_creates_a_standalone_module(cli, tmp_path, monkeypatc
     assert "cmake_minimum_required(VERSION 4.0)" in root_cmake
     assert "CMAKE_CXX_STANDARD 20" in root_cmake
     assert "find_package(holoscan 5.0 REQUIRED CONFIG COMPONENTS core)" in root_cmake
+    assert "add_library(holoscan::my_mod ALIAS holoscan_my_mod)" in root_cmake
+    assert "EXPORT_NAME my_mod" in root_cmake
+    assert "install(TARGETS holoscan_my_mod" in root_cmake
     assert metadata["module"]["language"] == ["C++"]
     assert metadata["module"]["namespace"] == {"cpp": "holoscan::my_mod"}
     assert metadata["module"]["holoscan_sdk"]["minimum_required_version"] == "5.0.0"
@@ -348,6 +351,104 @@ def test_packaged_template_creates_a_standalone_module(cli, tmp_path, monkeypatc
     assert "build 'holoscan-my-mod' if its dev hook is not staged" in preview.stdout
     assert "holoscan install --dev --local --dryrun" in preview.stdout
     assert not (project / "build").exists()
+
+
+def test_generated_module_exports_a_linkable_aggregate(cli, tmp_path, monkeypatch):
+    """Exercise the generated packaging with a small SDK and operator fixture."""
+    cmake = shutil.which("cmake")
+    if cmake is None:
+        pytest.skip("CMake 4 is required for the installed-package smoke test")
+    version = subprocess.check_output([cmake, "--version"], text=True).split()[2]
+    if int(version.split(".")[0]) < 4:
+        pytest.skip("CMake 4 is required for the installed-package smoke test")
+    monkeypatch.setattr(create, "_initialize_module_git", lambda _path: False)
+    create.handle_create(cli, _args(dryrun=False, directory=tmp_path / "output"))
+    project = tmp_path / "output/holoscan-my-mod"
+    operator = project / "operators/my_mod_op"
+    (operator / "my_mod_op.hpp").write_text("int module_value();\n", encoding="utf-8")
+    (operator / "my_mod_op.cpp").write_text(
+        '#include "my_mod_op.hpp"\nint module_value() { return 42; }\n', encoding="utf-8"
+    )
+    (project / "applications/my_mod_pipeline/cpp/my_mod_pipeline.cpp").write_text(
+        "int main() { return 0; }\n", encoding="utf-8"
+    )
+    with (project / "CMakeLists.txt").open("a", encoding="utf-8") as root:
+        root.write(
+            '\nif(NOT TARGET holoscan::my_mod)\nmessage(FATAL_ERROR "Missing alias")\nendif()\n'
+            "get_target_property(links holoscan_my_mod INTERFACE_LINK_LIBRARIES)\n"
+            "if(TARGET holoscan::my_mod_op)\n"
+            'if(NOT "holoscan::my_mod_op" IN_LIST links)\n'
+            'message(FATAL_ERROR "Enabled operator missing from aggregate")\nendif()\n'
+            'elseif(links)\nmessage(FATAL_ERROR "Disabled operator linked")\nendif()\n'
+        )
+    sdk = tmp_path / "sdk"
+    sdk.mkdir()
+    (sdk / "holoscanConfig.cmake").write_text(
+        "if(NOT TARGET holoscan::core)\n"
+        "add_library(holoscan::core INTERFACE IMPORTED)\nendif()\n",
+        encoding="utf-8",
+    )
+    (sdk / "holoscanConfigVersion.cmake").write_text(
+        'set(PACKAGE_VERSION "5.0.0")\nset(PACKAGE_VERSION_COMPATIBLE TRUE)\n',
+        encoding="utf-8",
+    )
+
+    def run(*args):
+        result = subprocess.run(args, capture_output=True, text=True)
+        assert result.returncode == 0, result.stdout + result.stderr
+
+    run(
+        cmake,
+        "-S",
+        str(project),
+        "-B",
+        str(tmp_path / "disabled"),
+        f"-Dholoscan_DIR={sdk}",
+        "-DBUILD_ALL=OFF",
+        "-DMY_MOD_BUILD_TESTING=OFF",
+    )
+    build = tmp_path / "build"
+    prefix = tmp_path / "install"
+    run(
+        cmake,
+        "-S",
+        str(project),
+        "-B",
+        str(build),
+        f"-Dholoscan_DIR={sdk}",
+        "-DBUILD_ALL=OFF",
+        "-DPKG_holoscan_my_mod=ON",
+        "-DMY_MOD_BUILD_TESTING=OFF",
+    )
+    run(cmake, "--build", str(build))
+    run(cmake, "--install", str(build), "--prefix", str(prefix))
+    consumer = tmp_path / "consumer"
+    consumer.mkdir()
+    (consumer / "CMakeLists.txt").write_text(
+        "cmake_minimum_required(VERSION 4.0)\nproject(consumer LANGUAGES CXX)\n"
+        "find_package(holoscan-my-mod CONFIG REQUIRED)\n"
+        "if(NOT TARGET holoscan::my_mod_op)\n"
+        'message(FATAL_ERROR "Missing individual operator target")\nendif()\n'
+        "add_executable(consumer main.cpp)\n"
+        "target_link_libraries(consumer PRIVATE holoscan::my_mod)\n",
+        encoding="utf-8",
+    )
+    (consumer / "main.cpp").write_text(
+        "#include <my_mod_op/my_mod_op.hpp>\nint main() { return module_value() != 42; }\n",
+        encoding="utf-8",
+    )
+    consumer_build = tmp_path / "consumer-build"
+    run(
+        cmake,
+        "-S",
+        str(consumer),
+        "-B",
+        str(consumer_build),
+        f"-DCMAKE_PREFIX_PATH={prefix}",
+        f"-Dholoscan_DIR={sdk}",
+    )
+    run(cmake, "--build", str(consumer_build))
+    run(str(consumer_build / "consumer"))
 
 
 def test_parser_leaves_template_and_directory_contextual():
