@@ -130,4 +130,20 @@ def validate_json(json_data, directory):
     except jsonschema.exceptions.ValidationError as err:
         return False, err
 
+    if isinstance(json_data, dict) and isinstance(json_data.get("module"), dict):
+        binary_packages = json_data["module"].get("binary_packages") or {}
+        pypi = binary_packages.get("pypi")
+        if pypi is not None:
+            wheel = binary_packages.get("wheel")
+            if wheel is not None and wheel != pypi:
+                return False, (
+                    f"module.binary_packages.pypi ({pypi!r}) does not match "
+                    f"module.binary_packages.wheel ({wheel!r}); remove the deprecated pypi field."
+                )
+            warnings.warn(
+                "module.binary_packages.pypi is deprecated; use module.binary_packages.wheel.",
+                FutureWarning,
+                stacklevel=2,
+            )
+
     return True, "valid"

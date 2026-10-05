@@ -147,6 +147,23 @@ for a machine-specific SDK.
 
 ---
 
+## Module identity and support level
+
+`metadata.json:module` records the Module's public identity:
+
+| Field | Purpose |
+| --- | --- |
+| `name` | Repository name: `holoscan-` followed by the lowercase, hyphen-separated Module slug (`holoscan-{{ cookiecutter.module_slug.replace('_', '-') }}`) |
+| `support_level` | Self-declared support level shown on the HoloHub ecosystem page: `community`, `supported_external`, or `supported_core` |
+| `binary_packages.debian` | Debian package name that installs the Module |
+| `binary_packages.wheel` | Normalized Python wheel distribution name, once the Module publishes a wheel |
+| `binary_packages.install_commands` | Recommended shell commands to install the binary packages |
+
+`binary_packages.pypi` is a deprecated alias for `binary_packages.wheel`: validation warns when it
+is present and fails when it disagrees with `wheel`.
+
+---
+
 ## Depending on operators from other Modules
 
 `metadata.json:module.dependencies` declares other Holoscan Modules whose operators this Module

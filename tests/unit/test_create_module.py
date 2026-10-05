@@ -290,6 +290,7 @@ def test_packaged_template_creates_a_standalone_module(cli, tmp_path, monkeypatc
     assert metadata["module"]["language"] == ["C++"]
     assert metadata["module"]["namespace"] == {"cpp": "holoscan::my_mod"}
     assert metadata["module"]["holoscan_sdk"]["minimum_required_version"] == "5.0.0"
+    assert metadata["module"]["support_level"] == "community"
     assert "pypi" not in metadata["module"]["binary_packages"]
     assert metadata["module"]["dependencies"] == []
     assert '"provides_operators": ["FrameCounterOp"]' in developer

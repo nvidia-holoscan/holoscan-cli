@@ -1,6 +1,6 @@
 {
     "module": {
-        "name": "minimal_module",
+        "name": "holoscan-minimal-module",
         "description": "Minimal module fixture for schema validation.",
         "authors": [
             { "name": "NVIDIA", "affiliation": "NVIDIA" }

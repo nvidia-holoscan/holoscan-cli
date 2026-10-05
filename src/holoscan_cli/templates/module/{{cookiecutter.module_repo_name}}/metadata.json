@@ -3,6 +3,7 @@
   "module": {
     "name": "holoscan-{{ cookiecutter.module_slug.replace('_', '-') }}",
     "version": "{{ cookiecutter.version }}",
+    "support_level": "community",
     "description": "{{ cookiecutter.description }}",
     "authors": [
       {

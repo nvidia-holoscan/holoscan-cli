@@ -128,5 +128,47 @@ def test_validate_json_resolves_legacy_ref_alias(tmp_path, monkeypatch):
     assert ok is False
 
 
+def _module_metadata(**binary_packages):
+    return {
+        "module": {
+            "name": "holoscan-example",
+            "description": "Example module.",
+            "authors": [{"name": "NVIDIA", "affiliation": "NVIDIA"}],
+            "version": "0.1.0",
+            "language": ["C++"],
+            "platforms": ["x86_64"],
+            "tags": ["example"],
+            "holoscan_sdk": {"minimum_required_version": "5.0.0", "tested_versions": ["5.0.0"]},
+            "binary_packages": binary_packages,
+        }
+    }
+
+
+def test_validate_json_accepts_wheel_without_deprecation_warning(recwarn):
+    ok, msg = metadata_validator.validate_json(
+        _module_metadata(wheel="holoscan-example"), "modules"
+    )
+    assert ok is True, msg
+    assert not [w for w in recwarn if issubclass(w.category, FutureWarning)]
+
+
+@pytest.mark.parametrize(
+    "binary_packages",
+    [{"pypi": "holoscan-example"}, {"pypi": "holoscan-example", "wheel": "holoscan-example"}],
+)
+def test_validate_json_warns_on_deprecated_pypi(binary_packages):
+    with pytest.warns(FutureWarning, match="binary_packages.pypi is deprecated"):
+        ok, msg = metadata_validator.validate_json(_module_metadata(**binary_packages), "modules")
+    assert ok is True, msg
+
+
+def test_validate_json_rejects_pypi_wheel_mismatch():
+    ok, msg = metadata_validator.validate_json(
+        _module_metadata(pypi="holoscan-other", wheel="holoscan-example"), "modules"
+    )
+    assert ok is False
+    assert "does not match" in str(msg)
+
+
 if __name__ == "__main__":
     raise SystemExit(pytest.main([__file__, "-q"]))
