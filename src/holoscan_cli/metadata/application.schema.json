@@ -53,6 +53,11 @@
           "type": "string",
           "pattern": "^[a-zA-Z_][a-zA-Z0-9_]*$",
           "description": "Name of the default mode to use when none is specified. Only needed when there are multiple modes."
+        },
+        "ci_mode": {
+          "type": "string",
+          "pattern": "^[a-zA-Z_][a-zA-Z0-9_]*$",
+          "description": "Name of the mode to use in CI. Falls back to default_mode when omitted."
         }
       },
       "required": [
@@ -100,7 +105,8 @@
         ]
       },
       "dependentRequired": {
-        "default_mode": ["modes"]
+        "default_mode": ["modes"],
+        "ci_mode": ["modes"]
       }
     }
   }

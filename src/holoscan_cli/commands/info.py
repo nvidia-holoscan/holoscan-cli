@@ -69,6 +69,19 @@ def _project_languages(metadata: dict) -> list:
     return list(language)
 
 
+def _effective_ci_mode(metadata: dict) -> str | None:
+    """Return the mode CI should use, following normal mode defaults."""
+    if "ci_mode" in metadata:
+        return metadata["ci_mode"]
+    if "default_mode" in metadata:
+        return metadata["default_mode"]
+
+    modes = metadata.get("modes", {})
+    if len(modes) == 1:
+        return next(iter(modes))
+    return None
+
+
 def _project_to_json(project: dict) -> dict:
     """Lean, machine-readable summary of one discovered project.
 
@@ -82,6 +95,7 @@ def _project_to_json(project: dict) -> dict:
         "source_folder": project.get("source_folder"),
         "language": _project_languages(metadata),
         "modes": sorted(metadata.get("modes", {}).keys()),
+        "ci_mode": _effective_ci_mode(metadata),
     }
 
 
@@ -151,6 +165,7 @@ def handle_modes(cli, args: argparse.Namespace) -> None:
                     "project": args.project,
                     "language": _project_languages(metadata),
                     "modes": modes,
+                    "ci_mode": _effective_ci_mode(metadata),
                 }
             )
         )
