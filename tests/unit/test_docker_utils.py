@@ -168,6 +168,89 @@ def test_effective_cpu_set_keeps_restricted_affinity_when_cgroup_is_unreadable(
     assert utils_docker.get_effective_cpu_set(proc_root=proc_root) == "1,3"
 
 
+@pytest.mark.parametrize("is_v2", [True, False])
+@pytest.mark.parametrize(
+    ("allowed_cpus", "quota", "expected"),
+    [
+        ("0-13", None, []),
+        ("0-7,11-13", None, ["--cpuset-cpus=0-7,11-13"]),
+        ("0-13", "150000", ["--cpu-quota=150000", "--cpu-period=100000"]),
+        (
+            "0-7,11-13",
+            "150000",
+            ["--cpuset-cpus=0-7,11-13", "--cpu-quota=150000", "--cpu-period=100000"],
+        ),
+    ],
+)
+def test_cgroup_cpu_limits_preserve_core_access(
+    tmp_path, monkeypatch, is_v2, allowed_cpus, quota, expected
+):
+    cpu_mount = tmp_path / "cpu"
+    cpu_job = cpu_mount / "job"
+    cpu_job.mkdir(parents=True)
+    cpuset_mount = cpu_mount if is_v2 else tmp_path / "cpuset"
+    cpuset_job = cpuset_mount / "job"
+    cpuset_job.mkdir(parents=True, exist_ok=True)
+    if is_v2:
+        (cpu_job / "cpu.max").write_text("400000 200000\n", encoding="utf-8")
+        (cpu_mount / "cpu.max").write_text(f"{quota or 'max'} 100000\n", encoding="utf-8")
+        if quota is None:
+            (cpu_job / "cpu.max").write_text("max 100000\n", encoding="utf-8")
+        cpuset_file = "cpuset.cpus.effective"
+        cgroup = "0::/pod/job\n"
+        mountinfo = f"1 0 0:1 /pod {cpu_mount} rw - cgroup2 cgroup rw\n"
+    else:
+        (cpu_job / "cpu.cfs_quota_us").write_text("400000\n", encoding="utf-8")
+        (cpu_job / "cpu.cfs_period_us").write_text("200000\n", encoding="utf-8")
+        (cpu_mount / "cpu.cfs_quota_us").write_text(f"{quota or '-1'}\n", encoding="utf-8")
+        (cpu_mount / "cpu.cfs_period_us").write_text("100000\n", encoding="utf-8")
+        if quota is None:
+            (cpu_job / "cpu.cfs_quota_us").write_text("-1\n", encoding="utf-8")
+        cpuset_file = "cpuset.effective_cpus"
+        cgroup = "2:cpu,cpuacct:/pod/job\n3:cpuset:/pod/job\n"
+        mountinfo = (
+            f"1 0 0:1 /pod {cpu_mount} rw - cgroup cgroup rw,cpu,cpuacct\n"
+            f"2 0 0:2 /pod {cpuset_mount} rw - cgroup cgroup rw,cpuset\n"
+        )
+    (cpuset_job / cpuset_file).write_text(f"{allowed_cpus}\n", encoding="utf-8")
+    proc_root = _write_cgroup_files(tmp_path, cgroup=cgroup, mountinfo=mountinfo)
+    sys_root = tmp_path / "sys"
+    online = sys_root / "devices/system/cpu/online"
+    online.parent.mkdir(parents=True)
+    online.write_text("0-13\n", encoding="utf-8")
+    monkeypatch.setattr(
+        utils_docker.os,
+        "sched_getaffinity",
+        lambda _pid: pytest.fail("runtime limits must not use thread affinity"),
+    )
+
+    assert utils_docker.get_cgroup_cpu_limits(proc_root, sys_root) == expected
+
+
+def test_cgroup_cpu_limits_inherit_parent_cpuset_when_controller_is_not_enabled(tmp_path):
+    cgroup_mount = tmp_path / "cgroup"
+    (cgroup_mount / "scope").mkdir(parents=True)
+    (cgroup_mount / "cpuset.cpus.effective").write_text("0-7,11-13\n", encoding="utf-8")
+    proc_root = _write_cgroup_files(
+        tmp_path,
+        cgroup="0::/slice/scope\n",
+        mountinfo=f"1 0 0:1 /slice {cgroup_mount} rw - cgroup2 cgroup rw\n",
+    )
+    sys_root = tmp_path / "sys"
+    online = sys_root / "devices/system/cpu/online"
+    online.parent.mkdir(parents=True)
+    online.write_text("0-13\n", encoding="utf-8")
+
+    assert utils_docker.get_cgroup_cpu_limits(proc_root, sys_root) == ["--cpuset-cpus=0-7,11-13"]
+
+
+def test_cgroup_cpu_limits_ignore_unreadable_cgroup_without_using_affinity(tmp_path, monkeypatch):
+    proc_root = _write_cgroup_files(tmp_path, cgroup="malformed\n", mountinfo="malformed\n")
+    monkeypatch.setattr(utils_docker.os, "sched_getaffinity", lambda _pid: {0, 1})
+
+    assert utils_docker.get_cgroup_cpu_limits(proc_root, tmp_path / "sys") == []
+
+
 def test_docker_build_resource_support_is_cached(monkeypatch):
     calls = []
 
