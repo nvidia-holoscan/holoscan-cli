@@ -79,7 +79,11 @@ def _effective_ci_mode(metadata: dict) -> str | None:
             fatal(f"Invalid ci_mode '{ci_mode}' in metadata among {available}")
         return ci_mode
     if "default_mode" in metadata:
-        return metadata["default_mode"]
+        default_mode = metadata["default_mode"]
+        if default_mode not in modes:
+            available = ", ".join(modes.keys())
+            fatal(f"Invalid default_mode '{default_mode}' in metadata among {available}")
+        return default_mode
 
     if len(modes) == 1:
         return next(iter(modes))

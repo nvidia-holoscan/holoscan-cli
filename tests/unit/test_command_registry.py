@@ -194,14 +194,15 @@ def test_list_json_prefers_explicit_ci_mode(capsys):
     assert data["projects"][0]["ci_mode"] == "smoke"
 
 
-def test_list_json_rejects_undeclared_ci_mode(capsys):
+@pytest.mark.parametrize("mode_field", ["ci_mode", "default_mode"])
+def test_list_json_rejects_undeclared_effective_mode(capsys, mode_field):
     cli = SimpleNamespace(
         projects=[
             {
                 "project_type": "application",
                 "project_name": "smoke_app",
                 "source_folder": "/repo/applications/smoke_app",
-                "metadata": {"ci_mode": "missing", "modes": {"smoke": {}}},
+                "metadata": {mode_field: "missing", "modes": {"smoke": {}}},
             }
         ]
     )
@@ -210,7 +211,7 @@ def test_list_json_rejects_undeclared_ci_mode(capsys):
         info.handle_list(cli, SimpleNamespace(json=True))
 
     assert exc_info.value.code == 1
-    assert "Invalid ci_mode 'missing'" in capsys.readouterr().err
+    assert f"Invalid {mode_field} 'missing'" in capsys.readouterr().err
 
 
 def test_modes_json_emits_resolved_modes(capsys):
@@ -246,7 +247,8 @@ def test_modes_json_emits_resolved_modes(capsys):
     assert data["ci_mode"] == "default"
 
 
-def test_modes_json_rejects_undeclared_ci_mode(capsys):
+@pytest.mark.parametrize("mode_field", ["ci_mode", "default_mode"])
+def test_modes_json_rejects_undeclared_effective_mode(capsys, mode_field):
     from holoscan_cli.cli import HoloscanCLI
 
     cli = HoloscanCLI()
@@ -255,7 +257,7 @@ def test_modes_json_rejects_undeclared_ci_mode(capsys):
             "project_name": "smoke_app",
             "metadata": {
                 "language": "python",
-                "ci_mode": "missing",
+                mode_field: "missing",
                 "modes": {"smoke": {}},
             },
         }
@@ -268,4 +270,4 @@ def test_modes_json_rejects_undeclared_ci_mode(capsys):
         )
 
     assert exc_info.value.code == 1
-    assert "Invalid ci_mode 'missing'" in capsys.readouterr().err
+    assert f"Invalid {mode_field} 'missing'" in capsys.readouterr().err
