@@ -194,6 +194,25 @@ def test_list_json_prefers_explicit_ci_mode(capsys):
     assert data["projects"][0]["ci_mode"] == "smoke"
 
 
+def test_list_json_rejects_undeclared_ci_mode(capsys):
+    cli = SimpleNamespace(
+        projects=[
+            {
+                "project_type": "application",
+                "project_name": "smoke_app",
+                "source_folder": "/repo/applications/smoke_app",
+                "metadata": {"ci_mode": "missing", "modes": {"smoke": {}}},
+            }
+        ]
+    )
+
+    with pytest.raises(SystemExit) as exc_info:
+        info.handle_list(cli, SimpleNamespace(json=True))
+
+    assert exc_info.value.code == 1
+    assert "Invalid ci_mode 'missing'" in capsys.readouterr().err
+
+
 def test_modes_json_emits_resolved_modes(capsys):
     from holoscan_cli.cli import HoloscanCLI
 
@@ -225,3 +244,28 @@ def test_modes_json_emits_resolved_modes(capsys):
         "smoke": {"description": "s"},
     }
     assert data["ci_mode"] == "default"
+
+
+def test_modes_json_rejects_undeclared_ci_mode(capsys):
+    from holoscan_cli.cli import HoloscanCLI
+
+    cli = HoloscanCLI()
+    cli.projects = [
+        {
+            "project_name": "smoke_app",
+            "metadata": {
+                "language": "python",
+                "ci_mode": "missing",
+                "modes": {"smoke": {}},
+            },
+        }
+    ]
+
+    with pytest.raises(SystemExit) as exc_info:
+        info.handle_modes(
+            cli,
+            SimpleNamespace(project="smoke_app", language="python", json=True),
+        )
+
+    assert exc_info.value.code == 1
+    assert "Invalid ci_mode 'missing'" in capsys.readouterr().err

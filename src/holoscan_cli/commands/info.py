@@ -36,7 +36,7 @@ from collections import defaultdict
 
 from holoscan_cli.commands.registry import help_for, project_command_names
 from holoscan_cli.utils.env_info import collect_env_info, collect_git_info, collect_holohub_info
-from holoscan_cli.utils.io import Color, format_cmd
+from holoscan_cli.utils.io import Color, fatal, format_cmd
 from holoscan_cli.utils.json_output import dumps as json_dumps
 
 # ---- list --------------------------------------------------------------------
@@ -71,12 +71,16 @@ def _project_languages(metadata: dict) -> list:
 
 def _effective_ci_mode(metadata: dict) -> str | None:
     """Return the mode CI should use, following normal mode defaults."""
+    modes = metadata.get("modes", {})
     if "ci_mode" in metadata:
-        return metadata["ci_mode"]
+        ci_mode = metadata["ci_mode"]
+        if ci_mode not in modes:
+            available = ", ".join(modes.keys())
+            fatal(f"Invalid ci_mode '{ci_mode}' in metadata among {available}")
+        return ci_mode
     if "default_mode" in metadata:
         return metadata["default_mode"]
 
-    modes = metadata.get("modes", {})
     if len(modes) == 1:
         return next(iter(modes))
     return None

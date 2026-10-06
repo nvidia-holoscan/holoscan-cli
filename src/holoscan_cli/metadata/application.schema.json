@@ -57,7 +57,7 @@
         "ci_mode": {
           "type": "string",
           "pattern": "^[a-zA-Z_][a-zA-Z0-9_]*$",
-          "description": "Name of the mode to use in CI. Falls back to default_mode when omitted."
+          "description": "Name of a mode declared in modes to use in CI. Falls back to default_mode when omitted."
         }
       },
       "required": [
