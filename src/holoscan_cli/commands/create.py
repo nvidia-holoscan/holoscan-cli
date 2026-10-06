@@ -43,11 +43,6 @@ from holoscan_cli.utils.text import parse_key_value_pairs, to_snake_case
 LEGACY_MODULE_TEMPLATE = Path("modules/template")
 CREATE_TEMPLATE_ENV = "HOLOSCAN_CLI_CREATE_TEMPLATE"
 LOCAL_SOURCE_VERSION = "0.0.0+local"
-# SDK 5 Module scaffolds install this released CLI preview.  The checkout's
-# dynamic development version (for example ``0.0.0a161``) is not published and
-# therefore cannot be resolved by the generated Docker build or pre-commit
-# metadata hook.
-MODULE_TEMPLATE_CLI_VERSION = "5.0.0a1"
 RESERVED_CONTEXT_KEYS = {"_holoscan_cli_version"}
 PRESERVED_DESTINATION_ENTRIES = {".git"}
 
@@ -314,7 +309,7 @@ def handle_create(cli, args: argparse.Namespace) -> None:
             "project_slug": project_slug,
             "language": args.language.lower() if args.language else None,
             "year": datetime.datetime.now().year,
-            "_holoscan_cli_version": MODULE_TEMPLATE_CLI_VERSION if is_module else __version__,
+            "_holoscan_cli_version": __version__,
         }
         if HoloscanContainer.BASE_SDK_VERSION:
             context["holoscan_version"] = HoloscanContainer.BASE_SDK_VERSION

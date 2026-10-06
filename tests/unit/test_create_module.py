@@ -303,11 +303,11 @@ def test_packaged_template_creates_a_standalone_module(cli, tmp_path, monkeypatc
     assert "return in a later release" in readme
     for text in (operator_source, operator_header, application, readme, pyproject, dockerfile):
         assert "{{" not in text and "{%" not in text
-    assert active_requirements == [f"holoscan-cli=={create.MODULE_TEMPLATE_CLI_VERSION}"]
+    assert active_requirements == [f"holoscan-cli=={create.__version__}"]
     assert "--extra-index-url https://pypi.nvidia.com" in requirement
     assert 'requires-python = ">=3.11"' in pyproject
     assert 'holoscan-cli = { index = "nvidia" }' in pyproject
-    assert f"holoscan-cli=={create.MODULE_TEMPLATE_CLI_VERSION}" in pyproject
+    assert f"holoscan-cli=={create.__version__}" in pyproject
     assert 'url = "https://pypi.nvidia.com"' in pyproject
     assert "explicit = true" in pyproject
     assert "package = false" in pyproject
@@ -328,10 +328,7 @@ def test_packaged_template_creates_a_standalone_module(cli, tmp_path, monkeypatc
     assert not (project / "holoscan").exists()
 
     pre_commit = (project / ".pre-commit-config.yaml").read_text(encoding="utf-8")
-    assert (
-        f'additional_dependencies: ["holoscan-cli[create]=={create.MODULE_TEMPLATE_CLI_VERSION}"]'
-        in pre_commit
-    )
+    assert f'additional_dependencies: ["holoscan-cli[create]=={create.__version__}"]' in pre_commit
 
     # A new scaffold must accept the development-install command before a build exists.
     env = dict(
