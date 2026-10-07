@@ -55,6 +55,7 @@ from ..utils.holohub import (
 from ..utils.io import fatal, info, run_command, warn
 from ..utils.sdk import (
     check_nvidia_ctk,
+    check_sdk_cuda_major,
     find_hsdk_dir,
     get_arch_gpu_str,
     get_compute_capacity,
@@ -63,6 +64,7 @@ from ..utils.sdk import (
     get_host_gpu,
     is_valid_sdk_directory,
     resolve_local_sdk_dir,
+    sdk_cuda_major,
 )
 from ..utils.text import (
     get_cli_arg_value,
@@ -607,9 +609,12 @@ class HoloscanContainer:
         gpu_type = get_host_gpu()
         compute_capacity = get_compute_capacity()
 
-        cuda_major = (
-            self.cuda_version if self.cuda_version is not None else get_default_cuda_version()
-        )
+        cuda_major = self.cuda_version
+        if cuda_major is None:
+            # Keep CUDA_MAJOR consistent with the base image's CUDA-only tag.
+            cuda_major = sdk_cuda_major(self.BASE_SDK_VERSION) or get_default_cuda_version()
+        else:
+            check_sdk_cuda_major(cuda_major, self.BASE_SDK_VERSION)
 
         full_build_args = self.compose_build_args(
             mode_build_args=mode_build_args,

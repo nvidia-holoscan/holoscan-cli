@@ -22,6 +22,7 @@ in ``commands/create.py``.
 """
 
 import json
+import warnings
 
 import pytest
 
@@ -58,6 +59,107 @@ def test_validate_json_rejects_invalid_schema_file(tmp_path, monkeypatch):
     ok, msg = metadata_validator.validate_json({"anything": {}}, "anything")
     assert ok is False
     assert isinstance(msg, json.JSONDecodeError)
+
+
+# ---- $schema labels ---------------------------------------------------------
+
+
+def test_validate_json_accepts_canonical_schema_label():
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        ok, msg = metadata_validator.validate_json(
+            {"$schema": "urn:holoscan:package:v1", "package": {}}, "pkg"
+        )
+    assert ok is True, msg
+
+
+def test_validate_json_warns_on_legacy_schema_label():
+    with pytest.warns(FutureWarning, match="2027"):
+        ok, msg = metadata_validator.validate_json(
+            {"$schema": "urn:holohub:package:v1", "package": {}}, "pkg"
+        )
+    assert ok is True, msg
+
+
+@pytest.mark.parametrize(
+    "label",
+    [
+        "urn:holoscan:module:v2",
+        "urn:holoscan:package:v2",
+        "holoscan/package/v1",
+        "urn:example:package:v1",
+        1,
+    ],
+)
+def test_validate_json_rejects_mismatched_schema_label(label):
+    ok, msg = metadata_validator.validate_json({"$schema": label, "package": {}}, "pkg")
+    assert ok is False
+    assert '"$schema"' in msg
+
+
+def test_validate_json_resolves_legacy_ref_alias(tmp_path, monkeypatch):
+    schema = tmp_path / "legacy.schema.json"
+    schema.write_text(
+        json.dumps(
+            {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "$id": "urn:holoscan:legacy:v1",
+                "type": "object",
+                "properties": {"tags": {"$ref": "urn:holohub:project:v1#/$defs/tags"}},
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(metadata_validator, "get_schema_path", lambda directory: schema)
+
+    with pytest.warns(FutureWarning, match="2027"):
+        ok, msg = metadata_validator.validate_json({"tags": ["a"]}, "legacy")
+    assert ok is True, msg
+    with pytest.warns(FutureWarning, match="2027"):
+        ok, _ = metadata_validator.validate_json({"tags": [1]}, "legacy")
+    assert ok is False
+
+
+def _module_metadata(**binary_packages):
+    return {
+        "module": {
+            "name": "holoscan-example",
+            "description": "Example module.",
+            "authors": [{"name": "NVIDIA", "affiliation": "NVIDIA"}],
+            "version": "0.1.0",
+            "language": ["C++"],
+            "platforms": ["x86_64"],
+            "tags": ["example"],
+            "holoscan_sdk": {"minimum_required_version": "5.0.0", "tested_versions": ["5.0.0"]},
+            "binary_packages": binary_packages,
+        }
+    }
+
+
+def test_validate_json_accepts_wheel_without_deprecation_warning(recwarn):
+    ok, msg = metadata_validator.validate_json(
+        _module_metadata(wheel="holoscan-example"), "modules"
+    )
+    assert ok is True, msg
+    assert not [w for w in recwarn if issubclass(w.category, FutureWarning)]
+
+
+@pytest.mark.parametrize(
+    "binary_packages",
+    [{"pypi": "holoscan-example"}, {"pypi": "holoscan-example", "wheel": "holoscan-example"}],
+)
+def test_validate_json_warns_on_deprecated_pypi(binary_packages):
+    with pytest.warns(FutureWarning, match="binary_packages.pypi is deprecated"):
+        ok, msg = metadata_validator.validate_json(_module_metadata(**binary_packages), "modules")
+    assert ok is True, msg
+
+
+def test_validate_json_rejects_pypi_wheel_mismatch():
+    ok, msg = metadata_validator.validate_json(
+        _module_metadata(pypi="holoscan-other", wheel="holoscan-example"), "modules"
+    )
+    assert ok is False
+    assert "does not match" in str(msg)
 
 
 if __name__ == "__main__":

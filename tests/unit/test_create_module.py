@@ -7,8 +7,11 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import shutil
 import subprocess
+import sys
+import tomllib
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -21,7 +24,7 @@ def _args(**overrides) -> argparse.Namespace:
     values = {
         "project": "My Mod",
         "template": None,
-        "language": "python",
+        "language": "cpp",
         "dryrun": True,
         "directory": None,
         "context": None,
@@ -196,16 +199,40 @@ def test_missing_cookiecutter_points_to_the_create_extra(cli, tmp_path, monkeypa
     assert "pip install 'holoscan-cli[create]'" in capsys.readouterr().err
 
 
-@pytest.mark.parametrize(
-    "language,generated_source",
-    [
-        ("python", "operators/my_mod_op/my_mod_op.py"),
-        ("cpp", "operators/my_mod_op/my_mod_op.cpp"),
-    ],
-)
-def test_packaged_template_creates_a_standalone_module(
-    cli, tmp_path, monkeypatch, language, generated_source
+def test_module_template_rejects_python_language(cli, tmp_path, capsys):
+    with pytest.raises(SystemExit):
+        create.handle_create(cli, _args(language="python", directory=tmp_path / "output"))
+
+    err = capsys.readouterr().err
+    assert "not available for Holoscan SDK 5.0" in err
+    assert "returns in a later release" in err
+    assert not (tmp_path / "output").exists()
+
+
+@pytest.mark.parametrize("holoscan_version", ["4.1.0", "5.0", "latest"])
+def test_module_template_rejects_pre_5_0_or_malformed_sdk_versions(
+    cli, tmp_path, monkeypatch, capsys, holoscan_version
 ):
+    pytest.importorskip("cookiecutter")
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    (tmp_path / "home").mkdir()
+    monkeypatch.setattr(create, "_initialize_module_git", lambda _path: False)
+
+    with pytest.raises(SystemExit):
+        create.handle_create(
+            cli,
+            _args(
+                dryrun=False,
+                directory=tmp_path / "output",
+                context=[f"holoscan_version={holoscan_version}"],
+            ),
+        )
+
+    assert "Hook script failed" in capsys.readouterr().err
+    assert not (tmp_path / "output/holoscan-my-mod").exists()
+
+
+def test_packaged_template_creates_a_standalone_module(cli, tmp_path, monkeypatch):
     pytest.importorskip("cookiecutter")
     monkeypatch.setenv("HOME", str(tmp_path / "home"))
     (tmp_path / "home").mkdir()
@@ -213,7 +240,7 @@ def test_packaged_template_creates_a_standalone_module(
 
     create.handle_create(
         cli,
-        _args(language=language, dryrun=False, directory=tmp_path / "output"),
+        _args(language="cpp", dryrun=False, directory=tmp_path / "output"),
     )
 
     project = tmp_path / "output/holoscan-my-mod"
@@ -221,40 +248,202 @@ def test_packaged_template_creates_a_standalone_module(
     pyproject = (project / "pyproject.toml").read_text(encoding="utf-8")
     dockerfile = (project / "Dockerfile").read_text(encoding="utf-8")
     readme = (project / "README.md").read_text(encoding="utf-8")
-    deb_cmake = (project / "pkg/holoscan-my-mod/CMakeLists.txt").read_text(encoding="utf-8")
-    deb_readme = (project / "pkg/holoscan-my-mod/README.md").read_text(encoding="utf-8")
-    ci_workflow = (project / ".github/workflows/ci.yml").read_text(encoding="utf-8")
     active_requirements = [
         line for line in requirement.splitlines() if line and not line.startswith("#")
     ]
 
-    assert (project / generated_source).is_file()
+    operator_source = (project / "operators/my_mod_op/my_mod_op.cpp").read_text(encoding="utf-8")
+    operator_header = (project / "operators/my_mod_op/my_mod_op.hpp").read_text(encoding="utf-8")
+    application = (project / "applications/my_mod_pipeline/cpp/my_mod_pipeline.cpp").read_text(
+        encoding="utf-8"
+    )
+    root_cmake = (project / "CMakeLists.txt").read_text(encoding="utf-8")
+    metadata = json.loads((project / "metadata.json").read_text(encoding="utf-8"))
+    deb = (project / "pkg/holoscan-my-mod/CMakeLists.txt").read_text(encoding="utf-8")
+    developer = (project / "DEVELOPER.md").read_text(encoding="utf-8")
+
     assert (project / "cmake/HoloHubConfigHelpers.cmake").is_file()
+    assert (project / "tests/cpp/test_operators.cpp").is_file()
+    for removed in (
+        "operators/my_mod_op/my_mod_op.py",
+        "operators/my_mod_op/python",
+        "applications/my_mod_pipeline/python",
+        "python",
+        "tests/python",
+        "pytest.ini",
+    ):
+        assert not (project / removed).exists(), removed
+    assert "holoscan::Operator<>" in operator_header
+    assert "holoscan::Input<std::uint32_t> in;" in operator_header
+    assert "HOLOSCAN_TRY(auto value, in.receive_data());" in operator_source
+    assert "holoscan::compile(graph)" in application
+    assert "holoscan::run_async(plan)" in application
+    assert "cmake_minimum_required(VERSION 4.0)" in root_cmake
+    assert "CMAKE_CXX_STANDARD 20" in root_cmake
+    assert "find_package(holoscan 5.0 REQUIRED CONFIG COMPONENTS core)" in root_cmake
+    assert "add_library(holoscan::my_mod ALIAS holoscan_my_mod)" in root_cmake
+    assert "EXPORT_NAME my_mod" in root_cmake
+    assert "install(TARGETS holoscan_my_mod" in root_cmake
+    assert metadata["module"]["language"] == ["C++"]
+    assert metadata["module"]["namespace"] == {"cpp": "holoscan::my_mod"}
+    assert metadata["module"]["holoscan_sdk"]["minimum_required_version"] == "5.0.0"
+    assert metadata["module"]["support_level"] == "community"
+    assert "pypi" not in metadata["module"]["binary_packages"]
+    assert metadata["module"]["dependencies"] == []
+    assert '"provides_operators": ["FrameCounterOp"]' in developer
+    assert "HOLOSCAN_CLI_LOCAL_HOLOSCAN_EXAMPLE_UTILS" in developer
+    assert "target_link_libraries(my_mod_op PUBLIC holoscan::frame_counter)" in developer
+    assert 'DEPENDS     "holoscan (>= 5.0.0)"' in deb
+    assert "scikit-build" not in pyproject
+    assert "pybind11" not in dockerfile
+    assert "holoscan:v5.0.0-cuda13" in dockerfile
+    assert "return in a later release" in readme
+    for text in (operator_source, operator_header, application, readme, pyproject, dockerfile):
+        assert "{{" not in text and "{%" not in text
     assert active_requirements == [f"holoscan-cli=={create.__version__}"]
     assert "--extra-index-url https://pypi.nvidia.com" in requirement
     assert 'requires-python = ">=3.11"' in pyproject
     assert 'holoscan-cli = { index = "nvidia" }' in pyproject
+    assert f"holoscan-cli=={create.__version__}" in pyproject
     assert 'url = "https://pypi.nvidia.com"' in pyproject
     assert "explicit = true" in pyproject
     assert "package = false" in pyproject
+    holoscan_config = tomllib.loads(pyproject)["tool"]["holoscan"]
+    assert holoscan_config["cuda"] == 13
+    assert holoscan_config["base-images"] == {
+        "x86_64": "nvcr.io/nvidia/clara-holoscan/holoscan:v5.0.0-cuda13",
+        "aarch64": "nvcr.io/nvidia/clara-holoscan/holoscan:v5.0.0-cuda13",
+    }
+    assert set(holoscan_config) == {"cuda", "base-images"}
     assert "--extra-index-url https://pypi.nvidia.com" in dockerfile
     assert "python3 -m venv .venv" in readme
     assert "uv run holoscan" in readme
-    assert 'set(HOLOSCAN_DEB_DEPENDENCY "holoscan-cuda-13 (>= 4.5.0)")' in deb_cmake
-    assert 'set(HOLOSCAN_DEB_DEPENDENCY "holoscan (>= 4.5.0)")' in deb_cmake
-    assert 'DEPENDS     "${HOLOSCAN_DEB_DEPENDENCY}"' in deb_cmake
-    assert "CMAKE_SYSTEM_PROCESSOR" in deb_cmake
-    assert "aarch64|arm64" in deb_cmake
-    assert "x86_64|amd64" in deb_cmake
-    assert "holoscan-cuda-12 (>= 4.5.0)" in deb_readme
-    assert "aarch64 (Jetson Thor)" in deb_readme
-    assert "holohub_configure_deb()" in deb_readme
-    assert 'dpkg-deb --field "$package" Depends' in ci_workflow
-    assert "tr ',' '\\n'" in ci_workflow
-    assert '"holoscan-cuda-13 (>= 4.5.0)"' in ci_workflow
-    assert 'apt-get install -y "./$package"' in ci_workflow
     assert not (project / "holohub").exists()
     assert not (project / "holoscan").exists()
+
+    pre_commit = (project / ".pre-commit-config.yaml").read_text(encoding="utf-8")
+    assert f'additional_dependencies: ["holoscan-cli[create]=={create.__version__}"]' in pre_commit
+
+    # A new scaffold must accept the development-install command before a build exists.
+    env = dict(
+        os.environ,
+        HOLOSCAN_CLI_ROOT=str(project),
+        PYTHONPATH=str(Path(__file__).resolve().parents[2] / "src"),
+    )
+    for name in ("HOLOSCAN_CLI_BUILD_LOCAL", "HOLOSCAN_CLI_IN_CONTAINER_CMD"):
+        env.pop(name, None)
+    preview = subprocess.run(
+        [sys.executable, "-m", "holoscan_cli", "install", "--dev", "--dryrun"],
+        cwd=project,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    assert "build 'holoscan-my-mod' if its dev hook is not staged" in preview.stdout
+    assert "holoscan install --dev --local --dryrun" in preview.stdout
+    assert not (project / "build").exists()
+
+
+def test_generated_module_exports_a_linkable_aggregate(cli, tmp_path, monkeypatch):
+    """Exercise the generated packaging with a small SDK and operator fixture."""
+    cmake = shutil.which("cmake")
+    if cmake is None:
+        pytest.skip("CMake 4 is required for the installed-package smoke test")
+    version = subprocess.check_output([cmake, "--version"], text=True).split()[2]
+    if int(version.split(".")[0]) < 4:
+        pytest.skip("CMake 4 is required for the installed-package smoke test")
+    monkeypatch.setattr(create, "_initialize_module_git", lambda _path: False)
+    create.handle_create(cli, _args(dryrun=False, directory=tmp_path / "output"))
+    project = tmp_path / "output/holoscan-my-mod"
+    operator = project / "operators/my_mod_op"
+    (operator / "my_mod_op.hpp").write_text("int module_value();\n", encoding="utf-8")
+    (operator / "my_mod_op.cpp").write_text(
+        '#include "my_mod_op.hpp"\nint module_value() { return 42; }\n', encoding="utf-8"
+    )
+    (project / "applications/my_mod_pipeline/cpp/my_mod_pipeline.cpp").write_text(
+        "int main() { return 0; }\n", encoding="utf-8"
+    )
+    with (project / "CMakeLists.txt").open("a", encoding="utf-8") as root:
+        root.write(
+            '\nif(NOT TARGET holoscan::my_mod)\nmessage(FATAL_ERROR "Missing alias")\nendif()\n'
+            "get_target_property(links holoscan_my_mod INTERFACE_LINK_LIBRARIES)\n"
+            "if(TARGET holoscan::my_mod_op)\n"
+            'if(NOT "holoscan::my_mod_op" IN_LIST links)\n'
+            'message(FATAL_ERROR "Enabled operator missing from aggregate")\nendif()\n'
+            'elseif(links)\nmessage(FATAL_ERROR "Disabled operator linked")\nendif()\n'
+        )
+    sdk = tmp_path / "sdk"
+    sdk.mkdir()
+    (sdk / "holoscanConfig.cmake").write_text(
+        "if(NOT TARGET holoscan::core)\n"
+        "add_library(holoscan::core INTERFACE IMPORTED)\nendif()\n",
+        encoding="utf-8",
+    )
+    (sdk / "holoscanConfigVersion.cmake").write_text(
+        'set(PACKAGE_VERSION "5.0.0")\nset(PACKAGE_VERSION_COMPATIBLE TRUE)\n',
+        encoding="utf-8",
+    )
+
+    def run(*args):
+        result = subprocess.run(args, capture_output=True, text=True)
+        assert result.returncode == 0, result.stdout + result.stderr
+
+    run(
+        cmake,
+        "-S",
+        str(project),
+        "-B",
+        str(tmp_path / "disabled"),
+        f"-Dholoscan_DIR={sdk}",
+        "-DBUILD_ALL=OFF",
+        "-DMY_MOD_BUILD_TESTING=OFF",
+    )
+    build = tmp_path / "build"
+    prefix = tmp_path / "install"
+    run(
+        cmake,
+        "-S",
+        str(project),
+        "-B",
+        str(build),
+        f"-Dholoscan_DIR={sdk}",
+        "-DBUILD_ALL=OFF",
+        "-DPKG_holoscan_my_mod=ON",
+        "-DMY_MOD_BUILD_TESTING=OFF",
+    )
+    # SDK 5 installs under /usr, so the Module's DEB must not use /opt/nvidia/holoscan.
+    cpack = (build / "pkg/CPackConfig-holoscan-my-mod.cmake").read_text(encoding="utf-8")
+    assert 'set(CPACK_PACKAGING_INSTALL_PREFIX "/usr")' in cpack
+    run(cmake, "--build", str(build))
+    run(cmake, "--install", str(build), "--prefix", str(prefix))
+    consumer = tmp_path / "consumer"
+    consumer.mkdir()
+    (consumer / "CMakeLists.txt").write_text(
+        "cmake_minimum_required(VERSION 4.0)\nproject(consumer LANGUAGES CXX)\n"
+        "find_package(holoscan-my-mod CONFIG REQUIRED)\n"
+        "if(NOT TARGET holoscan::my_mod_op)\n"
+        'message(FATAL_ERROR "Missing individual operator target")\nendif()\n'
+        "add_executable(consumer main.cpp)\n"
+        "target_link_libraries(consumer PRIVATE holoscan::my_mod)\n",
+        encoding="utf-8",
+    )
+    (consumer / "main.cpp").write_text(
+        "#include <my_mod_op/my_mod_op.hpp>\nint main() { return module_value() != 42; }\n",
+        encoding="utf-8",
+    )
+    consumer_build = tmp_path / "consumer-build"
+    run(
+        cmake,
+        "-S",
+        str(consumer),
+        "-B",
+        str(consumer_build),
+        f"-DCMAKE_PREFIX_PATH={prefix}",
+        f"-Dholoscan_DIR={sdk}",
+    )
+    run(cmake, "--build", str(consumer_build))
+    run(str(consumer_build / "consumer"))
 
 
 def test_parser_leaves_template_and_directory_contextual():

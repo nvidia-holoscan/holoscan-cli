@@ -69,7 +69,10 @@ def register_create_parser(cli, subparsers) -> argparse.ArgumentParser:
         "--language",
         choices=["cpp", "python"],
         default="cpp",
-        help="Programming language for the project",
+        help=(
+            "Programming language for the project. Holoscan SDK 5.0 Modules are C++ only; "
+            "'python' is not available yet and returns in a later release."
+        ),
     )
     parser.add_argument(
         "--dryrun", action="store_true", help="Print commands without executing them"
@@ -293,6 +296,12 @@ def handle_create(cli, args: argparse.Namespace) -> None:
                 "uninstalled source tree (version 0.0.0+local). Build and install a wheel, or "
                 "install the checkout into an isolated environment with distribution metadata, "
                 "then retry."
+            )
+        if is_module and args.language and args.language.lower() == "python":
+            fatal(
+                "--language python is not available for Holoscan SDK 5.0 Modules: the SDK 5.0 "
+                "operator API is C++-first and Python operator scaffolding returns in a later "
+                "release. Use --language cpp."
             )
         project_slug = to_snake_case(args.project)
         context = {

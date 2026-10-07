@@ -174,6 +174,35 @@ def get_default_cuda_version() -> str:
     return result
 
 
+def sdk_cuda_major(sdk_version: Optional[str]) -> Optional[str]:
+    """Return the only CUDA major version an SDK release supports, or None.
+
+    SDK 5.x supports CUDA 13 only. Other and unparsable versions return None,
+    so callers keep using the requested or detected CUDA version.
+    """
+    if not sdk_version:
+        return None
+    try:
+        sdk_ver = parse_semantic_version(sdk_version)
+    except (ValueError, IndexError):
+        return None
+    return "13" if sdk_ver[0] == 5 else None
+
+
+def check_sdk_cuda_major(
+    cuda_version: Optional[Union[str, int]], sdk_version: Optional[str]
+) -> None:
+    """Fail when an explicit CUDA major version is one the SDK release does not support."""
+    required = sdk_cuda_major(sdk_version)
+    if required is None or cuda_version is None or str(cuda_version) == required:
+        return
+    fatal(
+        f"Holoscan SDK {sdk_version} supports only CUDA {required}, but CUDA {cuda_version} "
+        "was requested. Remove the CUDA override (--cuda, HOLOSCAN_CLI_DEFAULT_CUDA_VERSION, "
+        f"or tool.holoscan.cuda) or set it to {required}."
+    )
+
+
 def get_cuda_tag(
     cuda_version: Optional[Union[str, int]] = None, sdk_version: Optional[str] = None
 ) -> str:
@@ -187,6 +216,7 @@ def get_cuda_tag(
       - cuda13: CUDA 13 (x86_64, Jetson AGX Orin w/ JP7.x, Jetson AGX Thor w/ JP7.x)
       - cuda12-dgpu: CUDA 12 dGPU (x86_64, IGX Orin dGPU, Clara AGX dGPU, GH200)
       - cuda12-igpu: CUDA 12 iGPU (Jetson AGX Orin w/ JP6.x, IGX Orin iGPU w/ IGX OS 1.x, Clara AGX iGPU)
+    - SDK 5.x: only cuda13 available; requesting another CUDA version is an error
 
     Args:
         cuda_version: CUDA major version (e.g., 12, 13). If None, uses platform default.
@@ -206,6 +236,11 @@ def get_cuda_tag(
         return get_host_gpu()
     if sdk_ver == (3, 6, 1):
         return "cuda13-dgpu"
+    required = sdk_cuda_major(sdk_version)
+    if required is not None:
+        # Single-CUDA releases are published without a GPU suffix.
+        check_sdk_cuda_major(cuda_version, sdk_version)
+        return f"cuda{required}"
     if cuda_version is None:
         cuda_version = get_default_cuda_version()
     cuda_str = str(cuda_version)

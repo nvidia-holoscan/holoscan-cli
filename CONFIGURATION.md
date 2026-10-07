@@ -47,7 +47,7 @@ and modes. Other settings resolve in this order, highest priority first:
 | Setting | Precedence |
 | --- | --- |
 | Architecture | `HOLOSCAN_CLI_TARGET_ARCH` → host |
-| CUDA | `--cuda` → `HOLOSCAN_CLI_DEFAULT_CUDA_VERSION` → `tool.holoscan.cuda` → host detection |
+| CUDA | `--cuda` → `HOLOSCAN_CLI_DEFAULT_CUDA_VERSION` → `tool.holoscan.cuda` → 13 for SDK 5.x, otherwise host detection |
 | CTest script | `--ctest-script` → `HOLOSCAN_CLI_CTEST_SCRIPT` → `tool.holoscan.ctest-script` → bundled script |
 | Execution | `--local` → `HOLOSCAN_CLI_BUILD_LOCAL` → selected mode → container |
 | Build type | `--build-type` → `CMAKE_BUILD_TYPE` → selected mode → release |

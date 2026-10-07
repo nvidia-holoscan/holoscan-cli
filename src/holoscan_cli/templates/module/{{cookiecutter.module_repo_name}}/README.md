@@ -3,10 +3,13 @@
 {{ cookiecutter.description }}
 
 A **Holoscan Module** — a self-contained, redistributable library that extends
-[Holoscan SDK](https://developer.nvidia.com/holoscan-sdk) with reusable operators under the
-`holoscan.{{ cookiecutter.module_slug }}` namespace.
+[Holoscan SDK](https://developer.nvidia.com/holoscan-sdk) 5.0 with reusable operators under the
+`holoscan::{{ cookiecutter.module_slug }}` namespace.
 {%- set op_class = cookiecutter.operator_slug.split('_')|map('capitalize')|join('') %}
 {%- set mod_kebab = cookiecutter.module_slug.replace('_', '-') %}
+
+> Holoscan SDK 5.0 is C++-first. This Module ships C++ operators only; Python bindings and wheel
+> packaging return in a later release.
 
 ---
 
@@ -22,19 +25,15 @@ python -m pip install \
   --extra-index-url https://pypi.nvidia.com \
   -r requirements-cli.txt
 
-# Run the Python demo application
-holoscan run {{ cookiecutter.module_slug }}_pipeline --language python
-{% if cookiecutter.language == 'cpp' %}
-# Run the C++ demo application
+# Build and run the C++ demo application inside the development container
 holoscan run {{ cookiecutter.module_slug }}_pipeline
-{% endif %}
 ```
 
 If you use [uv](https://docs.astral.sh/uv/), no separate environment setup or activation is
 needed. Prefix the same commands with `uv run`, for example:
 
 ```bash
-uv run holoscan run {{ cookiecutter.module_slug }}_pipeline --language python
+uv run holoscan run {{ cookiecutter.module_slug }}_pipeline
 ```
 
 The project configuration installs the development tools without building the Module on the host.
@@ -45,73 +44,71 @@ The project configuration installs the development tools without building the Mo
 
 | Operator | Implementation | Ports | Parameters |
 | --- | --- | --- | --- |
-| `{{ op_class }}` | {% if cookiecutter.language == 'cpp' %}C++ + pybind11{% else %}Pure Python{% endif %} | TODO | TODO |
+| `{{ op_class }}` | C++ | `in` → `out` (TODO) | TODO |
 
 ### Namespace
 
-{% if cookiecutter.language == 'cpp' -%}
 - C++: `holoscan::{{ cookiecutter.module_slug }}`
-
-{% endif -%}
-- Python: `holoscan.{{ cookiecutter.module_slug }}`
 
 ---
 
 ## Usage
 
-### Python
-
-```python
-from holoscan.core import Application
-from holoscan.{{ cookiecutter.module_slug }} import {{ op_class }}
-
-
-class MyApp(Application):
-    def compose(self):
-        op = {{ op_class }}(self, name="{{ cookiecutter.operator_slug }}")
-        # TODO: connect operators and add_flow calls
-
-
-MyApp().run()
-```
-
-{% if cookiecutter.language == 'cpp' -%}
-### C++
+Holoscan SDK 5.0 applications follow three phases: **compose** a `holoscan::Graph`, **compile**
+it into an `ExecutionPlan`, then **run** the plan. Structural mistakes (unknown ports, type
+mismatches, missing clocks) are reported as diagnostics at compile time, before anything runs.
 
 ```cpp
-#include <holoscan/holoscan.hpp>
+#include <iostream>
+
+#include <holoscan/core/compile.hpp>
+#include <holoscan/core/graph.hpp>
+#include <holoscan/core/run.hpp>
+#include <holoscan/time/realtime_clock.hpp>
+
 #include <{{ cookiecutter.operator_slug }}/{{ cookiecutter.operator_slug }}.hpp>
 
-class MyApp : public holoscan::Application {
- public:
-  void compose() override {
-    auto op = make_operator<holoscan::{{ cookiecutter.module_slug }}::{{ op_class }}>("{{ cookiecutter.operator_slug }}");
-    // TODO: connect operators
-  }
-};
+int main() {
+  holoscan::Graph graph{"my-pipeline"};
+  const auto op = graph.op<holoscan::{{ cookiecutter.module_slug }}::{{ op_class }}>("{{ cookiecutter.operator_slug }}");
+  // TODO: add your source/sink operators and connect typed ports:
+  // graph.add_flow(source->out, op->in);
+  // graph.add_flow(op->out, sink->in);
+  graph.set_default_clock(graph.add_clock<holoscan::RealtimeClock>("clock"));
 
-int main() { holoscan::make_application<MyApp>()->run(); }
+  const holoscan::ExecutionPlan plan = holoscan::compile(graph);
+  if (!plan.ok()) {
+    std::cerr << plan.json() << '\n';
+    return 1;
+  }
+  return holoscan::run(plan);
+}
 ```
 
-{% endif -%}
+See `applications/{{ cookiecutter.module_slug }}_pipeline/cpp/` for a complete example that owns
+its own termination with `holoscan::run_async`.
+
 ---
 
 ## Building from Source (without Holoscan CLI)
 
 | Requirement | Version |
 | --- | --- |
-| Holoscan SDK | ≥ {{ cookiecutter.holoscan_version }} |
+| Holoscan SDK | ≥ {{ cookiecutter.holoscan_version }} (`apt install holoscan`, the `holoscan-cuda-13` alias) |
 | CUDA Toolkit | 13.x (matches the Holoscan SDK CUDA pin; the dev `Dockerfile` uses `cuda13`) |
-| CMake | ≥ 3.24 |
-{%- if cookiecutter.language == 'cpp' %}
-| C++ compiler | C++17-capable |
-{%- endif %}
-| Python | ≥ 3.11 |
+| CMake | ≥ 4.0 |
+| C++ compiler | C++20-capable |
+| GoogleTest | any recent release (tests only) |
 
 ```bash
 cmake -S . -B build -DBUILD_ALL=ON -D{{ cookiecutter.module_slug | upper }}_BUILD_TESTING=ON
 cmake --build build -j$(nproc)
 ```
+
+The module's `{{ cookiecutter.module_slug | upper }}_BUILD_TESTING` option defaults to `ON` in a
+standalone build. For a build without tests, set `-D{{ cookiecutter.module_slug | upper }}_BUILD_TESTING:BOOL=OFF`
+when configuring. The standard `-DBUILD_TESTING=OFF` does not control this module's tests.
+Without an installed GoogleTest, CMake downloads it while configuring the tests.
 
 ---
 
@@ -123,33 +120,14 @@ holoscan test
 
 Or, without the Holoscan CLI:
 
-{% if cookiecutter.language == 'cpp' -%}
 ```bash
-# C++ (GTest via CTest)
 ctest --test-dir build --output-on-failure -L unit
 ```
 
-{% endif -%}
-```bash
-# Python (pytest)
-PYTHONPATH=build/python/lib${PYTHONPATH:+:$PYTHONPATH} {{ cookiecutter.module_slug | upper }}_BUILD_DIR=build pytest tests/python/ -v
-```
-
-`PYTHONPATH` is **prepended** (with `${PYTHONPATH:+:$PYTHONPATH}`) so that an
-ambient holoscan SDK install stays visible. A bare `PYTHONPATH=build/python/lib`
-would replace the variable and hide the SDK from pytest. A bare
-`PYTHONPATH=build/python/lib:$PYTHONPATH` looks safe but, when `$PYTHONPATH` is
-unset (typical on a fresh shell or CI runner), it expands to a trailing colon
-that Python reads as an empty path entry — equivalent to `.`, which silently
-adds the test CWD to `sys.path` and lets a local file shadow installed
-packages.
-
-The pytest suite currently covers importability and build-smoke only; full
-live-pipeline coverage is a TODO and may require real hardware. CTest is
-configured with `SKIP_RETURN_CODE 5` on the pytest entry — if a CTest run
-reports "Skipped" unexpectedly, the most common cause is that the holoscan
-SDK is not importable in the test environment (pytest collects zero items
-and exits 5).
+The generated GTest suite (`tests/cpp/test_operators.cpp`) covers two layers recommended by the
+Holoscan SDK 5.0 testing guide: a compile-plan test that asserts the graph is accepted, and a
+whole-graph test driven by a `holoscan::SyntheticClock` so it runs deterministically without
+hardware. Extend the test doubles and assertions as your operator grows.
 
 ---
 

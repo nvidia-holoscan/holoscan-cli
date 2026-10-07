@@ -213,6 +213,11 @@ with `FROM ${BASE_IMAGE}`, using any of the methods below:
    holoscan build-container my_app
    ```
 
+   SDK 5.x supports CUDA 13 only. For those versions the tag is always
+   `cuda13`, and the `CUDA_MAJOR` build argument defaults to `13` instead of
+   following the host driver. Requesting another CUDA version for SDK 5.x is
+   an error.
+
 If none of these is configured, the CLI asks for a base image instead of
 inferring one from its own package version.
 
