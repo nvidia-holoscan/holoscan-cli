@@ -122,8 +122,12 @@ Without an explicit release selector, the existing dynamic-versioning fallback
 still applies:
 
 * `main` → `serialize_pep440(base, stage, dev=distance)`
-* `release/*` → `serialize_pep440(base, stage="rc", revision=distance)`
+* `release/*` → `serialize_pep440(base, stage="rc", dev=distance)`
 * anything else → `serialize_pep440(base, stage="alpha", revision=GITHUB_RUN_ID)`
+  in GitHub Actions, otherwise `serialize_pep440(base, stage="alpha", dev=distance)`
+
+Except for GitHub Actions builds of other branches, these versions end in
+`.devN`, so they cannot match a published alpha or RC.
 
 Do not use that fallback for a release artifact; pass an explicit `alpha`, `rc`,
 or `ga=true` so the published version is deterministic.
@@ -143,7 +147,7 @@ not the maturity label.
 | any feature branch | –       | –    | –       | `X.Y.ZaNNN`             | throwaway branch build          |
 | `release/X.Y.Z`    | `N`     | –    | `false` | `X.Y.ZaN`               | downstream integration alpha    |
 | `release/X.Y.Z`    | –       | `N`  | `false` | `X.Y.ZrcN`              | release candidate               |
-| `release/X.Y.Z`    | –       | –    | `false` | `X.Y.Zrc<distance>`     | legacy fallback; do not publish |
+| `release/X.Y.Z`    | –       | –    | `false` | `X.Y.Zrc0.devN`         | legacy fallback; do not publish |
 | `release/X.Y.Z`    | –       | –    | `true`  | `X.Y.Z`                 | official GA                     |
 
 Every workflow dispatch publishes to **TestPyPI**. The approved promotion step
