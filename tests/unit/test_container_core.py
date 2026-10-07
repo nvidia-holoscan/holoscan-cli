@@ -36,6 +36,7 @@ import pytest
 from holoscan_cli.container import core as container_core
 from holoscan_cli.container.core import HoloscanContainer
 from holoscan_cli.project_context import ProjectContext
+from holoscan_cli.utils import sdk as sdk_utils
 
 # ---- helpers ----------------------------------------------------------------
 
@@ -511,6 +512,45 @@ def test_build_dryrun_emits_base_and_extra_script_layers(tmp_path, monkeypatch):
     assert "holohub-my_app:feature-x-coverage" in layer
     resource_index = layer.index("--resource")
     assert layer[resource_index + 1] == "cpuset-cpus=0,1"
+
+
+def test_build_uses_cuda13_for_sdk5_on_cuda12_host(tmp_path, monkeypatch):
+    """SDK 5 images exist only as cuda13, so a CUDA 12 host driver must not
+    select a cuda12 tag or a CUDA 12 build argument."""
+    calls = []
+    monkeypatch.setattr(HoloscanContainer, "BASE_SDK_VERSION", "5.0.0", raising=False)
+    monkeypatch.setattr(HoloscanContainer, "BASE_IMAGE_FORMAT", None, raising=False)
+    monkeypatch.setattr(HoloscanContainer, "DEFAULT_IMAGE_FORMAT", None, raising=False)
+    monkeypatch.setattr(container_core, "get_host_gpu", lambda: "dgpu")
+    monkeypatch.setattr(container_core, "get_compute_capacity", lambda: "90")
+    monkeypatch.setattr(container_core, "get_default_cuda_version", lambda: "12")
+    monkeypatch.setattr(sdk_utils, "get_default_cuda_version", lambda: "12")
+    monkeypatch.setattr(sdk_utils, "get_host_gpu", lambda: "dgpu")
+    monkeypatch.setattr(container_core, "run_command", lambda cmd, **kwargs: calls.append(cmd))
+
+    c = _stub_container(tmp_path, project_metadata=None)
+    c.dryrun = True
+    c.build()
+
+    first = calls[0]
+    assert "BASE_IMAGE=nvcr.io/x/holoscan:v5.0.0-cuda13" in first
+    assert "CUDA_MAJOR=13" in first
+    assert "holohub:ngc-v5.0.0-cuda13" in first
+
+
+def test_build_rejects_cuda12_for_sdk5_even_with_explicit_images(tmp_path, monkeypatch):
+    """SDK 5 supports CUDA 13 only, so an explicit CUDA 12 build must fail."""
+    calls = []
+    monkeypatch.setattr(HoloscanContainer, "BASE_SDK_VERSION", "5.0.0", raising=False)
+    monkeypatch.setattr(container_core, "get_host_gpu", lambda: "dgpu")
+    monkeypatch.setattr(container_core, "get_compute_capacity", lambda: "90")
+    monkeypatch.setattr(container_core, "run_command", lambda cmd, **kwargs: calls.append(cmd))
+
+    c = _stub_container(tmp_path, project_metadata=None)
+    c.dryrun = True
+    with pytest.raises(SystemExit):
+        c.build(img="example/app:test", base_img="example/sdk:5", cuda_version="12")
+    assert calls == []
 
 
 @pytest.mark.parametrize(

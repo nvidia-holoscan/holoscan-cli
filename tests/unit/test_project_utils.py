@@ -79,3 +79,16 @@ def test_report_effective_configuration(capsys):
         "  base image: example:latest (command line (--base-img))\n"
         "  Docker build options: configured by command line (values hidden)\n"
     )
+
+
+def test_report_effective_configuration_uses_sdk5_cuda(capsys, monkeypatch):
+    from holoscan_cli.container.core import HoloscanContainer
+    from holoscan_cli.utils import sdk
+
+    monkeypatch.delenv("HOLOSCAN_CLI_DEFAULT_CUDA_VERSION", raising=False)
+    monkeypatch.setattr(HoloscanContainer, "BASE_SDK_VERSION", "5.0.0", raising=False)
+    monkeypatch.setattr(sdk, "get_default_cuda_version", lambda: "12")
+    args = Namespace(dryrun=True, cuda=None, local_sdk_root=None)
+
+    report_effective_configuration(args)
+    assert "  CUDA: 13 (Holoscan SDK 5.0.0 supports only CUDA 13)\n" in capsys.readouterr().out

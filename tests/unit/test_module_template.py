@@ -5,6 +5,8 @@
 
 import importlib.util
 import json
+import shutil
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -72,3 +74,31 @@ def test_generated_gitutils_handles_untracked_files_and_safe_revisions(monkeypat
 def test_direct_cookiecutter_use_cannot_pin_an_arbitrary_cli_release():
     defaults = json.loads((TEMPLATE / "cookiecutter.json").read_text(encoding="utf-8"))
     assert defaults["_holoscan_cli_version"] == "0"
+
+
+@pytest.mark.parametrize(
+    "sdk_version,prefix", [("4.6.0", "/opt/nvidia/holoscan"), ("5.0.0", "/usr")]
+)
+def test_deb_install_prefix_follows_sdk_layout(tmp_path, sdk_version, prefix):
+    cmake = shutil.which("cmake")
+    if cmake is None:
+        pytest.skip("CMake is required to configure the packaging helper")
+    project = tmp_path / "project"
+    project.mkdir()
+    (project / "CMakeLists.txt").write_text(
+        "cmake_minimum_required(VERSION 3.24)\n"
+        "project(example VERSION 1.0.0 LANGUAGES NONE)\n"
+        f'set(holoscan_VERSION "{sdk_version}")\n'
+        f'list(APPEND CMAKE_MODULE_PATH "{CMAKE.as_posix()}")\n'
+        "include(holohub_configure_deb)\n"
+        "holohub_configure_deb(NAME example DESCRIPTION Example VERSION 1.0.0 VENDOR NVIDIA\n"
+        '  CONTACT "dev@example.com" DEPENDS "holoscan")\n',
+        encoding="utf-8",
+    )
+    build = tmp_path / "build"
+    result = subprocess.run(
+        [cmake, "-S", str(project), "-B", str(build)], capture_output=True, text=True
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    config = (build / "pkg/CPackConfig-example.cmake").read_text(encoding="utf-8")
+    assert f'set(CPACK_PACKAGING_INSTALL_PREFIX "{prefix}")' in config

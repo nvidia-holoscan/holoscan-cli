@@ -418,6 +418,9 @@ def test_generated_module_exports_a_linkable_aggregate(cli, tmp_path, monkeypatc
         "-DPKG_holoscan_my_mod=ON",
         "-DMY_MOD_BUILD_TESTING=OFF",
     )
+    # SDK 5 installs under /usr, so the Module's DEB must not use /opt/nvidia/holoscan.
+    cpack = (build / "pkg/CPackConfig-holoscan-my-mod.cmake").read_text(encoding="utf-8")
+    assert 'set(CPACK_PACKAGING_INSTALL_PREFIX "/usr")' in cpack
     run(cmake, "--build", str(build))
     run(cmake, "--install", str(build), "--prefix", str(prefix))
     consumer = tmp_path / "consumer"

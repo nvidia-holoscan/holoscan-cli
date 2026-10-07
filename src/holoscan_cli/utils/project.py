@@ -200,8 +200,13 @@ def _reported_cuda(
     if context is not None and context.cuda is not None:
         return context.cuda, "project (tool.holoscan.cuda)"
 
-    from holoscan_cli.utils.sdk import get_default_cuda_version
+    from holoscan_cli.container.core import HoloscanContainer
+    from holoscan_cli.utils.sdk import get_default_cuda_version, sdk_cuda_major
 
+    sdk_version = HoloscanContainer.BASE_SDK_VERSION
+    sdk_cuda = sdk_cuda_major(sdk_version)
+    if sdk_cuda is not None:
+        return sdk_cuda, f"Holoscan SDK {sdk_version} supports only CUDA {sdk_cuda}"
     return get_default_cuda_version(), "host detection"
 
 

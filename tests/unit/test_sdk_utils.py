@@ -109,6 +109,27 @@ def test_get_cuda_tag_handles_sdk_and_cuda_matrix(monkeypatch):
     assert sdk.get_cuda_tag(None, sdk_version="4.2.0") == "cuda12-igpu"
     assert sdk.get_cuda_tag("13", sdk_version="4.2.0") == "cuda13"
     assert sdk.get_cuda_tag("14", sdk_version="4.2.0") == "cuda14-igpu"
+    # SDK 5 publishes CUDA 13 images only, without a GPU suffix, whatever the host says.
+    assert sdk.get_cuda_tag(None, sdk_version="5.0.0") == "cuda13"
+    assert sdk.get_cuda_tag("13", sdk_version="5.1.0") == "cuda13"
+    with pytest.raises(SystemExit):
+        sdk.get_cuda_tag("12", sdk_version="5.1.0")
+
+
+@pytest.mark.parametrize(
+    "sdk_version,expected",
+    [
+        (None, None),
+        ("", None),
+        ("not-a-version", None),
+        ("4.6.0", None),
+        ("5.0.0", "13"),
+        ("5.0.0rc1", "13"),
+        ("5.2.1", "13"),
+    ],
+)
+def test_sdk_cuda_major_limits_sdk5_to_cuda13(sdk_version, expected):
+    assert sdk.sdk_cuda_major(sdk_version) == expected
 
 
 @pytest.mark.parametrize(
