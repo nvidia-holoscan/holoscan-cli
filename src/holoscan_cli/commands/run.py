@@ -473,6 +473,7 @@ def handle_run(cli, args: argparse.Namespace) -> None:
             if builder_opts_extra:
                 builder_docker_opts = f"{builder_docker_opts} {builder_opts_extra}".strip()
             container.run(
+                limit_build_parallelism=True,
                 img=img,
                 local_sdk_root=getattr(args, "local_sdk_root", None),
                 enable_x11=getattr(args, "enable_x11", True),

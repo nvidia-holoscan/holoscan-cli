@@ -27,6 +27,7 @@ import json
 import os
 import shlex
 import subprocess
+from fractions import Fraction
 from functools import cache
 from pathlib import Path, PurePosixPath
 from typing import TYPE_CHECKING, List, Optional, Sequence
@@ -90,15 +91,17 @@ def get_build_arg_names(tokens: Sequence[str]) -> set[str]:
     return names
 
 
-def _find_cpu_cgroup(proc_root: Path) -> tuple[Optional[Path], Optional[Path], bool]:
-    """Return the CPU cgroup mount, current directory, and whether it is v2."""
+def _find_cpu_cgroup(
+    proc_root: Path, controller: str = "cpu"
+) -> tuple[Optional[Path], Optional[Path], bool]:
+    """Return the controller's cgroup mount, current directory, and whether it is v2."""
     cgroup_v2 = None
     cgroup_v1 = None
     for line in (proc_root / "self" / "cgroup").read_text(encoding="utf-8").splitlines():
         _, controllers, cgroup_path = line.split(":", 2)
         if not controllers:
             cgroup_v2 = cgroup_path
-        elif "cpu" in controllers.split(","):
+        elif controller in controllers.split(","):
             cgroup_v1 = cgroup_path
 
     for line in (proc_root / "self" / "mountinfo").read_text(encoding="utf-8").splitlines():
@@ -112,7 +115,7 @@ def _find_cpu_cgroup(proc_root: Path) -> tuple[Optional[Path], Optional[Path], b
             options = filesystem_fields[2].split(",")
 
             if cgroup_v1 is not None:
-                if fs_type != "cgroup" or "cpu" not in options:
+                if fs_type != "cgroup" or controller not in options:
                     continue
                 cgroup_path = cgroup_v1
                 is_v2 = False
@@ -130,8 +133,8 @@ def _find_cpu_cgroup(proc_root: Path) -> tuple[Optional[Path], Optional[Path], b
     return None, None, False
 
 
-def _read_cpu_quota(proc_root: Path) -> Optional[int]:
-    """Return the smallest CPU quota in the current cgroup hierarchy."""
+def _read_cpu_quota(proc_root: Path) -> Optional[tuple[int, int]]:
+    """Return quota and period for the smallest CPU-time limit in the cgroup hierarchy."""
     try:
         mountpoint, current, is_v2 = _find_cpu_cgroup(proc_root)
     except (OSError, ValueError, IndexError):
@@ -148,12 +151,12 @@ def _read_cpu_quota(proc_root: Path) -> Optional[int]:
                     quota = int(quota)
                     period = int(period)
                     if quota > 0 and period > 0:
-                        quotas.append((quota + period - 1) // period)
+                        quotas.append((quota, period))
             else:
                 quota = int((current / "cpu.cfs_quota_us").read_text(encoding="utf-8"))
                 period = int((current / "cpu.cfs_period_us").read_text(encoding="utf-8"))
                 if quota > 0 and period > 0:
-                    quotas.append((quota + period - 1) // period)
+                    quotas.append((quota, period))
         except (OSError, ValueError):
             pass
 
@@ -161,11 +164,11 @@ def _read_cpu_quota(proc_root: Path) -> Optional[int]:
             break
         current = current.parent
 
-    return min(quotas) if quotas else None
+    return min(quotas, key=lambda limit: Fraction(*limit)) if quotas else None
 
 
 def get_effective_cpu_set(proc_root: Path = Path("/proc")) -> Optional[str]:
-    """Return CPUs to forward when affinity or cgroup quota limits this process.
+    """Return a build cpuset when affinity or cgroup quota limits this process.
 
     A quota narrower than the affinity set deterministically selects its lowest CPU IDs.
     """
@@ -176,7 +179,8 @@ def get_effective_cpu_set(proc_root: Path = Path("/proc")) -> Optional[str]:
     if not affinity:
         return None
 
-    quota = _read_cpu_quota(proc_root)
+    limit = _read_cpu_quota(proc_root)
+    quota = (limit[0] + limit[1] - 1) // limit[1] if limit else None
     cpu_count = os.cpu_count()
     limited_by_affinity = cpu_count is not None and len(affinity) < cpu_count
     limited_by_quota = quota is not None and quota < len(affinity)
@@ -185,6 +189,36 @@ def get_effective_cpu_set(proc_root: Path = Path("/proc")) -> Optional[str]:
 
     usable_count = min(quota, len(affinity)) if quota is not None else len(affinity)
     return ",".join(str(cpu) for cpu in affinity[:usable_count])
+
+
+def get_cgroup_cpu_limits(
+    proc_root: Path = Path("/proc"), sys_root: Path = Path("/sys")
+) -> List[str]:
+    """Forward cgroup CPU permissions and quota without using thread affinity."""
+    args = []
+    try:
+        mountpoint, current, is_v2 = _find_cpu_cgroup(proc_root, controller="cpuset")
+        while current is not None:
+            filename = "cpuset.cpus.effective" if is_v2 else "cpuset.effective_cpus"
+            try:
+                cpu_set = (current / filename).read_text(encoding="utf-8").strip()
+            except FileNotFoundError:
+                if not is_v2 or current == mountpoint:
+                    break
+                current = current.parent
+                continue
+            online = (sys_root / "devices/system/cpu/online").read_text(encoding="utf-8").strip()
+            if cpu_set and cpu_set != online:
+                args.append(f"--cpuset-cpus={cpu_set}")
+            break
+    except (OSError, ValueError, IndexError):
+        pass
+
+    limit = _read_cpu_quota(proc_root)
+    if limit is not None:
+        quota, period = limit
+        args.extend([f"--cpu-quota={quota}", f"--cpu-period={period}"])
+    return args
 
 
 @cache

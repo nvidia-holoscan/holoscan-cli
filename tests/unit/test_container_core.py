@@ -68,6 +68,7 @@ def _isolate_container_class_attrs(monkeypatch):
     monkeypatch.delenv("DOCKER_CONTEXT", raising=False)
     monkeypatch.delenv("BUILDX_BUILDER", raising=False)
     monkeypatch.setattr(container_core, "get_effective_cpu_set", lambda: None)
+    monkeypatch.setattr(container_core, "get_cgroup_cpu_limits", list)
     monkeypatch.setattr(container_core, "docker_build_supports_resource", lambda _docker_exe: True)
 
 
@@ -750,10 +751,16 @@ def test_run_reasserts_typed_cleanup_after_raw_docker_options(tmp_path, monkeypa
     assert [arg for arg in persistent if arg.startswith("--rm")] == ["--rm", "--rm=false"]
 
 
-def test_run_forwards_effective_cpu_set(tmp_path, monkeypatch):
+@pytest.mark.parametrize("limit_build_parallelism", [False, True])
+def test_run_uses_cgroup_limits_unless_compiling(tmp_path, monkeypatch, limit_build_parallelism):
     project_dir = _stub_run_env(tmp_path, monkeypatch)
     calls = []
     monkeypatch.setattr(container_core, "get_effective_cpu_set", lambda: "0,2,4")
+    monkeypatch.setattr(
+        container_core,
+        "get_cgroup_cpu_limits",
+        lambda: ["--cpuset-cpus=0-7,11-13", "--cpu-quota=150000", "--cpu-period=100000"],
+    )
     monkeypatch.setattr(container_core, "run_command", lambda cmd, **kwargs: calls.append(cmd))
     c = _stub_container(
         tmp_path,
@@ -761,9 +768,16 @@ def test_run_forwards_effective_cpu_set(tmp_path, monkeypatch):
     )
     c.dryrun = True
 
-    c.run(img="custom:image")
+    c.run(img="custom:image", limit_build_parallelism=limit_build_parallelism)
 
-    assert "--cpuset-cpus=0,2,4" in calls[0]
+    if limit_build_parallelism:
+        assert "--cpuset-cpus=0,2,4" in calls[0]
+        assert not any(arg.startswith("--cpu-quota") for arg in calls[0])
+    else:
+        assert "--cpuset-cpus=0-7,11-13" in calls[0]
+        assert "--cpu-quota=150000" in calls[0]
+        assert "--cpu-period=100000" in calls[0]
+        assert "--cpuset-cpus=0,2,4" not in calls[0]
 
 
 @pytest.mark.parametrize(
@@ -779,6 +793,11 @@ def test_run_preserves_explicit_cpu_limit(tmp_path, monkeypatch, cpu_option, use
     project_dir = _stub_run_env(tmp_path, monkeypatch)
     calls = []
     monkeypatch.setattr(container_core, "get_effective_cpu_set", lambda: "0,1")
+    monkeypatch.setattr(
+        container_core,
+        "get_cgroup_cpu_limits",
+        lambda: pytest.fail("explicit CPU options must override cgroup forwarding"),
+    )
     monkeypatch.setattr(container_core, "run_command", lambda cmd, **kwargs: calls.append(cmd))
     if use_default:
         monkeypatch.setattr(HoloscanContainer, "DEFAULT_DOCKER_RUN_ARGS", cpu_option)
@@ -802,6 +821,11 @@ def test_run_does_not_copy_cpu_ids_to_remote_docker(tmp_path, monkeypatch, env_n
     monkeypatch.setattr(
         container_core,
         "get_effective_cpu_set",
+        lambda: pytest.fail("must not inspect local limits for remote Docker"),
+    )
+    monkeypatch.setattr(
+        container_core,
+        "get_cgroup_cpu_limits",
         lambda: pytest.fail("must not inspect local limits for remote Docker"),
     )
     monkeypatch.setattr(container_core, "run_command", lambda cmd, **kwargs: calls.append(cmd))
