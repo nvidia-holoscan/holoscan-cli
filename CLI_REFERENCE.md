@@ -132,6 +132,11 @@ repository-wide tests and focused CTest/pytest targets. A module name in a
 multi-project repository does not imply module-scoped test coverage. Inspect
 the driver's build-directory cleanup before testing an existing workspace.
 
+For automated build and run checks, application metadata can set `ci_mode` to
+the mode intended for CI. When it is omitted, the effective CI mode falls back
+to `default_mode`, or to the only declared mode. `list --json` and
+`modes <project> --json` report the effective value as `ci_mode`.
+
 `install --dev` installs hooks from an already built module into the CLI's
 Python environment. Inspect `env-info --json`, name the module, and select the
 build directory explicitly when multiple builds exist. After consumer testing,

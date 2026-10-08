@@ -148,7 +148,10 @@ def test_list_json_emits_schema_and_project_fields(capsys):
                 "project_type": "module",
                 "project_name": "holoscan-gstreamer",
                 "source_folder": "/repo/operators/holoscan-gstreamer",
-                "metadata": {"language": "python", "modes": {"default": {}}},
+                "metadata": {
+                    "language": "python",
+                    "modes": {"default": {}},
+                },
             }
         ]
     )
@@ -164,8 +167,51 @@ def test_list_json_emits_schema_and_project_fields(capsys):
             "source_folder": "/repo/operators/holoscan-gstreamer",
             "language": ["python"],  # string normalized to a list
             "modes": ["default"],
+            "ci_mode": "default",
         }
     ]
+
+
+def test_list_json_prefers_explicit_ci_mode(capsys):
+    cli = SimpleNamespace(
+        projects=[
+            {
+                "project_type": "application",
+                "project_name": "smoke_app",
+                "source_folder": "/repo/applications/smoke_app",
+                "metadata": {
+                    "default_mode": "interactive",
+                    "ci_mode": "smoke",
+                    "modes": {"interactive": {}, "smoke": {}},
+                },
+            }
+        ]
+    )
+
+    info.handle_list(cli, SimpleNamespace(json=True))
+
+    data = json.loads(capsys.readouterr().out)
+    assert data["projects"][0]["ci_mode"] == "smoke"
+
+
+@pytest.mark.parametrize("mode_field", ["ci_mode", "default_mode"])
+def test_list_json_rejects_undeclared_effective_mode(capsys, mode_field):
+    cli = SimpleNamespace(
+        projects=[
+            {
+                "project_type": "application",
+                "project_name": "smoke_app",
+                "source_folder": "/repo/applications/smoke_app",
+                "metadata": {mode_field: "missing", "modes": {"smoke": {}}},
+            }
+        ]
+    )
+
+    with pytest.raises(SystemExit) as exc_info:
+        info.handle_list(cli, SimpleNamespace(json=True))
+
+    assert exc_info.value.code == 1
+    assert f"Invalid {mode_field} 'missing'" in capsys.readouterr().err
 
 
 def test_modes_json_emits_resolved_modes(capsys):
@@ -175,7 +221,14 @@ def test_modes_json_emits_resolved_modes(capsys):
     cli.projects = [
         {
             "project_name": "smoke_app",
-            "metadata": {"language": language, "modes": {"default": {"description": "d"}}},
+            "metadata": {
+                "language": language,
+                "default_mode": "default",
+                "modes": {
+                    "default": {"description": "d"},
+                    "smoke": {"description": "s"},
+                },
+            },
         }
         for language in ("cpp", "python")
     ]
@@ -187,4 +240,34 @@ def test_modes_json_emits_resolved_modes(capsys):
     assert "Defaulting to 'python'" in captured.err
     assert data["schema_version"] == 1
     assert data["language"] == ["python"]  # parity with list --json
-    assert data["modes"] == {"default": {"description": "d"}}
+    assert data["modes"] == {
+        "default": {"description": "d"},
+        "smoke": {"description": "s"},
+    }
+    assert data["ci_mode"] == "default"
+
+
+@pytest.mark.parametrize("mode_field", ["ci_mode", "default_mode"])
+def test_modes_json_rejects_undeclared_effective_mode(capsys, mode_field):
+    from holoscan_cli.cli import HoloscanCLI
+
+    cli = HoloscanCLI()
+    cli.projects = [
+        {
+            "project_name": "smoke_app",
+            "metadata": {
+                "language": "python",
+                mode_field: "missing",
+                "modes": {"smoke": {}},
+            },
+        }
+    ]
+
+    with pytest.raises(SystemExit) as exc_info:
+        info.handle_modes(
+            cli,
+            SimpleNamespace(project="smoke_app", language="python", json=True),
+        )
+
+    assert exc_info.value.code == 1
+    assert f"Invalid {mode_field} 'missing'" in capsys.readouterr().err
