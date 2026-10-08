@@ -122,8 +122,15 @@ Without an explicit release selector, the existing dynamic-versioning fallback
 still applies:
 
 * `main` → `serialize_pep440(base, stage, dev=distance)`
-* `release/*` → `serialize_pep440(base, stage="rc", revision=distance)`
-* anything else → `serialize_pep440(base, stage="alpha", revision=GITHUB_RUN_ID)`
+* `release/*` → `X.Y.Zrc0.dev<run ID>` in GitHub Actions, otherwise
+  `X.Y.Zrc0.dev<distance>+g<commit>`
+* anything else → `X.Y.Za<run ID>` in GitHub Actions, otherwise
+  `X.Y.Za0.dev<distance>+g<commit>`
+
+Except for GitHub Actions builds of other branches, these are development
+versions, so they cannot match a published alpha or RC. Builds outside GitHub
+Actions also name their commit. Workflow builds use the run ID instead, because
+TestPyPI does not accept a `+` suffix.
 
 Do not use that fallback for a release artifact; pass an explicit `alpha`, `rc`,
 or `ga=true` so the published version is deterministic.
@@ -143,7 +150,7 @@ not the maturity label.
 | any feature branch | –       | –    | –       | `X.Y.ZaNNN`             | throwaway branch build          |
 | `release/X.Y.Z`    | `N`     | –    | `false` | `X.Y.ZaN`               | downstream integration alpha    |
 | `release/X.Y.Z`    | –       | `N`  | `false` | `X.Y.ZrcN`              | release candidate               |
-| `release/X.Y.Z`    | –       | –    | `false` | `X.Y.Zrc<distance>`     | legacy fallback; do not publish |
+| `release/X.Y.Z`    | –       | –    | `false` | `X.Y.Zrc0.dev<run ID>`  | legacy fallback; do not publish |
 | `release/X.Y.Z`    | –       | –    | `true`  | `X.Y.Z`                 | official GA                     |
 
 Every workflow dispatch publishes to **TestPyPI**. The approved promotion step

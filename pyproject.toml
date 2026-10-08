@@ -182,15 +182,17 @@ format-jinja = """
         {%- else -%}
             {%- if env.get("rc") -%}
                 {{ serialize_pep440(base, stage="rc", revision=env["rc"] ) }}
+            {%- elif 'GITHUB_RUN_ID' in env -%}
+                {{ serialize_pep440(base, stage="rc", dev=env['GITHUB_RUN_ID']) }}
             {%- else -%}
-                {{ serialize_pep440(base, stage="rc", revision=distance) }}
+                {{ serialize_pep440(base, stage="rc", dev=distance, metadata=["g" ~ commit]) }}
             {%- endif -%}
         {%- endif -%}
     {%- else -%}
         {%- if 'GITHUB_RUN_ID' in env -%}
             {{ serialize_pep440(base, stage="alpha", revision=env['GITHUB_RUN_ID']) }}
         {%- else -%}
-            {{ serialize_pep440(base, stage="alpha", revision=distance) }}
+            {{ serialize_pep440(base, stage="alpha", dev=distance, metadata=["g" ~ commit]) }}
         {%- endif -%}
     {%- endif -%}
 """

@@ -209,6 +209,7 @@ def handle_package(cli, args: argparse.Namespace) -> None:
     if docker_opts_extra:
         docker_opts = (docker_opts + " " + docker_opts_extra).strip()
     container.run(
+        limit_build_parallelism=True,
         img=run_image,
         local_sdk_root=getattr(args, "local_sdk_root", None),
         enable_x11=getattr(args, "enable_x11", True),

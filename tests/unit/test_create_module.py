@@ -209,6 +209,17 @@ def test_module_template_rejects_python_language(cli, tmp_path, capsys):
     assert not (tmp_path / "output").exists()
 
 
+def test_custom_module_template_allows_python_language(cli, tmp_path, capsys):
+    selected = _write_template(tmp_path, "modules/template", module=True)
+
+    create.handle_create(
+        cli,
+        _args(template="modules/template", language="python", directory=tmp_path / "output"),
+    )
+
+    assert f"Template: {selected}" in capsys.readouterr().out
+
+
 @pytest.mark.parametrize("holoscan_version", ["4.1.0", "5.0", "latest"])
 def test_module_template_rejects_pre_5_0_or_malformed_sdk_versions(
     cli, tmp_path, monkeypatch, capsys, holoscan_version

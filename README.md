@@ -67,6 +67,24 @@ removal or rename bumps `schema_version`.
 `env-info --json` reports host state, so the values vary by machine — the
 `docker`, `cuda_gpu`, and `git` sections are `null` when unavailable.
 
+## CPU limits
+
+For local Docker daemons, `run` and `run-container` forward the caller's cgroup
+CPU set and CPU-time quota separately. They do not restrict containers to the
+launcher's thread affinity or shrink the permitted CPU set to match the quota.
+Applications can pin threads to isolated cores when the cgroup permits those cores.
+Unrestricted hosts receive no automatic CPU options.
+
+Image builds and compile containers (`build`, `install`, `package`, `test`) keep
+the affinity/quota-based smaller CPU set for tools that size parallel work from
+affinity, such as `nproc`. Builds inside `run` and `run-container` use runtime limits.
+The CLI's default CMake job count uses `os.cpu_count()`, which ignores affinity.
+Use `--parallel` or `CMAKE_BUILD_PARALLEL_LEVEL` to set that job count explicitly.
+
+To choose runtime cores explicitly, use `--docker-opts='--cpuset-cpus=0,11-13'`,
+not `taskset`. Supplying `--cpuset-cpus`, `--cpus`, `--cpu-quota`, or `--cpu-period`
+in the configured Docker run options disables all automatic run CPU limits.
+
 ## Source layout
 
 ```text

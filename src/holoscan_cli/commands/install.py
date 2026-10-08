@@ -279,6 +279,7 @@ def handle_install(cli, args: argparse.Namespace) -> None:
         if docker_opts_extra:
             docker_opts = f"{docker_opts} {docker_opts_extra}".strip()
         container.run(
+            limit_build_parallelism=True,
             img=img,
             local_sdk_root=getattr(args, "local_sdk_root", None),
             enable_x11=getattr(args, "enable_x11", True),
@@ -388,6 +389,7 @@ def _handle_install_dev_in_container(cli, args: argparse.Namespace, module_name:
     if docker_opts_extra:
         docker_opts = f"{docker_opts} {docker_opts_extra}".strip()
     container.run(
+        limit_build_parallelism=True,
         img=image,
         local_sdk_root=getattr(args, "local_sdk_root", None),
         enable_x11=getattr(args, "enable_x11", True),

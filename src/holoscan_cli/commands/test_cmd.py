@@ -271,6 +271,7 @@ def handle_test(cli, args: argparse.Namespace) -> None:
         '${CMAKE_PREFIX_PATH:+:${CMAKE_PREFIX_PATH}}"; fi; ' + ctest_cmd
     )
     container.run(
+        limit_build_parallelism=True,
         img=container.resolve_run_image(getattr(args, "img", None)),
         local_sdk_root=getattr(args, "local_sdk_root", None),
         use_tini=True,
