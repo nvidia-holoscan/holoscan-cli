@@ -297,7 +297,9 @@ def handle_create(cli, args: argparse.Namespace) -> None:
                 "install the checkout into an isolated environment with distribution metadata, "
                 "then retry."
             )
-        if is_module and args.language and args.language.lower() == "python":
+        # Only the packaged template is C++-only; caller templates keep their
+        # own language support.
+        if use_packaged_template and args.language and args.language.lower() == "python":
             fatal(
                 "--language python is not available for Holoscan SDK 5.0 Modules: the SDK 5.0 "
                 "operator API is C++-first and Python operator scaffolding returns in a later "
