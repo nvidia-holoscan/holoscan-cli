@@ -6,11 +6,13 @@ from __future__ import annotations
 import json
 import os
 import shlex
+import shutil
 import subprocess
 from argparse import Namespace
 
 import pytest
 
+from holoscan_cli.cli import HoloscanCLI
 from holoscan_cli.commands import build as build_cmd
 from holoscan_cli.commands import containers as containers_cmd
 from holoscan_cli.commands import install as install_cmd
@@ -398,7 +400,10 @@ def test_build_project_locally_verbose_redacts_env_mapping(tmp_path, monkeypatch
     assert "secret-value" not in output
 
 
-def test_handle_build_container_branch_passes_recursive_local_command(tmp_path, monkeypatch):
+@pytest.mark.parametrize("targets", [None, ["resources", "other resources"]])
+def test_handle_build_container_branch_passes_recursive_local_command(
+    tmp_path, monkeypatch, targets
+):
     project = {
         "project_name": "smoke_app",
         "project_type": "application",
@@ -435,6 +440,7 @@ def test_handle_build_container_branch_passes_recursive_local_command(tmp_path, 
             verbose=True,
             benchmark=True,
             configure_args=["-DCLI=ON"],
+            targets=targets,
         ),
     )
 
@@ -461,9 +467,55 @@ def test_handle_build_container_branch_passes_recursive_local_command(tmp_path, 
         "2",
         "--verbose",
         "--benchmark",
+        *[f"--target={target}" for target in targets or []],
         "--configure-args=-DCLI=ON",
     ]
     assert cli.container.run_calls
+
+
+@pytest.mark.skipif(shutil.which("cmake") is None, reason="CMake is required")
+@pytest.mark.parametrize("project_type", ["application", "package"])
+def test_build_targets_configure_fresh_directory_without_building_default_target(
+    tmp_path, monkeypatch, project_type
+):
+    cli = RecordingCLI(tmp_path)
+    cli.project_data["project_type"] = project_type
+    monkeypatch.setenv("HOLOSCAN_CLI_ENABLE_SCCACHE", "OFF")
+    (cli.HOLOHUB_ROOT / "CMakeLists.txt").write_text(
+        "cmake_minimum_required(VERSION 3.24)\n"
+        "project(smoke LANGUAGES NONE)\n"
+        "if(NOT FEATURE)\n"
+        '  message(FATAL_ERROR "Missing configure argument")\n'
+        "endif()\n"
+        "add_custom_target(resources COMMAND ${CMAKE_COMMAND} -E touch "
+        "${CMAKE_BINARY_DIR}/resources.ready)\n"
+        "add_custom_target(other_resources COMMAND ${CMAKE_COMMAND} -E touch "
+        "${CMAKE_BINARY_DIR}/other_resources.ready)\n"
+        "add_custom_target(application ALL COMMAND ${CMAKE_COMMAND} -E false)\n"
+        "file(MAKE_DIRECTORY ${CMAKE_BINARY_DIR}/pkg)\n"
+        "file(WRITE ${CMAKE_BINARY_DIR}/pkg/CPackConfig-smoke.cmake "
+        '"message(FATAL_ERROR unexpected_packaging)")\n',
+        encoding="utf-8",
+    )
+    args = HoloscanCLI().parser.parse_args(
+        [
+            "build",
+            "smoke_app",
+            "--local",
+            "--configure-args=-DFEATURE=ON",
+            "--target",
+            "resources",
+            "--target",
+            "other_resources",
+        ]
+    )
+
+    build_cmd.handle_build(cli, args)
+
+    build_dir = cli.DEFAULT_BUILD_PARENT_DIR / "smoke_app"
+    assert (build_dir / "CMakeCache.txt").exists()
+    assert (build_dir / "resources.ready").exists()
+    assert (build_dir / "other_resources.ready").exists()
 
 
 def test_handle_build_no_docker_build_still_applies_cuda_override(tmp_path, monkeypatch):
