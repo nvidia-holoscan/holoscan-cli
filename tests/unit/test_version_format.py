@@ -21,8 +21,9 @@ TEMPLATE = tomllib.loads(PYPROJECT.read_text(encoding="utf-8"))["tool"][
     ("branch", "tag", "commits", "env", "expected"),
     [
         ("main", "5.0.0a1", 16, {}, "5.0.0a0.dev16"),
-        ("release/5.0.0", "5.0.0a2", 1, {}, "5.0.0rc0.dev1"),
-        ("other", "5.0.0a2", 3, {}, "5.0.0a0.dev3"),
+        ("release/5.0.0", "5.0.0a2", 1, {}, "5.0.0rc0.dev1+gabc1234"),
+        ("release/5.0.0", "5.0.0a2", 1, {"GITHUB_RUN_ID": "42"}, "5.0.0rc0.dev42"),
+        ("other", "5.0.0a2", 3, {}, "5.0.0a0.dev3+gabc1234"),
         # Unchanged: explicit RC and GA builds, and GitHub Actions builds of other branches.
         ("release/5.0.0", "5.0.0a2", 1, {"rc": "1"}, "5.0.0rc1"),
         ("release/5.0.0", "5.0.0a2", 1, {"ga": "true"}, "5.0.0"),
@@ -36,6 +37,7 @@ def test_version_without_a_release_choice(branch, tag, commits, env, expected):
         stage=version.stage,
         revision=version.revision,
         distance=commits,
+        commit="abc1234",
         branch=branch,
         env=env,
         serialize_pep440=dunamai.serialize_pep440,
