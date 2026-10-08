@@ -13,6 +13,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import os
+
 import pytest
 
 from holoscan_cli.project_context import set_active_project_context
@@ -22,8 +24,15 @@ from holoscan_cli.project_context import set_active_project_context
 def _reset_active_project_context():
     """Keep process-local project defaults from leaking between tests."""
     set_active_project_context(None)
-    yield
-    set_active_project_context(None)
+    original_root = os.environ.get("HOLOSCAN_CLI_ROOT")
+    try:
+        yield
+    finally:
+        set_active_project_context(None)
+        if original_root is None:
+            os.environ.pop("HOLOSCAN_CLI_ROOT", None)
+        else:
+            os.environ["HOLOSCAN_CLI_ROOT"] = original_root
 
 
 @pytest.fixture

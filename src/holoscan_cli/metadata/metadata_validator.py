@@ -20,6 +20,16 @@ from referencing import Registry
 from referencing.jsonschema import DRAFT202012
 
 from holoscan_cli.metadata.utils import BASE_SCHEMA_PATH, SCHEMA_DIR, get_schema_path
+from holoscan_cli.utils.sdk import parse_required_versions
+
+_FORMAT_CHECKER = jsonschema.FormatChecker(formats=[])
+
+
+@_FORMAT_CHECKER.checks("sdk-version-specifier", raises=ValueError)
+def _is_sdk_version_specifier(value):
+    parse_required_versions(value)
+    return True
+
 
 # Top-level keys that uniquely identify which schema applies to a metadata.json,
 # kept in sync with holohub/utilities/metadata/metadata_validator.py.
@@ -56,7 +66,9 @@ def validate_json(json_data, directory):
             execute_api_schema = json.load(file)
         except json.decoder.JSONDecodeError as err:
             return False, err
-    validator = Draft202012Validator(execute_api_schema, registry=registry)
+    validator = Draft202012Validator(
+        execute_api_schema, registry=registry, format_checker=_FORMAT_CHECKER
+    )
 
     try:
         validator.validate(json_data)
