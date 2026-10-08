@@ -105,6 +105,14 @@ For dash-leading values, use `=`, for example `--configure-args=-DFEATURE=ON`.
 appends to its CMake options. Docker argument layers are described in
 [configuration](CONFIGURATION.md).
 
+`build --target <name>` configures the project normally, then builds only that
+CMake target and its dependencies. Repeat `--target` to select multiple targets;
+omit it to build the default target. For example:
+
+```bash
+holoscan build my_app --target my_target
+```
+
 Only `run-container` accepts a command after `--`. With its normal shell
 entrypoint, quote a multi-argument or compound command as one argument:
 
