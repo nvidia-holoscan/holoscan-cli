@@ -38,6 +38,7 @@ from ..utils.docker import (
     RESERVED_CONTAINER_ENV_NAMES,
     docker_build_supports_resource,
     get_build_arg_names,
+    get_cgroup_cpu_limits,
     get_effective_cpu_set,
     get_image_pythonpath,
     image_reference_has_tag_or_digest,
@@ -769,6 +770,7 @@ class HoloscanContainer:
         mode_docker_opts: Optional[str] = None,
         forward_env: Optional[List[str]] = None,
         effective_docker_opts: Optional[str] = None,
+        limit_build_parallelism: bool = False,
     ) -> None:
         """Launch the container"""
 
@@ -804,9 +806,12 @@ class HoloscanContainer:
         cmd = [self.DOCKER_EXE, "run"]
 
         if _uses_local_docker_cpu_ids() and not _has_run_cpu_limit(extra_run_args):
-            cpu_set = get_effective_cpu_set()
-            if cpu_set:
-                cmd.append(f"--cpuset-cpus={cpu_set}")
+            if limit_build_parallelism:
+                cpu_set = get_effective_cpu_set()
+                if cpu_set:
+                    cmd.append(f"--cpuset-cpus={cpu_set}")
+            else:
+                cmd.extend(get_cgroup_cpu_limits())
 
         cmd.extend(self.get_basic_args())
         if internal_cidfile is not None:

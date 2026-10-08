@@ -9,9 +9,12 @@ import shlex
 import subprocess
 from argparse import Namespace
 
+import pytest
+
 from holoscan_cli.commands import build as build_cmd
 from holoscan_cli.commands import containers as containers_cmd
 from holoscan_cli.commands import install as install_cmd
+from holoscan_cli.commands import package as package_cmd
 from holoscan_cli.commands import run as run_cmd
 from holoscan_cli.commands import test_cmd
 
@@ -189,6 +192,24 @@ def _project_args(**overrides):
     )
     defaults.update(overrides)
     return Namespace(**defaults)
+
+
+@pytest.mark.parametrize(
+    "handler",
+    [
+        build_cmd.handle_build,
+        install_cmd.handle_install,
+        package_cmd.handle_package,
+        test_cmd.handle_test,
+    ],
+)
+def test_compile_commands_keep_build_parallelism_limit(tmp_path, monkeypatch, handler):
+    cli = RecordingCLI(tmp_path)
+    monkeypatch.setenv("HOLOSCAN_CLI_BUILD_LOCAL", "0")
+
+    handler(cli, _project_args(no_docker_build=True))
+
+    assert cli.container.run_calls[0]["limit_build_parallelism"] is True
 
 
 def test_handle_build_container_applies_mode_build_args(tmp_path, capsys):
@@ -563,6 +584,8 @@ def test_handle_run_container_as_root_builds_as_user_then_runs_as_root(tmp_path,
         assert stripped not in build_opts
 
     build_run, app_run = cli.container.run_calls
+    assert build_run["limit_build_parallelism"] is True
+    assert not app_run.get("limit_build_parallelism", False)
     assert build_run["as_root"] is False
     assert "effective_docker_opts" in build_run
     run_command, _ = entrypoints[1]
