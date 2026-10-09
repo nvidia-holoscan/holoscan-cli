@@ -189,7 +189,8 @@ The packaged 5.0.0a1 template contains a `4.5.0` fallback; a configured base SDK
 version overrides it, and explicit context values take precedence. See
 [template defaults](src/holoscan_cli/templates/module/cookiecutter.json) and
 [creation](src/holoscan_cli/commands/create.py). The generated module's
-`README.md` and `DEVELOPER.md` document its implementation and consumer flow.
+`README.md` and `DEVELOPER.md` document its implementation and consumer flow,
+and its `AGENTS.md` gives AI coding agents its commands and boundaries.
 
 ## Test, install, and package
 
