@@ -40,6 +40,12 @@ _SDK_VERSION_CONFIG_NAMES = (
     "HoloscanConfigVersion.cmake",
 )
 
+# Directories of a host-installed Holoscan SDK, searched in this order unless
+# ``HOLOSCAN_CLI_DEFAULT_HSDK_DIR`` is set. Holoscan SDK 5 installs under
+# ``/usr``; SDK 4 installs under ``/opt/nvidia/holoscan``.
+DEFAULT_LOCAL_SDK_DIR = "/usr"
+LEGACY_LOCAL_SDK_DIR = "/opt/nvidia/holoscan"
+
 
 def normalize_arch(value: str) -> str:
     """Normalize common architecture aliases used by SDK layouts."""
@@ -307,10 +313,45 @@ def is_valid_sdk_directory(path: Union[str, Path]) -> bool:
     return is_valid_sdk_installation(path) or is_valid_sdk_build(path)
 
 
+def default_local_sdk_dir() -> str:
+    """Return the host SDK directory used when no SDK root is selected.
+
+    ``HOLOSCAN_CLI_DEFAULT_HSDK_DIR`` wins. Otherwise use ``/usr`` (SDK 5) when
+    it holds an SDK, then ``/opt/nvidia/holoscan`` (SDK 4), and ``/usr`` when
+    neither does.
+    """
+    configured = os.environ.get("HOLOSCAN_CLI_DEFAULT_HSDK_DIR")
+    if configured is not None:
+        return configured
+    for candidate in (DEFAULT_LOCAL_SDK_DIR, LEGACY_LOCAL_SDK_DIR):
+        if is_valid_sdk_directory(candidate):
+            return candidate
+    return DEFAULT_LOCAL_SDK_DIR
+
+
 def get_sdk_cmake_prefix_path(path: Union[str, Path]) -> str:
     """Return CMake prefixes that work for SDK install and source-build layouts."""
     sdk_path = Path(path)
     return ";".join((str(sdk_path), str(sdk_path / "lib")))
+
+
+def get_sdk_python_paths(path: Union[str, Path]) -> list[str]:
+    """Return the directories that hold an SDK's ``holoscan`` Python package.
+
+    SDK 4 installations and SDK build trees use ``python/lib``. SDK 5
+    installations use ``lib/python3.X/site-packages`` (for a system install,
+    ``/usr/lib/python3.12/site-packages``), which Debian's system Python does
+    not search by default.
+    """
+    sdk_path = Path(path)
+    legacy = sdk_path / "python" / "lib"
+    site_packages = sorted(
+        package.parent
+        for package in sdk_path.glob("lib/python3*/site-packages/holoscan")
+        if package.is_dir()
+    )
+    paths = ([legacy] if legacy.is_dir() else []) + site_packages
+    return [str(p) for p in paths or [legacy]]
 
 
 def _cuda_major(value: Optional[str | int]) -> Optional[str]:

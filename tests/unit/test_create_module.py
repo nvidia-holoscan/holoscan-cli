@@ -272,6 +272,7 @@ def test_packaged_template_creates_a_standalone_module(cli, tmp_path, monkeypatc
     metadata = json.loads((project / "metadata.json").read_text(encoding="utf-8"))
     deb = (project / "pkg/holoscan-my-mod/CMakeLists.txt").read_text(encoding="utf-8")
     developer = (project / "DEVELOPER.md").read_text(encoding="utf-8")
+    agents = (project / "AGENTS.md").read_text(encoding="utf-8")
 
     assert (project / "cmake/HoloHubConfigHelpers.cmake").is_file()
     assert (project / "tests/cpp/test_operators.cpp").is_file()
@@ -309,7 +310,19 @@ def test_packaged_template_creates_a_standalone_module(cli, tmp_path, monkeypatc
     assert "pybind11" not in dockerfile
     assert "holoscan:v5.0.0-cuda13" in dockerfile
     assert "return in a later release" in readme
-    for text in (operator_source, operator_header, application, readme, pyproject, dockerfile):
+    assert "holoscan build my_mod_pipeline" in agents
+    assert "holoscan package holoscan-my-mod --pkg-generator DEB" in agents
+    assert "pkg/holoscan-my-mod/CMakeLists.txt" in agents
+    assert '--docker-opts="--runtime=runc"' in agents
+    for text in (
+        operator_source,
+        operator_header,
+        application,
+        readme,
+        pyproject,
+        dockerfile,
+        agents,
+    ):
         assert "{{" not in text and "{%" not in text
     assert active_requirements == [f"holoscan-cli=={create.__version__}"]
     assert "--extra-index-url https://pypi.nvidia.com" in requirement

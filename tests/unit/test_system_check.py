@@ -251,6 +251,16 @@ def test_check_holoscan_not_found(monkeypatch, tmp_path):
     assert "not found" in result.message
 
 
+def test_check_holoscan_not_found_lists_sdk5_and_sdk4_dirs(monkeypatch):
+    monkeypatch.delenv("HOLOSCAN_CLI_DEFAULT_HSDK_DIR", raising=False)
+    monkeypatch.delenv("HOLOSCAN_SDK_ROOT", raising=False)
+    monkeypatch.setattr(system_check, "default_local_sdk_dir", lambda: "/usr")
+    monkeypatch.setattr(system_check, "is_valid_sdk_directory", lambda _p: False)
+    result = system_check.check_holoscan()
+    assert result.status == "WARN"
+    assert "searched: /usr, /opt/nvidia/holoscan" in result.message
+
+
 # ---- check_holoscan_python --------------------------------------------------
 
 

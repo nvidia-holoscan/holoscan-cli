@@ -52,6 +52,7 @@ from holoscan_cli.utils.holohub import (
     resolve_path_prefix,
 )
 from holoscan_cli.utils.io import Color, fatal, warn
+from holoscan_cli.utils.sdk import default_local_sdk_dir
 from holoscan_cli.utils.text import levenshtein_distance, normalize_args_str
 
 
@@ -76,7 +77,7 @@ class HoloscanCLI:
         os.environ.get("HOLOSCAN_CLI_BUILD_PARENT_DIR", HOLOHUB_ROOT / "build")
     )
     DEFAULT_DATA_DIR = Path(os.environ.get("HOLOSCAN_CLI_DATA_DIR", HOLOHUB_ROOT / "data"))
-    DEFAULT_SDK_DIR = os.environ.get("HOLOSCAN_CLI_DEFAULT_HSDK_DIR", "/opt/nvidia/holoscan")
+    DEFAULT_SDK_DIR = default_local_sdk_dir()
     # Allow overriding the default CTest script path via environment variable
     DEFAULT_CTEST_SCRIPT = os.environ.get(
         "HOLOSCAN_CLI_CTEST_SCRIPT",

@@ -16,6 +16,8 @@ distributing this Holoscan Module.
 ├── CMakeLists.txt                  # Root CMake — orchestrates operators/applications/tests
 ├── pyproject.toml                  # Development tooling (CLI pin, ruff); no wheel build
 ├── metadata.json                   # Module-level metadata (schema: urn:holoscan:module:v2)
+├── AGENTS.md                       # Guidance for AI coding agents
+├── cmake/                          # CMake helpers copied from the CLI at create time
 ├── operators/
 │   └── {{ cookiecutter.operator_slug }}/
 │       ├── {{ cookiecutter.operator_slug }}.cpp / .hpp  # Operator implementation (typed ports)
@@ -92,9 +94,10 @@ during normal UV commands, so no separate setup or activation is needed:
 uv run holoscan test
 ```
 
-To upgrade the tested development environment, update the CLI pin in both
-`requirements-cli.txt` and `pyproject.toml`, reinstall the requirements (or rerun
-`uv sync`), and rebuild the image.
+To upgrade the tested development environment, update the CLI pin in
+`requirements-cli.txt`, `pyproject.toml`, and `.pre-commit-config.yaml`, reinstall the
+requirements (or rerun `uv sync`), and rebuild the image. Upgrading the CLI does not update
+the helpers in `cmake/`; they belong to this Module, so update them by hand if needed.
 
 ---
 

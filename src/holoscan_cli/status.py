@@ -24,6 +24,7 @@ from typing import List, Optional
 from .utils.io import Color, run_info_command
 from .utils.json_output import dumps as json_dumps
 from .utils.sdk import (
+    default_local_sdk_dir,
     find_hsdk_dir,
     get_default_cuda_version,
     get_gpu_name,
@@ -86,7 +87,7 @@ def collect_platform_info() -> PlatformInfo:
         resolved = Path(find_hsdk_dir(root))
         sdk_path = resolved if resolved.is_absolute() else root / resolved
     else:
-        sdk_path = Path(os.environ.get("HOLOSCAN_CLI_DEFAULT_HSDK_DIR", "/opt/nvidia/holoscan"))
+        sdk_path = Path(default_local_sdk_dir())
     holoscan_version = get_sdk_version(sdk_path)
 
     return PlatformInfo(

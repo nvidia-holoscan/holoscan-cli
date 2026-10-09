@@ -130,18 +130,19 @@ holoscan --help
 
 ### Create and work on a standalone module
 
-Creating a module requires the `create` extra. For the CLI 5.0.0a1 integration
-release, use NVIDIA's package index (`uv` 0.4.23 or later):
+Creating a module requires the `create` extra. CLI 5.0 pre-releases are on
+NVIDIA's package index (`uv` 0.4.23 or later):
 
 ```bash
-uvx --index https://pypi.nvidia.com --from 'holoscan-cli[create]==5.0.0a1' holoscan create my-sensor --language python --interactive false --context holoscan_version=4.6.0 --dryrun
-uvx --index https://pypi.nvidia.com --from 'holoscan-cli[create]==5.0.0a1' holoscan create my-sensor --language python --interactive false --context holoscan_version=4.6.0
+uvx --index https://pypi.nvidia.com --from 'holoscan-cli[create]>=5.0.0rc1' holoscan create my-sensor --interactive false --context holoscan_version=5.0.0 --dryrun
+uvx --index https://pypi.nvidia.com --from 'holoscan-cli[create]>=5.0.0rc1' holoscan create my-sensor --interactive false --context holoscan_version=5.0.0
 cd holoscan-my-sensor
 uv run holoscan list --json
 uv run holoscan build my_sensor_pipeline --dryrun --verbose
 ```
 
-Replace `4.6.0` with the module's intended minimum SDK version. CLI and SDK
+The packaged template creates C++ modules for Holoscan SDK 5.0.0 or later.
+Replace `5.0.0` with the module's intended minimum SDK version. CLI and SDK
 versions are independent. Review the preview before running the build without
 `--dryrun`; builds require the module's documented SDK/container prerequisites.
 The generated project records the creating CLI version, and `uv run` prepares
@@ -151,7 +152,7 @@ For the pip alternative, install the same creation extra in the activated
 `.venv`, then run `holoscan create` with the same arguments:
 
 ```bash
-python -m pip install --extra-index-url https://pypi.nvidia.com 'holoscan-cli[create]==5.0.0a1'
+python -m pip install --extra-index-url https://pypi.nvidia.com 'holoscan-cli[create]>=5.0.0rc1'
 ```
 
 In an existing generated module, use its `requirements-cli.txt` to provision
@@ -177,8 +178,8 @@ docker-build-args = ["--build-arg", "PROJECT_FEATURE=ON"]
 docker-run-args = ["--network=host"]
 
 [tool.holoscan.base-images]
-x86_64 = "registry.example.com/holoscan/sdk-build-x86_64:4.5.0-cuda13"
-aarch64 = "registry.example.com/holoscan/sdk-build-aarch64:4.5.0-cuda13"
+x86_64 = "registry.example.com/holoscan/sdk-build-x86_64:5.0.0-cuda13"
+aarch64 = "registry.example.com/holoscan/sdk-build-aarch64:5.0.0-cuda13"
 ```
 
 `cuda` and `ctest-script` provide Module-wide toolchain defaults,
