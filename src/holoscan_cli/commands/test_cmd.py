@@ -35,7 +35,11 @@ from holoscan_cli.utils.holohub import (
 )
 from holoscan_cli.utils.io import format_cmd, run_command
 from holoscan_cli.utils.project import language_cmake_args, report_effective_configuration
-from holoscan_cli.utils.sdk import get_sdk_cmake_prefix_path, resolve_local_sdk_dir
+from holoscan_cli.utils.sdk import (
+    get_sdk_cmake_prefix_path,
+    get_sdk_python_paths,
+    resolve_local_sdk_dir,
+)
 
 
 def register_test_parser(
@@ -246,7 +250,9 @@ def handle_test(cli, args: argparse.Namespace) -> None:
 
         env = os.environ.copy()
         sdk_dir = resolve_local_sdk_dir(cli.DEFAULT_SDK_DIR, getattr(args, "local_sdk_root", None))
-        env["PYTHONPATH"] = f"{env.get('PYTHONPATH', '')}:{sdk_dir}/python/lib:{cli.HOLOHUB_ROOT}"
+        env["PYTHONPATH"] = ":".join(
+            [env.get("PYTHONPATH", ""), *get_sdk_python_paths(sdk_dir), str(cli.HOLOHUB_ROOT)]
+        )
         sdk_prefixes = get_sdk_cmake_prefix_path(sdk_dir).replace(";", os.pathsep)
         env["CMAKE_PREFIX_PATH"] = os.pathsep.join(
             filter(None, (sdk_prefixes, env.get("CMAKE_PREFIX_PATH")))

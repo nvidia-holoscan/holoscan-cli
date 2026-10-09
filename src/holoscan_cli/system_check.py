@@ -29,7 +29,10 @@ from .utils.holohub import get_git_short_sha, get_holohub_root
 from .utils.io import Color, run_info_command
 from .utils.json_output import dumps as json_dumps
 from .utils.sdk import (
+    DEFAULT_LOCAL_SDK_DIR,
+    LEGACY_LOCAL_SDK_DIR,
     cuda_major_from_driver,
+    default_local_sdk_dir,
     find_hsdk_dir,
     get_cuda_runtime_version,
     get_gpu_name,
@@ -265,13 +268,15 @@ def check_holoscan() -> CheckResult:
                     message=f"SDK {version} at {resolved_path} (via HOLOSCAN_SDK_ROOT)",
                 )
 
-    sdk_dir = os.environ.get("HOLOSCAN_CLI_DEFAULT_HSDK_DIR", "/opt/nvidia/holoscan")
+    sdk_dir = default_local_sdk_dir()
     sdk_path = Path(sdk_dir)
     if sdk_path.exists() and is_valid_sdk_directory(sdk_path):
         version = get_sdk_version(sdk_path)
         return CheckResult(status="OK", name="Holoscan", message=f"SDK {version} at {sdk_dir}")
 
     searched = sdk_dir
+    if "HOLOSCAN_CLI_DEFAULT_HSDK_DIR" not in os.environ:
+        searched = f"{DEFAULT_LOCAL_SDK_DIR}, {LEGACY_LOCAL_SDK_DIR}"
     if sdk_root:
         searched += f", HOLOSCAN_SDK_ROOT={sdk_root}"
     return CheckResult(

@@ -178,6 +178,37 @@ def test_get_sdk_version_and_validation_from_4x_build_tree(tmp_path, make_sdk_di
     assert sdk.get_sdk_cmake_prefix_path(build) == f"{build};{build / 'lib'}"
 
 
+def test_get_sdk_python_paths_follows_sdk_layout(tmp_path, make_sdk_directory):
+    sdk5 = make_sdk_directory(tmp_path / "usr")
+    (sdk5 / "lib/python3.12/site-packages/holoscan").mkdir(parents=True)
+    (sdk5 / "lib/python3.10/site-packages").mkdir(parents=True)
+    assert sdk.get_sdk_python_paths(sdk5) == [str(sdk5 / "lib/python3.12/site-packages")]
+
+    build = make_sdk_directory(tmp_path / "build-x86_64", build=True)
+    (build / "python/lib/holoscan").mkdir(parents=True)
+    assert sdk.get_sdk_python_paths(build) == [str(build / "python/lib")]
+
+    missing = tmp_path / "missing"
+    assert sdk.get_sdk_python_paths(missing) == [str(missing / "python/lib")]
+
+
+def test_default_local_sdk_dir_prefers_sdk5_then_sdk4(tmp_path, make_sdk_directory, monkeypatch):
+    usr, opt = tmp_path / "usr", tmp_path / "opt"
+    monkeypatch.setattr(sdk, "DEFAULT_LOCAL_SDK_DIR", str(usr))
+    monkeypatch.setattr(sdk, "LEGACY_LOCAL_SDK_DIR", str(opt))
+    monkeypatch.delenv("HOLOSCAN_CLI_DEFAULT_HSDK_DIR", raising=False)
+    assert sdk.default_local_sdk_dir() == str(usr)
+
+    make_sdk_directory(opt)
+    assert sdk.default_local_sdk_dir() == str(opt)
+
+    make_sdk_directory(usr)
+    assert sdk.default_local_sdk_dir() == str(usr)
+
+    monkeypatch.setenv("HOLOSCAN_CLI_DEFAULT_HSDK_DIR", str(tmp_path / "custom"))
+    assert sdk.default_local_sdk_dir() == str(tmp_path / "custom")
+
+
 def test_find_hsdk_dir_prefers_cuda_install_then_other_install_then_build(
     tmp_path, make_sdk_directory
 ):

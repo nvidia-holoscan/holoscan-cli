@@ -50,7 +50,7 @@ from holoscan_cli.utils.project import (
     report_effective_configuration,
     resolve_effective_build_type,
 )
-from holoscan_cli.utils.sdk import resolve_local_sdk_dir
+from holoscan_cli.utils.sdk import get_sdk_python_paths, resolve_local_sdk_dir
 
 
 def _transient_builder_docker_opts(docker_opts):
@@ -288,9 +288,13 @@ def handle_run(cli, args: argparse.Namespace) -> None:
             getattr(args, "local_sdk_root", None),
             environ=sdk_environment,
         )
-        run_env["PYTHONPATH"] = (
-            f"{run_env.get('PYTHONPATH', '')}:{sdk_dir}/python/lib:"
-            f"{build_dir}/python/lib:{cli.HOLOHUB_ROOT}"
+        run_env["PYTHONPATH"] = ":".join(
+            [
+                run_env.get("PYTHONPATH", ""),
+                *get_sdk_python_paths(sdk_dir),
+                f"{build_dir}/python/lib",
+                str(cli.HOLOHUB_ROOT),
+            ]
         )
         run_env["HOLOSCAN_CLI_DATA_PATH"] = str(cli.DEFAULT_DATA_DIR)
         run_env["HOLOSCAN_INPUT_PATH"] = run_env.get(
