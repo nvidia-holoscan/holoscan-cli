@@ -176,11 +176,6 @@ def iter_metadata_paths(
             candidates = _walk_metadata_files(path)
 
         for file_path in candidates:
-            # Resolve symlinks so aliased search folders list a file once.
-            resolved_path = os.path.realpath(file_path)
-            if resolved_path in seen:
-                continue
-            seen.add(resolved_path)
             if excludes and _matches_segment(file_path, excludes):
                 continue
 
@@ -194,4 +189,9 @@ def iter_metadata_paths(
             if ignore_patterns and _matches_segment(file_path, ignore_patterns):
                 continue
 
+            # Resolve symlinks so aliased search folders list a file once.
+            resolved_path = os.path.realpath(file_path)
+            if resolved_path in seen:
+                continue
+            seen.add(resolved_path)
             yield file_path

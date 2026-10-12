@@ -84,3 +84,8 @@ def test_search_lists_a_file_reached_through_a_symlinked_folder_once(tmp_path):
     projects = gather_metadata([str(root / "applications"), str(root / "examples")])
 
     assert [project["source_folder"] for project in projects] == [str(root / "applications/ex_app")]
+    # An excluded path doesn't hide the same file reached through another path.
+    projects = gather_metadata(
+        [str(root / "applications"), str(root / "examples")], exclude_paths=["applications"]
+    )
+    assert [project["source_folder"] for project in projects] == [str(root / "examples/ex_app")]
