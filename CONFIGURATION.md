@@ -35,8 +35,9 @@ variable wins. Either list replaces the conventional directories, so it also
 excludes the ones it leaves out; `.` searches the whole project. Entries are
 directories or exact `metadata.json` paths relative to the root; an empty
 variable uses conventional directories. A Module's root `metadata.json` is
-always included. Discovery skips hidden folders such as `.git` and `.venv`,
-Python virtual environments, and CMake build trees below each searched folder.
+always included. Below each searched folder, discovery skips hidden folders
+such as `.git` and `.venv`. It also skips Python and Conda environments and CMake
+build trees, except a folder with its own `metadata.json`, such as an in-source build.
 `HOLOSCAN_CLI_APP_NAME` overrides the application's directory-based selector and
 is forwarded automatically to preserve it across renamed container mounts.
 

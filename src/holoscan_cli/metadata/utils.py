@@ -55,9 +55,9 @@ BASE_SCHEMA_PATH = SCHEMA_DIR / "project.schema.json"
 
 DEFAULT_INCLUDE_PATHS = tuple(METADATA_DIRECTORY_CONFIG.keys())
 MAX_METADATA_BYTES = 1024 * 1024
-# Files that mark a Python virtual environment or a CMake build tree. Such
+# Entries that mark a Python or Conda environment or a CMake build tree. Such
 # folders can hold copies of project metadata, so discovery skips them.
-SKIPPED_FOLDER_MARKERS = ("pyvenv.cfg", "CMakeCache.txt")
+SKIPPED_FOLDER_MARKERS = ("pyvenv.cfg", "conda-meta", "CMakeCache.txt")
 
 
 def read_metadata(path: str | os.PathLike):
@@ -131,11 +131,16 @@ def list_normalized_languages(language, *, strict: bool = False) -> list[str]:
 def _walk_metadata_files(top: Path) -> Iterator[str]:
     """Yield metadata.json files below ``top``, skipping generated folders.
 
-    Hidden folders (``.git``, ``.venv``, tool caches), virtual environments, and
-    CMake build trees are skipped below ``top``; ``top`` itself is always searched.
+    Hidden folders (``.git``, ``.venv``, tool caches), Python and Conda
+    environments, and CMake build trees are skipped below ``top``. ``top`` and
+    folders with their own metadata.json, such as in-source builds, are searched.
     """
     for root, dirs, files in os.walk(top):
-        if root != os.fspath(top) and any(marker in files for marker in SKIPPED_FOLDER_MARKERS):
+        if (
+            root != os.fspath(top)
+            and "metadata.json" not in files
+            and not {*files, *dirs}.isdisjoint(SKIPPED_FOLDER_MARKERS)
+        ):
             dirs.clear()
             continue
         dirs[:] = [name for name in dirs if not name.startswith(".")]
