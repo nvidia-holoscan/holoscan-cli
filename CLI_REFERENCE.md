@@ -135,12 +135,12 @@ Use `--nsys-args` to replace that option list. For NVTX-only tracing without
 CPU sampling, backtraces, or context-switch collection:
 
 ```bash
-holoscan run my_app --nsys-profile \
+holoscan run my_app \
   --nsys-args='--trace=nvtx --sample=none --backtrace=none --cpuctxsw=none -o profile' \
   --dryrun --verbose
 ```
 
-Remove `--dryrun` to capture. `--nsys-args` requires `--nsys-profile`; its
+Remove `--dryrun` to capture. `--nsys-args` implies `--nsys-profile`; its
 value is split using shell-style quoting, without shell expansion. An empty
 value (`--nsys-args=''`) supplies no profile options, using Nsight's defaults.
 Use `--run-args` separately for application arguments.

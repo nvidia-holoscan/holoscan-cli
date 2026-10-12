@@ -75,7 +75,7 @@ existing prefixes unless explicit CMake options override them.
 `run --nsys-profile` defaults to `--trace=cuda,vulkan,nvtx,osrt`.
 `--nsys-args='...'` replaces the complete profiler option list; it does not
 append to those defaults or change application arguments. An empty string
-uses Nsight's own defaults. The option requires `--nsys-profile` and is
+uses Nsight's own defaults. The option implies `--nsys-profile` and is
 forwarded into the container's `run --local` invocation.
 
 These options are command-line settings, with no mode or `pyproject.toml`

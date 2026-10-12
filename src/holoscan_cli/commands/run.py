@@ -134,7 +134,7 @@ def register_run_parser(
     parser.add_argument(
         "--nsys-args",
         help="Options for nsys profile, replacing --trace=cuda,vulkan,nvtx,osrt. "
-        "Requires --nsys-profile; use --nsys-args='--trace=nvtx --sample=none "
+        "Implies --nsys-profile; use --nsys-args='--trace=nvtx --sample=none "
         "--backtrace=none --cpuctxsw=none' for NVTX-only tracing",
     )
     parser.add_argument(
@@ -169,8 +169,7 @@ def handle_run(cli, args: argparse.Namespace) -> None:
     nsys_args = getattr(args, "nsys_args", None)
     profile_args = ["--trace=cuda,vulkan,nvtx,osrt"]
     if nsys_args is not None:
-        if not args.nsys_profile:
-            fatal("--nsys-args requires --nsys-profile")
+        args.nsys_profile = True
         try:
             profile_args = shlex.split(nsys_args)
         except ValueError as exc:

@@ -567,11 +567,14 @@ def test_handle_run_local_dryrun_builds_mapping_and_executes_command(tmp_path, m
 @pytest.mark.parametrize("dryrun", [True, False])
 @pytest.mark.parametrize("run_args", [None, '--name "two words" --literal "$(echo literal)"'])
 @pytest.mark.parametrize(
-    "nsys_args,expected_profile_args",
+    "profile,nsys_args,expected_profile_args",
     [
-        (None, ["--trace=cuda,vulkan,nvtx,osrt"]),
-        ("", []),
+        (True, None, ["--trace=cuda,vulkan,nvtx,osrt"]),
+        (True, "", []),
+        (False, "", []),
+        (False, "--trace=nvtx", ["--trace=nvtx"]),
         (
+            True,
             '--trace=nvtx --sample=none --backtrace=none --cpuctxsw=none -o "my profile"',
             [
                 "--trace=nvtx",
@@ -585,7 +588,7 @@ def test_handle_run_local_dryrun_builds_mapping_and_executes_command(tmp_path, m
     ],
 )
 def test_handle_run_profiles_application_argv(
-    tmp_path, monkeypatch, dryrun, run_args, nsys_args, expected_profile_args
+    tmp_path, monkeypatch, dryrun, run_args, profile, nsys_args, expected_profile_args
 ):
     cli = RecordingCLI(tmp_path)
     cli.project_data["metadata"]["run"]["command"] = 'python "my app.py"'
@@ -605,7 +608,7 @@ def test_handle_run_profiles_application_argv(
         _project_args(
             local=True,
             dryrun=dryrun,
-            nsys_profile=True,
+            nsys_profile=profile,
             nsys_args=nsys_args,
             run_args=run_args,
         ),
@@ -625,34 +628,28 @@ def test_handle_run_profiles_application_argv(
 
 
 @pytest.mark.parametrize("local", [True, False])
-@pytest.mark.parametrize(
-    "profile,nsys_args,message",
-    [
-        (False, "--trace=nvtx", "--nsys-args requires --nsys-profile"),
-        (False, "", "--nsys-args requires --nsys-profile"),
-        (True, '-o "unfinished', "Invalid --nsys-args: No closing quotation"),
-    ],
-)
-def test_handle_run_rejects_invalid_nsys_args_before_building(
-    tmp_path, capsys, local, profile, nsys_args, message
-):
+@pytest.mark.parametrize("profile", [False, True])
+def test_handle_run_rejects_invalid_nsys_args_before_building(tmp_path, capsys, local, profile):
     cli = RecordingCLI(tmp_path)
     with pytest.raises(SystemExit) as exc:
         run_cmd.handle_run(
-            cli, _project_args(local=local, nsys_profile=profile, nsys_args=nsys_args)
+            cli, _project_args(local=local, nsys_profile=profile, nsys_args='-o "unfinished')
         )
 
     assert exc.value.code != 0
     captured = capsys.readouterr()
-    assert message in captured.out + captured.err
+    assert "Invalid --nsys-args: No closing quotation" in captured.out + captured.err
     assert not cli.find_project_calls
     assert not cli.container.build_calls
     assert not cli.container.run_calls
 
 
 @pytest.mark.parametrize("as_root", [False, True])
+@pytest.mark.parametrize("profile", [False, True])
 @pytest.mark.parametrize("nsys_args", ["", '--trace=nvtx -o "my profile"'])
-def test_handle_run_forwards_nsys_args_through_container(tmp_path, monkeypatch, as_root, nsys_args):
+def test_handle_run_forwards_nsys_args_through_container(
+    tmp_path, monkeypatch, as_root, profile, nsys_args
+):
     cli = RecordingCLI(tmp_path)
     cli.container.DEFAULT_DOCKER_RUN_ARGS = ""
     commands = []
@@ -665,7 +662,7 @@ def test_handle_run_forwards_nsys_args_through_container(tmp_path, monkeypatch, 
     run_cmd.handle_run(
         cli,
         _project_args(
-            nsys_profile=True,
+            nsys_profile=profile,
             nsys_args=nsys_args,
             nsys_location="/opt/custom-nsys",
             run_args='--name "two words"',
