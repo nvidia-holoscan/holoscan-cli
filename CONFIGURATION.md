@@ -28,9 +28,13 @@ project type, with non-empty strings for `name` and
 `holoscan_sdk.minimum_required_version`. Incomplete or unrelated descriptors are
 ignored; this is not full schema validation and needs no optional dependencies.
 
-Use `HOLOSCAN_CLI_SEARCH_PATH` for custom directories such as `examples/`.
-It replaces defaults with comma-separated directories or exact `metadata.json`
-paths, relative to the root; an empty value uses conventional directories.
+Standalone Modules can search more folders, such as `examples/`, with
+`extra-search-paths` in [`[tool.holoscan]`](#pyprojecttoml-settings).
+`HOLOSCAN_CLI_SEARCH_PATH` replaces the default and extra folders with
+comma-separated directories or exact `metadata.json` paths, relative to the
+root; an empty value uses conventional directories. Discovery skips hidden
+folders such as `.git` and `.venv`, Python virtual environments, and CMake build
+trees inside the searched folders.
 `HOLOSCAN_CLI_APP_NAME` overrides the application's directory-based selector and
 is forwarded automatically to preserve it across renamed container mounts.
 
@@ -79,6 +83,7 @@ unrelated to CLI configuration. Supported keys:
 | --- | --- | --- |
 | `cuda` | Integer / host detection | CUDA major version. |
 | `ctest-script` | Relative path / bundled script | CTest driver; must stay within the Module root. |
+| `extra-search-paths` | Relative path array / `[]` | Folders to search for projects in addition to the defaults; must stay within the Module root. |
 | `repo-prefix` | String / Module metadata | Repository naming prefix. |
 | `container-prefix` | String / repository prefix | Docker image prefix. |
 | `workspace-name` | String / repository prefix | Directory under `/workspace`. |
@@ -91,6 +96,7 @@ unrelated to CLI configuration. Supported keys:
 [tool.holoscan]
 cuda = 13
 ctest-script = "ci/container.ctest"
+extra-search-paths = ["examples"]
 forward-env = ["IS_CI_BUILD"]
 docker-build-args = ["--build-arg", "PROJECT_FEATURE=ON"]
 docker-run-args = ["--network=host"]

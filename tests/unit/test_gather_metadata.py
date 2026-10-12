@@ -40,3 +40,28 @@ def test_module_uses_declared_name_instead_of_mount_directory(tmp_path):
         projects = gather_metadata([str(mounted_root)])
 
         assert projects[0]["project_name"] == expected_name
+
+
+def test_search_skips_generated_folders_and_lists_each_file_once(tmp_path):
+    root = tmp_path / "module"
+    application = json.dumps({"application": {"name": "ex_app"}})
+    for folder in (
+        "examples/ex_app",
+        ".venv/lib/placeholder",  # hidden folder
+        "venv/lib/placeholder",  # virtual environment
+        "build/ex_app/examples/ex_app",  # CMake build tree
+    ):
+        (root / folder).mkdir(parents=True)
+        (root / folder / "metadata.json").write_text(application, encoding="utf-8")
+    (root / "metadata.json").write_text(json.dumps({"module": {"name": "m"}}), encoding="utf-8")
+    (root / "venv/pyvenv.cfg").touch()
+    (root / "build/ex_app/CMakeCache.txt").touch()
+
+    projects = gather_metadata([str(root / "metadata.json"), str(root), str(root / "examples")])
+
+    assert [project["source_folder"] for project in projects] == [
+        str(root),
+        str(root / "examples/ex_app"),
+    ]
+    # A folder named directly in the search path is always searched.
+    assert len(gather_metadata([str(root / "build/ex_app")])) == 1

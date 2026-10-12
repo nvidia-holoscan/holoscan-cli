@@ -55,6 +55,9 @@ BASE_SCHEMA_PATH = SCHEMA_DIR / "project.schema.json"
 
 DEFAULT_INCLUDE_PATHS = tuple(METADATA_DIRECTORY_CONFIG.keys())
 MAX_METADATA_BYTES = 1024 * 1024
+# Files that mark a Python virtual environment or a CMake build tree. Such
+# folders can hold copies of project metadata, so discovery skips them.
+SKIPPED_FOLDER_MARKERS = ("pyvenv.cfg", "CMakeCache.txt")
 
 
 def read_metadata(path: str | os.PathLike):
@@ -125,6 +128,21 @@ def list_normalized_languages(language, *, strict: bool = False) -> list[str]:
     return normalized or [""]
 
 
+def _walk_metadata_files(top: Path) -> Iterator[str]:
+    """Yield metadata.json files below ``top``, skipping generated folders.
+
+    Hidden folders (``.git``, ``.venv``, tool caches), virtual environments, and
+    CMake build trees are skipped below ``top``; ``top`` itself is always searched.
+    """
+    for root, dirs, files in os.walk(top):
+        if root != os.fspath(top) and any(marker in files for marker in SKIPPED_FOLDER_MARKERS):
+            dirs.clear()
+            continue
+        dirs[:] = [name for name in dirs if not name.startswith(".")]
+        if "metadata.json" in files:
+            yield os.path.join(root, "metadata.json")
+
+
 def iter_metadata_paths(
     repo_paths: Sequence[str | os.PathLike],
     *,
@@ -143,18 +161,20 @@ def iter_metadata_paths(
             ("/" + pattern.replace(os.sep, "/").strip("/") + "/") in norm for pattern in patterns
         )
 
+    # Overlapping search paths, such as "." and "applications", list each file once.
+    seen: set[str] = set()
     for repo_path in repo_paths:
         path = Path(repo_path)
         if path.is_file():
             candidates = [str(path)] if path.name == "metadata.json" else []
         else:
-            candidates = [
-                os.path.join(root, "metadata.json")
-                for root, _, files in os.walk(path)
-                if "metadata.json" in files
-            ]
+            candidates = _walk_metadata_files(path)
 
         for file_path in candidates:
+            absolute_path = os.path.abspath(file_path)
+            if absolute_path in seen:
+                continue
+            seen.add(absolute_path)
             if excludes and _matches_segment(file_path, excludes):
                 continue
 
