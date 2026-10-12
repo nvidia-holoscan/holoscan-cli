@@ -75,6 +75,7 @@ def test_search_lists_a_file_reached_through_a_symlinked_folder_once(tmp_path):
     )
     (root / "examples").symlink_to(root / "applications", target_is_directory=True)
 
+    assert len(gather_metadata([str(root / "examples")])) == 1
     projects = gather_metadata([str(root / "applications"), str(root / "examples")])
 
     assert [project["source_folder"] for project in projects] == [str(root / "applications/ex_app")]
