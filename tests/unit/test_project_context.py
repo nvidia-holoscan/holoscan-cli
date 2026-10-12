@@ -231,6 +231,15 @@ def test_module_pyproject_rejects_unsafe_or_unknown_values(tmp_path, pyproject, 
         discover_project_context(cwd=root, environ={})
 
 
+def test_module_search_paths_reject_a_symlink_outside_the_module(tmp_path):
+    root = _module(tmp_path / "module", pyproject="[tool.holoscan]\nsearch-paths = ['examples']\n")
+    (tmp_path / "outside").mkdir()
+    (root / "examples").symlink_to(tmp_path / "outside", target_is_directory=True)
+
+    with pytest.raises(ProjectContextError, match="search-paths must stay within"):
+        discover_project_context(cwd=root, environ={})
+
+
 def test_lightweight_import_does_not_load_project_cli(tmp_path):
     script = """
 import sys

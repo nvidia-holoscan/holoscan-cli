@@ -331,6 +331,14 @@ def _resolve_project_profile(
             )
             for value in search_paths
         )
+        # A symlinked entry must not lead discovery outside the Module.
+        real_root = root.resolve()
+        for value in resolved["search_paths"]:
+            if not (root / value).resolve().is_relative_to(real_root):
+                raise ProjectContextError(
+                    f"{config_source}: tool.holoscan.search-paths must stay within the "
+                    f"project and be relative: {value}"
+                )
 
     for key, field in (
         ("docker-build-args", "docker_build_args"),
