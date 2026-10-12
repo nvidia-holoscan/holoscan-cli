@@ -12,7 +12,6 @@ from pathlib import Path
 import pytest
 
 from holoscan_cli.project_context import (
-    SEARCH_DIRS,
     ProjectContextError,
     activate_project_context,
     discover_project_context,
@@ -140,7 +139,7 @@ workspace-name = "sensor_workspace"
 forward-env = ["CI"]
 docker-build-args = ["--build-arg", "PROJECT_FEATURE=ON"]
 docker-run-args = ["--network=host"]
-extra-search-paths = ["examples", "./tools/"]
+search-paths = ["examples", "./tools/"]
 
 [tool.holoscan.base-images]
 x86_64 = "example.test/holoscan:fixed"
@@ -159,10 +158,8 @@ x86_64 = "example.test/holoscan:fixed"
     assert context.docker_build_args == "--build-arg PROJECT_FEATURE=ON"
     assert context.docker_run_args == "--network=host"
     assert context.forward_env == ("CI",)
-    assert context.extra_search_paths == ("examples", "tools")
-    assert profile["HOLOSCAN_CLI_SEARCH_PATH"] == ",".join(
-        ("metadata.json", *SEARCH_DIRS, "examples", "tools")
-    )
+    assert context.search_paths == ("examples", "tools")
+    assert profile["HOLOSCAN_CLI_SEARCH_PATH"] == "metadata.json,examples,tools"
     assert profile["HOLOSCAN_CLI_DEFAULT_CUDA_VERSION"] == "13"
     assert profile["HOLOSCAN_CLI_CTEST_SCRIPT"] == "ci/container.ctest"
     assert profile["HOLOSCAN_CLI_REPO_PREFIX"] == "sensor_repo"
@@ -214,9 +211,10 @@ def test_module_environment_resolves_4x_sdk_build_tree(tmp_path, monkeypatch, ma
         ("[tool.holoscan]\nctest-script = '../container.ctest'\n", "ctest-script"),
         ("[tool.holoscan]\nforward-env = ['HOME']\n", "forward-env"),
         ("[tool.holoscan]\ndocker-run-args = ['']\n", "docker-run-args"),
-        ("[tool.holoscan]\nextra-search-paths = 'examples'\n", "extra-search-paths must"),
-        ("[tool.holoscan]\nextra-search-paths = ['../examples']\n", "extra-search-paths must"),
-        ("[tool.holoscan]\nextra-search-paths = ['a,b']\n", "extra-search-paths must"),
+        ("[tool.holoscan]\nsearch-paths = 'examples'\n", "search-paths must"),
+        ("[tool.holoscan]\nsearch-paths = []\n", "search-paths must"),
+        ("[tool.holoscan]\nsearch-paths = ['../examples']\n", "search-paths must"),
+        ("[tool.holoscan]\nsearch-paths = ['a,b']\n", "search-paths must"),
         ("[tool.holoscan]\nbase-images = 'x86_64'\n", "base-images must be a table"),
         (
             "[tool.holoscan.base-images]\n"
@@ -282,13 +280,18 @@ def test_dispatch_activates_module_without_a_runtime_version_gate(tmp_path):
     assert module["source_folder"] == str(root)
 
 
-def test_list_adds_extra_search_paths_and_skips_generated_folders(tmp_path):
+def test_list_uses_search_paths_and_skips_generated_folders(tmp_path):
     root = _module(
         tmp_path / "module",
-        pyproject='[tool.holoscan]\nextra-search-paths = ["examples"]\n',
+        pyproject='[tool.holoscan]\nsearch-paths = ["examples"]\n',
     )
     application = json.dumps({"application": {"name": "ex_app"}})
-    for folder in ("examples/ex_app", ".venv/lib/placeholder", "build/ex_app/examples/ex_app"):
+    for folder in (
+        "examples/ex_app",
+        "operators/ex_op",
+        ".venv/lib/placeholder",
+        "build/ex_app/examples/ex_app",
+    ):
         (root / folder).mkdir(parents=True)
         (root / folder / "metadata.json").write_text(application, encoding="utf-8")
     (root / "build/ex_app/CMakeCache.txt").touch()
@@ -305,6 +308,10 @@ def test_list_adds_extra_search_paths_and_skips_generated_folders(tmp_path):
         projects = json.loads(result.stdout)["projects"]
         return sorted((project["project_type"], project["source_folder"]) for project in projects)
 
-    expected = [("application", str(root / "examples/ex_app")), ("module", str(root))]
-    assert list_projects() == expected
-    assert list_projects(HOLOSCAN_CLI_SEARCH_PATH=".") == expected
+    module = ("module", str(root))
+    example = ("application", str(root / "examples/ex_app"))
+    operator = ("application", str(root / "operators/ex_op"))
+    # search-paths replaces the default folders; the Module itself is always listed.
+    assert list_projects() == [example, module]
+    assert list_projects(HOLOSCAN_CLI_SEARCH_PATH="operators") == [operator, module]
+    assert list_projects(HOLOSCAN_CLI_SEARCH_PATH=".") == [example, operator, module]
