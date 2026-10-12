@@ -132,6 +132,12 @@ def register_run_parser(
         "example: --run-args=--flag or --run-args '-c config/file'",
     )
     parser.add_argument(
+        "--nsys-args",
+        help="Options for nsys profile, replacing --trace=cuda,vulkan,nvtx,osrt. "
+        "Implies --nsys-profile; use --nsys-args='--trace=nvtx --sample=none "
+        "--backtrace=none --cpuctxsw=none' for NVTX-only tracing",
+    )
+    parser.add_argument(
         "--build-with",
         dest="with_operators",
         help=(
@@ -159,6 +165,15 @@ def register_run_parser(
 def handle_run(cli, args: argparse.Namespace) -> None:
     """Handle run command"""
     from holoscan_cli.cli import in_container_cli_command
+
+    nsys_args = getattr(args, "nsys_args", None)
+    profile_args = ["--trace=cuda,vulkan,nvtx,osrt"]
+    if nsys_args is not None:
+        args.nsys_profile = True
+        try:
+            profile_args = shlex.split(nsys_args)
+        except ValueError as exc:
+            fatal(f"Invalid --nsys-args: {exc}")
 
     # Handle mode-specific configuration
     project_data = cli.find_project(args.project, language=args.language)
@@ -336,7 +351,13 @@ def handle_run(cli, args: argparse.Namespace) -> None:
                 )
             )
 
-        # Handle Nsight Systems profiling
+        # `run.command` is intentionally executable project configuration. Keep
+        # plain strings out of a shell: projects that need shell semantics must
+        # request an interpreter explicitly (for example, `bash -c ...`).
+        cmd_to_run = cmd if isinstance(cmd, list) else shlex.split(cmd)
+
+        # Handle Nsight Systems profiling. Nsight checks permissions for the
+        # requested collectors; NVTX-only tracing does not need CPU perf events.
         if args.nsys_profile:
             if (
                 not shutil.which("nsys")
@@ -348,23 +369,7 @@ def handle_run(cli, args: argparse.Namespace) -> None:
                 )
             nsys_cmd = "/opt/nvidia/nsys-host/bin/nsys" if not shutil.which("nsys") else "nsys"
 
-            # Check perf_event_paranoid level
-            if not args.dryrun:
-                try:
-                    with open("/proc/sys/kernel/perf_event_paranoid") as f:
-                        if int(f.read()) > 2:
-                            fatal(
-                                "For Nsight Systems profiling the Linux operating system's perf_event_paranoid level must be 2 or less."
-                            )
-                except (IOError, ValueError):
-                    pass
-
-            cmd = f"{nsys_cmd} profile --trace=cuda,vulkan,nvtx,osrt {cmd}"
-
-        # `run.command` is intentionally executable project configuration. Keep
-        # plain strings out of a shell: projects that need shell semantics must
-        # request an interpreter explicitly (for example, `bash -c ...`).
-        cmd_to_run = cmd if isinstance(cmd, list) else shlex.split(cmd)
+            cmd_to_run = [nsys_cmd, "profile", *profile_args, *cmd_to_run]
         as_root = getattr(args, "as_root", False)
         # sudo resets the environment; list every variable the elevated app
         # needs, including the project-declared run/mode env keys.
@@ -439,6 +444,8 @@ def handle_run(cli, args: argparse.Namespace) -> None:
             run_tokens.extend(["--pkg-generator", str(args.pkg_generator)])
         if args.nsys_profile:
             run_tokens.append("--nsys-profile")
+        if nsys_args is not None:
+            run_tokens.append(f"--nsys-args={nsys_args}")
         if skip_local_build:
             run_tokens.append("--no-local-build")
         if getattr(args, "with_operators", None) is not None:
