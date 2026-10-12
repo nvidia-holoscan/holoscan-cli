@@ -70,6 +70,18 @@ dependencies. Python apps also need the SDK's Python bindings. Add `--local` to
 run on the host. `holoscan test` adds the SDK to `CMAKE_PREFIX_PATH`, preserving
 existing prefixes unless explicit CMake options override them.
 
+## Nsight Systems options
+
+`run --nsys-profile` defaults to `--trace=cuda,vulkan,nvtx,osrt`.
+`--nsys-args='...'` replaces the complete profiler option list; it does not
+append to those defaults or change application arguments. An empty string
+uses Nsight's own defaults. The option requires `--nsys-profile` and is
+forwarded into the container's `run --local` invocation.
+
+These options are command-line settings, with no mode or `pyproject.toml`
+defaults. See [profiling](CLI_REFERENCE.md#profile-an-application) for an
+NVTX-only capture and output-path behavior.
+
 ## `pyproject.toml` settings
 
 Standalone Modules can set defaults in `[tool.holoscan]`. Other TOML tables are

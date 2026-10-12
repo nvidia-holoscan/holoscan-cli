@@ -120,6 +120,50 @@ entrypoint, quote a multi-argument or compound command as one argument:
 uv run holoscan run-container -- "holoscan list --json"
 ```
 
+## Profile an application
+
+Add `--nsys-profile` to `run` to launch the application under Nsight Systems
+after its build completes. This works in a container or with `--local`:
+
+```bash
+holoscan run my_app --nsys-profile --dryrun --verbose
+holoscan run my_app --nsys-profile
+```
+
+By default, the CLI invokes `nsys profile --trace=cuda,vulkan,nvtx,osrt`.
+Use `--nsys-args` to replace that option list. For NVTX-only tracing without
+CPU sampling, backtraces, or context-switch collection:
+
+```bash
+holoscan run my_app --nsys-profile \
+  --nsys-args='--trace=nvtx --sample=none --backtrace=none --cpuctxsw=none -o profile' \
+  --dryrun --verbose
+```
+
+Remove `--dryrun` to capture. `--nsys-args` requires `--nsys-profile`; its
+value is split using shell-style quoting, without shell expansion. An empty
+value (`--nsys-args=''`) supplies no profile options, using Nsight's defaults.
+Use `--run-args` separately for application arguments.
+
+The same options work with downstream wrappers such as `./holohub` and
+`./isaac_os` once their host and container CLI versions include this feature.
+The application's mode, environment, arguments, and working directory are
+preserved. Relative output paths resolve from that working directory; for
+container runs, use a writable mounted path to keep reports on the host.
+Wait for Nsight to finish writing the `.nsys-rep` file after stopping the app.
+Add `--force-overwrite=true` to `--nsys-args` only when replacing an existing
+capture is intended.
+
+Nsight Systems must be installed in the execution environment. Alternatively,
+`--nsys-location /path/to/nsight-systems` mounts a host installation into the
+container at `/opt/nvidia/nsys-host`; an `nsys` already on the container's
+`PATH` takes precedence. Nsight reports permission limitations for the
+requested collectors; the CLI does not change host perf settings.
+
+`run-container --nsys-profile` only adds profiling permissions
+(`--cap-add=SYS_ADMIN`). It does not start profiling or accept `--nsys-args`;
+launch `nsys profile` yourself for commands run directly in that container.
+
 ## Create a module
 
 `holoscan create my-sensor` uses the packaged module template and creates
