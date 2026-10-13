@@ -369,15 +369,25 @@ class HoloscanContainer:
         # A Module's optional devices and mounts are also added only when present.
         context = get_active_project_context()
         if context is not None:
+            # Skip container paths added above: Docker rejects a repeated mount point.
+            taken = set()
+            for flag, value in zip(options, options[1:]):
+                if flag in ("-v", "--device"):
+                    fields = value.split(":")
+                    taken.add(os.path.normpath(fields[1] if len(fields) > 1 else fields[0]))
+                elif flag == "--mount":
+                    for field in value.split(","):
+                        key, _, target = field.partition("=")
+                        if key in ("target", "dst", "destination"):
+                            taken.add(os.path.normpath(target))
             for flag, paths in (
                 ("--device", context.optional_devices),
                 ("-v", context.optional_mounts),
             ):
-                for path in paths:
-                    mapping = f"{path}:{path}"
-                    # Skip paths added above: Docker rejects a repeated mount point.
-                    if os.path.exists(path) and path not in options and mapping not in options:
-                        options.extend([flag, path if flag == "--device" else mapping])
+                for path in map(os.path.normpath, paths):
+                    if path not in taken and os.path.exists(path):
+                        taken.add(path)
+                        options.extend([flag, path if flag == "--device" else f"{path}:{path}"])
         return options
 
     @staticmethod

@@ -1008,7 +1008,7 @@ def test_optional_devices_and_mounts_are_added_only_when_present(tmp_path, monke
         kind="module",
         discovery="project-root",
         optional_devices=(str(device), str(missing), str(camera)),
-        optional_mounts=(str(vendor), str(missing), str(vendor)),
+        optional_mounts=(str(vendor), str(missing), f"{vendor}/", "/etc/asound.conf"),
     )
     monkeypatch.setattr(container_core, "get_active_project_context", lambda: context)
     # The CLI's own device scan already adds the camera.
@@ -1017,6 +1017,13 @@ def test_optional_devices_and_mounts_are_added_only_when_present(tmp_path, monke
         container_core.glob,
         "glob",
         lambda pattern: [str(camera)] if pattern == "/dev/video[0-9]*" else scan(pattern),
+    )
+    # The CLI already mounts /etc/asound.conf with --mount when it exists.
+    exists = container_core.os.path.exists
+    monkeypatch.setattr(
+        container_core.os.path,
+        "exists",
+        lambda path: path == "/etc/asound.conf" or exists(path),
     )
     monkeypatch.delenv("HOLOSCAN_SDK_ROOT", raising=False)
     calls = []
@@ -1027,6 +1034,8 @@ def test_optional_devices_and_mounts_are_added_only_when_present(tmp_path, monke
     container.run(img="custom:image")
 
     command = calls[0]
+    assert not any(token.startswith("/etc/asound.conf") for token in command)
+    assert not any(token.startswith(f"{vendor}/") for token in command)
     assert command[command.index(str(device)) - 1] == "--device"
     assert command[command.index(f"{vendor}:{vendor}") - 1] == "-v"
     assert command.count(str(camera)) == command.count(f"{vendor}:{vendor}") == 1
