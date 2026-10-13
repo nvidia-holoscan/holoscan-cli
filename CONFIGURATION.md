@@ -104,6 +104,8 @@ unrelated to CLI configuration. Supported keys:
 | `forward-env` | String array / `[]` | Host variable names to forward into containers. |
 | `docker-build-args` | Token array / `[]` | Extra Docker build options. |
 | `docker-run-args` | Token array / `[]` | Extra Docker run options. |
+| `optional-devices` | Absolute path array / `[]` | Host devices added with `--device` when present. |
+| `optional-mounts` | Absolute path array / `[]` | Host paths bind-mounted at the same path when present. |
 | `search-paths` | Relative path array / conventional directories | Folders or `metadata.json` files searched for projects; must stay within the Module root. |
 | `base-images` | Table / absent | Exact image references keyed by `x86_64` or `aarch64`. |
 
@@ -114,6 +116,8 @@ ctest-script = "ci/container.ctest"
 forward-env = ["IS_CI_BUILD"]
 docker-build-args = ["--build-arg", "PROJECT_FEATURE=ON"]
 docker-run-args = ["--network=host"]
+optional-devices = ["/dev/ttyUSB0"]
+optional-mounts = ["/opt/vendor/sdk"]
 search-paths = ["operators", "examples"]
 
 [tool.holoscan.base-images]
@@ -128,6 +132,11 @@ aarch64 = "registry.example.com/holoscan/sdk-build-aarch64:5.0.0-cuda13"
   project → mode → `HOLOSCAN_CLI_DEFAULT_DOCKER_BUILD_ARGS` or
   `HOLOSCAN_CLI_DEFAULT_DOCKER_RUN_ARGS` → command line. Later options win only
   where Docker supports that behavior.
+- `docker-run-args` and a mode's `run.docker_run_args` also reach the `build`
+  container, so every host that builds, including CI, needs what they list. Put
+  devices and mounts that only some hosts have in `optional-devices` or
+  `optional-mounts` instead. Each container gets an entry only when its path
+  exists on the host, as the CLI already does for common devices such as `/dev/video*`.
 - `base-images`, when present, must include the selected architecture. References
   are used unchanged and cannot be empty or contain whitespace. `--base-img`, then
   `HOLOSCAN_CLI_BASE_IMAGE`, take precedence.

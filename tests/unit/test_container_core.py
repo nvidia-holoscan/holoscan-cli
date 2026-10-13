@@ -994,6 +994,45 @@ def test_precomposed_run_args_are_not_composed_again(tmp_path, monkeypatch):
         assert command.count(label) == 1
 
 
+def test_optional_devices_and_mounts_are_added_only_when_present(tmp_path, monkeypatch):
+    project_dir = _stub_run_env(tmp_path, monkeypatch)
+    device = tmp_path / "ttyUSB0"
+    device.touch()
+    camera = tmp_path / "video0"
+    camera.touch()
+    vendor = tmp_path / "vendor"
+    vendor.mkdir()
+    missing = tmp_path / "missing"
+    context = ProjectContext(
+        root=tmp_path,
+        kind="module",
+        discovery="project-root",
+        optional_devices=(str(device), str(missing), str(camera)),
+        optional_mounts=(str(vendor), str(missing), str(vendor)),
+    )
+    monkeypatch.setattr(container_core, "get_active_project_context", lambda: context)
+    # The CLI's own device scan already adds the camera.
+    scan = container_core.glob.glob
+    monkeypatch.setattr(
+        container_core.glob,
+        "glob",
+        lambda pattern: [str(camera)] if pattern == "/dev/video[0-9]*" else scan(pattern),
+    )
+    monkeypatch.delenv("HOLOSCAN_SDK_ROOT", raising=False)
+    calls = []
+    monkeypatch.setattr(container_core, "run_command", lambda cmd, **kw: calls.append(cmd))
+    container = _stub_container(tmp_path, project_metadata=_project_metadata(project_dir))
+    container.dryrun = True
+
+    container.run(img="custom:image")
+
+    command = calls[0]
+    assert command[command.index(str(device)) - 1] == "--device"
+    assert command[command.index(f"{vendor}:{vendor}") - 1] == "-v"
+    assert command.count(str(camera)) == command.count(f"{vendor}:{vendor}") == 1
+    assert not any(str(missing) in token for token in command)
+
+
 def test_add_volume_appears_as_v_mount_in_docker_run(tmp_path, monkeypatch):
     """`--add-volume /some/path` lands as `-v /some/path:/workspace/volumes/...`
     in `docker run` (pre-consolidation `test_holohub_run_container_add_volume`)."""

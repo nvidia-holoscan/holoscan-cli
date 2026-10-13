@@ -365,6 +365,19 @@ class HoloscanContainer:
             options.extend(["--device", "/dev/nvidia-modeset"])
         if os.path.exists("/usr/share/nvidia/nvoptix.bin"):
             options.extend(["-v", "/usr/share/nvidia/nvoptix.bin:/usr/share/nvidia/nvoptix.bin:ro"])
+
+        # A Module's optional devices and mounts are also added only when present.
+        context = get_active_project_context()
+        if context is not None:
+            for flag, paths in (
+                ("--device", context.optional_devices),
+                ("-v", context.optional_mounts),
+            ):
+                for path in paths:
+                    mapping = f"{path}:{path}"
+                    # Skip paths added above: Docker rejects a repeated mount point.
+                    if os.path.exists(path) and path not in options and mapping not in options:
+                        options.extend([flag, path if flag == "--device" else mapping])
         return options
 
     @staticmethod

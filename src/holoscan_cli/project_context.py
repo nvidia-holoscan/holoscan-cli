@@ -90,6 +90,8 @@ class ProjectContext:
     docker_run_args: Optional[str] = None
     forward_env: tuple[str, ...] = ()
     search_paths: tuple[str, ...] = ()
+    optional_devices: tuple[str, ...] = ()
+    optional_mounts: tuple[str, ...] = ()
     warnings: tuple[str, ...] = ()
     container_prefix: Optional[str] = None
     workspace_name: Optional[str] = None
@@ -240,6 +242,8 @@ def _read_holoscan_project_config(root: Path) -> tuple[Optional[Path], dict]:
             "docker-build-args",
             "docker-run-args",
             "forward-env",
+            "optional-devices",
+            "optional-mounts",
             "repo-prefix",
             "search-paths",
             "workspace-name",
@@ -354,6 +358,22 @@ def _resolve_project_profile(
                 f"{config_source}: tool.holoscan.{key} must be an array of non-empty strings."
             )
         resolved[field] = shlex.join(value.strip() for value in values)
+
+    for key in ("optional-devices", "optional-mounts"):
+        values = config.get(key)
+        if values is None:
+            continue
+        # Each path is used as both the host and container path, which Docker
+        # separates with ':'.
+        if not isinstance(values, list) or not all(
+            isinstance(value, str) and value.startswith("/") and ":" not in value
+            for value in values
+        ):
+            raise ProjectContextError(
+                f"{config_source}: tool.holoscan.{key} must be an array of absolute paths "
+                "without ':'."
+            )
+        resolved[key.replace("-", "_")] = tuple(values)
 
     forward_env = config.get("forward-env")
     if forward_env is not None:
@@ -555,6 +575,8 @@ def _build_module_context(
         docker_run_args=profile.get("docker_run_args"),
         forward_env=profile.get("forward_env", ()),
         search_paths=profile.get("search_paths", ()),
+        optional_devices=profile.get("optional_devices", ()),
+        optional_mounts=profile.get("optional_mounts", ()),
         warnings=(*warnings, *profile_warnings),
     )
 
