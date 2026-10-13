@@ -166,9 +166,12 @@ update before publishing:
 
 The supported keys are `tool.holoscan.cuda`, `tool.holoscan.ctest-script`,
 `tool.holoscan.docker-build-args`, `tool.holoscan.docker-run-args`,
-`tool.holoscan.forward-env`, and `tool.holoscan.base-images.{x86_64,aarch64}`. Docker argument
-arrays contain one command token per element. Do not store credentials or machine paths here;
-use `HOLOSCAN_SDK_ROOT` or `--local-sdk-root` for a machine-specific SDK.
+`tool.holoscan.forward-env`, `tool.holoscan.search-paths`, and
+`tool.holoscan.base-images.{x86_64,aarch64}`. Docker argument arrays contain one command token
+per element. `search-paths` lists the folders searched for projects, replacing the defaults
+(`applications`, `operators`, `pkg`, and other conventional folders); for example,
+`search-paths = ["operators", "examples"]`. Do not store credentials or machine paths here; use `HOLOSCAN_SDK_ROOT` or
+`--local-sdk-root` for a machine-specific SDK.
 
 Build a wheel:
 

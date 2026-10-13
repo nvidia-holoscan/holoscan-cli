@@ -89,6 +89,7 @@ class ProjectContext:
     docker_build_args: Optional[str] = None
     docker_run_args: Optional[str] = None
     forward_env: tuple[str, ...] = ()
+    search_paths: tuple[str, ...] = ()
     warnings: tuple[str, ...] = ()
     container_prefix: Optional[str] = None
     workspace_name: Optional[str] = None
@@ -113,7 +114,9 @@ class ProjectContext:
             "HOLOSCAN_CLI_ROOT": str(self.root),
             "HOLOSCAN_CLI_BUILD_PARENT_DIR": str(self.root / "build"),
             "HOLOSCAN_CLI_DATA_DIR": str(self.root / "data"),
-            "HOLOSCAN_CLI_SEARCH_PATH": ",".join((MODULE_METADATA_FILENAME, *SEARCH_DIRS)),
+            "HOLOSCAN_CLI_SEARCH_PATH": ",".join(
+                (MODULE_METADATA_FILENAME, *(self.search_paths or SEARCH_DIRS))
+            ),
         }
         optional_values = {
             "HOLOSCAN_CLI_REPO_PREFIX": self.repo_prefix,
@@ -238,6 +241,7 @@ def _read_holoscan_project_config(root: Path) -> tuple[Optional[Path], dict]:
             "docker-run-args",
             "forward-env",
             "repo-prefix",
+            "search-paths",
             "workspace-name",
         },
         source_path=config_path,
@@ -306,6 +310,35 @@ def _resolve_project_profile(
             path="tool.holoscan.ctest-script",
             source_path=config_source,
         )
+
+    search_paths = config.get("search-paths")
+    if search_paths is not None:
+        # Entries are joined into the comma-separated HOLOSCAN_CLI_SEARCH_PATH.
+        if (
+            not isinstance(search_paths, list)
+            or not search_paths
+            or any(isinstance(value, str) and "," in value for value in search_paths)
+        ):
+            raise ProjectContextError(
+                f"{config_source}: tool.holoscan.search-paths must be a non-empty array of "
+                "relative paths without commas."
+            )
+        resolved["search_paths"] = tuple(
+            relative_project_path(
+                value,
+                path="tool.holoscan.search-paths",
+                source_path=config_source,
+            )
+            for value in search_paths
+        )
+        # A symlinked entry must not lead discovery outside the Module.
+        real_root = root.resolve()
+        for value in resolved["search_paths"]:
+            if not (root / value).resolve().is_relative_to(real_root):
+                raise ProjectContextError(
+                    f"{config_source}: tool.holoscan.search-paths must stay within the "
+                    f"project and be relative: {value}"
+                )
 
     for key, field in (
         ("docker-build-args", "docker_build_args"),
@@ -521,6 +554,7 @@ def _build_module_context(
         docker_build_args=profile.get("docker_build_args"),
         docker_run_args=profile.get("docker_run_args"),
         forward_env=profile.get("forward_env", ()),
+        search_paths=profile.get("search_paths", ()),
         warnings=(*warnings, *profile_warnings),
     )
 

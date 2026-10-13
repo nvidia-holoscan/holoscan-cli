@@ -28,9 +28,16 @@ project type, with non-empty strings for `name` and
 `holoscan_sdk.minimum_required_version`. Incomplete or unrelated descriptors are
 ignored; this is not full schema validation and needs no optional dependencies.
 
-Use `HOLOSCAN_CLI_SEARCH_PATH` for custom directories such as `examples/`.
-It replaces defaults with comma-separated directories or exact `metadata.json`
-paths, relative to the root; an empty value uses conventional directories.
+To choose which folders are searched, list them in `HOLOSCAN_CLI_SEARCH_PATH`
+(comma-separated) or, for a standalone Module, in
+[`tool.holoscan.search-paths`](#pyprojecttoml-settings). The environment
+variable wins. Either list replaces the conventional directories, so it also
+excludes the ones it leaves out; `.` searches the whole project. Entries are
+directories or exact `metadata.json` paths relative to the root; an empty
+variable uses conventional directories. A Module's root `metadata.json` is
+always included. Below each searched folder, discovery skips hidden folders
+such as `.git` and `.venv`. It also skips Python and Conda environments and CMake
+build trees, except a folder with its own `metadata.json`, such as an in-source build.
 `HOLOSCAN_CLI_APP_NAME` overrides the application's directory-based selector and
 is forwarded automatically to preserve it across renamed container mounts.
 
@@ -97,6 +104,7 @@ unrelated to CLI configuration. Supported keys:
 | `forward-env` | String array / `[]` | Host variable names to forward into containers. |
 | `docker-build-args` | Token array / `[]` | Extra Docker build options. |
 | `docker-run-args` | Token array / `[]` | Extra Docker run options. |
+| `search-paths` | Relative path array / conventional directories | Folders or `metadata.json` files searched for projects; must stay within the Module root. |
 | `base-images` | Table / absent | Exact image references keyed by `x86_64` or `aarch64`. |
 
 ```toml
@@ -106,6 +114,7 @@ ctest-script = "ci/container.ctest"
 forward-env = ["IS_CI_BUILD"]
 docker-build-args = ["--build-arg", "PROJECT_FEATURE=ON"]
 docker-run-args = ["--network=host"]
+search-paths = ["operators", "examples"]
 
 [tool.holoscan.base-images]
 x86_64 = "registry.example.com/holoscan/sdk-build-x86_64:5.0.0-cuda13"

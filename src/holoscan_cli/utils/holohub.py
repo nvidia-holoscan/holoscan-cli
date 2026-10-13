@@ -34,9 +34,11 @@ from pathlib import Path
 from typing import Mapping, Optional, Tuple
 
 from holoscan_cli.project_context import (
+    MODULE_METADATA_FILENAME,
     SEARCH_DIRS,
     activated_environment_source,
     discover_project_context,
+    get_active_project_context,
 )
 from holoscan_cli.utils.io import format_cmd, info, run_info_command, warn
 from holoscan_cli.utils.project import CMAKE_BUILD_TYPES, resolve_build_type
@@ -109,7 +111,11 @@ def get_component_search_paths(base_dir: Optional[Path] = None) -> tuple[Path, .
     """Return metadata search paths honoring HOLOSCAN_CLI_SEARCH_PATH overrides."""
     base_path = base_dir or get_holohub_root()
     tokens = os.environ.get("HOLOSCAN_CLI_SEARCH_PATH", "").split(",")
-    paths = [token.strip() for token in tokens if token.strip()] or SEARCH_DIRS
+    paths = [token.strip() for token in tokens if token.strip()] or list(SEARCH_DIRS)
+    context = get_active_project_context()
+    if context is not None and context.is_module and context.root == base_path:
+        # A custom search path must not hide the Module itself.
+        paths.insert(0, MODULE_METADATA_FILENAME)
     return tuple(
         (Path(token) if Path(token).is_absolute() else base_path / token) for token in paths
     )
