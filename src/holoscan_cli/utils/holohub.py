@@ -17,6 +17,8 @@
 
 Existing callers, such as HoloHub's benchmarking tool, import these names.
 New code should use :mod:`holoscan_cli.utils.source_project`.
+Monkeypatch functions in that module; patching names here does not affect
+the CLI.
 """
 
 from pathlib import Path

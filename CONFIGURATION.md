@@ -51,7 +51,7 @@ including excessive nesting, are reported.
 Metadata refers to project paths with these placeholders. The HoloHub names
 work as before, so existing `metadata.json` files need no change.
 
-| Placeholder | HoloHub name | Path |
+| Placeholder | Prefixed name (default `holohub_`) | Path |
 | --- | --- | --- |
 | `<project_root>` | `<holohub_root>` | Project root |
 | `<project_data_dir>` | `<holohub_data_dir>` | `HOLOSCAN_CLI_DATA_DIR`, else `data` under the root |
