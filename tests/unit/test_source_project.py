@@ -13,9 +13,23 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Tests for the HoloHub names kept in ``holoscan_cli.utils.holohub``."""
+"""Tests for source-project path placeholders and the original HoloHub names."""
+
+import pytest
 
 from holoscan_cli.utils import holohub, source_project
+
+
+@pytest.mark.parametrize("prefix", ["holohub_", "myrepo_"])
+def test_path_mapping_adds_project_names(tmp_path, prefix):
+    root = tmp_path / "repo"
+    project = {"source_folder": str(root / "applications" / "app"), "project_name": "app"}
+
+    mapping = source_project.build_path_mapping(root, project, root / "build", prefix=prefix)
+
+    for name in ("root", "data_dir", "app_source", "bin", "app_bin"):
+        assert mapping[f"project_{name}"] == mapping[f"{prefix}{name}"]
+    assert source_project.build_path_mapping(root, prefix=prefix)["project_root"] == str(root)
 
 
 def test_holohub_module_keeps_original_names(tmp_path):

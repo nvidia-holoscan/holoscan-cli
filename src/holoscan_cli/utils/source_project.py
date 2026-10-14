@@ -46,6 +46,9 @@ from holoscan_cli.utils.text import get_env_bool, is_env_flag_true, slugify
 
 DEFAULT_GIT_REF = "latest"
 
+# Path placeholders such as <project_app_bin> work with any configured prefix.
+PROJECT_PLACEHOLDER_PREFIX = "project_"
+
 PROJECT_PREFIXES = {
     "application": "APP",
     "benchmark": "APP",
@@ -178,6 +181,13 @@ def resolve_path_prefix(prefix: Optional[str] = None) -> str:
     return prefix
 
 
+def _add_project_names(path_mapping: dict[str, str], prefix: str) -> dict[str, str]:
+    """Add the ``project_`` name of each placeholder alongside the prefixed one."""
+    for key, value in list(path_mapping.items()):
+        path_mapping.setdefault(PROJECT_PLACEHOLDER_PREFIX + key[len(prefix) :], value)
+    return path_mapping
+
+
 def build_path_mapping(
     project_root: Path,
     project_data: Optional[dict] = None,
@@ -194,7 +204,8 @@ def build_path_mapping(
         build_dir: Optional build directory path
         data_dir: Optional data directory path
         prefix: Prefix for placeholder keys. If None, reads from HOLOSCAN_CLI_PATH_PREFIX
-                environment variable (default: "holohub_")
+                environment variable (default: "holohub_"). The same paths are also
+                available with the "project_" prefix.
         verbose: Whether to print verbose output
 
     Returns:
@@ -210,7 +221,7 @@ def build_path_mapping(
         f"{prefix}data_dir": str(data_dir),
     }
     if not project_data:
-        return path_mapping
+        return _add_project_names(path_mapping, prefix)
     # Add project-specific mappings if project_data is provided
     app_source_path = project_data.get("source_folder", "")
     if app_source_path:
@@ -236,6 +247,7 @@ def build_path_mapping(
             except ValueError:
                 path_mapping[f"{prefix}app_bin"] = str(inferred_build_dir)
 
+    _add_project_names(path_mapping, prefix)
     if verbose:
         mapping_info = ";\n".join(f"<{key}>: {value}" for key, value in path_mapping.items())
         print(format_cmd(f"Path mappings: \n{mapping_info}", is_dryrun=False))
@@ -251,11 +263,11 @@ def replace_placeholders(
     """Replace placeholders in text using the provided path mapping and environment variables
 
     Supports two types of placeholders:
-    1. Path mapping placeholders: <holohub_*> (e.g., <holohub_root>, <holohub_app_bin>)
+    1. Path mapping placeholders: <project_*> and <holohub_*> (e.g., <project_app_bin>)
     2. Environment variable placeholders: All other placeholders (e.g., <PATH>, <HOME>, <USER>)
 
     Resolution strategy:
-    - Placeholders starting with "holohub_" are resolved using path_mapping
+    - Placeholders named in path_mapping are resolved using path_mapping
     - All other placeholders are resolved using environment variables
 
     Args:
@@ -311,7 +323,7 @@ def update_env(
     Update the environment variable with the new value from the new environment dictionary.
 
     Supports placeholder replacement for:
-    - Path mapping placeholders: <holohub_*> (e.g., <holohub_root>, <holohub_app_bin>)
+    - Path mapping placeholders: <project_*> and <holohub_*> (e.g., <project_app_bin>)
     - Environment variable placeholders: <VAR_NAME> (e.g., <PATH>, <HOME>, <USER>)
       The variable name itself can be used as a placeholder to reference its current value.
 
