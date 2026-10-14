@@ -17,7 +17,7 @@
 ``holoscan build-container --extra-scripts``.
 
 The scripts live next to this module so the wheel always carries a working
-default. ``holoscan_cli.utils.holohub.get_holohub_setup_scripts_dir`` prefers
+default. ``holoscan_cli.utils.source_project.get_setup_scripts_dir`` prefers
 an explicit ``HOLOSCAN_CLI_SETUP_SCRIPTS_DIR`` override and the active
 project's own ``utilities/setup/`` directory (e.g. HoloHub's) before falling
 back here.

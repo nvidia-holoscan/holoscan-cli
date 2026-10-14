@@ -25,7 +25,6 @@ from pathlib import Path
 from typing import List, Optional
 
 from .utils.docker import is_running_in_docker
-from .utils.holohub import get_git_short_sha, get_holohub_root
 from .utils.io import Color, run_info_command
 from .utils.json_output import dumps as json_dumps
 from .utils.sdk import (
@@ -36,6 +35,7 @@ from .utils.sdk import (
     get_sdk_version,
     is_valid_sdk_directory,
 )
+from .utils.source_project import get_git_short_sha, get_project_root
 
 
 @dataclass
@@ -325,9 +325,9 @@ def check_holoscan_python() -> CheckResult:
 
 def check_disk() -> CheckResult:
     """Check free disk space on the filesystem containing the build directory"""
-    holohub_root = get_holohub_root()
-    build_dir = Path(os.environ.get("HOLOSCAN_CLI_BUILD_PARENT_DIR", holohub_root / "build"))
-    check_path = build_dir if build_dir.exists() else holohub_root
+    project_root = get_project_root()
+    build_dir = Path(os.environ.get("HOLOSCAN_CLI_BUILD_PARENT_DIR", project_root / "build"))
+    check_path = build_dir if build_dir.exists() else project_root
 
     try:
         stat = os.statvfs(str(check_path))
@@ -362,9 +362,9 @@ def check_cli() -> CheckResult:
     import holoscan_cli
 
     cli_version = f"holoscan-cli {holoscan_cli.__version__}"
-    holohub_root = get_holohub_root()
+    project_root = get_project_root()
 
-    cli_commit_file = holohub_root / ".cli_commit_hash"
+    cli_commit_file = project_root / ".cli_commit_hash"
     project_name = cli_commit_file.parent.name or "source project"
     if cli_commit_file.exists():
         cli_hash = cli_commit_file.read_text().strip()

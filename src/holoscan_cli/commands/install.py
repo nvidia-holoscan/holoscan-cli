@@ -33,17 +33,17 @@ from holoscan_cli.utils.docker import (
     get_entrypoint_command_args,
     resolve_cli_docker_opts,
 )
-from holoscan_cli.utils.holohub import (
-    build_holohub_path_mapping,
-    check_skip_builds,
-    is_env_request_local_build,
-    update_env,
-)
 from holoscan_cli.utils.io import Color, fatal, run_command
 from holoscan_cli.utils.project import (
     append_configure_args,
     report_effective_configuration,
     resolve_effective_build_type,
+)
+from holoscan_cli.utils.source_project import (
+    build_path_mapping,
+    check_skip_builds,
+    is_env_request_local_build,
+    update_env,
 )
 
 
@@ -191,8 +191,8 @@ def handle_install(cli, args: argparse.Namespace) -> None:
         )
 
         # Build path mapping
-        path_mapping = build_holohub_path_mapping(
-            holohub_root=cli.HOLOHUB_ROOT,
+        path_mapping = build_path_mapping(
+            project_root=cli.HOLOHUB_ROOT,
             project_data=project_data,
             build_dir=build_dir,
             data_dir=cli.DEFAULT_DATA_DIR,
