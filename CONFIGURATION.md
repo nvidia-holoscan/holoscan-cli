@@ -46,6 +46,23 @@ only regular, non-symlink files up to 1 MiB. Reads stay bounded if a file grows;
 FIFOs are rejected without waiting for a writer. Read and JSON decoding errors,
 including excessive nesting, are reported.
 
+## Metadata placeholders
+
+Metadata refers to project paths with these placeholders. They keep their
+HoloHub names so that existing `metadata.json` files keep working.
+
+| Placeholder | Path |
+| --- | --- |
+| `<holohub_root>` | Project root |
+| `<holohub_data_dir>` | `HOLOSCAN_CLI_DATA_DIR`, else `data` under the root |
+| `<holohub_app_source>` | Folder that contains the project's `metadata.json` |
+| `<holohub_bin>` | Project build folder |
+| `<holohub_app_bin>` | The project's source path under `<holohub_bin>`; the default `run.workdir` |
+
+The CLI expands them in `run.command`, `run.workdir`, `env` values, and
+`dockerfile`. `run.workdir` also accepts a name without brackets, such as
+`holohub_app_bin`. `HOLOSCAN_CLI_PATH_PREFIX` sets a different prefix.
+
 ## Module defaults
 
 Module `metadata.json` supplies the identity, minimum SDK version, Dockerfile,
