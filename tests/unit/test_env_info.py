@@ -48,7 +48,7 @@ def test_collectors_print_available_host_tooling(tmp_path, monkeypatch, capsys):
     root = tmp_path / "repo"
     root.mkdir()
 
-    env_info.collect_holohub_info(root, tmp_path / "build", tmp_path / "data", Path("/sdk"))
+    env_info.collect_source_project_info(root, tmp_path / "build", tmp_path / "data", Path("/sdk"))
     env_info.collect_git_info(root)
     env_info.collect_env_info()
 

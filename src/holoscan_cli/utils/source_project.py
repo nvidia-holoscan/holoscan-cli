@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""HoloHub-specific source-project utilities.
+"""Source-project utilities.
 
 Root discovery, search paths, the ``HOLOSCAN_CLI_PATH_PREFIX`` placeholder
 namespace, project-type prefixes, build-type translation, sccache
@@ -62,12 +62,12 @@ BUILD_TYPES = CMAKE_BUILD_TYPES
 
 def check_skip_builds(args) -> Tuple[bool, bool]:
     """Checking skip build flags and printing info messages"""
-    holohub_always_build, always_build = get_env_bool("HOLOSCAN_CLI_ALWAYS_BUILD", default=True)
+    always_build_value, always_build = get_env_bool("HOLOSCAN_CLI_ALWAYS_BUILD", default=True)
     skip_builds = not always_build
     skip_docker_build = skip_builds or getattr(args, "no_docker_build", False)
     skip_local_build = skip_builds or getattr(args, "no_local_build", False)
     if skip_builds:
-        info(f"Skipping build due to HOLOSCAN_CLI_ALWAYS_BUILD={holohub_always_build}")
+        info(f"Skipping build due to HOLOSCAN_CLI_ALWAYS_BUILD={always_build_value}")
     else:
         if getattr(args, "no_local_build", False):
             info("Skipping local build due to --no-local-build")
@@ -87,7 +87,7 @@ def is_env_request_local_build(*mode_envs: Mapping[str, str]) -> bool:
     return False
 
 
-def _get_holohub_root() -> Path:
+def _get_project_root() -> Path:
     """Get the source-project repository root path.
 
     The historical HoloHub CLI lived inside the source tree and could use its
@@ -102,14 +102,14 @@ def _get_holohub_root() -> Path:
 
 
 @functools.lru_cache(maxsize=1)
-def get_holohub_root() -> Path:
+def get_project_root() -> Path:
     """Discover and cache the source-project repo root on first use."""
-    return _get_holohub_root()
+    return _get_project_root()
 
 
 def get_component_search_paths(base_dir: Optional[Path] = None) -> tuple[Path, ...]:
     """Return metadata search paths honoring HOLOSCAN_CLI_SEARCH_PATH overrides."""
-    base_path = base_dir or get_holohub_root()
+    base_path = base_dir or get_project_root()
     tokens = os.environ.get("HOLOSCAN_CLI_SEARCH_PATH", "").split(",")
     paths = [token.strip() for token in tokens if token.strip()] or list(SEARCH_DIRS)
     context = get_active_project_context()
@@ -121,7 +121,7 @@ def get_component_search_paths(base_dir: Optional[Path] = None) -> tuple[Path, .
     )
 
 
-def get_holohub_setup_scripts_dir() -> Path:
+def get_setup_scripts_dir() -> Path:
     """Return the directory containing named setup scripts.
 
     Resolution order:
@@ -138,7 +138,7 @@ def get_holohub_setup_scripts_dir() -> Path:
     if explicit:
         return Path(explicit).expanduser()
 
-    repo_dir = get_holohub_root() / "utilities" / "setup"
+    repo_dir = get_project_root() / "utilities" / "setup"
     if repo_dir.is_dir():
         return repo_dir
 
@@ -170,7 +170,7 @@ def get_buildtype_str(
 
 @functools.lru_cache(maxsize=32)
 def resolve_path_prefix(prefix: Optional[str] = None) -> str:
-    """Resolve the path prefix for HoloHub placeholders"""
+    """Resolve the prefix of path placeholders such as ``<holohub_root>``"""
     if prefix is None:
         prefix = os.environ.get("HOLOSCAN_CLI_PATH_PREFIX", "holohub_")
     if not prefix.endswith("_"):
@@ -178,18 +178,18 @@ def resolve_path_prefix(prefix: Optional[str] = None) -> str:
     return prefix
 
 
-def build_holohub_path_mapping(
-    holohub_root: Path,
+def build_path_mapping(
+    project_root: Path,
     project_data: Optional[dict] = None,
     build_dir: Optional[Path] = None,
     data_dir: Optional[Path] = None,
     prefix: Optional[str] = None,
     verbose: bool = False,
 ) -> dict[str, str]:
-    """Build a mapping of HoloHub placeholders to their resolved paths
+    """Build a mapping of path placeholders to their resolved paths
 
     Args:
-        holohub_root: Root directory of HoloHub
+        project_root: Root directory of the source project
         project_data: Optional project metadata dictionary
         build_dir: Optional build directory path
         data_dir: Optional data directory path
@@ -203,10 +203,10 @@ def build_holohub_path_mapping(
     prefix = resolve_path_prefix(prefix)
 
     if data_dir is None:
-        data_dir = holohub_root / "data"
+        data_dir = project_root / "data"
 
     path_mapping = {
-        f"{prefix}root": str(holohub_root),
+        f"{prefix}root": str(project_root),
         f"{prefix}data_dir": str(data_dir),
     }
     if not project_data:
@@ -219,19 +219,19 @@ def build_holohub_path_mapping(
         path_mapping[f"{prefix}bin"] = str(build_dir)
         if app_source_path:
             try:
-                app_build_dir = build_dir / Path(app_source_path).relative_to(holohub_root)
+                app_build_dir = build_dir / Path(app_source_path).relative_to(project_root)
                 path_mapping[f"{prefix}app_bin"] = str(app_build_dir)
             except ValueError:
-                # Handle case where app_source_path is not relative to holohub_root
+                # Handle case where app_source_path is not relative to project_root
                 path_mapping[f"{prefix}app_bin"] = str(build_dir)
     elif project_data.get("project_name"):
         # If no build_dir provided but we have project name, try to infer it
         project_name = project_data["project_name"]
-        inferred_build_dir = holohub_root / "build" / project_name
+        inferred_build_dir = project_root / "build" / project_name
         path_mapping[f"{prefix}bin"] = str(inferred_build_dir)
         if app_source_path:
             try:
-                app_build_dir = inferred_build_dir / Path(app_source_path).relative_to(holohub_root)
+                app_build_dir = inferred_build_dir / Path(app_source_path).relative_to(project_root)
                 path_mapping[f"{prefix}app_bin"] = str(app_build_dir)
             except ValueError:
                 path_mapping[f"{prefix}app_bin"] = str(inferred_build_dir)
@@ -357,7 +357,7 @@ def get_git_short_sha(length: int = 12) -> str:
     """Return the short git SHA for the source-project repo, or DEFAULT_GIT_REF on failure."""
     try:
         sha = run_info_command(
-            ["git", "rev-parse", f"--short={length}", "HEAD"], cwd=str(get_holohub_root())
+            ["git", "rev-parse", f"--short={length}", "HEAD"], cwd=str(get_project_root())
         )
         return sha or DEFAULT_GIT_REF
     except Exception:
@@ -373,7 +373,7 @@ def get_current_branch_slug() -> str:
     """
     try:
         branch = run_info_command(
-            ["git", "rev-parse", "--abbrev-ref", "HEAD"], cwd=str(get_holohub_root())
+            ["git", "rev-parse", "--abbrev-ref", "HEAD"], cwd=str(get_project_root())
         )
         if not branch or branch in ["HEAD", "(no branch)"] or branch.startswith("(HEAD detached"):
             return DEFAULT_GIT_REF

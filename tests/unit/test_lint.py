@@ -21,7 +21,7 @@ import pytest
 
 from holoscan_cli import cli as project_cli
 from holoscan_cli.commands import lint as commands_lint
-from holoscan_cli.utils import holohub as project_holohub
+from holoscan_cli.utils import source_project
 
 
 def _lint_cli(root, monkeypatch):
@@ -43,7 +43,7 @@ def test_holoscan_cli_root_discovery_from_subdirectory(tmp_path, monkeypatch):
 
     monkeypatch.chdir(subdir)
 
-    assert project_holohub._get_holohub_root() == root
+    assert source_project._get_project_root() == root
 
 
 def test_lint_dryrun_uses_pre_commit_all_files(tmp_path, monkeypatch):

@@ -292,7 +292,7 @@ def test_check_holoscan_python_timeout(monkeypatch):
 
 
 def test_check_disk_ok(monkeypatch, tmp_path):
-    monkeypatch.setattr(system_check, "get_holohub_root", lambda: tmp_path)
+    monkeypatch.setattr(system_check, "get_project_root", lambda: tmp_path)
     monkeypatch.delenv("HOLOSCAN_CLI_BUILD_PARENT_DIR", raising=False)
 
     class _StatVfs:
@@ -305,7 +305,7 @@ def test_check_disk_ok(monkeypatch, tmp_path):
 
 
 def test_check_disk_warn_below_20gb(monkeypatch, tmp_path):
-    monkeypatch.setattr(system_check, "get_holohub_root", lambda: tmp_path)
+    monkeypatch.setattr(system_check, "get_project_root", lambda: tmp_path)
 
     class _StatVfs:
         f_bavail = 10 * 1024 * 1024
@@ -317,7 +317,7 @@ def test_check_disk_warn_below_20gb(monkeypatch, tmp_path):
 
 
 def test_check_disk_fail_below_5gb(monkeypatch, tmp_path):
-    monkeypatch.setattr(system_check, "get_holohub_root", lambda: tmp_path)
+    monkeypatch.setattr(system_check, "get_project_root", lambda: tmp_path)
 
     class _StatVfs:
         f_bavail = 1 * 1024 * 1024
@@ -329,7 +329,7 @@ def test_check_disk_fail_below_5gb(monkeypatch, tmp_path):
 
 
 def test_check_disk_handles_oserror(monkeypatch, tmp_path):
-    monkeypatch.setattr(system_check, "get_holohub_root", lambda: tmp_path)
+    monkeypatch.setattr(system_check, "get_project_root", lambda: tmp_path)
 
     def boom(_p):
         raise OSError("statvfs failed")
@@ -344,7 +344,7 @@ def test_check_disk_handles_oserror(monkeypatch, tmp_path):
 
 
 def test_check_cli_prefers_cli_commit_hash_file(monkeypatch, tmp_path):
-    monkeypatch.setattr(system_check, "get_holohub_root", lambda: tmp_path)
+    monkeypatch.setattr(system_check, "get_project_root", lambda: tmp_path)
     (tmp_path / ".cli_commit_hash").write_text("deadbee\n")
     result = system_check.check_cli()
     assert result.status == "OK"
@@ -352,7 +352,7 @@ def test_check_cli_prefers_cli_commit_hash_file(monkeypatch, tmp_path):
 
 
 def test_check_cli_falls_back_to_git_sha(monkeypatch, tmp_path):
-    monkeypatch.setattr(system_check, "get_holohub_root", lambda: tmp_path)
+    monkeypatch.setattr(system_check, "get_project_root", lambda: tmp_path)
     monkeypatch.setattr(system_check, "get_git_short_sha", lambda length=7: "abc1234")
     result = system_check.check_cli()
     assert result.status == "OK"
