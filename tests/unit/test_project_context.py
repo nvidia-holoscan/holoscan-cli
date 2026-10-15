@@ -203,6 +203,31 @@ def test_module_environment_resolves_4x_sdk_build_tree(tmp_path, monkeypatch, ma
 
 
 @pytest.mark.parametrize(
+    ("triplet", "resolves"),
+    [("aarch64-linux-gnu", True), ("x86_64-linux-gnu", False)],
+)
+def test_module_environment_checks_debian_libdir_for_target_arch(
+    tmp_path, monkeypatch, make_sdk_directory, triplet, resolves
+):
+    root = _module(tmp_path / "module")
+    usr = make_sdk_directory(tmp_path / "usr", libdir=f"lib/{triplet}")
+    monkeypatch.setattr("holoscan_cli.project_context.platform.machine", lambda: "x86_64")
+    monkeypatch.setattr("holoscan_cli.utils.sdk.get_host_arch", lambda: "x86_64")
+
+    context = discover_project_context(
+        cwd=root,
+        environ={"HOLOSCAN_SDK_ROOT": str(usr), "HOLOSCAN_CLI_TARGET_ARCH": "aarch64"},
+    )
+
+    if resolves:
+        assert context.sdk_root == usr.resolve()
+        assert context.sdk_root_source == "HOLOSCAN_SDK_ROOT"
+    else:
+        assert context.sdk_root is None
+        assert any("not a valid SDK directory for aarch64" in w for w in context.warnings)
+
+
+@pytest.mark.parametrize(
     ("pyproject", "error"),
     [
         ("[tool.holoscan]\ncdua = 13\n", "unknown field.*cdua"),

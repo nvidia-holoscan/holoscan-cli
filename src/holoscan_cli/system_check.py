@@ -251,21 +251,22 @@ def check_docker() -> CheckResult:
 def _find_local_sdk() -> tuple[Optional[Path], bool]:
     """Return the local SDK that env-check reports, and whether it was resolved
     below ``HOLOSCAN_SDK_ROOT`` rather than at it."""
+    target_arch = os.environ.get("HOLOSCAN_CLI_TARGET_ARCH")
     sdk_root = os.environ.get("HOLOSCAN_SDK_ROOT")
     if sdk_root:
         root_path = Path(sdk_root)
-        if root_path.exists() and is_valid_sdk_directory(root_path):
+        if root_path.exists() and is_valid_sdk_directory(root_path, target_arch):
             return root_path, False
         if root_path.exists():
             resolved = find_hsdk_dir(root_path)
             resolved_path = (
                 root_path / resolved if not Path(resolved).is_absolute() else Path(resolved)
             )
-            if resolved_path.exists() and is_valid_sdk_directory(resolved_path):
+            if resolved_path.exists() and is_valid_sdk_directory(resolved_path, target_arch):
                 return resolved_path, True
 
     sdk_path = Path(default_local_sdk_dir())
-    if sdk_path.exists() and is_valid_sdk_directory(sdk_path):
+    if sdk_path.exists() and is_valid_sdk_directory(sdk_path, target_arch):
         return sdk_path, False
     return None, False
 
@@ -274,7 +275,7 @@ def check_holoscan() -> CheckResult:
     """Check Holoscan SDK availability"""
     sdk_path, via_sdk_root = _find_local_sdk()
     if sdk_path is not None:
-        version = get_sdk_version(sdk_path)
+        version = get_sdk_version(sdk_path, os.environ.get("HOLOSCAN_CLI_TARGET_ARCH"))
         suffix = " (via HOLOSCAN_SDK_ROOT)" if via_sdk_root else ""
         return CheckResult(
             status="OK", name="Holoscan", message=f"SDK {version} at {sdk_path}{suffix}"

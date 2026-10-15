@@ -29,6 +29,7 @@ from types import SimpleNamespace
 import pytest
 
 from holoscan_cli import system_check
+from holoscan_cli.utils import sdk as sdk_utils
 
 
 def _proc(returncode=0, stderr="", stdout=""):
@@ -219,8 +220,8 @@ def test_check_docker_ok_with_ctk(monkeypatch):
 
 def test_check_holoscan_found_at_default_path(monkeypatch, tmp_path):
     monkeypatch.setenv("HOLOSCAN_CLI_DEFAULT_HSDK_DIR", str(tmp_path))
-    monkeypatch.setattr(system_check, "is_valid_sdk_directory", lambda _p: True)
-    monkeypatch.setattr(system_check, "get_sdk_version", lambda _p: "3.4.0")
+    monkeypatch.setattr(system_check, "is_valid_sdk_directory", lambda _p, _arch=None: True)
+    monkeypatch.setattr(system_check, "get_sdk_version", lambda _p, _arch=None: "3.4.0")
     result = system_check.check_holoscan()
     assert result.status == "OK"
     assert "3.4.0" in result.message
@@ -234,18 +235,62 @@ def test_check_holoscan_prefers_sdk_root(monkeypatch, tmp_path):
     real_root.mkdir()
     monkeypatch.setenv("HOLOSCAN_SDK_ROOT", str(real_root))
 
-    monkeypatch.setattr(system_check, "is_valid_sdk_directory", lambda _p: True)
-    monkeypatch.setattr(system_check, "get_sdk_version", lambda _p: "3.4.0")
+    monkeypatch.setattr(system_check, "is_valid_sdk_directory", lambda _p, _arch=None: True)
+    monkeypatch.setattr(system_check, "get_sdk_version", lambda _p, _arch=None: "3.4.0")
     result = system_check.check_holoscan()
     assert result.status == "OK"
     assert "3.4.0" in result.message
     assert str(real_root) in result.message
 
 
+def test_check_holoscan_reports_sdk5_debian_install(monkeypatch, tmp_path):
+    monkeypatch.setattr(sdk_utils, "get_host_arch", lambda: "x86_64")
+    config_dir = tmp_path / "usr/lib/x86_64-linux-gnu/cmake/holoscan"
+    config_dir.mkdir(parents=True)
+    (config_dir / "holoscan-config.cmake").write_text("# config\n", encoding="utf-8")
+    (config_dir / "holoscan-config-version.cmake").write_text(
+        'set(PACKAGE_VERSION "5.0.0")\n', encoding="utf-8"
+    )
+    monkeypatch.setenv("HOLOSCAN_CLI_DEFAULT_HSDK_DIR", str(tmp_path / "usr"))
+    monkeypatch.delenv("HOLOSCAN_SDK_ROOT", raising=False)
+
+    result = system_check.check_holoscan()
+
+    assert result.status == "OK"
+    assert result.message == f"SDK 5.0.0 at {tmp_path / 'usr'}"
+
+
+@pytest.mark.parametrize(
+    ("triplet", "found"),
+    [("aarch64-linux-gnu", True), ("x86_64-linux-gnu", False)],
+)
+def test_check_holoscan_checks_debian_libdir_for_target_arch(
+    monkeypatch, tmp_path, make_sdk_directory, triplet, found
+):
+    monkeypatch.setattr(sdk_utils, "get_host_arch", lambda: "x86_64")
+    monkeypatch.setattr(sdk_utils, "get_host_gpu", lambda: "dgpu")
+    root = make_sdk_directory(tmp_path / "usr", libdir=f"lib/{triplet}")
+    (root / f"lib/{triplet}/cmake/holoscan/holoscan-config-version.cmake").write_text(
+        'set(PACKAGE_VERSION "5.0.0")\n', encoding="utf-8"
+    )
+    monkeypatch.setenv("HOLOSCAN_SDK_ROOT", str(root))
+    monkeypatch.setenv("HOLOSCAN_CLI_TARGET_ARCH", "aarch64")
+    monkeypatch.setenv("HOLOSCAN_CLI_DEFAULT_HSDK_DIR", str(tmp_path / "none"))
+    monkeypatch.delenv("HOLOSCAN_CLI_DEFAULT_CUDA_VERSION", raising=False)
+
+    result = system_check.check_holoscan()
+
+    if found:
+        assert result.status == "OK"
+        assert result.message == f"SDK 5.0.0 at {root}"
+    else:
+        assert result.status == "WARN"
+
+
 def test_check_holoscan_not_found(monkeypatch, tmp_path):
     monkeypatch.setenv("HOLOSCAN_CLI_DEFAULT_HSDK_DIR", str(tmp_path / "nope"))
     monkeypatch.delenv("HOLOSCAN_SDK_ROOT", raising=False)
-    monkeypatch.setattr(system_check, "is_valid_sdk_directory", lambda _p: False)
+    monkeypatch.setattr(system_check, "is_valid_sdk_directory", lambda _p, _arch=None: False)
     result = system_check.check_holoscan()
     assert result.status == "WARN"
     assert "not found" in result.message
@@ -255,7 +300,7 @@ def test_check_holoscan_not_found_lists_sdk5_and_sdk4_dirs(monkeypatch):
     monkeypatch.delenv("HOLOSCAN_CLI_DEFAULT_HSDK_DIR", raising=False)
     monkeypatch.delenv("HOLOSCAN_SDK_ROOT", raising=False)
     monkeypatch.setattr(system_check, "default_local_sdk_dir", lambda: "/usr")
-    monkeypatch.setattr(system_check, "is_valid_sdk_directory", lambda _p: False)
+    monkeypatch.setattr(system_check, "is_valid_sdk_directory", lambda _p, _arch=None: False)
     result = system_check.check_holoscan()
     assert result.status == "WARN"
     assert "searched: /usr, /opt/nvidia/holoscan" in result.message

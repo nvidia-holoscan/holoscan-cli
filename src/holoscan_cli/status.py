@@ -88,7 +88,7 @@ def collect_platform_info() -> PlatformInfo:
         sdk_path = resolved if resolved.is_absolute() else root / resolved
     else:
         sdk_path = Path(default_local_sdk_dir())
-    holoscan_version = get_sdk_version(sdk_path)
+    holoscan_version = get_sdk_version(sdk_path, target_arch)
 
     return PlatformInfo(
         arch=arch,

@@ -192,6 +192,68 @@ def test_get_sdk_python_paths_follows_sdk_layout(tmp_path, make_sdk_directory):
     assert sdk.get_sdk_python_paths(missing) == [str(missing / "python/lib")]
 
 
+@pytest.mark.parametrize(
+    "host_arch,triplet",
+    [("x86_64", "x86_64-linux-gnu"), ("aarch64", "aarch64-linux-gnu")],
+)
+def test_sdk5_debian_libdir_install_tree(
+    tmp_path, monkeypatch, make_sdk_directory, host_arch, triplet
+):
+    monkeypatch.setattr(sdk, "get_host_arch", lambda: host_arch)
+    libdir = f"lib/{triplet}"
+    usr = make_sdk_directory(tmp_path / "usr", libdir=libdir)
+    (usr / libdir / "cmake/holoscan/holoscan-config-version.cmake").write_text(
+        'set(PACKAGE_VERSION "5.0.0")\n',
+        encoding="utf-8",
+    )
+    (usr / libdir / "python3.12/site-packages/holoscan").mkdir(parents=True)
+
+    assert sdk.is_valid_sdk_installation(usr)
+    assert sdk.is_valid_sdk_directory(usr)
+    assert sdk.get_sdk_version(usr) == "5.0.0"
+    assert sdk.get_sdk_python_paths(usr) == [str(usr / libdir / "python3.12/site-packages")]
+
+
+def test_sdk5_debian_libdir_follows_requested_arch(tmp_path, monkeypatch, make_sdk_directory):
+    monkeypatch.setattr(sdk, "get_host_arch", lambda: "x86_64")
+    usr = make_sdk_directory(tmp_path / "usr", libdir="lib/aarch64-linux-gnu")
+
+    assert not sdk.is_valid_sdk_installation(usr)
+    assert sdk.is_valid_sdk_installation(usr, arch="aarch64-dgpu")
+    assert sdk.get_sdk_lib_dirs(usr, "arm64") == [
+        usr / "lib/aarch64-linux-gnu",
+        usr / "lib",
+    ]
+
+
+def test_get_sdk_version_prefers_debian_libdir_like_cmake(
+    tmp_path, monkeypatch, make_sdk_directory
+):
+    monkeypatch.setattr(sdk, "get_host_arch", lambda: "x86_64")
+    usr = tmp_path / "usr"
+    for libdir, version in (("lib", "5.0.0"), ("lib/x86_64-linux-gnu", "5.0.1")):
+        make_sdk_directory(usr, libdir=libdir)
+        (usr / libdir / "cmake/holoscan/holoscan-config-version.cmake").write_text(
+            f'set(PACKAGE_VERSION "{version}")\n', encoding="utf-8"
+        )
+
+    assert sdk.get_sdk_version(usr) == "5.0.1"
+
+
+def test_resolve_local_sdk_dir_accepts_sdk5_debian_libdir(
+    tmp_path, monkeypatch, make_sdk_directory
+):
+    monkeypatch.setattr(sdk, "get_host_arch", lambda: "x86_64")
+    usr = make_sdk_directory(tmp_path / "usr", libdir="lib/aarch64-linux-gnu")
+
+    assert (
+        sdk.resolve_local_sdk_dir(
+            "/usr", environ={"HOLOSCAN_SDK_ROOT": str(usr), "HOLOSCAN_CLI_TARGET_ARCH": "aarch64"}
+        )
+        == usr.resolve()
+    )
+
+
 def test_default_local_sdk_dir_prefers_sdk5_then_sdk4(tmp_path, make_sdk_directory, monkeypatch):
     usr, opt = tmp_path / "usr", tmp_path / "opt"
     monkeypatch.setattr(sdk, "DEFAULT_LOCAL_SDK_DIR", str(usr))
@@ -202,7 +264,7 @@ def test_default_local_sdk_dir_prefers_sdk5_then_sdk4(tmp_path, make_sdk_directo
     make_sdk_directory(opt)
     assert sdk.default_local_sdk_dir() == str(opt)
 
-    make_sdk_directory(usr)
+    make_sdk_directory(usr, libdir=f"lib/{sdk.get_host_arch()}-linux-gnu")
     assert sdk.default_local_sdk_dir() == str(usr)
 
     monkeypatch.setenv("HOLOSCAN_CLI_DEFAULT_HSDK_DIR", str(tmp_path / "custom"))
@@ -401,3 +463,33 @@ def test_get_gpu_name_and_compute_capacity_handle_subprocess_failures(monkeypatc
 
     assert sdk.get_gpu_name() is None
     assert sdk.get_compute_capacity() == "0.0"
+
+
+@pytest.mark.parametrize(
+    ("triplet", "resolves"),
+    [("aarch64-linux-gnu", True), ("x86_64-linux-gnu", False)],
+)
+def test_resolve_sdk_directory_checks_debian_libdir_for_target_arch(
+    tmp_path, monkeypatch, make_sdk_directory, triplet, resolves
+):
+    monkeypatch.setattr(sdk, "get_host_arch", lambda: "x86_64")
+    usr = make_sdk_directory(tmp_path / "usr", libdir=f"lib/{triplet}")
+
+    expected = usr if resolves else None
+    assert sdk.resolve_sdk_directory(usr, "aarch64") == expected
+    assert sdk.resolve_sdk_installation(usr, "aarch64") == expected
+
+
+@pytest.mark.parametrize(
+    ("triplet", "expected"),
+    [("aarch64-linux-gnu", "public/install-aarch64"), ("x86_64-linux-gnu", None)],
+)
+def test_sdk_arch_layout_checks_debian_libdir_for_target_arch(
+    tmp_path, monkeypatch, make_sdk_directory, triplet, expected
+):
+    monkeypatch.setattr(sdk, "get_host_arch", lambda: "x86_64")
+    monkeypatch.setattr(sdk, "get_host_gpu", lambda: "dgpu")
+    root = tmp_path / "sdk-src"
+    make_sdk_directory(root / "public/install-aarch64", libdir=f"lib/{triplet}")
+
+    assert sdk.resolve_sdk_installation(root, "aarch64") == (root / expected if expected else None)
