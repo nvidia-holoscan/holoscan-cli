@@ -353,6 +353,21 @@ def report_effective_configuration(
                 environment_name="HOLOSCAN_CLI_DEFAULT_DOCKER_RUN_ARGS",
             )
         )
+        project_build_run_args = context.build_docker_run_args if context is not None else None
+        if "docker_run_args" in build_config or project_build_run_args is not None:
+            lines.append(
+                _reported_options(
+                    "Build container run options",
+                    build_config.get("docker_run_args", run_config.get("docker_run_args")),
+                    cli_docker_opts,
+                    project_value=(
+                        project_build_run_args
+                        if project_build_run_args is not None
+                        else context.docker_run_args if context is not None else None
+                    ),
+                    environment_name="HOLOSCAN_CLI_DEFAULT_DOCKER_RUN_ARGS",
+                )
+            )
         lines.append(_reported_forward_env(args, context))
 
     if include_configure:

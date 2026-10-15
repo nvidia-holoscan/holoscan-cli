@@ -931,6 +931,36 @@ def test_project_docker_args_are_composed_before_mode_environment_and_cli(tmp_pa
     )
 
 
+@pytest.mark.parametrize(
+    ("build_docker_run_args", "expected"),
+    [
+        (None, "--label project=1 --label mode=1"),
+        ("--label build=1", "--label build=1 --label mode=1"),
+        ("", "--label mode=1"),
+    ],
+)
+def test_build_containers_use_project_build_docker_run_args(
+    tmp_path, monkeypatch, build_docker_run_args, expected
+):
+    context = ProjectContext(
+        root=tmp_path,
+        kind="module",
+        discovery="project-root",
+        docker_run_args="--label project=1",
+        build_docker_run_args=build_docker_run_args,
+    )
+    monkeypatch.setattr(container_core, "get_active_project_context", lambda: context)
+    monkeypatch.delenv("HOLOSCAN_CLI_DEFAULT_DOCKER_RUN_ARGS", raising=False)
+    container = _stub_container(tmp_path)
+    container.DEFAULT_DOCKER_RUN_ARGS = ""
+
+    assert container.compose_run_args(mode_docker_opts="--label mode=1", for_build=True) == expected
+    assert (
+        container.compose_run_args(mode_docker_opts="--label mode=1")
+        == "--label project=1 --label mode=1"
+    )
+
+
 def test_cuda_version_arg_lands_as_cuda_major_build_arg(tmp_path, monkeypatch):
     """`--cuda 13` propagates to a `CUDA_MAJOR=13` build-arg
     (pre-consolidation `test_holohub_build_container_cuda_version`)."""

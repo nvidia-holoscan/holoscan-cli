@@ -270,8 +270,11 @@ def handle_install(cli, args: argparse.Namespace) -> None:
 
         img = container.resolve_run_image(getattr(args, "img", None))
         docker_opts = container.compose_run_args(
-            mode_docker_opts=build_args.get("mode_docker_opts"),
+            mode_docker_opts=build_args.get(
+                "mode_build_docker_opts", build_args.get("mode_docker_opts")
+            ),
             docker_opts=build_args.get("docker_opts", ""),
+            for_build=True,
         )
         docker_opts_extra, extra_args = get_entrypoint_command_args(
             img, install_cmd, docker_opts, dry_run=args.dryrun

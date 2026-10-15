@@ -198,7 +198,7 @@ def handle_package(cli, args: argparse.Namespace) -> None:
     build_cmd = shlex.join(build_tokens)
 
     cli_docker_opts = resolve_cli_docker_opts(args)
-    docker_opts = container.compose_run_args(docker_opts=cli_docker_opts)
+    docker_opts = container.compose_run_args(docker_opts=cli_docker_opts, for_build=True)
     run_image = container.resolve_run_image(getattr(args, "img", None))
     docker_opts_extra, extra_args = get_entrypoint_command_args(
         run_image,
