@@ -114,10 +114,13 @@ holoscan build my_app --target my_target
 ```
 
 Only `run-container` accepts a command after `--`. With its normal shell
-entrypoint, quote a multi-argument or compound command as one argument:
+entrypoint, quote a multi-argument or compound command as one argument. The
+shell in the container expands its variables, so single-quote a command that
+reads container values:
 
 ```bash
 uv run holoscan run-container -- "holoscan list --json"
+uv run holoscan run-container -- 'echo "$HOME"'
 ```
 
 ## Profile an application
