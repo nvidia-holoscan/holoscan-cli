@@ -1002,13 +1002,22 @@ def test_optional_devices_and_mounts_are_added_only_when_present(tmp_path, monke
     camera.touch()
     vendor = tmp_path / "vendor"
     vendor.mkdir()
+    configured = tmp_path / "configured"
+    configured.mkdir()
     missing = tmp_path / "missing"
     context = ProjectContext(
         root=tmp_path,
         kind="module",
         discovery="project-root",
         optional_devices=(str(device), str(missing), str(camera)),
-        optional_mounts=(str(vendor), str(missing), f"{vendor}/", "/etc/asound.conf"),
+        optional_mounts=(
+            str(vendor),
+            str(missing),
+            f"{vendor}/",
+            "/etc/asound.conf",
+            "/etc/passwd",
+            str(configured),
+        ),
     )
     monkeypatch.setattr(container_core, "get_active_project_context", lambda: context)
     # The CLI's own device scan already adds the camera.
@@ -1018,7 +1027,8 @@ def test_optional_devices_and_mounts_are_added_only_when_present(tmp_path, monke
         "glob",
         lambda pattern: [str(camera)] if pattern == "/dev/video[0-9]*" else scan(pattern),
     )
-    # The CLI already mounts /etc/asound.conf with --mount when it exists.
+    # The CLI already mounts /etc/asound.conf with --mount when it exists, and
+    # /etc/passwd for a non-root user.
     exists = container_core.os.path.exists
     monkeypatch.setattr(
         container_core.os.path,
@@ -1031,10 +1041,12 @@ def test_optional_devices_and_mounts_are_added_only_when_present(tmp_path, monke
     container = _stub_container(tmp_path, project_metadata=_project_metadata(project_dir))
     container.dryrun = True
 
-    container.run(img="custom:image")
+    container.run(img="custom:image", docker_opts=f"--volume={configured}:{configured}")
 
     command = calls[0]
     assert not any(token.startswith("/etc/asound.conf") for token in command)
+    assert sum(token.startswith("/etc/passwd:") for token in command) == 1
+    assert not any(token.startswith(str(configured)) for token in command)
     assert not any(token.startswith(f"{vendor}/") for token in command)
     assert command[command.index(str(device)) - 1] == "--device"
     assert command[command.index(f"{vendor}:{vendor}") - 1] == "-v"

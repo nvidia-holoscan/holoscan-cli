@@ -137,6 +137,7 @@ aarch64 = "registry.example.com/holoscan/sdk-build-aarch64:5.0.0-cuda13"
   devices and mounts that only some hosts have in `optional-devices` or
   `optional-mounts` instead. Each container gets an entry only when its path
   exists on the host, as the CLI already does for common devices such as `/dev/video*`.
+  An entry is skipped when another option already uses its container path.
 - `base-images`, when present, must include the selected architecture. References
   are used unchanged and cannot be empty or contain whitespace. `--base-img`, then
   `HOLOSCAN_CLI_BASE_IMAGE`, take precedence.

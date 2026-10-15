@@ -365,29 +365,40 @@ class HoloscanContainer:
             options.extend(["--device", "/dev/nvidia-modeset"])
         if os.path.exists("/usr/share/nvidia/nvoptix.bin"):
             options.extend(["-v", "/usr/share/nvidia/nvoptix.bin:/usr/share/nvidia/nvoptix.bin:ro"])
+        return options
 
-        # A Module's optional devices and mounts are also added only when present.
+    @staticmethod
+    def optional_device_mounts(existing_args: List[str]) -> List[str]:
+        """Get the Module's optional devices and mounts that exist on the host.
+
+        Container paths already used in ``existing_args`` are skipped because
+        Docker rejects a repeated mount point.
+        """
         context = get_active_project_context()
-        if context is not None:
-            # Skip container paths added above: Docker rejects a repeated mount point.
-            taken = set()
-            for flag, value in zip(options, options[1:]):
-                if flag in ("-v", "--device"):
-                    fields = value.split(":")
-                    taken.add(os.path.normpath(fields[1] if len(fields) > 1 else fields[0]))
-                elif flag == "--mount":
-                    for field in value.split(","):
-                        key, _, target = field.partition("=")
-                        if key in ("target", "dst", "destination"):
-                            taken.add(os.path.normpath(target))
-            for flag, paths in (
-                ("--device", context.optional_devices),
-                ("-v", context.optional_mounts),
-            ):
-                for path in map(os.path.normpath, paths):
-                    if path not in taken and os.path.exists(path):
-                        taken.add(path)
-                        options.extend([flag, path if flag == "--device" else f"{path}:{path}"])
+        if context is None:
+            return []
+        taken = set()
+        for i, arg in enumerate(existing_args):
+            flag, sep, value = arg.partition("=") if arg.startswith("--") else (arg, "", "")
+            if not sep:
+                value = existing_args[i + 1] if i + 1 < len(existing_args) else ""
+            if flag in ("-v", "--volume", "--device"):
+                fields = value.split(":")
+                taken.add(os.path.normpath(fields[1] if len(fields) > 1 else fields[0]))
+            elif flag == "--mount":
+                for field in value.split(","):
+                    key, _, target = field.partition("=")
+                    if key in ("target", "dst", "destination"):
+                        taken.add(os.path.normpath(target))
+        options = []
+        for flag, paths in (
+            ("--device", context.optional_devices),
+            ("-v", context.optional_mounts),
+        ):
+            for path in map(os.path.normpath, paths):
+                if path not in taken and os.path.exists(path):
+                    taken.add(path)
+                    options.extend([flag, path if flag == "--device" else f"{path}:{path}"])
         return options
 
     @staticmethod
@@ -859,6 +870,8 @@ class HoloscanContainer:
 
         if local_sdk_root or os.environ.get("HOLOSCAN_SDK_ROOT"):
             cmd.extend(self.get_local_sdk_options(local_sdk_root))
+
+        cmd.extend(self.optional_device_mounts(cmd + extra_run_args))
 
         # Effective project/mode/environment/CLI Docker options (parsed above).
         raw_run_start = len(cmd)
