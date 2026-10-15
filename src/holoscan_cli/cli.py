@@ -46,12 +46,12 @@ from holoscan_cli.metadata.utils import (
 )
 from holoscan_cli.project_context import get_active_project_context
 from holoscan_cli.utils.docker import resolve_cli_docker_opts
-from holoscan_cli.utils.holohub import (
+from holoscan_cli.utils.io import Color, fatal, warn
+from holoscan_cli.utils.source_project import (
     get_component_search_paths,
-    get_holohub_root,
+    get_project_root,
     resolve_path_prefix,
 )
-from holoscan_cli.utils.io import Color, fatal, warn
 from holoscan_cli.utils.text import levenshtein_distance, normalize_args_str
 
 
@@ -71,7 +71,7 @@ def in_container_cli_command() -> str:
 class HoloscanCLI:
     """Command-line interface for Holoscan source-project workflows."""
 
-    HOLOHUB_ROOT = get_holohub_root()
+    HOLOHUB_ROOT = get_project_root()
     DEFAULT_BUILD_PARENT_DIR = Path(
         os.environ.get("HOLOSCAN_CLI_BUILD_PARENT_DIR", HOLOHUB_ROOT / "build")
     )

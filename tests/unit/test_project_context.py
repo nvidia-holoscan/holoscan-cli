@@ -246,6 +246,7 @@ import sys
 import holoscan_cli.__main__
 import holoscan_cli.commands.registry
 import holoscan_cli.utils.holohub
+import holoscan_cli.utils.source_project
 blocked = ('holoscan_cli.cli', 'holoscan_cli.container.core')
 assert not any(name in sys.modules for name in blocked)
 """

@@ -99,10 +99,10 @@ def collect_platform_info() -> PlatformInfo:
     )
 
 
-def collect_git_info(holohub_root: Path) -> Optional[GitInfo]:
-    branch = run_info_command(["git", "-C", str(holohub_root), "branch", "--show-current"])
-    commit = run_info_command(["git", "-C", str(holohub_root), "rev-parse", "--short", "HEAD"])
-    porcelain = run_info_command(["git", "-C", str(holohub_root), "status", "--porcelain"])
+def collect_git_info(project_root: Path) -> Optional[GitInfo]:
+    branch = run_info_command(["git", "-C", str(project_root), "branch", "--show-current"])
+    commit = run_info_command(["git", "-C", str(project_root), "rev-parse", "--short", "HEAD"])
+    porcelain = run_info_command(["git", "-C", str(project_root), "status", "--porcelain"])
     if branch is None or commit is None:
         return None
     modified = [line for line in (porcelain or "").splitlines() if line.strip()]

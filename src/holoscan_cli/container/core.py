@@ -43,16 +43,6 @@ from ..utils.docker import (
     get_image_pythonpath,
     image_reference_has_tag_or_digest,
 )
-from ..utils.holohub import (
-    build_holohub_path_mapping,
-    get_current_branch_slug,
-    get_git_short_sha,
-    get_group_id,
-    get_holohub_root,
-    get_holohub_setup_scripts_dir,
-    get_sccache_dir,
-    replace_placeholders,
-)
 from ..utils.io import fatal, info, run_command, warn
 from ..utils.sdk import (
     check_nvidia_ctk,
@@ -64,6 +54,16 @@ from ..utils.sdk import (
     get_host_gpu,
     is_valid_sdk_directory,
     resolve_local_sdk_dir,
+)
+from ..utils.source_project import (
+    build_path_mapping,
+    get_current_branch_slug,
+    get_git_short_sha,
+    get_group_id,
+    get_project_root,
+    get_sccache_dir,
+    get_setup_scripts_dir,
+    replace_placeholders,
 )
 from ..utils.text import (
     get_cli_arg_value,
@@ -120,7 +120,7 @@ class HoloscanContainer:
     Default attributes may be overridden by a project-specific implementation.
     """
 
-    HOLOHUB_ROOT = get_holohub_root()  # Repository root directory
+    HOLOHUB_ROOT = get_project_root()  # Repository root directory
     # Primary repository prefix - sets defaults for container, workspace, and hostname
     REPO_PREFIX = os.environ.get("HOLOSCAN_CLI_REPO_PREFIX", "holohub")
     CONTAINER_PREFIX = os.environ.get("HOLOSCAN_CLI_CONTAINER_PREFIX", REPO_PREFIX)
@@ -456,8 +456,8 @@ class HoloscanContainer:
         dockerfile_from_metadata = self.project_metadata.get("metadata", {}).get("dockerfile")
         if dockerfile_from_metadata:
             # Build path mapping for this project
-            path_mapping = build_holohub_path_mapping(
-                holohub_root=HoloscanContainer.HOLOHUB_ROOT,
+            path_mapping = build_path_mapping(
+                project_root=HoloscanContainer.HOLOHUB_ROOT,
                 project_data=self.project_metadata,
             )
 
@@ -721,7 +721,7 @@ class HoloscanContainer:
         run_command(cmd, dry_run=self.dryrun, display_override=display_cmd)
 
         if extra_scripts:
-            setup_scripts_dir = get_holohub_setup_scripts_dir()
+            setup_scripts_dir = get_setup_scripts_dir()
             for script in extra_scripts:
                 script_path = setup_scripts_dir / f"{script}.sh"
                 if not script_path.exists():

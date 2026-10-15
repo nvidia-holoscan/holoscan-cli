@@ -31,7 +31,7 @@ def test_named_setup_script_runs_in_cli_environment(monkeypatch, tmp_path):
     script_env = {"PATH": "/tmp/cli-venv/bin:/usr/bin"}
     commands = []
 
-    monkeypatch.setattr(setup_cmd, "get_holohub_setup_scripts_dir", lambda: setup_dir)
+    monkeypatch.setattr(setup_cmd, "get_setup_scripts_dir", lambda: setup_dir)
     monkeypatch.setattr(setup_cmd, "_build_script_env", lambda: script_env)
     monkeypatch.setattr(
         setup_cmd,

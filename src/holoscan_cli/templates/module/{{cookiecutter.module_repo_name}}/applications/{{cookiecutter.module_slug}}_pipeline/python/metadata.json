@@ -26,8 +26,8 @@
             "default": {
                 "description": "Run the Python {{ cookiecutter.module_slug }} pipeline",
                 "run": {
-                    "command": "python3 <holohub_app_source>/{{ cookiecutter.module_slug }}_pipeline.py",
-                    "workdir": "holohub_app_bin"
+                    "command": "python3 <project_app_source>/{{ cookiecutter.module_slug }}_pipeline.py",
+                    "workdir": "project_app_bin"
                 }
             }
         }
