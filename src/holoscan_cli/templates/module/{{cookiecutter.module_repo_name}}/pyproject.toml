@@ -1,10 +1,17 @@
 # SPDX-FileCopyrightText: Copyright (c) {% now 'utc', '%Y' %} {{ cookiecutter.full_name }}{% if cookiecutter.affiliation %} / {{ cookiecutter.affiliation }}{% endif %}. All rights reserved.
 # SPDX-License-Identifier: {{ cookiecutter._license }}
 
+{% if cookiecutter.__python_bindings == 'yes' -%}
+# Development tooling only. Holoscan SDK 5.0 Modules are C++ libraries shipped
+# as Debian packages; the CMake build adds the Python bindings, and wheel
+# packaging returns in a later release. This file pins the Holoscan CLI for
+# `uv run holoscan ...` and configures ruff for the repository's helper scripts.
+{%- else -%}
 # Development tooling only. Holoscan SDK 5.0 Modules are C++ libraries shipped
 # as Debian packages; Python bindings and wheel packaging return in a later
 # release. This file pins the Holoscan CLI for `uv run holoscan ...` and
 # configures ruff for the repository's helper scripts.
+{%- endif %}
 
 [project]
 name = "holoscan-{{ cookiecutter.module_slug.replace('_', '-') }}"
@@ -15,12 +22,19 @@ license = { text = "{{ cookiecutter._license }}" }
 authors = [
     { name = "{{ cookiecutter.full_name }}" },
 ]
+{% if cookiecutter.__python_bindings == 'yes' -%}
+requires-python = ">=3.12"
+{%- else -%}
 requires-python = ">=3.11"
+{%- endif %}
 
 [dependency-groups]
 dev = [
     "holoscan-cli=={{ cookiecutter._holoscan_cli_version }}",
     "ruff",
+{%- if cookiecutter.__python_bindings == 'yes' %}
+    "pytest",
+{%- endif %}
 ]
 
 [tool.uv]
@@ -51,7 +65,7 @@ aarch64 = "nvcr.io/nvidia/clara-holoscan/holoscan:v{{ cookiecutter.holoscan_vers
 
 [tool.ruff]
 line-length = 100
-target-version = "py311"
+target-version = "{% if cookiecutter.__python_bindings == 'yes' %}py312{% else %}py311{% endif %}"
 # build*/, dist/ are CMake/packaging outputs; .local/, .cache/, .cupy/ are
 # dev-container HOME junk.
 exclude = [

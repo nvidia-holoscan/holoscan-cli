@@ -31,7 +31,7 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y clang-format
       - name: C++ format check
         run: |
-          find operators applications tests \
+          find operators applications tests{% if cookiecutter.__python_bindings == 'yes' %} python{% endif %} \
                -name '*.cpp' -o -name '*.hpp' \
             | xargs clang-format --dry-run --Werror
 

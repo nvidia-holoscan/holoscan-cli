@@ -187,7 +187,13 @@ output parent. A selected application template can have different defaults.
 Choose the SDK minimum explicitly with `--context holoscan_version=<version>`.
 The packaged template defaults to `5.0.0` and rejects older versions; a
 configured base SDK version overrides the default, and explicit context values
-take precedence. See
+take precedence. `--language cpp python` (or `cpp,python`) also generates a
+nanobind extension that registers the module's C++ operators with the SDK
+operator registry, a Python example, and CTest-run pytest suites; the default
+`--language cpp` stays C++ only, and `--language python` alone stays rejected
+until pure-Python modules are supported. The project name may come before or
+after `--language`; a project named after a language, such as `python`, must
+come first. See
 [template defaults](src/holoscan_cli/templates/module/cookiecutter.json) and
 [creation](src/holoscan_cli/commands/create.py). The generated module's
 `README.md` and `DEVELOPER.md` document its implementation and consumer flow,

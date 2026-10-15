@@ -6,9 +6,14 @@ SDK {{ cookiecutter.holoscan_version }} or later. [README.md](README.md) covers 
 
 ## Holoscan SDK 5
 
+{% if cookiecutter.__python_bindings == 'yes' -%}
+- This Module's operators are C++ and ship as a Debian package. `python/` exposes them to
+  Python through the SDK operator registry; there are no operators implemented in Python and no wheel.
+{%- else -%}
 - This Module is C++ only and ships as a Debian package. It has no Python operators, bindings,
   pytest suite, or wheel.
-- SDK 5 changed the operator and application APIs, and most published Holoscan examples still use
+{%- endif %}
+- Holoscan SDK 5 changed the operator and application APIs, and most published Holoscan examples still use
   the 4.x API. Follow the code in this repository and the API cheat sheet in DEVELOPER.md:
   - Operators derive from `holoscan::Operator<>` (or `holoscan::Operator<ParamsStruct>`), declare
     `holoscan::Input<T>` and `holoscan::Output<T>` members, and bind them in `setup()`.
@@ -31,8 +36,11 @@ Install the CLI version pinned in `requirements-cli.txt` (see README.md), or pre
 
 | Task | Command |
 | --- | --- |
-| Build the example | `holoscan build {{ cookiecutter.module_slug }}_pipeline` |
-| Run the example | `holoscan run {{ cookiecutter.module_slug }}_pipeline` |
+| Build the example | `holoscan build {{ cookiecutter.module_slug }}_pipeline{% if cookiecutter.__python_bindings == 'yes' %} --language cpp{% endif %}` |
+| Run the example | `holoscan run {{ cookiecutter.module_slug }}_pipeline{% if cookiecutter.__python_bindings == 'yes' %} --language cpp{% endif %}` |
+{%- if cookiecutter.__python_bindings == 'yes' %}
+| Run the Python example | `holoscan run {{ cookiecutter.module_slug }}_pipeline --language python` |
+{%- endif %}
 | Run the tests | `holoscan test` |
 | Lint | `holoscan lint` |
 | Build the Debian package | `holoscan package {{ cookiecutter.module_repo_name }} --pkg-generator DEB` |
@@ -74,7 +82,12 @@ and you can edit them. Upgrading the CLI does not update them; update them by ha
   Module, its namespace, package, or operators.
 - **Ask first** before running anything that needs `sudo` or changes the host, such as `apt` or
   installing the Debian package.
+{% if cookiecutter.__python_bindings == 'yes' -%}
+- Register every new operator in `python/_{{ cookiecutter.module_slug }}.cpp` and cover it in `tests/python`.
+- **Never** add Python-implemented operators or wheel packaging.
+{%- else -%}
 - **Never** add Python operators, bindings, pytest suites, or wheel packaging.
+{%- endif %}
 - **Never** store secrets or machine-specific paths in `pyproject.toml` or `metadata.json`.
 - **Never** pin a dependency on another Module to a tag or branch; use a full commit SHA.
 - **Never** delete `build/`, `build-native/`, or `install/` directories without asking.
