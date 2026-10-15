@@ -48,7 +48,9 @@ class RecordingContainer:
         *,
         mode_docker_opts=None,
         docker_opts=None,
+        for_build=False,
     ):
+        self.compose_calls = [*getattr(self, "compose_calls", []), for_build]
         return " ".join(
             filter(
                 None,
@@ -117,6 +119,7 @@ class RecordingCLI:
             "mode_build_args": build.get("build_args"),
             "docker_opts": getattr(args, "docker_opts", ""),
             "mode_docker_opts": run.get("docker_opts"),
+            "mode_build_docker_opts": build.get("docker_opts", run.get("docker_opts")),
         }
 
     def get_effective_run_config(self, args, mode_config):
@@ -742,6 +745,55 @@ def test_handle_run_container_branch_passes_recursive_local_command(tmp_path, mo
     assert "--no-local-build" in command
     assert "--run-args=--once" in command
     assert cli.container.run_calls[0]["extra_args"] == ["-c", command]
+
+
+def _project_with_build_docker_opts():
+    return {
+        "project_name": "smoke_app",
+        "project_type": "application",
+        "metadata": {
+            "language": "python",
+            "modes": {
+                "dev": {
+                    "build": {"docker_opts": "--label build=1"},
+                    "run": {"command": "python app.py", "docker_opts": "--ipc=host"},
+                }
+            },
+        },
+    }
+
+
+def test_handle_build_container_uses_mode_build_docker_opts(tmp_path, monkeypatch):
+    cli = RecordingCLI(tmp_path, _project_with_build_docker_opts())
+    captured = {}
+
+    def capture_entrypoint(img, cmd, opts, dry_run=False):
+        captured["opts"] = opts
+        return "", []
+
+    monkeypatch.setattr(build_cmd, "get_entrypoint_command_args", capture_entrypoint)
+
+    build_cmd.handle_build(cli, _project_args(mode="dev"))
+
+    assert captured["opts"] == "--label build=1"
+    assert cli.container.compose_calls == [True]
+
+
+def test_handle_run_container_as_root_builder_uses_mode_build_docker_opts(tmp_path, monkeypatch):
+    cli = RecordingCLI(tmp_path, _project_with_build_docker_opts())
+    entrypoints = []
+
+    def capture_entrypoint(img, cmd, opts, dry_run=False):
+        entrypoints.append(opts)
+        return "", []
+
+    monkeypatch.setattr(run_cmd, "get_entrypoint_command_args", capture_entrypoint)
+
+    run_cmd.handle_run(cli, _project_args(mode="dev", as_root=True))
+
+    build_opts, app_opts = entrypoints
+    assert "--label build=1" in build_opts and "--ipc=host" not in build_opts
+    assert "--ipc=host" in app_opts and "--label build=1" not in app_opts
 
 
 def test_handle_run_container_as_root_builds_as_user_then_runs_as_root(tmp_path, monkeypatch):

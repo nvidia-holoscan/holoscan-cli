@@ -268,7 +268,13 @@ class HoloscanCLI:
 
         # Define valid keys for mode configuration
         valid_top_level_keys = ["description", "requirements", "build", "run", "env"]
-        valid_build_keys = ["depends", "docker_build_args", "cmake_options", "env"]
+        valid_build_keys = [
+            "depends",
+            "docker_build_args",
+            "docker_run_args",
+            "cmake_options",
+            "env",
+        ]
         valid_run_keys = ["command", "workdir", "docker_run_args", "env"]
 
         # Check top-level keys
@@ -304,6 +310,7 @@ class HoloscanCLI:
             "with_operators": getattr(args, "with_operators", None),
             "docker_opts": resolve_cli_docker_opts(args),
             "mode_docker_opts": "",
+            "mode_build_docker_opts": "",
             "build_args": getattr(args, "build_args", None) or "",
             "mode_build_args": "",
             "configure_args": getattr(args, "configure_args", None),
@@ -335,6 +342,13 @@ class HoloscanCLI:
 
         if "run" in mode_config and "docker_run_args" in mode_config["run"]:
             config["mode_docker_opts"] = normalize_args_str(mode_config["run"]["docker_run_args"])
+
+        # Containers that only build use build.docker_run_args when the mode sets it.
+        config["mode_build_docker_opts"] = config["mode_docker_opts"]
+        if "docker_run_args" in mode_config.get("build", {}):
+            config["mode_build_docker_opts"] = normalize_args_str(
+                mode_config["build"]["docker_run_args"]
+            )
 
         return config
 

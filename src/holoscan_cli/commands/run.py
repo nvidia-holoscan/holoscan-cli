@@ -473,7 +473,15 @@ def handle_run(cli, args: argparse.Namespace) -> None:
                 language,
                 effective_build_type,
             )
-            builder_docker_opts = _transient_builder_docker_opts(effective_docker_opts)
+            builder_docker_opts = _transient_builder_docker_opts(
+                container.compose_run_args(
+                    mode_docker_opts=build_args.get(
+                        "mode_build_docker_opts", build_args.get("mode_docker_opts")
+                    ),
+                    docker_opts=docker_opts,
+                    for_build=True,
+                )
+            )
             builder_opts_extra, builder_extra_args = get_entrypoint_command_args(
                 img, build_cmd, builder_docker_opts, dry_run=args.dryrun
             )

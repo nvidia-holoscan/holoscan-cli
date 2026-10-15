@@ -183,7 +183,8 @@ aarch64 = "registry.example.com/holoscan/sdk-build-aarch64:4.5.0-cuda13"
 
 `cuda` and `ctest-script` provide Module-wide toolchain defaults,
 `forward-env` contains names only, the Docker argument arrays provide static
-defaults, and `base-images` contains exact images for the supported target
+defaults (`build-docker-run-args`, when set, replaces `docker-run-args` in build
+containers), and `base-images` contains exact images for the supported target
 architectures. Use command options for one-off choices. See
 [Configuring Holoscan CLI](https://github.com/nvidia-holoscan/holoscan-cli/blob/main/CONFIGURATION.md)
 for the complete user-facing behavior.

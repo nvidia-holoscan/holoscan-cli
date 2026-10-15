@@ -586,10 +586,17 @@ class HoloscanContainer:
         *,
         mode_docker_opts: Optional[str] = None,
         docker_opts: Optional[str] = None,
+        for_build: bool = False,
     ) -> str:
-        """Compose Docker run options in project -> mode -> environment -> CLI order."""
+        """Compose Docker run options in project -> mode -> environment -> CLI order.
+
+        With ``for_build``, the project's ``build-docker-run-args``, when set,
+        replaces its ``docker-run-args``.
+        """
         context = get_active_project_context()
         project_args = context.docker_run_args if context is not None else None
+        if for_build and context is not None and context.build_docker_run_args is not None:
+            project_args = context.build_docker_run_args
         environment_args = os.environ.get(
             "HOLOSCAN_CLI_DEFAULT_DOCKER_RUN_ARGS", self.DEFAULT_DOCKER_RUN_ARGS
         )

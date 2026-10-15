@@ -139,6 +139,7 @@ workspace-name = "sensor_workspace"
 forward-env = ["CI"]
 docker-build-args = ["--build-arg", "PROJECT_FEATURE=ON"]
 docker-run-args = ["--network=host"]
+build-docker-run-args = []
 optional-devices = ["/dev/ttyUSB0"]
 optional-mounts = ["/opt/vendor/sdk"]
 search-paths = ["examples", "./tools/"]
@@ -159,6 +160,7 @@ x86_64 = "example.test/holoscan:fixed"
     assert context.ctest_script == "ci/container.ctest"
     assert context.docker_build_args == "--build-arg PROJECT_FEATURE=ON"
     assert context.docker_run_args == "--network=host"
+    assert context.build_docker_run_args == ""
     assert context.optional_devices == ("/dev/ttyUSB0",)
     assert context.optional_mounts == ("/opt/vendor/sdk",)
     assert context.forward_env == ("CI",)
@@ -215,6 +217,7 @@ def test_module_environment_resolves_4x_sdk_build_tree(tmp_path, monkeypatch, ma
         ("[tool.holoscan]\nctest-script = '../container.ctest'\n", "ctest-script"),
         ("[tool.holoscan]\nforward-env = ['HOME']\n", "forward-env"),
         ("[tool.holoscan]\ndocker-run-args = ['']\n", "docker-run-args"),
+        ("[tool.holoscan]\nbuild-docker-run-args = '--ipc=host'\n", "build-docker-run-args"),
         ("[tool.holoscan]\noptional-devices = '/dev/video0'\n", "optional-devices must"),
         ("[tool.holoscan]\noptional-devices = ['dev/video0']\n", "optional-devices must"),
         ("[tool.holoscan]\noptional-mounts = ['/opt/sdk:/sdk']\n", "optional-mounts must"),

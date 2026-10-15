@@ -104,6 +104,7 @@ unrelated to CLI configuration. Supported keys:
 | `forward-env` | String array / `[]` | Host variable names to forward into containers. |
 | `docker-build-args` | Token array / `[]` | Extra Docker build options. |
 | `docker-run-args` | Token array / `[]` | Extra Docker run options. |
+| `build-docker-run-args` | Token array / `docker-run-args` | Docker run options for build containers, replacing `docker-run-args` there. |
 | `optional-devices` | Absolute path array / `[]` | Host devices added with `--device` when present. |
 | `optional-mounts` | Absolute path array / `[]` | Host paths bind-mounted at the same path when present. |
 | `search-paths` | Relative path array / conventional directories | Folders or `metadata.json` files searched for projects; must stay within the Module root. |
@@ -132,11 +133,16 @@ aarch64 = "registry.example.com/holoscan/sdk-build-aarch64:5.0.0-cuda13"
   project → mode → `HOLOSCAN_CLI_DEFAULT_DOCKER_BUILD_ARGS` or
   `HOLOSCAN_CLI_DEFAULT_DOCKER_RUN_ARGS` → command line. Later options win only
   where Docker supports that behavior.
-- `docker-run-args` and a mode's `run.docker_run_args` also reach the `build`
-  container, so every host that builds, including CI, needs what they list. Put
-  devices and mounts that only some hosts have in `optional-devices` or
-  `optional-mounts` instead. Each container gets an entry only when its path
-  exists on the host, as the CLI already does for common devices such as `/dev/video*`.
+- `docker-run-args` and a mode's `run.docker_run_args` also reach build
+  containers unless replaced there: `build-docker-run-args` replaces
+  `docker-run-args`, and a mode's `build.docker_run_args` replaces
+  `run.docker_run_args`. An empty array adds nothing. Build containers are the
+  ones started by `build`, `install`, `package`, and the separate build step of
+  `run --as-root`. `run` otherwise builds inside the application container,
+  which uses the run options, as does `test`.
+- Put devices and mounts that only some hosts have in `optional-devices` or
+  `optional-mounts`. Every container gets an entry only when its path exists on
+  the host, as the CLI already does for common devices such as `/dev/video*`.
   An entry is skipped when another option already uses its container path.
 - `base-images`, when present, must include the selected architecture. References
   are used unchanged and cannot be empty or contain whitespace. `--base-img`, then

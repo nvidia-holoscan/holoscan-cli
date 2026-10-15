@@ -217,6 +217,23 @@
           ],
           "description": "Docker build arguments - can be a single string or array of strings, equivalent to CLI `--build-args`"
         },
+        "docker_run_args": {
+          "oneOf": [
+            {
+              "type": "string",
+              "description": "Docker run arguments as a single string"
+            },
+            {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "description": "Docker arguments"
+              },
+              "description": "Array of Docker run arguments"
+            }
+          ],
+          "description": "Docker run arguments for containers that build the project, replacing `run.docker_run_args` there"
+        },
         "cmake_options": {
           "type": "array",
           "items": {

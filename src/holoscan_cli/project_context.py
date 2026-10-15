@@ -88,6 +88,7 @@ class ProjectContext:
     sdk_root_source: Optional[str] = None
     docker_build_args: Optional[str] = None
     docker_run_args: Optional[str] = None
+    build_docker_run_args: Optional[str] = None
     forward_env: tuple[str, ...] = ()
     search_paths: tuple[str, ...] = ()
     optional_devices: tuple[str, ...] = ()
@@ -239,6 +240,7 @@ def _read_holoscan_project_config(root: Path) -> tuple[Optional[Path], dict]:
             "container-prefix",
             "ctest-script",
             "cuda",
+            "build-docker-run-args",
             "docker-build-args",
             "docker-run-args",
             "forward-env",
@@ -358,6 +360,18 @@ def _resolve_project_profile(
                 f"{config_source}: tool.holoscan.{key} must be an array of non-empty strings."
             )
         resolved[field] = shlex.join(value.strip() for value in values)
+
+    # An empty array keeps docker-run-args out of build containers.
+    build_run_args = config.get("build-docker-run-args")
+    if build_run_args is not None:
+        if not isinstance(build_run_args, list) or not all(
+            isinstance(value, str) and value.strip() for value in build_run_args
+        ):
+            raise ProjectContextError(
+                f"{config_source}: tool.holoscan.build-docker-run-args must be an array of "
+                "non-empty strings."
+            )
+        resolved["build_docker_run_args"] = shlex.join(value.strip() for value in build_run_args)
 
     for key in ("optional-devices", "optional-mounts"):
         values = config.get(key)
@@ -573,6 +587,7 @@ def _build_module_context(
         sdk_root_source=profile.get("sdk_root_source"),
         docker_build_args=profile.get("docker_build_args"),
         docker_run_args=profile.get("docker_run_args"),
+        build_docker_run_args=profile.get("build_docker_run_args"),
         forward_env=profile.get("forward_env", ()),
         search_paths=profile.get("search_paths", ()),
         optional_devices=profile.get("optional_devices", ()),

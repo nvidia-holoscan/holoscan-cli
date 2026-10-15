@@ -155,6 +155,7 @@ def test_effective_mode_config_applies_metadata_defaults():
         "with_operators": "op_a;op_b",
         "docker_opts": "",
         "mode_docker_opts": "--ipc=host --network=host",
+        "mode_build_docker_opts": "--ipc=host --network=host",
         "build_args": "",
         "mode_build_args": "--build-arg MODE=dev",
         "configure_args": ["-DMODE=dev", "-DENABLE_TESTS=ON"],
@@ -166,6 +167,23 @@ def test_effective_mode_config_applies_metadata_defaults():
         "command": "python app.py",
         "workdir": ".",
     }
+
+
+def test_effective_build_config_prefers_mode_build_docker_run_args():
+    cli = object.__new__(project_cli.HoloscanCLI)
+    args = Namespace(docker_opts="", build_args="", configure_args=None, with_operators=None)
+    mode_config = {
+        "build": {"docker_run_args": []},
+        "run": {"command": "python app.py", "docker_run_args": ["--device", "/dev/ttyUSB0"]},
+    }
+
+    build_config = cli.get_effective_build_config(args, mode_config)
+
+    assert build_config["mode_docker_opts"] == "--device /dev/ttyUSB0"
+    assert build_config["mode_build_docker_opts"] == ""
+    assert cli.get_effective_run_config(args, mode_config)["mode_docker_opts"] == (
+        "--device /dev/ttyUSB0"
+    )
 
 
 def test_metadata_docker_argument_arrays_preserve_shell_fragments(monkeypatch, tmp_path):
@@ -215,6 +233,7 @@ def test_effective_mode_config_preserves_cli_overrides(capsys):
         "with_operators": "cli_op",
         "docker_opts": "--cap-add SYS_PTRACE",
         "mode_docker_opts": "--ipc=host",
+        "mode_build_docker_opts": "--ipc=host",
         "build_args": "--build-arg CLI=1",
         "mode_build_args": "--build-arg MODE=1",
         "configure_args": ["-DMODE=ON", "-DCLI=ON"],
