@@ -288,6 +288,45 @@ def test_check_holoscan_python_import_failure(monkeypatch):
     assert "failed" in result.message.lower()
 
 
+def test_check_holoscan_python_adds_local_sdk_python_paths(monkeypatch, tmp_path):
+    sdk_dir = tmp_path / "sdk"
+    (sdk_dir / "lib/cmake/holoscan").mkdir(parents=True)
+    (sdk_dir / "lib/cmake/holoscan/holoscan-config.cmake").write_text("# config\n")
+    site_packages = sdk_dir / "lib/python3.12/site-packages"
+    (site_packages / "holoscan").mkdir(parents=True)
+    monkeypatch.setenv("HOLOSCAN_CLI_DEFAULT_HSDK_DIR", str(sdk_dir))
+    monkeypatch.delenv("HOLOSCAN_SDK_ROOT", raising=False)
+    monkeypatch.setenv("PYTHONPATH", "/existing")
+    seen = {}
+
+    def fake_run(*a, **kw):
+        seen["env"] = kw["env"]
+        return _proc(stdout=f"5.0.0\n{site_packages}/holoscan/__init__.py\n")
+
+    monkeypatch.setattr(system_check.subprocess, "run", fake_run)
+    result = system_check.check_holoscan_python()
+
+    assert seen["env"]["PYTHONPATH"] == f"/existing:{site_packages}"
+    assert result.status == "OK"
+    assert result.message == f"5.0.0 ({site_packages / 'holoscan'})"
+
+
+def test_check_holoscan_python_without_local_sdk_keeps_pythonpath(monkeypatch, tmp_path):
+    monkeypatch.setenv("HOLOSCAN_CLI_DEFAULT_HSDK_DIR", str(tmp_path / "missing"))
+    monkeypatch.delenv("HOLOSCAN_SDK_ROOT", raising=False)
+    monkeypatch.delenv("PYTHONPATH", raising=False)
+    seen = {}
+
+    def fake_run(*a, **kw):
+        seen["env"] = kw["env"]
+        return _proc(stdout="5.0.0\n/venv/holoscan/__init__.py\n")
+
+    monkeypatch.setattr(system_check.subprocess, "run", fake_run)
+    system_check.check_holoscan_python()
+
+    assert "PYTHONPATH" not in seen["env"]
+
+
 def test_check_holoscan_python_timeout(monkeypatch):
     def boom(*a, **kw):
         raise subprocess.TimeoutExpired(cmd=[], timeout=15)

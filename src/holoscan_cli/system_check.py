@@ -36,6 +36,7 @@ from .utils.sdk import (
     find_hsdk_dir,
     get_cuda_runtime_version,
     get_gpu_name,
+    get_sdk_python_paths,
     get_sdk_version,
     is_valid_sdk_directory,
 )
@@ -247,33 +248,40 @@ def check_docker() -> CheckResult:
     return CheckResult(status=status, name="Docker", message=" + ".join(parts), fix_suggestion=fix)
 
 
-def check_holoscan() -> CheckResult:
-    """Check Holoscan SDK availability"""
+def _find_local_sdk() -> tuple[Optional[Path], bool]:
+    """Return the local SDK that env-check reports, and whether it was resolved
+    below ``HOLOSCAN_SDK_ROOT`` rather than at it."""
     sdk_root = os.environ.get("HOLOSCAN_SDK_ROOT")
     if sdk_root:
         root_path = Path(sdk_root)
         if root_path.exists() and is_valid_sdk_directory(root_path):
-            version = get_sdk_version(root_path)
-            return CheckResult(status="OK", name="Holoscan", message=f"SDK {version} at {sdk_root}")
+            return root_path, False
         if root_path.exists():
             resolved = find_hsdk_dir(root_path)
             resolved_path = (
                 root_path / resolved if not Path(resolved).is_absolute() else Path(resolved)
             )
             if resolved_path.exists() and is_valid_sdk_directory(resolved_path):
-                version = get_sdk_version(resolved_path)
-                return CheckResult(
-                    status="OK",
-                    name="Holoscan",
-                    message=f"SDK {version} at {resolved_path} (via HOLOSCAN_SDK_ROOT)",
-                )
+                return resolved_path, True
 
-    sdk_dir = default_local_sdk_dir()
-    sdk_path = Path(sdk_dir)
+    sdk_path = Path(default_local_sdk_dir())
     if sdk_path.exists() and is_valid_sdk_directory(sdk_path):
-        version = get_sdk_version(sdk_path)
-        return CheckResult(status="OK", name="Holoscan", message=f"SDK {version} at {sdk_dir}")
+        return sdk_path, False
+    return None, False
 
+
+def check_holoscan() -> CheckResult:
+    """Check Holoscan SDK availability"""
+    sdk_path, via_sdk_root = _find_local_sdk()
+    if sdk_path is not None:
+        version = get_sdk_version(sdk_path)
+        suffix = " (via HOLOSCAN_SDK_ROOT)" if via_sdk_root else ""
+        return CheckResult(
+            status="OK", name="Holoscan", message=f"SDK {version} at {sdk_path}{suffix}"
+        )
+
+    sdk_root = os.environ.get("HOLOSCAN_SDK_ROOT")
+    sdk_dir = default_local_sdk_dir()
     searched = sdk_dir
     if "HOLOSCAN_CLI_DEFAULT_HSDK_DIR" not in os.environ:
         searched = f"{DEFAULT_LOCAL_SDK_DIR}, {LEGACY_LOCAL_SDK_DIR}"
@@ -291,12 +299,20 @@ def check_holoscan_python() -> CheckResult:
     """Check if the Holoscan Python package is importable and report its location.
 
     Runs ``python3 -c "import holoscan"`` in a subprocess so a failed import
-    (e.g. missing libcudart) does not crash the CLI itself.
+    (e.g. missing libcudart) does not crash the CLI itself. Like local
+    ``holoscan run``, the local SDK's Python paths are appended to ``PYTHONPATH``.
     """
     snippet = "import holoscan; " "print(holoscan.__version__); " "print(holoscan.__file__)"
+    env = os.environ.copy()
+    sdk_path, _ = _find_local_sdk()
+    if sdk_path is not None:
+        env["PYTHONPATH"] = os.pathsep.join(
+            p for p in [env.get("PYTHONPATH", ""), *get_sdk_python_paths(sdk_path)] if p
+        )
     try:
         proc = subprocess.run(
             [sys.executable, "-c", snippet],
+            env=env,
             capture_output=True,
             text=True,
             timeout=15,
