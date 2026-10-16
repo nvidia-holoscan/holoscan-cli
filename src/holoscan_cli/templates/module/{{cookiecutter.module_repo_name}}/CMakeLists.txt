@@ -60,6 +60,13 @@ if(NOT DEFINED {{ cookiecutter.module_slug | upper }}_BUILD_TESTING)
     endif()
 endif()
 
+# Application languages. The Holoscan CLI sets these from --language or the
+# application's metadata.json; a plain CMake build includes every language.
+{%- if cookiecutter.language == 'cpp' %}
+option(HOLOSCAN_{{ cookiecutter.module_slug | upper }}_BUILD_CPP "Build C++ applications" ON)
+{%- endif %}
+option(HOLOSCAN_{{ cookiecutter.module_slug | upper }}_BUILD_PYTHON "Build Python applications" ON)
+
 # ---------------------------------------------------------------------------
 # Python package root in the build tree.
 # PYTHONPATH=${{'{'}}{{ cookiecutter.module_slug | upper }}_PYTHON_ROOT} lets Python find
