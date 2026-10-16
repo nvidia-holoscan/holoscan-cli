@@ -68,6 +68,8 @@ A change is done when `holoscan lint`, the build, and `holoscan test` pass.
   `pkg/{{ cookiecutter.module_repo_name }}/CMakeLists.txt`.
 - Operator ports or parameters: the operator's `metadata.json`, the tests, and the operator table in
   README.md.
+- Operator languages: the operator's `metadata.json` and `module.language` in the root
+  `metadata.json`.
 - Third-party dependencies: `NOTICE`, which lists each one with its version and license.
 
 `cmake/` holds CMake helpers that `holoscan create` copied from the CLI. They belong to this Module,

@@ -34,6 +34,14 @@ def _args(**overrides) -> argparse.Namespace:
     return argparse.Namespace(**values)
 
 
+def _validate_generated_metadata(project: Path) -> None:
+    script = project / ".github/workflows/scripts/validate_metadata.py"
+    result = subprocess.run(
+        [sys.executable, str(script)], capture_output=True, text=True, check=False
+    )
+    assert result.returncode == 0, result.stderr
+
+
 @pytest.fixture()
 def cli(tmp_path):
     return SimpleNamespace(HOLOHUB_ROOT=tmp_path, script_name="holoscan")
@@ -319,7 +327,12 @@ def test_packaged_template_generates_python_bindings_for_cpp_python(cli, tmp_pat
     assert 'target-version = "py312"' in pyproject
     module = json.loads((project / "metadata.json").read_text(encoding="utf-8"))["module"]
     assert module["language"] == ["C++", "Python"]
+    operator = json.loads(
+        (project / "operators/my_mod_op/metadata.json").read_text(encoding="utf-8")
+    )["operator"]
+    assert operator["language"] == ["C++", "Python"]
     assert module["namespace"] == {"cpp": "holoscan::my_mod", "python": "holoscan_my_mod"}
+    _validate_generated_metadata(project)
     apps = {
         lang: json.loads(
             (project / f"applications/my_mod_pipeline/{lang}/metadata.json").read_text(
@@ -444,11 +457,16 @@ def test_packaged_template_creates_a_standalone_module(cli, tmp_path, monkeypatc
     assert "EXPORT_NAME my_mod" in root_cmake
     assert "install(TARGETS holoscan_my_mod" in root_cmake
     assert metadata["module"]["language"] == ["C++"]
+    operator = json.loads(
+        (project / "operators/my_mod_op/metadata.json").read_text(encoding="utf-8")
+    )["operator"]
+    assert operator["language"] == ["C++"]
     assert metadata["module"]["namespace"] == {"cpp": "holoscan::my_mod"}
     assert metadata["module"]["holoscan_sdk"]["minimum_required_version"] == "5.0.0"
     assert metadata["module"]["support_level"] == "community"
     assert "pypi" not in metadata["module"]["binary_packages"]
     assert metadata["module"]["dependencies"] == []
+    _validate_generated_metadata(project)
     assert '"provides_operators": ["FrameCounterOp"]' in developer
     assert "HOLOSCAN_CLI_LOCAL_HOLOSCAN_EXAMPLE_UTILS" in developer
     assert "target_link_libraries(my_mod_op PUBLIC holoscan::frame_counter)" in developer
@@ -518,6 +536,30 @@ def test_packaged_template_creates_a_standalone_module(cli, tmp_path, monkeypatc
     assert "build 'holoscan-my-mod' if its dev hook is not staged" in preview.stdout
     assert "holoscan install --dev --local --dryrun" in preview.stdout
     assert not (project / "build").exists()
+
+
+def test_generated_metadata_check_rejects_an_undeclared_operator_language(
+    cli, tmp_path, monkeypatch
+):
+    pytest.importorskip("cookiecutter")
+    monkeypatch.setattr(create, "_initialize_module_git", lambda _path: False)
+    create.handle_create(cli, _args(dryrun=False, directory=tmp_path / "output"))
+    project = tmp_path / "output/holoscan-my-mod"
+    operator_path = project / "operators/my_mod_op/metadata.json"
+    metadata = json.loads(operator_path.read_text(encoding="utf-8"))
+    metadata["operator"]["language"] = ["C++", "Python"]
+    operator_path.write_text(json.dumps(metadata), encoding="utf-8")
+
+    script = project / ".github/workflows/scripts/validate_metadata.py"
+    result = subprocess.run(
+        [sys.executable, str(script)], capture_output=True, text=True, check=False
+    )
+
+    assert result.returncode == 1
+    assert (
+        "metadata.json: module.language lacks 'Python', "
+        "declared by operators/my_mod_op/metadata.json"
+    ) in result.stderr
 
 
 def test_generated_module_exports_a_linkable_aggregate(cli, tmp_path, monkeypatch):
