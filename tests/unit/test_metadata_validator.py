@@ -30,6 +30,29 @@ from holoscan_cli.metadata import metadata_validator
 # ---- validate_json ----------------------------------------------------------
 
 
+def _valid_application_metadata():
+    return {
+        "name": "Smoke Test App",
+        "authors": [{"name": "Holoscan CLI Maintainers", "affiliation": "NVIDIA"}],
+        "version": "0.0.1",
+        "changelog": {"0.0.1": "Initial test metadata."},
+        "holoscan_sdk": {
+            "minimum_required_version": "2.5.0",
+            "tested_versions": ["2.5.0"],
+        },
+        "platforms": ["x86_64"],
+        "tags": ["smoke", "test"],
+        "ranking": 4,
+        "requirements": {},
+        "modes": {
+            "smoke": {
+                "description": "Run the smoke check.",
+                "run": {"command": "true", "workdir": "<holohub_root>"},
+            }
+        },
+    }
+
+
 def test_validate_json_accepts_minimal_package_metadata():
     # The package schema has no required fields on the `package` object;
     # any well-formed dict passes.
@@ -45,6 +68,37 @@ def test_validate_json_rejects_violations():
     # `msg` here is a `jsonschema.exceptions.ValidationError`; str-ifying
     # it gives the violation summary.
     assert "required" in str(msg).lower() or "validation" in str(msg).lower()
+
+
+@pytest.mark.parametrize("ci_mode", ["smoke-test", "1_smoke"])
+def test_validate_json_rejects_invalid_ci_mode_name(ci_mode):
+    application = _valid_application_metadata()
+    application["ci_mode"] = ci_mode
+
+    ok, msg = metadata_validator.validate_json({"application": application}, "applications")
+
+    assert ok is False
+    assert "does not match" in str(msg)
+
+
+def test_validate_json_accepts_ci_mode_with_modes():
+    application = _valid_application_metadata()
+    application["ci_mode"] = "smoke"
+
+    ok, msg = metadata_validator.validate_json({"application": application}, "applications")
+
+    assert ok is True, msg
+
+
+def test_validate_json_rejects_ci_mode_without_modes():
+    application = _valid_application_metadata()
+    application["ci_mode"] = "smoke"
+    del application["modes"]
+
+    ok, msg = metadata_validator.validate_json({"application": application}, "applications")
+
+    assert ok is False
+    assert "modes" in str(msg)
 
 
 def test_validate_json_rejects_invalid_schema_file(tmp_path, monkeypatch):
