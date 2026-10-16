@@ -34,7 +34,7 @@ from holoscan_cli.utils.holohub import (
     is_env_request_local_build,
 )
 from holoscan_cli.utils.io import format_cmd, run_command
-from holoscan_cli.utils.project import report_effective_configuration
+from holoscan_cli.utils.project import language_cmake_args, report_effective_configuration
 from holoscan_cli.utils.sdk import (
     get_sdk_cmake_prefix_path,
     get_sdk_python_paths,
@@ -199,10 +199,13 @@ def handle_test(cli, args: argparse.Namespace) -> None:
             "one.' >&2; xvfb_cmd=''; fi; ${xvfb_cmd} "
         )
     ctest_cmd = f'{xvfb}ctest -DCTEST_SOURCE_DIRECTORY="$PWD" '
+    module_name = None
     if args.project:
         project_metadata = container.project_metadata or {}
         project_name = project_metadata.get("project_name", args.project)
         project_type = project_metadata.get("project_type", "application")
+        if project_type == "module":
+            module_name = project_name
         proj_prefix = determine_project_prefix(project_type)
         ctest_cmd += f"-D{proj_prefix}={project_name} "
     ctest_cmd += f"-DTAG={tag} "
@@ -213,15 +216,8 @@ def handle_test(cli, args: argparse.Namespace) -> None:
         configure_opts.extend(args.cmake_options)
 
     # Respect language selection by toggling build flags
-    normalized_lang = None
     if hasattr(args, "language") and args.language:
-        normalized_lang = normalize_language(args.language)
-        if normalized_lang == "python":
-            configure_opts.append("-DHOLOHUB_BUILD_PYTHON=ON")
-            configure_opts.append("-DHOLOHUB_BUILD_CPP=OFF")
-        elif normalized_lang == "cpp":
-            configure_opts.append("-DHOLOHUB_BUILD_PYTHON=OFF")
-            configure_opts.append("-DHOLOHUB_BUILD_CPP=ON")
+        configure_opts.extend(language_cmake_args(normalize_language(args.language), module_name))
 
     if configure_opts:
         cmake_opts = ";".join(configure_opts)

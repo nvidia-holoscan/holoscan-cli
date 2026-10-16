@@ -309,6 +309,11 @@ def test_packaged_template_generates_python_bindings_for_cpp_python(cli, tmp_pat
     assert "nanobind_add_module(my_mod_python NB_STATIC STABLE_ABI" in python_cmake
     assert "COMPONENT ${_component} EXCLUDE_FROM_ALL" in python_cmake
     assert "set(HOLOSCAN_MY_MOD_BUILD_PYTHON ON\n" in root_cmake
+    assert "option(HOLOSCAN_MY_MOD_BUILD_PYTHON" not in root_cmake
+    assert 'option(HOLOSCAN_MY_MOD_BUILD_CPP "Build C++ applications" ON)' in root_cmake
+    assert "if(HOLOSCAN_MY_MOD_BUILD_CPP)\n    add_subdirectory(cpp)\nendif()" in (
+        project / "applications/my_mod_pipeline/CMakeLists.txt"
+    ).read_text(encoding="utf-8")
     assert "if(PROJECT_IS_TOP_LEVEL AND NOT PKG_holoscan_my_mod)" in root_cmake
     assert root_cmake.index("find_package(Python 3.12") < root_cmake.index(
         "add_subdirectory(tests)"
@@ -406,6 +411,9 @@ def test_packaged_template_creates_a_standalone_module(cli, tmp_path, monkeypatc
     pyproject = (project / "pyproject.toml").read_text(encoding="utf-8")
     dockerfile = (project / "Dockerfile").read_text(encoding="utf-8")
     readme = (project / "README.md").read_text(encoding="utf-8")
+    app_cmake = (project / "applications/my_mod_pipeline/CMakeLists.txt").read_text(
+        encoding="utf-8"
+    )
     active_requirements = [
         line for line in requirement.splitlines() if line and not line.startswith("#")
     ]
@@ -500,6 +508,9 @@ def test_packaged_template_creates_a_standalone_module(cli, tmp_path, monkeypatc
     assert "--extra-index-url https://pypi.nvidia.com" in dockerfile
     assert "python3 -m venv .venv" in readme
     assert "uv run holoscan" in readme
+    assert 'option(HOLOSCAN_MY_MOD_BUILD_CPP "Build C++ applications" ON)' in root_cmake
+    assert "HOLOSCAN_MY_MOD_BUILD_PYTHON" not in root_cmake
+    assert "if(HOLOSCAN_MY_MOD_BUILD_CPP)\n    add_subdirectory(cpp)\nendif()" in app_cmake
     assert not (project / "holohub").exists()
     assert not (project / "holoscan").exists()
 

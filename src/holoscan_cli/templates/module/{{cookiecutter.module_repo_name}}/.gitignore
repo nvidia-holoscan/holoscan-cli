@@ -2,6 +2,11 @@
 build/
 .cmake/
 
+# `holoscan test` build trees and `holoscan package` outputs
+build-*/
+_CPack_Packages/
+*.deb
+
 # Caller-owned Python environments
 .venv/
 

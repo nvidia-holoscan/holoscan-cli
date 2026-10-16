@@ -80,6 +80,10 @@ if(HOLOSCAN_{{ cookiecutter.module_slug | upper }}_BUILD_PYTHON)
 endif()
 {%- endif %}
 
+# Application languages. The Holoscan CLI sets these from --language or the
+# application's metadata.json; a plain CMake build includes every language.
+option(HOLOSCAN_{{ cookiecutter.module_slug | upper }}_BUILD_CPP "Build C++ applications" ON)
+
 # ---------------------------------------------------------------------------
 # CMake helpers
 # ---------------------------------------------------------------------------

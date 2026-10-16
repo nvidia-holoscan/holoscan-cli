@@ -53,6 +53,7 @@ def test_module_discovery_and_activation(tmp_path, monkeypatch):
     context = discover_project_context(cwd=descendant, environ={})
 
     assert context.root == root
+    assert context.module_name == "holoscan-my-sensor"
     assert context.repo_prefix == "my_sensor"
     assert context.base_sdk_version == "4.6.0"
     assert context.forward_env == ()

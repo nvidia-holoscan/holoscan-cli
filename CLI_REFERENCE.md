@@ -113,6 +113,20 @@ omit it to build the default target. For example:
 holoscan build my_app --target my_target
 ```
 
+`build` and `test` pass the selected language to CMake: `build` uses
+`--language` or the project's metadata, and `test` uses `--language`. In a
+Module, or for a Module selected in a HoloHub checkout, these options start
+with `module.name` in upper case, with each character other than a letter or
+digit replaced by `_`. For `holoscan-my-sensor`, `--language python` passes
+`-DHOLOSCAN_MY_SENSOR_BUILD_PYTHON=ON -DHOLOSCAN_MY_SENSOR_BUILD_CPP=OFF`.
+HoloHub projects read `HOLOHUB_BUILD_PYTHON` and `HOLOHUB_BUILD_CPP`. Modules
+still receive these too, but should read their own names; a later release will
+stop passing the HoloHub names to Modules. Other CMake variables keep their
+HoloHub names: the bundled CMake helpers read `HOLOHUB_BUILD_OPERATORS` (from
+`--build-with`), `HOLOHUB_PYTHON_MODULE_OUT_DIR`, and
+`HOLOHUB_EXT_OP_<op>_PROVIDER`, and HoloHub applications read the data folder
+from `HOLOHUB_DATA_DIR`.
+
 Only `run-container` accepts a command after `--`. With its normal shell
 entrypoint, quote a multi-argument or compound command as one argument:
 

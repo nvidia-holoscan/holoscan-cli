@@ -5,4 +5,7 @@
 # its own metadata.json so the Holoscan CLI can discover and run it
 # (e.g. `holoscan run {{ cookiecutter.module_slug }}_pipeline`). Holoscan SDK 5.0
 # is C++-first; a Python implementation returns in a later release.
-add_subdirectory(cpp)
+# The language options in the root CMakeLists.txt select which ones build.
+if(HOLOSCAN_{{ cookiecutter.module_slug | upper }}_BUILD_CPP)
+    add_subdirectory(cpp)
+endif()

@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import re
 from collections.abc import Mapping
 from pathlib import Path
 from typing import TYPE_CHECKING, Optional, cast
@@ -89,6 +90,34 @@ def append_configure_args(command: list[str], args: argparse.Namespace) -> None:
     """Propagate additive CMake options across container recursion."""
     for value in getattr(args, "configure_args", None) or []:
         command.append(f"--configure-args={value}")
+
+
+def language_cmake_args(language: str, module_name: Optional[str] = None) -> list[str]:
+    """Return CMake options that select the C++ or Python build.
+
+    HoloHub projects read ``HOLOHUB_BUILD_CPP`` and ``HOLOHUB_BUILD_PYTHON``.
+    A Module also gets the same options prefixed with its ``module.name`` in
+    upper case, with other characters replaced by ``_``, such as
+    ``HOLOSCAN_MY_SENSOR_BUILD_CPP`` for ``holoscan-my-sensor``. Pass
+    ``module_name`` when the selected project is a Module, such as one in a
+    HoloHub ``modules/`` folder; otherwise the active Module project is used.
+    """
+    if language not in ("cpp", "python"):
+        return []
+    from holoscan_cli.project_context import get_active_project_context
+
+    prefixes = ["HOLOHUB"]
+    if not module_name:
+        context = get_active_project_context()
+        if context is not None and context.is_module:
+            module_name = context.module_name
+    if module_name:
+        prefixes.append(re.sub(r"[^A-Z0-9]", "_", module_name.upper()))
+    return [
+        f"-D{prefix}_BUILD_{name}={'ON' if language == value else 'OFF'}"
+        for prefix in prefixes
+        for name, value in (("PYTHON", "python"), ("CPP", "cpp"))
+    ]
 
 
 def _explicit_environment_value(name: str) -> Optional[str]:
