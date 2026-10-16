@@ -13,6 +13,7 @@ from argparse import Namespace
 
 import pytest
 
+from holoscan_cli import project_context
 from holoscan_cli.cli import HoloscanCLI
 from holoscan_cli.commands import build as build_cmd
 from holoscan_cli.commands import containers as containers_cmd
@@ -20,6 +21,7 @@ from holoscan_cli.commands import install as install_cmd
 from holoscan_cli.commands import package as package_cmd
 from holoscan_cli.commands import run as run_cmd
 from holoscan_cli.commands import test_cmd
+from holoscan_cli.project_context import ProjectContext
 
 
 class RecordingContainer:
@@ -845,6 +847,60 @@ def test_handle_install_container_branch_passes_recursive_local_command(tmp_path
     assert "--parallel 4" in command
     assert "--configure-args=-DDEV=ON" in command
     assert cli.container.run_calls[0]["extra_args"] == ["-c", command]
+
+
+def test_build_and_test_pass_module_language_options(tmp_path, monkeypatch):
+    context = ProjectContext(
+        root=tmp_path, kind="module", discovery="cwd", module_name="holoscan-my-sensor"
+    )
+    monkeypatch.setattr(project_context, "get_active_project_context", lambda: context)
+    cli = RecordingCLI(tmp_path)
+    calls = []
+    monkeypatch.setattr(build_cmd, "run_command", lambda cmd, **kwargs: calls.append(cmd))
+    monkeypatch.setattr(build_cmd.shutil, "which", lambda name: None)
+
+    build_cmd.build_project_locally(cli, "smoke_app", language="cpp", dryrun=True)
+    test_cmd.handle_test(cli, _container_args(no_xvfb=True, language="cpp"))
+
+    expected = [
+        "-DHOLOHUB_BUILD_PYTHON=OFF",
+        "-DHOLOHUB_BUILD_CPP=ON",
+        "-DHOLOSCAN_MY_SENSOR_BUILD_PYTHON=OFF",
+        "-DHOLOSCAN_MY_SENSOR_BUILD_CPP=ON",
+    ]
+    assert all(option in calls[0] for option in expected)
+    ctest_command = cli.container.run_calls[0]["extra_args"][1]
+    assert f'-DCONFIGURE_OPTIONS="{";".join(expected)}"' in ctest_command
+
+
+def test_build_and_test_pass_language_options_for_module_in_source_tree(tmp_path, monkeypatch):
+    context = ProjectContext(root=tmp_path, kind="source", discovery="cwd")
+    monkeypatch.setattr(project_context, "get_active_project_context", lambda: context)
+    module = {
+        "project_name": "holoscan-my-sensor",
+        "project_type": "module",
+        "source_folder": tmp_path / "repo/modules/holoscan-my-sensor",
+        "metadata": {"language": "cpp"},
+    }
+    cli = RecordingCLI(tmp_path, project_data=module)
+    calls = []
+    monkeypatch.setattr(build_cmd, "run_command", lambda cmd, **kwargs: calls.append(cmd))
+    monkeypatch.setattr(build_cmd.shutil, "which", lambda name: None)
+
+    build_cmd.build_project_locally(cli, "holoscan-my-sensor", language="python", dryrun=True)
+    test_cmd.handle_test(
+        cli, _container_args(project="holoscan-my-sensor", no_xvfb=True, language="python")
+    )
+
+    expected = [
+        "-DHOLOHUB_BUILD_PYTHON=ON",
+        "-DHOLOHUB_BUILD_CPP=OFF",
+        "-DHOLOSCAN_MY_SENSOR_BUILD_PYTHON=ON",
+        "-DHOLOSCAN_MY_SENSOR_BUILD_CPP=OFF",
+    ]
+    assert all(option in calls[0] for option in expected)
+    ctest_command = cli.container.run_calls[0]["extra_args"][1]
+    assert f'-DCONFIGURE_OPTIONS="{";".join(expected)}"' in ctest_command
 
 
 def test_handle_test_container_adds_coverage_build_args_and_ctest_options(tmp_path):

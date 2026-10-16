@@ -94,6 +94,7 @@ class ProjectContext:
     container_prefix: Optional[str] = None
     workspace_name: Optional[str] = None
     application_name: Optional[str] = None
+    module_name: Optional[str] = None
 
     @property
     def is_module(self) -> bool:
@@ -540,6 +541,7 @@ def _build_module_context(
         root=root,
         kind="module",
         discovery=discovery,
+        module_name=descriptor["name"].strip(),
         repo_prefix=profile.get("repo_prefix", derived_repo_prefix),
         container_prefix=profile.get("container_prefix"),
         workspace_name=profile.get("workspace_name"),

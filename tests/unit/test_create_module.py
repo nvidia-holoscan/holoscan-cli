@@ -231,6 +231,10 @@ def test_packaged_template_creates_a_standalone_module(
     deb_cmake = (project / "pkg/holoscan-my-mod/CMakeLists.txt").read_text(encoding="utf-8")
     deb_readme = (project / "pkg/holoscan-my-mod/README.md").read_text(encoding="utf-8")
     ci_workflow = (project / ".github/workflows/ci.yml").read_text(encoding="utf-8")
+    root_cmake = (project / "CMakeLists.txt").read_text(encoding="utf-8")
+    app_cmake = (project / "applications/my_mod_pipeline/CMakeLists.txt").read_text(
+        encoding="utf-8"
+    )
     active_requirements = [
         line for line in requirement.splitlines() if line and not line.startswith("#")
     ]
@@ -261,6 +265,12 @@ def test_packaged_template_creates_a_standalone_module(
     assert "tr ',' '\\n'" in ci_workflow
     assert '"holoscan-cuda-13 (>= 4.5.0)"' in ci_workflow
     assert 'apt-get install -y "./$package"' in ci_workflow
+    assert 'option(HOLOSCAN_MY_MOD_BUILD_PYTHON "Build Python applications" ON)' in root_cmake
+    assert ("option(HOLOSCAN_MY_MOD_BUILD_CPP" in root_cmake) is (language == "cpp")
+    assert "if(HOLOSCAN_MY_MOD_BUILD_PYTHON)\n    add_subdirectory(python)\nendif()" in app_cmake
+    assert ("if(HOLOSCAN_MY_MOD_BUILD_CPP)\n    add_subdirectory(cpp)" in app_cmake) is (
+        language == "cpp"
+    )
     assert not (project / "holohub").exists()
     assert not (project / "holoscan").exists()
 

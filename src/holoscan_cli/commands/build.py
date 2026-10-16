@@ -55,6 +55,7 @@ from holoscan_cli.utils.holohub import (
 from holoscan_cli.utils.io import fatal, info, run_command, warn
 from holoscan_cli.utils.project import (
     append_configure_args,
+    language_cmake_args,
     report_effective_configuration,
     resolve_effective_build_type,
 )
@@ -425,12 +426,12 @@ def build_project_locally(
     if not language:
         language = normalize_language(project_data.get("metadata", {}).get("language", None))
     # Set build flags based on language
-    if language == "python":
-        resolved_cmake_args.append("-DHOLOHUB_BUILD_PYTHON=ON")
-        resolved_cmake_args.append("-DHOLOHUB_BUILD_CPP=OFF")
-    elif language == "cpp":
-        resolved_cmake_args.append("-DHOLOHUB_BUILD_PYTHON=OFF")
-        resolved_cmake_args.append("-DHOLOHUB_BUILD_CPP=ON")
+    resolved_cmake_args.extend(
+        language_cmake_args(
+            language,
+            project_data.get("project_name", project_name) if project_type == "module" else None,
+        )
+    )
 
     # Configure sccache
     sccache_bin = shutil.which("sccache")
