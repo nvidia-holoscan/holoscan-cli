@@ -79,6 +79,7 @@ and you can edit them. Upgrading the CLI does not update them; update them by ha
   options you intend to run. Read-only commands (`version`, `list`, `modes`, `env-info`,
   `env-check`, `status`) need no preview.
 - **Always** run `holoscan lint` and `holoscan test` before committing.
+- **Always** sign off commits with `git commit -s` (Developer Certificate of Origin).
 - **Ask first** before changing the SDK version, base images, or CLI pin, and before renaming the
   Module, its namespace, package, or operators.
 - **Ask first** before running anything that needs `sudo` or changes the host, such as `apt` or
