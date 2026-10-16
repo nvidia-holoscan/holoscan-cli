@@ -101,6 +101,11 @@ set_target_properties(holoscan_{{ cookiecutter.module_slug }} PROPERTIES
 install(TARGETS holoscan_{{ cookiecutter.module_slug }}
     EXPORT holoscan_{{ cookiecutter.module_slug }}_targets)
 
+# Every install and package carries the license and third-party notices.
+include(GNUInstallDirs)
+install(FILES LICENSE NOTICE
+    DESTINATION "${CMAKE_INSTALL_DATAROOTDIR}/doc/{{ cookiecutter.module_repo_name }}")
+
 # ---------------------------------------------------------------------------
 # Subprojects
 # ---------------------------------------------------------------------------

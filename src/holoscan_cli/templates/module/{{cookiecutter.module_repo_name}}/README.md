@@ -150,4 +150,4 @@ hardware. Extend the test doubles and assertions as your operator grows.
 
 ## License
 
-{{ cookiecutter._license }} — see [LICENSE](LICENSE).
+{{ cookiecutter._license }} — see [LICENSE](LICENSE). Third-party software is listed in [NOTICE](NOTICE).

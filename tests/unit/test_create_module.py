@@ -295,6 +295,9 @@ def test_packaged_template_generates_python_bindings_for_cpp_python(cli, tmp_pat
         '                           "holoscan.my_mod.MyModOp");'
     ) in extension
     assert "NB_MODULE(_my_mod, module)" in extension
+    assert "nanobind (https://github.com/wjakob/nanobind)" in (project / "NOTICE").read_text(
+        encoding="utf-8"
+    )
     assert "nanobind_add_module(my_mod_python NB_STATIC STABLE_ABI" in python_cmake
     assert "COMPONENT ${_component} EXCLUDE_FROM_ALL" in python_cmake
     assert "set(HOLOSCAN_MY_MOD_BUILD_PYTHON ON\n" in root_cmake
@@ -412,8 +415,13 @@ def test_packaged_template_creates_a_standalone_module(cli, tmp_path, monkeypatc
     deb = (project / "pkg/holoscan-my-mod/CMakeLists.txt").read_text(encoding="utf-8")
     developer = (project / "DEVELOPER.md").read_text(encoding="utf-8")
     agents = (project / "AGENTS.md").read_text(encoding="utf-8")
+    notice = (project / "NOTICE").read_text(encoding="utf-8")
 
     assert (project / "cmake/HoloHubConfigHelpers.cmake").is_file()
+    assert notice.startswith("My Mod\nCopyright (c) ")
+    assert "GoogleTest (https://github.com/google/googletest)" in notice
+    assert "nanobind" not in notice
+    assert "[NOTICE](NOTICE)" in readme
     assert (project / "tests/cpp/test_operators.cpp").is_file()
     for removed in (
         "operators/my_mod_op/my_mod_op.py",
@@ -461,6 +469,7 @@ def test_packaged_template_creates_a_standalone_module(cli, tmp_path, monkeypatc
         pyproject,
         dockerfile,
         agents,
+        notice,
     ):
         assert "{{" not in text and "{%" not in text
     assert active_requirements == [f"holoscan-cli=={create.__version__}"]
@@ -583,6 +592,21 @@ def test_generated_module_exports_a_linkable_aggregate(cli, tmp_path, monkeypatc
     assert 'set(CPACK_PACKAGING_INSTALL_PREFIX "/usr")' in cpack
     run(cmake, "--build", str(build))
     run(cmake, "--install", str(build), "--prefix", str(prefix))
+    for name in ("LICENSE", "NOTICE"):
+        assert (prefix / "share/doc/holoscan-my-mod" / name).is_file(), name
+    cpack = shutil.which("cpack")
+    if cpack and shutil.which("dpkg-deb"):
+        run(
+            cpack,
+            "--config",
+            str(build / "pkg/CPackConfig-holoscan-my-mod.cmake"),
+            "-B",
+            str(build),
+        )
+        (deb,) = build.glob("holoscan-my-mod_*.deb")
+        contents = subprocess.check_output(["dpkg-deb", "-c", str(deb)], text=True)
+        for name in ("LICENSE", "NOTICE"):
+            assert f"./usr/share/doc/holoscan-my-mod/{name}\n" in contents, name
     consumer = tmp_path / "consumer"
     consumer.mkdir()
     (consumer / "CMakeLists.txt").write_text(
