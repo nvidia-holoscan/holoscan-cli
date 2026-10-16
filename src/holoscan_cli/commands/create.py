@@ -43,7 +43,8 @@ from holoscan_cli.utils.text import parse_key_value_pairs, to_snake_case
 LEGACY_MODULE_TEMPLATE = Path("modules/template")
 CREATE_TEMPLATE_ENV = "HOLOSCAN_CLI_CREATE_TEMPLATE"
 LOCAL_SOURCE_VERSION = "0.0.0+local"
-RESERVED_CONTEXT_KEYS = {"_holoscan_cli_version"}
+RESERVED_CONTEXT_KEYS = {"_holoscan_cli_version", "__python_bindings"}
+LANGUAGES = ("cpp", "python")
 PRESERVED_DESTINATION_ENTRIES = {".git"}
 
 
@@ -55,7 +56,7 @@ def register_create_parser(cli, subparsers) -> argparse.ArgumentParser:
     an explicit ``--template`` always wins.
     """
     parser = subparsers.add_parser("create", help=help_for("create"))
-    parser.add_argument("project", help="Name of the project to create")
+    parser.add_argument("project", nargs="?", help="Name of the project to create")
     parser.add_argument(
         "--template",
         default=None,
@@ -67,11 +68,16 @@ def register_create_parser(cli, subparsers) -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--language",
-        choices=["cpp", "python"],
-        default="cpp",
+        nargs="+",
+        action="extend",
+        default=None,
+        metavar="{cpp,python}",
         help=(
-            "Programming language for the project. Holoscan SDK 5.0 Modules are C++ only; "
-            "'python' is not available yet and returns in a later release."
+            "Languages for the project (default: cpp). For the packaged Module template, "
+            "'cpp python' (or 'cpp,python') adds Python bindings that expose the C++ operators "
+            "through the Holoscan SDK operator registry; pure-Python Modules return in a later "
+            "release. Custom templates take one language. The project name may come before "
+            "or after --language."
         ),
     )
     parser.add_argument(
@@ -271,8 +277,39 @@ def _select_template(cli, template: Optional[str]) -> tuple[AbstractContextManag
 # ---- handler -----------------------------------------------------------------
 
 
+def _normalize_languages(values: str | list[str] | None) -> list[str]:
+    """Return the sorted, de-duplicated languages from space- or comma-separated values."""
+    if values is None:
+        return ["cpp"]
+    if isinstance(values, str):
+        values = [values]
+    languages = set()
+    for value in values:
+        for token in value.split(","):
+            token = token.strip().lower()
+            if not token:
+                continue
+            if token not in LANGUAGES:
+                fatal(f"Unsupported --language {token!r}; choose from {', '.join(LANGUAGES)}.")
+            languages.add(token)
+    if not languages:
+        fatal(f"--language needs at least one of {', '.join(LANGUAGES)}.")
+    return sorted(languages)
+
+
+def _take_project_from_languages(args: argparse.Namespace) -> None:
+    """Accept the project name after --language values, as in --language cpp my-module."""
+    if args.project is None and isinstance(args.language, list) and args.language:
+        candidate = args.language[-1]
+        if "," not in candidate and candidate.strip().lower() not in LANGUAGES:
+            args.project = args.language.pop()
+    if not args.project:
+        fatal("holoscan create needs a project name, for example: holoscan create my-module")
+
+
 def handle_create(cli, args: argparse.Namespace) -> None:
     """Scaffold a project from the packaged or caller-selected template."""
+    _take_project_from_languages(args)
     template_manager, use_packaged_template = _select_template(cli, args.template)
 
     with template_manager as template_dir:
@@ -297,19 +334,25 @@ def handle_create(cli, args: argparse.Namespace) -> None:
                 "install the checkout into an isolated environment with distribution metadata, "
                 "then retry."
             )
-        # Only the packaged template is C++-only; caller templates keep their
-        # own language support.
-        if use_packaged_template and args.language and args.language.lower() == "python":
+        # The packaged template combines languages; caller templates keep their
+        # own single-language support.
+        languages = _normalize_languages(args.language)
+        if use_packaged_template and languages == ["python"]:
             fatal(
-                "--language python is not available for Holoscan SDK 5.0 Modules: the SDK 5.0 "
-                "operator API is C++-first and Python operator scaffolding returns in a later "
-                "release. Use --language cpp."
+                "--language python is not available for Holoscan SDK 5.0 Modules: pure-Python "
+                "Modules return in a later release. Use --language cpp python to call the "
+                "Module's C++ operators from Python."
+            )
+        if not use_packaged_template and len(languages) > 1:
+            fatal(
+                f"--language {' '.join(languages)} is only supported by the packaged Module "
+                "template; custom templates take one language."
             )
         project_slug = to_snake_case(args.project)
         context = {
             "project_name": args.project,
             "project_slug": project_slug,
-            "language": args.language.lower() if args.language else None,
+            "language": ",".join(languages),
             "year": datetime.datetime.now().year,
             "_holoscan_cli_version": __version__,
         }

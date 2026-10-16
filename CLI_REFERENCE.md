@@ -105,12 +105,64 @@ For dash-leading values, use `=`, for example `--configure-args=-DFEATURE=ON`.
 appends to its CMake options. Docker argument layers are described in
 [configuration](CONFIGURATION.md).
 
+`build --target <name>` configures the project normally, then builds only that
+CMake target and its dependencies. Repeat `--target` to select multiple targets;
+omit it to build the default target. For example:
+
+```bash
+holoscan build my_app --target my_target
+```
+
 Only `run-container` accepts a command after `--`. With its normal shell
 entrypoint, quote a multi-argument or compound command as one argument:
 
 ```bash
 uv run holoscan run-container -- "holoscan list --json"
 ```
+
+## Profile an application
+
+Add `--nsys-profile` to `run` to launch the application under Nsight Systems
+after its build completes. This works in a container or with `--local`:
+
+```bash
+holoscan run my_app --nsys-profile --dryrun --verbose
+holoscan run my_app --nsys-profile
+```
+
+By default, the CLI invokes `nsys profile --trace=cuda,vulkan,nvtx,osrt`.
+Use `--nsys-args` to replace that option list. For NVTX-only tracing without
+CPU sampling, backtraces, or context-switch collection:
+
+```bash
+holoscan run my_app \
+  --nsys-args='--trace=nvtx --sample=none --backtrace=none --cpuctxsw=none -o profile' \
+  --dryrun --verbose
+```
+
+Remove `--dryrun` to capture. `--nsys-args` implies `--nsys-profile`; its
+value is split using shell-style quoting, without shell expansion. An empty
+value (`--nsys-args=''`) supplies no profile options, using Nsight's defaults.
+Use `--run-args` separately for application arguments.
+
+The same options work with downstream wrappers such as `./holohub` and
+`./isaac_os` once their host and container CLI versions include this feature.
+The application's mode, environment, arguments, and working directory are
+preserved. Relative output paths resolve from that working directory; for
+container runs, use a writable mounted path to keep reports on the host.
+Wait for Nsight to finish writing the `.nsys-rep` file after stopping the app.
+Add `--force-overwrite=true` to `--nsys-args` only when replacing an existing
+capture is intended.
+
+Nsight Systems must be installed in the execution environment. Alternatively,
+`--nsys-location /path/to/nsight-systems` mounts a host installation into the
+container at `/opt/nvidia/nsys-host`; an `nsys` already on the container's
+`PATH` takes precedence. Nsight reports permission limitations for the
+requested collectors; the CLI does not change host perf settings.
+
+`run-container --nsys-profile` only adds profiling permissions
+(`--cap-add=SYS_ADMIN`). It does not start profiling or accept `--nsys-args`;
+launch `nsys profile` yourself for commands run directly in that container.
 
 ## Create a module
 
@@ -121,7 +173,13 @@ output parent. A selected application template can have different defaults.
 Choose the SDK minimum explicitly with `--context holoscan_version=<version>`.
 The packaged template defaults to `5.0.0` and rejects older versions; a
 configured base SDK version overrides the default, and explicit context values
-take precedence. See
+take precedence. `--language cpp python` (or `cpp,python`) also generates a
+nanobind extension that registers the module's C++ operators with the SDK
+operator registry, a Python example, and CTest-run pytest suites; the default
+`--language cpp` stays C++ only, and `--language python` alone stays rejected
+until pure-Python modules are supported. The project name may come before or
+after `--language`; a project named after a language, such as `python`, must
+come first. See
 [template defaults](src/holoscan_cli/templates/module/cookiecutter.json) and
 [creation](src/holoscan_cli/commands/create.py). The generated module's
 `README.md` and `DEVELOPER.md` document its implementation and consumer flow,

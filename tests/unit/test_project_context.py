@@ -139,6 +139,7 @@ workspace-name = "sensor_workspace"
 forward-env = ["CI"]
 docker-build-args = ["--build-arg", "PROJECT_FEATURE=ON"]
 docker-run-args = ["--network=host"]
+search-paths = ["examples", "./tools/"]
 
 [tool.holoscan.base-images]
 x86_64 = "example.test/holoscan:fixed"
@@ -157,6 +158,8 @@ x86_64 = "example.test/holoscan:fixed"
     assert context.docker_build_args == "--build-arg PROJECT_FEATURE=ON"
     assert context.docker_run_args == "--network=host"
     assert context.forward_env == ("CI",)
+    assert context.search_paths == ("examples", "tools")
+    assert profile["HOLOSCAN_CLI_SEARCH_PATH"] == "metadata.json,examples,tools"
     assert profile["HOLOSCAN_CLI_DEFAULT_CUDA_VERSION"] == "13"
     assert profile["HOLOSCAN_CLI_CTEST_SCRIPT"] == "ci/container.ctest"
     assert profile["HOLOSCAN_CLI_REPO_PREFIX"] == "sensor_repo"
@@ -199,6 +202,31 @@ def test_module_environment_resolves_4x_sdk_build_tree(tmp_path, monkeypatch, ma
 
 
 @pytest.mark.parametrize(
+    ("triplet", "resolves"),
+    [("aarch64-linux-gnu", True), ("x86_64-linux-gnu", False)],
+)
+def test_module_environment_checks_debian_libdir_for_target_arch(
+    tmp_path, monkeypatch, make_sdk_directory, triplet, resolves
+):
+    root = _module(tmp_path / "module")
+    usr = make_sdk_directory(tmp_path / "usr", libdir=f"lib/{triplet}")
+    monkeypatch.setattr("holoscan_cli.project_context.platform.machine", lambda: "x86_64")
+    monkeypatch.setattr("holoscan_cli.utils.sdk.get_host_arch", lambda: "x86_64")
+
+    context = discover_project_context(
+        cwd=root,
+        environ={"HOLOSCAN_SDK_ROOT": str(usr), "HOLOSCAN_CLI_TARGET_ARCH": "aarch64"},
+    )
+
+    if resolves:
+        assert context.sdk_root == usr.resolve()
+        assert context.sdk_root_source == "HOLOSCAN_SDK_ROOT"
+    else:
+        assert context.sdk_root is None
+        assert any("not a valid SDK directory for aarch64" in w for w in context.warnings)
+
+
+@pytest.mark.parametrize(
     ("pyproject", "error"),
     [
         ("[tool.holoscan]\ncdua = 13\n", "unknown field.*cdua"),
@@ -208,6 +236,10 @@ def test_module_environment_resolves_4x_sdk_build_tree(tmp_path, monkeypatch, ma
         ("[tool.holoscan]\nctest-script = '../container.ctest'\n", "ctest-script"),
         ("[tool.holoscan]\nforward-env = ['HOME']\n", "forward-env"),
         ("[tool.holoscan]\ndocker-run-args = ['']\n", "docker-run-args"),
+        ("[tool.holoscan]\nsearch-paths = 'examples'\n", "search-paths must"),
+        ("[tool.holoscan]\nsearch-paths = []\n", "search-paths must"),
+        ("[tool.holoscan]\nsearch-paths = ['../examples']\n", "search-paths must"),
+        ("[tool.holoscan]\nsearch-paths = ['a,b']\n", "search-paths must"),
         ("[tool.holoscan]\nbase-images = 'x86_64'\n", "base-images must be a table"),
         (
             "[tool.holoscan.base-images]\n"
@@ -221,6 +253,15 @@ def test_module_pyproject_rejects_unsafe_or_unknown_values(tmp_path, pyproject, 
     root = _module(tmp_path / "module", pyproject=pyproject)
 
     with pytest.raises(ProjectContextError, match=error):
+        discover_project_context(cwd=root, environ={})
+
+
+def test_module_search_paths_reject_a_symlink_outside_the_module(tmp_path):
+    root = _module(tmp_path / "module", pyproject="[tool.holoscan]\nsearch-paths = ['examples']\n")
+    (tmp_path / "outside").mkdir()
+    (root / "examples").symlink_to(tmp_path / "outside", target_is_directory=True)
+
+    with pytest.raises(ProjectContextError, match="search-paths must stay within"):
         discover_project_context(cwd=root, environ={})
 
 
@@ -271,3 +312,40 @@ def test_dispatch_activates_module_without_a_runtime_version_gate(tmp_path):
     projects = json.loads(result.stdout)["projects"]
     module = next(project for project in projects if project["project_type"] == "module")
     assert module["source_folder"] == str(root)
+
+
+def test_list_uses_search_paths_and_skips_generated_folders(tmp_path):
+    root = _module(
+        tmp_path / "module",
+        pyproject='[tool.holoscan]\nsearch-paths = ["examples"]\n',
+    )
+    application = json.dumps({"application": {"name": "ex_app"}})
+    for folder in (
+        "examples/ex_app",
+        "operators/ex_op",
+        ".venv/lib/placeholder",
+        "build/ex_app/examples/ex_app",
+    ):
+        (root / folder).mkdir(parents=True)
+        (root / folder / "metadata.json").write_text(application, encoding="utf-8")
+    (root / "build/ex_app/CMakeCache.txt").touch()
+
+    def list_projects(**environment: str) -> list[tuple[str, str]]:
+        result = subprocess.run(
+            [sys.executable, "-m", "holoscan_cli", "--project-root", str(root), "list", "--json"],
+            cwd=tmp_path,
+            env={**_subprocess_env(), **environment},
+            capture_output=True,
+            text=True,
+        )
+        assert result.returncode == 0, result.stderr
+        projects = json.loads(result.stdout)["projects"]
+        return sorted((project["project_type"], project["source_folder"]) for project in projects)
+
+    module = ("module", str(root))
+    example = ("application", str(root / "examples/ex_app"))
+    operator = ("application", str(root / "operators/ex_op"))
+    # search-paths replaces the default folders; the Module itself is always listed.
+    assert list_projects() == [example, module]
+    assert list_projects(HOLOSCAN_CLI_SEARCH_PATH="operators") == [operator, module]
+    assert list_projects(HOLOSCAN_CLI_SEARCH_PATH=".") == [example, operator, module]

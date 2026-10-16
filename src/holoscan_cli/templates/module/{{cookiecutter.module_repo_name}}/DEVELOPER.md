@@ -24,15 +24,52 @@ distributing this Holoscan Module.
 │       └── metadata.json           # Operator-level metadata
 ├── applications/
 │   └── {{ cookiecutter.module_slug }}_pipeline/
-│       └── cpp/                    # C++ pipeline (compose → compile → run) + metadata.json
+│       {% if cookiecutter.__python_bindings == 'yes' %}├{% else %}└{% endif %}── cpp/                    # C++ pipeline (compose → compile → run) + metadata.json
+{%- if cookiecutter.__python_bindings == 'yes' %}
+│       └── python/                 # Python pipeline using the C++ operator + metadata.json
+{%- endif %}
 ├── pkg/{{ cookiecutter.module_repo_name }}/  # Debian package (CPack) configuration
+{%- if cookiecutter.__python_bindings == 'yes' %}
+├── python/                         # nanobind extension + holoscan_{{ cookiecutter.module_slug }} package
+{%- endif %}
 └── tests/
-    └── cpp/                        # GTest suite: compile-plan + SyntheticClock graph tests
+    {% if cookiecutter.__python_bindings == 'yes' %}├{% else %}└{% endif %}── cpp/                        # GTest suite: compile-plan + SyntheticClock graph tests
+{%- if cookiecutter.__python_bindings == 'yes' %}
+    └── python/                     # pytest suite: registry, proxy ports, Python pipeline
+{%- endif %}
 ```
 
+{% if cookiecutter.__python_bindings == 'yes' -%}
+Holoscan SDK 5.0 is C++-first. The C++ operators are the implementation; `python/` adds a
+nanobind extension that registers them with the SDK operator registry when
+`holoscan_{{ cookiecutter.module_slug }}` is imported. Python code then uses the typed registry proxies:
+
+```python
+import holoscan as hs
+from holoscan_{{ cookiecutter.module_slug }}.operators import {{ cookiecutter.operator_slug.split('_')|map('capitalize')|join('') }}
+```
+
+- Register each new operator with `HOLOSCAN_REGISTER_OPERATOR` in
+  `python/_{{ cookiecutter.module_slug }}.cpp` under a `holoscan.{{ cookiecutter.module_slug }}.` name, and link the operator's target to
+  the extension in `python/CMakeLists.txt`.
+- `HOLOSCAN_{{ cookiecutter.module_slug | upper }}_BUILD_PYTHON` (default `ON` when this is the top-level project and `PKG_{{ cookiecutter.module_repo_name.replace('-', '_') }}` is off) builds the extension. It needs Python 3.12+, the SDK's
+  Python package on `PYTHONPATH`, and nanobind 3.0.1, which CMake fetches when it is not
+  installed.
+- `tests/python` runs through CTest (label `python`).
+- The example has a `metadata.json` in both `cpp/` and `python/`, so `holoscan run
+  {{ cookiecutter.module_slug }}_pipeline` takes `--language cpp` or `--language python`. Without `--language`, the CLI picks
+  Python. From a CMake build tree, run `PYTHONPATH=build/python/lib:$PYTHONPATH python3
+  applications/{{ cookiecutter.module_slug }}_pipeline/python/{{ cookiecutter.module_slug }}_pipeline.py`.
+- The package is installed only on request and is not part of the Debian package:
+  `cmake --install build --component {{ cookiecutter.module_repo_name }}-python`.
+- Native installs support `import holoscan_{{ cookiecutter.module_slug }}`. Wheel packaging and the `holoscan.{{ cookiecutter.module_slug }}`
+  alias return in a later release; until then the `pyproject.toml` only provisions
+  development tooling.
+{%- else -%}
 Holoscan SDK 5.0 is C++-first, so this scaffold contains no Python operator, pipeline, or
 binding layer. Python support returns in a later release; until then the `pyproject.toml` only
 provisions development tooling.
+{%- endif %}
 
 ---
 
@@ -76,9 +113,12 @@ Run a lifecycle command with `--verbose` to see what was selected.
 | Command | What it does |
 | --- | --- |
 | `holoscan run-container` | Build and start the development container |
-| `holoscan build {{ cookiecutter.module_slug }}_pipeline` | CMake configure + build inside the container |
-| `holoscan run {{ cookiecutter.module_slug }}_pipeline` | Run the example pipeline |
-| `holoscan test` | Run CTest (C++ unit tests) |
+| `holoscan build {{ cookiecutter.module_slug }}_pipeline{% if cookiecutter.__python_bindings == 'yes' %} --language cpp{% endif %}` | CMake configure + build inside the container |
+| `holoscan run {{ cookiecutter.module_slug }}_pipeline{% if cookiecutter.__python_bindings == 'yes' %} --language cpp{% endif %}` | Run the example pipeline |
+{%- if cookiecutter.__python_bindings == 'yes' %}
+| `holoscan run {{ cookiecutter.module_slug }}_pipeline --language python` | Run the Python example pipeline |
+{%- endif %}
+| `holoscan test` | Run CTest (C++ unit tests{% if cookiecutter.__python_bindings == 'yes' %} and the `tests/python` pytest suite{% endif %}) |
 | `holoscan package {{ cookiecutter.module_repo_name }} --pkg-generator DEB` | Build the Debian package |
 
 The scaffold intentionally ships no launcher wrapper. Projects that need custom environment or
@@ -141,9 +181,12 @@ repository's helper scripts. It does not build a Python package (`[tool.uv].pack
 | `[tool.ruff]` | Lint configuration used by `.pre-commit-config.yaml` and CI |
 
 The supported `[tool.holoscan]` keys are `cuda`, `ctest-script`, `docker-build-args`,
-`docker-run-args`, `forward-env`, and `base-images.{x86_64,aarch64}`. Docker argument arrays
-contain one command token per element. Do not store credentials or machine paths here; use
-`HOLOSCAN_SDK_ROOT` or `--local-sdk-root` for a machine-specific SDK.
+`docker-run-args`, `forward-env`, `search-paths`, and `base-images.{x86_64,aarch64}`.
+Docker argument arrays contain one command token per element. `search-paths` lists the folders
+searched for projects, replacing the defaults (`applications`, `operators`, `pkg`, and other
+conventional folders); for example, `search-paths = ["operators", "examples"]`.
+Do not store credentials or machine paths here; use `HOLOSCAN_SDK_ROOT` or `--local-sdk-root`
+for a machine-specific SDK.
 
 ---
 

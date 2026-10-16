@@ -94,6 +94,8 @@ def make_local_build_command(
         command.append("--verbose")
     if getattr(args, "benchmark", False):
         command.append("--benchmark")
+    for target in getattr(args, "targets", None) or []:
+        command.append(f"--target={target}")
     append_configure_args(command, args)
     return shlex.join(command)
 
@@ -132,6 +134,12 @@ def register_build_parser(
     )
     parser.add_argument(
         "--parallel", help="Number of parallel build jobs (e.g. --parallel $(($(nproc)-1)))"
+    )
+    parser.add_argument(
+        "--target",
+        dest="targets",
+        action="append",
+        help="Build a CMake target instead of the default target; repeat for multiple targets",
     )
     parser.add_argument(
         "--language", choices=["cpp", "python"], help="Specify language implementation"
@@ -203,6 +211,7 @@ def handle_build(cli, args: argparse.Namespace) -> None:
             configure_args=build_args.get("configure_args"),
             extra_env=build_mode_env,
             local_sdk_root=getattr(args, "local_sdk_root", None),
+            targets=getattr(args, "targets", None),
         )
     else:
         # Build in container
@@ -294,6 +303,7 @@ def build_project_locally(
     configure_args: Optional[list[str]] = None,
     extra_env: Optional[dict] = None,
     local_sdk_root: Optional[str | Path] = None,
+    targets: Optional[list[str]] = None,
 ) -> tuple[Path, dict]:
     """Helper to build a project locally (cmake + cmake --build)."""
     project_data = cli.find_project(project_name=project_name, language=language)
@@ -483,6 +493,8 @@ def build_project_locally(
 
     # Build the project with optional parallel jobs
     build_cmd = ["cmake", "--build", str(build_dir), "--config", build_type]
+    if targets:
+        build_cmd.extend(["--target", *targets])
     # Determine the number of parallel jobs (user input > env var > CPU count):
     if parallel is not None:
         build_njobs = str(parallel)
@@ -514,7 +526,7 @@ def build_project_locally(
             info(f"Sccache stats written to {stats_file_rel}")
 
     # If this is a package, run cpack
-    if project_type == "package":
+    if project_type == "package" and not targets:
         pkg_build_dir = build_dir / "pkg"
         if pkg_build_dir.exists():
             for cpack_config in pkg_build_dir.glob("CPackConfig-*.cmake"):

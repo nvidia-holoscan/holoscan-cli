@@ -272,14 +272,34 @@ def get_arch_gpu_str() -> str:
     return arch
 
 
-def get_sdk_version(sdk_path: Path) -> str:
+# Debian multiarch libdirs for the supported architectures (see normalize_arch).
+_DEBIAN_LIBDIR_TRIPLETS = {"x86_64": "x86_64-linux-gnu", "aarch64": "aarch64-linux-gnu"}
+
+
+def get_sdk_lib_dirs(path: Union[str, Path], arch: Optional[str] = None) -> list[Path]:
+    """Return the library directories an SDK installation may use.
+
+    SDK 5 Debian packages install under ``/usr`` with the Debian libdir for the
+    architecture (``lib/x86_64-linux-gnu`` or ``lib/aarch64-linux-gnu``); other
+    installations use ``lib``. The Debian libdir comes first, matching the order
+    in which CMake's ``find_package`` searches. ``arch`` defaults to the host
+    architecture.
+    """
+    lib_dir = Path(path) / "lib"
+    base_arch = normalize_arch(arch or get_host_arch()).partition("-")[0]
+    triplet = _DEBIAN_LIBDIR_TRIPLETS.get(base_arch)
+    return [lib_dir / triplet, lib_dir] if triplet else [lib_dir]
+
+
+def get_sdk_version(sdk_path: Path, arch: Optional[str] = None) -> str:
     """Extract the Holoscan SDK version from an installation or build tree."""
     try:
         version_file = sdk_path / "VERSION"
         if version_file.is_file():
             return version_file.read_text().strip()
 
-        for directory in (sdk_path, sdk_path / "lib" / "cmake" / "holoscan"):
+        config_dirs = [d / "cmake" / "holoscan" for d in get_sdk_lib_dirs(sdk_path, arch)]
+        for directory in (sdk_path, *config_dirs):
             for name in _SDK_VERSION_CONFIG_NAMES:
                 cmake_config = directory / name
                 if cmake_config.is_file():
@@ -291,10 +311,12 @@ def get_sdk_version(sdk_path: Path) -> str:
     return "unknown"
 
 
-def is_valid_sdk_installation(path: Union[str, Path]) -> bool:
+def is_valid_sdk_installation(path: Union[str, Path], arch: Optional[str] = None) -> bool:
     """Return whether a directory contains an installed Holoscan SDK."""
     path = Path(path)
-    return path.is_dir() and _has_sdk_config(path / "lib" / "cmake" / "holoscan")
+    return path.is_dir() and any(
+        _has_sdk_config(lib_dir / "cmake" / "holoscan") for lib_dir in get_sdk_lib_dirs(path, arch)
+    )
 
 
 def is_valid_sdk_build(path: Union[str, Path]) -> bool:
@@ -308,9 +330,9 @@ def _has_sdk_config(path: Path) -> bool:
     return any((path / name).is_file() for name in _SDK_CONFIG_NAMES)
 
 
-def is_valid_sdk_directory(path: Union[str, Path]) -> bool:
+def is_valid_sdk_directory(path: Union[str, Path], arch: Optional[str] = None) -> bool:
     """Return whether a path is a usable Holoscan SDK installation or build tree."""
-    return is_valid_sdk_installation(path) or is_valid_sdk_build(path)
+    return is_valid_sdk_installation(path, arch) or is_valid_sdk_build(path)
 
 
 def default_local_sdk_dir() -> str:
@@ -335,19 +357,21 @@ def get_sdk_cmake_prefix_path(path: Union[str, Path]) -> str:
     return ";".join((str(sdk_path), str(sdk_path / "lib")))
 
 
-def get_sdk_python_paths(path: Union[str, Path]) -> list[str]:
+def get_sdk_python_paths(path: Union[str, Path], arch: Optional[str] = None) -> list[str]:
     """Return the directories that hold an SDK's ``holoscan`` Python package.
 
     SDK 4 installations and SDK build trees use ``python/lib``. SDK 5
-    installations use ``lib/python3.X/site-packages`` (for a system install,
-    ``/usr/lib/python3.12/site-packages``), which Debian's system Python does
-    not search by default.
+    installations that include Python bindings use
+    ``<libdir>/python3.X/site-packages``, where ``<libdir>`` is ``lib`` or the
+    Debian libdir ``lib/<triplet>``. The SDK 5 Debian packages do not include
+    Python bindings.
     """
     sdk_path = Path(path)
     legacy = sdk_path / "python" / "lib"
     site_packages = sorted(
         package.parent
-        for package in sdk_path.glob("lib/python3*/site-packages/holoscan")
+        for lib_dir in get_sdk_lib_dirs(sdk_path, arch)
+        for package in lib_dir.glob("python3*/site-packages/holoscan")
         if package.is_dir()
     )
     paths = ([legacy] if legacy.is_dir() else []) + site_packages
@@ -452,7 +476,11 @@ def _sdk_layout_candidates(
     """Return valid matching SDK directories in compatibility order."""
     target_arch, _, expected_gpu = arch_gpu.partition("-")
     prefer_cuda_qualified = _prefers_cuda_qualified_layout(root)
-    validator = is_valid_sdk_installation if kind == "install" else is_valid_sdk_directory
+    sdk_validator = is_valid_sdk_installation if kind == "install" else is_valid_sdk_directory
+
+    def validator(candidate: Path) -> bool:
+        return sdk_validator(candidate, target_arch)
+
     ranked: list[tuple[tuple[int, int, int, str], Path]] = []
     for root_priority, parent in enumerate((root, root / "public")):
         if allow_generic:
@@ -493,7 +521,7 @@ def _resolve_sdk_path(
         return None
     roots = (resolved, resolved / "public")
     validator = is_valid_sdk_directory if include_build else is_valid_sdk_installation
-    direct = next((root for root in roots if validator(root)), None)
+    direct = next((root for root in roots if validator(root, arch)), None)
     if direct is not None:
         return direct
     arch_gpu = _target_arch_gpu(arch)
@@ -567,10 +595,11 @@ def resolve_local_sdk_dir(
         cuda_version=effective_cuda_version,
     )
     installation = Path(sdk_dir) if Path(sdk_dir).is_absolute() else requested_root / sdk_dir
-    if not is_valid_sdk_directory(installation):
+    if not is_valid_sdk_directory(installation, target_arch):
         fatal(
             f"{source_label} does not contain a usable Holoscan SDK directory "
-            "(expected an installed config under lib/cmake/holoscan or a source-build "
+            "(expected an installed config under lib/cmake/holoscan or "
+            "lib/<arch>-linux-gnu/cmake/holoscan, or a source-build "
             "config at the build root, directly or under install-* or build-*)."
         )
     return installation
@@ -608,23 +637,23 @@ def find_hsdk_dir(
         Relative path to the SDK directory from the root, or absolute path if passed directly
     """
     search_root: Optional[Path] = None
+    configured_target = target_arch or os.environ.get("HOLOSCAN_CLI_TARGET_ARCH")
 
     # An explicit argument is authoritative. Do not let an ambient SDK select a
     # different installation while the caller later mounts local_sdk_root.
     if local_sdk_root is not None:
         local_sdk_root = Path(local_sdk_root) if isinstance(local_sdk_root, str) else local_sdk_root
         if local_sdk_root.exists():
-            if is_valid_sdk_directory(local_sdk_root):
+            if is_valid_sdk_directory(local_sdk_root, configured_target):
                 return str(local_sdk_root)
             search_root = local_sdk_root
     elif os.environ.get("HOLOSCAN_SDK_ROOT"):
         env_path = Path(os.environ["HOLOSCAN_SDK_ROOT"])
         if env_path.exists():
-            if is_valid_sdk_directory(env_path):
+            if is_valid_sdk_directory(env_path, configured_target):
                 return str(env_path)
             search_root = env_path
 
-    configured_target = target_arch or os.environ.get("HOLOSCAN_CLI_TARGET_ARCH")
     arch_gpu = _target_arch_gpu(configured_target) if configured_target else get_arch_gpu_str()
     cuda_major = _cuda_major(cuda_version or os.environ.get("HOLOSCAN_CLI_DEFAULT_CUDA_VERSION"))
     if search_root is not None:

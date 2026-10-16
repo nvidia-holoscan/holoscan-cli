@@ -21,6 +21,7 @@ has been safely materialized, so this hook never mutates caller-owned Git state.
 """
 
 import os
+import shutil
 
 MODULE_SLUG = "{{ cookiecutter.module_slug }}"
 OPERATOR_SLUG = "{{ cookiecutter.operator_slug }}"
@@ -34,6 +35,17 @@ def remove_empty_dirs(root: str = ".") -> None:
         if not os.listdir(dirpath):
             os.rmdir(dirpath)
 
+
+PYTHON_BINDINGS = {{ cookiecutter.__python_bindings | tojson }}
+PYTHON_BINDING_PATHS = (
+    "python",
+    "tests/python",
+    f"applications/{MODULE_SLUG}_pipeline/python",
+)
+
+if PYTHON_BINDINGS != "yes":
+    for path in PYTHON_BINDING_PATHS:
+        shutil.rmtree(path, ignore_errors=True)
 
 remove_empty_dirs()
 

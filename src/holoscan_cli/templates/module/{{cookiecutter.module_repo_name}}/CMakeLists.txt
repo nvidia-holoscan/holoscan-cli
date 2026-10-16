@@ -55,6 +55,30 @@ if(NOT DEFINED {{ cookiecutter.module_slug | upper }}_BUILD_TESTING)
             CACHE BOOL "Build the {{ cookiecutter.module_slug }} module's CTest suite")
     endif()
 endif()
+{%- if cookiecutter.__python_bindings == 'yes' %}
+
+# The Python bindings follow the same rule: ON when standalone, OFF when nested.
+# They are also OFF when packaging, because the Debian package ships no Python files.
+if(NOT DEFINED HOLOSCAN_{{ cookiecutter.module_slug | upper }}_BUILD_PYTHON)
+    if(PROJECT_IS_TOP_LEVEL AND NOT PKG_{{ cookiecutter.module_repo_name.replace('-', '_') }})
+        set(HOLOSCAN_{{ cookiecutter.module_slug | upper }}_BUILD_PYTHON ON
+            CACHE BOOL "Build the holoscan_{{ cookiecutter.module_slug }} Python bindings")
+    else()
+        set(HOLOSCAN_{{ cookiecutter.module_slug | upper }}_BUILD_PYTHON OFF
+            CACHE BOOL "Build the holoscan_{{ cookiecutter.module_slug }} Python bindings")
+    endif()
+endif()
+if(HOLOSCAN_{{ cookiecutter.module_slug | upper }}_BUILD_PYTHON)
+    # The operator libraries are linked into the Python extension module.
+    set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+    # Found at the root so python/ and tests/python/ see the same interpreter.
+    if(Python3_EXECUTABLE AND NOT Python_EXECUTABLE)
+        set(Python_EXECUTABLE "${Python3_EXECUTABLE}")
+    endif()
+    find_package(Python 3.12 REQUIRED
+        COMPONENTS Interpreter Development.Module Development.SABIModule)
+endif()
+{%- endif %}
 
 # ---------------------------------------------------------------------------
 # CMake helpers
@@ -73,6 +97,11 @@ set_target_properties(holoscan_{{ cookiecutter.module_slug }} PROPERTIES
 install(TARGETS holoscan_{{ cookiecutter.module_slug }}
     EXPORT holoscan_{{ cookiecutter.module_slug }}_targets)
 
+# Every install and package carries the license and third-party notices.
+include(GNUInstallDirs)
+install(FILES LICENSE NOTICE
+    DESTINATION "${CMAKE_INSTALL_DATAROOTDIR}/doc/{{ cookiecutter.module_repo_name }}")
+
 # ---------------------------------------------------------------------------
 # Subprojects
 # ---------------------------------------------------------------------------
@@ -86,6 +115,12 @@ install(TARGETS holoscan_{{ cookiecutter.module_slug }}
 add_subdirectory(pkg)
 add_subdirectory(operators)
 add_subdirectory(applications)
+{%- if cookiecutter.__python_bindings == 'yes' %}
+
+if(HOLOSCAN_{{ cookiecutter.module_slug | upper }}_BUILD_PYTHON)
+    add_subdirectory(python)
+endif()
+{%- endif %}
 
 if({{ cookiecutter.module_slug | upper }}_BUILD_TESTING)
     enable_testing()

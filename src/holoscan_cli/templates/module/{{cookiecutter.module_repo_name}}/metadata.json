@@ -12,9 +12,10 @@
       }
     ],
     "license": "{{ cookiecutter._license }}",
-    "language": ["C++"],
+    "language": [{% if cookiecutter.__python_bindings == 'yes' %}"C++", "Python"{% else %}"C++"{% endif %}],
     "namespace": {
-      "cpp": "holoscan::{{ cookiecutter.module_slug }}"
+      "cpp": "holoscan::{{ cookiecutter.module_slug }}"{% if cookiecutter.__python_bindings == 'yes' %},
+      "python": "holoscan_{{ cookiecutter.module_slug }}"{% endif %}
     },
     "holoscan_sdk": {
       "minimum_required_version": "{{ cookiecutter.holoscan_version }}",

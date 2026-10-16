@@ -40,3 +40,52 @@ def test_module_uses_declared_name_instead_of_mount_directory(tmp_path):
         projects = gather_metadata([str(mounted_root)])
 
         assert projects[0]["project_name"] == expected_name
+
+
+def test_search_skips_generated_folders_and_lists_each_file_once(tmp_path):
+    root = tmp_path / "module"
+    application = json.dumps({"application": {"name": "ex_app"}})
+    for folder in (
+        "examples/ex_app",
+        ".venv/lib/placeholder",  # hidden folder
+        "venv/lib/placeholder",  # virtual environment
+        "conda/lib/placeholder",  # Conda environment
+        "build/ex_app/examples/ex_app",  # CMake build tree
+        "examples/in_source_app",  # in-source CMake build
+    ):
+        (root / folder).mkdir(parents=True)
+        (root / folder / "metadata.json").write_text(application, encoding="utf-8")
+    (root / "metadata.json").write_text(json.dumps({"module": {"name": "m"}}), encoding="utf-8")
+    (root / "venv/pyvenv.cfg").touch()
+    (root / "conda/conda-meta").mkdir()
+    (root / "build/ex_app/CMakeCache.txt").touch()
+    (root / "examples/in_source_app/CMakeCache.txt").touch()
+
+    projects = gather_metadata([str(root / "metadata.json"), str(root), str(root / "examples")])
+
+    assert sorted(project["source_folder"] for project in projects) == [
+        str(root),
+        str(root / "examples/ex_app"),
+        str(root / "examples/in_source_app"),
+    ]
+    # A folder named directly in the search path is always searched.
+    assert len(gather_metadata([str(root / "build/ex_app")])) == 1
+
+
+def test_search_lists_a_file_reached_through_a_symlinked_folder_once(tmp_path):
+    root = tmp_path / "module"
+    (root / "applications/ex_app").mkdir(parents=True)
+    (root / "applications/ex_app/metadata.json").write_text(
+        json.dumps({"application": {"name": "ex_app"}}), encoding="utf-8"
+    )
+    (root / "examples").symlink_to(root / "applications", target_is_directory=True)
+
+    assert len(gather_metadata([str(root / "examples")])) == 1
+    projects = gather_metadata([str(root / "applications"), str(root / "examples")])
+
+    assert [project["source_folder"] for project in projects] == [str(root / "applications/ex_app")]
+    # An excluded path doesn't hide the same file reached through another path.
+    projects = gather_metadata(
+        [str(root / "applications"), str(root / "examples")], exclude_paths=["applications"]
+    )
+    assert [project["source_folder"] for project in projects] == [str(root / "examples/ex_app")]

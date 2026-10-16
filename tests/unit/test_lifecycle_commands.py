@@ -3,14 +3,17 @@
 
 from __future__ import annotations
 
+import io
 import json
 import os
 import shlex
+import shutil
 import subprocess
 from argparse import Namespace
 
 import pytest
 
+from holoscan_cli.cli import HoloscanCLI
 from holoscan_cli.commands import build as build_cmd
 from holoscan_cli.commands import containers as containers_cmd
 from holoscan_cli.commands import install as install_cmd
@@ -183,6 +186,7 @@ def _project_args(**overrides):
             "benchmark": False,
             "configure_args": None,
             "run_args": None,
+            "nsys_args": None,
             "no_local_build": False,
             "dev": False,
             "uninstall": False,
@@ -398,7 +402,10 @@ def test_build_project_locally_verbose_redacts_env_mapping(tmp_path, monkeypatch
     assert "secret-value" not in output
 
 
-def test_handle_build_container_branch_passes_recursive_local_command(tmp_path, monkeypatch):
+@pytest.mark.parametrize("targets", [None, ["resources", "other resources"]])
+def test_handle_build_container_branch_passes_recursive_local_command(
+    tmp_path, monkeypatch, targets
+):
     project = {
         "project_name": "smoke_app",
         "project_type": "application",
@@ -435,6 +442,7 @@ def test_handle_build_container_branch_passes_recursive_local_command(tmp_path, 
             verbose=True,
             benchmark=True,
             configure_args=["-DCLI=ON"],
+            targets=targets,
         ),
     )
 
@@ -461,9 +469,55 @@ def test_handle_build_container_branch_passes_recursive_local_command(tmp_path, 
         "2",
         "--verbose",
         "--benchmark",
+        *[f"--target={target}" for target in targets or []],
         "--configure-args=-DCLI=ON",
     ]
     assert cli.container.run_calls
+
+
+@pytest.mark.skipif(shutil.which("cmake") is None, reason="CMake is required")
+@pytest.mark.parametrize("project_type", ["application", "package"])
+def test_build_targets_configure_fresh_directory_without_building_default_target(
+    tmp_path, monkeypatch, project_type
+):
+    cli = RecordingCLI(tmp_path)
+    cli.project_data["project_type"] = project_type
+    monkeypatch.setenv("HOLOSCAN_CLI_ENABLE_SCCACHE", "OFF")
+    (cli.HOLOHUB_ROOT / "CMakeLists.txt").write_text(
+        "cmake_minimum_required(VERSION 3.24)\n"
+        "project(smoke LANGUAGES NONE)\n"
+        "if(NOT FEATURE)\n"
+        '  message(FATAL_ERROR "Missing configure argument")\n'
+        "endif()\n"
+        "add_custom_target(resources COMMAND ${CMAKE_COMMAND} -E touch "
+        "${CMAKE_BINARY_DIR}/resources.ready)\n"
+        "add_custom_target(other_resources COMMAND ${CMAKE_COMMAND} -E touch "
+        "${CMAKE_BINARY_DIR}/other_resources.ready)\n"
+        "add_custom_target(application ALL COMMAND ${CMAKE_COMMAND} -E false)\n"
+        "file(MAKE_DIRECTORY ${CMAKE_BINARY_DIR}/pkg)\n"
+        "file(WRITE ${CMAKE_BINARY_DIR}/pkg/CPackConfig-smoke.cmake "
+        '"message(FATAL_ERROR unexpected_packaging)")\n',
+        encoding="utf-8",
+    )
+    args = HoloscanCLI().parser.parse_args(
+        [
+            "build",
+            "smoke_app",
+            "--local",
+            "--configure-args=-DFEATURE=ON",
+            "--target",
+            "resources",
+            "--target",
+            "other_resources",
+        ]
+    )
+
+    build_cmd.handle_build(cli, args)
+
+    build_dir = cli.DEFAULT_BUILD_PARENT_DIR / "smoke_app"
+    assert (build_dir / "CMakeCache.txt").exists()
+    assert (build_dir / "resources.ready").exists()
+    assert (build_dir / "other_resources.ready").exists()
 
 
 def test_handle_build_no_docker_build_still_applies_cuda_override(tmp_path, monkeypatch):
@@ -508,6 +562,151 @@ def test_handle_run_local_dryrun_builds_mapping_and_executes_command(tmp_path, m
     command, kwargs = calls[0]
     assert command == ["python", "app.py", "--frames", "1"]
     assert kwargs["dry_run"] is True
+
+
+@pytest.mark.parametrize("dryrun", [True, False])
+@pytest.mark.parametrize("run_args", [None, '--name "two words" --literal "$(echo literal)"'])
+@pytest.mark.parametrize(
+    "profile,nsys_args,expected_profile_args",
+    [
+        (True, None, ["--trace=cuda,vulkan,nvtx,osrt"]),
+        (True, "", []),
+        (False, "", []),
+        (False, "--trace=nvtx", ["--trace=nvtx"]),
+        (
+            True,
+            '--trace=nvtx --sample=none --backtrace=none --cpuctxsw=none -o "my profile"',
+            [
+                "--trace=nvtx",
+                "--sample=none",
+                "--backtrace=none",
+                "--cpuctxsw=none",
+                "-o",
+                "my profile",
+            ],
+        ),
+    ],
+)
+def test_handle_run_profiles_application_argv(
+    tmp_path, monkeypatch, dryrun, run_args, profile, nsys_args, expected_profile_args
+):
+    cli = RecordingCLI(tmp_path)
+    cli.project_data["metadata"]["run"]["command"] = 'python "my app.py"'
+    build_dir = cli.DEFAULT_BUILD_PARENT_DIR / "smoke_app"
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(
+        run_cmd, "build_project_locally", lambda *a, **kw: (build_dir, cli.project_data)
+    )
+    monkeypatch.setattr(run_cmd.shutil, "which", lambda name: "/usr/bin/nsys")
+    # A restrictive perf setting must not prevent Nsight from choosing its collectors.
+    monkeypatch.setattr(run_cmd, "open", lambda *a, **kw: io.StringIO("4"), raising=False)
+    calls = []
+    monkeypatch.setattr(run_cmd, "run_command", lambda cmd, **kw: calls.append((cmd, kw)))
+
+    run_cmd.handle_run(
+        cli,
+        _project_args(
+            local=True,
+            dryrun=dryrun,
+            nsys_profile=profile,
+            nsys_args=nsys_args,
+            run_args=run_args,
+        ),
+    )
+
+    command, kwargs = calls[0]
+    assert command == [
+        "nsys",
+        "profile",
+        *expected_profile_args,
+        "python",
+        "my app.py",
+        *([] if run_args is None else ["--name", "two words", "--literal", "$(echo literal)"]),
+    ]
+    assert kwargs["dry_run"] is dryrun
+    assert kwargs["replace_process"] is True
+
+
+@pytest.mark.parametrize("local", [True, False])
+@pytest.mark.parametrize("profile", [False, True])
+def test_handle_run_rejects_invalid_nsys_args_before_building(tmp_path, capsys, local, profile):
+    cli = RecordingCLI(tmp_path)
+    with pytest.raises(SystemExit) as exc:
+        run_cmd.handle_run(
+            cli, _project_args(local=local, nsys_profile=profile, nsys_args='-o "unfinished')
+        )
+
+    assert exc.value.code != 0
+    captured = capsys.readouterr()
+    assert "Invalid --nsys-args: No closing quotation" in captured.out + captured.err
+    assert not cli.find_project_calls
+    assert not cli.container.build_calls
+    assert not cli.container.run_calls
+
+
+@pytest.mark.parametrize("as_root", [False, True])
+@pytest.mark.parametrize("profile", [False, True])
+@pytest.mark.parametrize("nsys_args", ["", '--trace=nvtx -o "my profile"'])
+def test_handle_run_forwards_nsys_args_through_container(
+    tmp_path, monkeypatch, as_root, profile, nsys_args
+):
+    cli = RecordingCLI(tmp_path)
+    cli.container.DEFAULT_DOCKER_RUN_ARGS = ""
+    commands = []
+
+    def capture_entrypoint(img, cmd, opts, dry_run=False):
+        commands.append(cmd)
+        return "--entrypoint=/bin/bash", ["-c", cmd]
+
+    monkeypatch.setattr(run_cmd, "get_entrypoint_command_args", capture_entrypoint)
+    run_cmd.handle_run(
+        cli,
+        _project_args(
+            nsys_profile=profile,
+            nsys_args=nsys_args,
+            nsys_location="/opt/custom-nsys",
+            run_args='--name "two words"',
+            as_root=as_root,
+        ),
+    )
+
+    container_args = HoloscanCLI().parser.parse_args(shlex.split(commands[-1])[1:])
+    assert container_args.local is True
+    assert container_args.nsys_profile is True
+    assert container_args.nsys_args == nsys_args
+    assert container_args.run_args == '--name "two words"'
+    assert cli.container.run_calls[-1]["nsys_profile"] is True
+    assert cli.container.run_calls[-1]["nsys_location"] == "/opt/custom-nsys"
+    if as_root:
+        assert "--nsys-args" not in commands[0]
+        assert "--nsys-profile" not in commands[0]
+
+
+@pytest.mark.parametrize("mounted,dryrun", [(True, False), (False, True), (False, False)])
+def test_handle_run_profile_without_nsys_on_path(tmp_path, monkeypatch, mounted, dryrun):
+    cli = RecordingCLI(tmp_path)
+    build_dir = cli.DEFAULT_BUILD_PARENT_DIR / "smoke_app"
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(
+        run_cmd, "build_project_locally", lambda *a, **kw: (build_dir, cli.project_data)
+    )
+    monkeypatch.setattr(run_cmd.shutil, "which", lambda name: None)
+    isdir = os.path.isdir
+    monkeypatch.setattr(
+        run_cmd.os.path,
+        "isdir",
+        lambda path: mounted if path == "/opt/nvidia/nsys-host" else isdir(path),
+    )
+    calls = []
+    monkeypatch.setattr(run_cmd, "run_command", lambda cmd, **kw: calls.append(cmd))
+    args = _project_args(local=True, nsys_profile=True, nsys_args="--trace=nvtx", dryrun=dryrun)
+    if not mounted and not dryrun:
+        with pytest.raises(SystemExit):
+            run_cmd.handle_run(cli, args)
+        assert calls == []
+    else:
+        run_cmd.handle_run(cli, args)
+        assert calls[0][:3] == ["/opt/nvidia/nsys-host/bin/nsys", "profile", "--trace=nvtx"]
 
 
 def test_handle_run_container_branch_passes_recursive_local_command(tmp_path, monkeypatch):

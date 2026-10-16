@@ -16,9 +16,9 @@ TEMPLATE = ROOT / "templates/module"
 CMAKE = ROOT / "cmake"
 
 
-def _load_gitutils():
-    path = TEMPLATE / "{{cookiecutter.module_repo_name}}/.github/workflows/scripts/gitutils.py"
-    spec = importlib.util.spec_from_file_location("generated_gitutils", path)
+def _load_script(name):
+    path = TEMPLATE / f"{{{{cookiecutter.module_repo_name}}}}/.github/workflows/scripts/{name}.py"
+    spec = importlib.util.spec_from_file_location(f"generated_{name}", path)
     assert spec and spec.loader
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
@@ -51,7 +51,7 @@ def test_cmake_support_keeps_export_and_pybind_contracts():
 
 
 def test_generated_gitutils_handles_untracked_files_and_safe_revisions(monkeypatch):
-    gitutils = _load_gitutils()
+    gitutils = _load_script("gitutils")
     calls = []
 
     def git(*args):
@@ -69,6 +69,25 @@ def test_generated_gitutils_handles_untracked_files_and_safe_revisions(monkeypat
     assert any("--end-of-options" in call for call in calls)
     with pytest.raises(ValueError, match="Invalid Git revision"):
         gitutils.changed_files_between("--unsafe", "head")
+
+
+def _write_language(path: Path, kind: str, language):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps({kind: {"language": language}}), encoding="utf-8")
+
+
+def test_generated_metadata_check_reports_operator_languages_missing_from_module(tmp_path):
+    validator = _load_script("validate_metadata")
+    _write_language(tmp_path / "metadata.json", "module", ["C++"])
+    _write_language(tmp_path / "operators/a_op/metadata.json", "operator", ["C++", "Python"])
+    _write_language(tmp_path / "operators/b_op/metadata.json", "operator", "C++")
+
+    assert validator.find_undeclared_languages(tmp_path) == [
+        (Path("operators/a_op/metadata.json"), "Python")
+    ]
+
+    _write_language(tmp_path / "metadata.json", "module", ["C++", "Python"])
+    assert validator.find_undeclared_languages(tmp_path) == []
 
 
 def test_direct_cookiecutter_use_cannot_pin_an_arbitrary_cli_release():

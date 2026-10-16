@@ -8,8 +8,14 @@ A **Holoscan Module** — a self-contained, redistributable library that extends
 {%- set op_class = cookiecutter.operator_slug.split('_')|map('capitalize')|join('') %}
 {%- set mod_kebab = cookiecutter.module_slug.replace('_', '-') %}
 
+{% if cookiecutter.__python_bindings == 'yes' -%}
+> Holoscan SDK 5.0 is C++-first. This Module ships C++ operators plus Python bindings that expose
+> them through the SDK operator registry (`import holoscan_{{ cookiecutter.module_slug }}`). Wheel packaging returns in a
+> later release.
+{%- else -%}
 > Holoscan SDK 5.0 is C++-first. This Module ships C++ operators only; Python bindings and wheel
 > packaging return in a later release.
+{%- endif %}
 
 ---
 
@@ -26,14 +32,19 @@ python -m pip install \
   -r requirements-cli.txt
 
 # Build and run the C++ demo application inside the development container
-holoscan run {{ cookiecutter.module_slug }}_pipeline
+holoscan run {{ cookiecutter.module_slug }}_pipeline{% if cookiecutter.__python_bindings == 'yes' %} --language cpp{% endif %}
+{%- if cookiecutter.__python_bindings == 'yes' %}
+
+# Or run the Python example, which calls the C++ operator through the bindings
+holoscan run {{ cookiecutter.module_slug }}_pipeline --language python
+{%- endif %}
 ```
 
 If you use [uv](https://docs.astral.sh/uv/), no separate environment setup or activation is
 needed. Prefix the same commands with `uv run`, for example:
 
 ```bash
-uv run holoscan run {{ cookiecutter.module_slug }}_pipeline
+uv run holoscan run {{ cookiecutter.module_slug }}_pipeline{% if cookiecutter.__python_bindings == 'yes' %} --language cpp{% endif %}
 ```
 
 The project configuration installs the development tools without building the Module on the host.
@@ -99,6 +110,12 @@ its own termination with `holoscan::run_async`.
 | CMake | ≥ 4.0 |
 | C++ compiler | C++20-capable |
 | GoogleTest | any recent release (tests only) |
+{%- if cookiecutter.__python_bindings == 'yes' %}
+| Python | 3.12+ with development headers (Python bindings) |
+| Holoscan SDK Python package | importable as `holoscan` (Python bindings and tests) |
+| nanobind | 3.0.1 (CMake fetches it from GitHub when it is not installed) |
+| pytest | any recent release (Python tests only) |
+{%- endif %}
 
 ```bash
 cmake -S . -B build -DBUILD_ALL=ON -D{{ cookiecutter.module_slug | upper }}_BUILD_TESTING=ON
@@ -133,4 +150,4 @@ hardware. Extend the test doubles and assertions as your operator grows.
 
 ## License
 
-{{ cookiecutter._license }} — see [LICENSE](LICENSE).
+{{ cookiecutter._license }} — see [LICENSE](LICENSE). Third-party software is listed in [NOTICE](NOTICE).

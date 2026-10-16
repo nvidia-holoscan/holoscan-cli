@@ -22,6 +22,8 @@ _PROJECT_NAME = re.compile(r"[A-Za-z0-9]+(?:[ _-][A-Za-z0-9]+)*")
 _SNAKE_CASE = re.compile(r"[a-z][a-z0-9]*(?:_[a-z0-9]+)*")
 _REPOSITORY_NAME = re.compile(r"holoscan-[a-z0-9]+(?:-[a-z0-9]+)*")
 _SEMVER = re.compile(r"(\d+)\.(\d+)\.(\d+)(?:[-+].*)?")
+# Holoscan SDK modules own these names: holoscan_<name>, holoscan::<name> and holoscan.<name>.
+RESERVED_MODULE_SLUGS = ("core", "vision", "visualization", "inference")
 
 
 def reject(message: str) -> None:
@@ -31,12 +33,11 @@ def reject(message: str) -> None:
 
 if LANGUAGE == "python":
     reject(
-        "language 'python' is not available for Holoscan SDK 5.0 Modules: the SDK 5.0 "
-        "operator API is C++-first and Python operator scaffolding returns in a later release. "
-        "Use --language cpp."
+        "language 'python' is not available for Holoscan SDK 5.0 Modules: pure-Python Modules "
+        "return in a later release. Use 'cpp,python' to call the C++ operators from Python."
     )
-if LANGUAGE != "cpp":
-    reject("language must be 'cpp'.")
+if LANGUAGE not in ("cpp", "cpp,python"):
+    reject("language must be 'cpp' or 'cpp,python'.")
 
 version_match = _SEMVER.fullmatch(HOLOSCAN_VERSION)
 if version_match is None:
@@ -53,6 +54,12 @@ if not _PROJECT_NAME.fullmatch(PROJECT_NAME):
 for name, value in (("module_slug", MODULE_SLUG), ("operator_slug", OPERATOR_SLUG)):
     if not _SNAKE_CASE.fullmatch(value) or not value.isidentifier() or keyword.iskeyword(value):
         reject(f"{name} must be a lowercase snake_case identifier beginning with a letter.")
+
+if MODULE_SLUG in RESERVED_MODULE_SLUGS:
+    reject(
+        f"module_slug {MODULE_SLUG!r} is reserved for the Holoscan SDK's own {MODULE_SLUG} module "
+        f"(holoscan_{MODULE_SLUG}, holoscan.{MODULE_SLUG}.). Choose a different project name."
+    )
 
 expected_repo_name = f"holoscan-{MODULE_SLUG.replace('_', '-')}"
 if not _REPOSITORY_NAME.fullmatch(MODULE_REPO_NAME) or MODULE_REPO_NAME != expected_repo_name:
