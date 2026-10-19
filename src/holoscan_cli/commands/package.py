@@ -35,14 +35,14 @@ from holoscan_cli.utils.docker import (
     get_entrypoint_command_args,
     resolve_cli_docker_opts,
 )
-from holoscan_cli.utils.holohub import (
+from holoscan_cli.utils.io import Color, fatal, run_command
+from holoscan_cli.utils.project import report_effective_configuration
+from holoscan_cli.utils.sdk import get_sdk_cmake_prefix_path, resolve_local_sdk_dir
+from holoscan_cli.utils.source_project import (
     check_skip_builds,
     get_buildtype_str,
     is_env_request_local_build,
 )
-from holoscan_cli.utils.io import Color, fatal, run_command
-from holoscan_cli.utils.project import report_effective_configuration
-from holoscan_cli.utils.sdk import get_sdk_cmake_prefix_path, resolve_local_sdk_dir
 
 
 def register_package_parser(

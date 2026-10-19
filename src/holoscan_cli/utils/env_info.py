@@ -30,9 +30,9 @@ from pathlib import Path
 from typing import List, Optional
 
 import holoscan_cli
-from holoscan_cli.utils.holohub import get_sccache_dir
 from holoscan_cli.utils.io import Color, run_info_command
 from holoscan_cli.utils.json_output import dumps as json_dumps
+from holoscan_cli.utils.source_project import get_sccache_dir
 from holoscan_cli.utils.text import get_env_bool
 
 
@@ -114,28 +114,28 @@ def collect_python_info() -> None:
     print(f"  Executable: {sys.executable} Path: {sys.path[0] if sys.path else 'N/A'}")
 
 
-def collect_holohub_info(
-    holohub_root: Path, build_dir: Path, data_dir: Path, sdk_dir: Path
+def collect_source_project_info(
+    project_root: Path, build_dir: Path, data_dir: Path, sdk_dir: Path
 ) -> None:
     """Collect and display source-project information"""
     print(f"\n{Color.blue('Source Project Information:')}")
-    print(f"  HOLOSCAN_CLI_ROOT: {holohub_root}")
+    print(f"  HOLOSCAN_CLI_ROOT: {project_root}")
     print(f"  HOLOSCAN_CLI_BUILD_PARENT_DIR: {build_dir}")
     print(f"  HOLOSCAN_CLI_DATA_DIR: {data_dir}")
     print(f"  HOLOSCAN_CLI_SDK_DIR: {sdk_dir}")
 
 
-def collect_git_info(holohub_root: Path) -> None:
+def collect_git_info(project_root: Path) -> None:
     """Collect and display Git repository information"""
     print(f"\n{Color.blue('Git Repository Information:')}")
-    if not holohub_root.exists() or not holohub_root.is_dir():
+    if not project_root.exists() or not project_root.is_dir():
         print(
-            f"  Source-project root directory does not exist or is not a directory: {holohub_root}"
+            f"  Source-project root directory does not exist or is not a directory: {project_root}"
         )
         return
     original_cwd = os.getcwd()
     try:
-        os.chdir(holohub_root)
+        os.chdir(project_root)
     except Exception as e:
         print(f"  Cannot access source-project directory: {e}")
         return
@@ -358,21 +358,21 @@ def gather_python_info() -> dict:
 
 
 def gather_source_project_info(
-    holohub_root: Path, build_dir: Path, data_dir: Path, sdk_dir: Path
+    project_root: Path, build_dir: Path, data_dir: Path, sdk_dir: Path
 ) -> dict:
     return {
-        "root": str(holohub_root),
+        "root": str(project_root),
         "build_parent_dir": str(build_dir),
         "data_dir": str(data_dir),
         "sdk_dir": str(sdk_dir),
     }
 
 
-def gather_git_info(holohub_root: Path) -> Optional[dict]:
-    """Structured git state for ``holohub_root``, or ``None`` when unavailable."""
-    if not holohub_root.exists() or not holohub_root.is_dir():
+def gather_git_info(project_root: Path) -> Optional[dict]:
+    """Structured git state for ``project_root``, or ``None`` when unavailable."""
+    if not project_root.exists() or not project_root.is_dir():
         return None
-    root = str(holohub_root)
+    root = str(project_root)
     branch = run_info_command(["git", "-C", root, "branch", "--show-current"])
     commit = run_info_command(["git", "-C", root, "rev-parse", "HEAD"])
     status = run_info_command(["git", "-C", root, "status", "--porcelain"])
@@ -463,14 +463,14 @@ def gather_environment_variables() -> dict:
     }
 
 
-def format_env_info_json(holohub_root: Path, build_dir: Path, data_dir: Path, sdk_dir: Path) -> str:
+def format_env_info_json(project_root: Path, build_dir: Path, data_dir: Path, sdk_dir: Path) -> str:
     """Assemble the full ``env-info`` payload as a JSON document."""
     data = {
         "cli": gather_cli_info(),
         "system": gather_system_info(),
         "python": gather_python_info(),
-        "source_project": gather_source_project_info(holohub_root, build_dir, data_dir, sdk_dir),
-        "git": gather_git_info(holohub_root),
+        "source_project": gather_source_project_info(project_root, build_dir, data_dir, sdk_dir),
+        "git": gather_git_info(project_root),
         "docker": gather_docker_info(),
         "cuda_gpu": gather_cuda_gpu_info(),
         "sccache": gather_sccache_info(),

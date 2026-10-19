@@ -566,6 +566,29 @@ def test_handle_run_local_dryrun_builds_mapping_and_executes_command(tmp_path, m
     assert kwargs["dry_run"] is True
 
 
+@pytest.mark.parametrize("name", ["holohub_app_bin", "project_app_bin"])
+def test_handle_run_expands_holohub_and_project_placeholders(tmp_path, monkeypatch, capsys, name):
+    project = {
+        "project_name": "smoke_app",
+        "project_type": "application",
+        "source_folder": tmp_path / "repo" / "applications" / "smoke_app",
+        "metadata": {"language": "cpp", "run": {"command": f"<{name}>/app", "workdir": name}},
+    }
+    cli = RecordingCLI(tmp_path, project)
+    build_dir = tmp_path / "build" / "smoke_app"
+    calls = []
+    monkeypatch.setattr(
+        run_cmd, "build_project_locally", lambda *args, **kwargs: (build_dir, cli.project_data)
+    )
+    monkeypatch.setattr(run_cmd, "run_command", lambda cmd, **kwargs: calls.append(cmd))
+
+    run_cmd.handle_run(cli, _project_args(local=True, language="cpp"))
+
+    app_bin = build_dir / "applications" / "smoke_app"
+    assert calls == [[f"{app_bin}/app"]]
+    assert f"cd {app_bin}" in capsys.readouterr().out
+
+
 @pytest.mark.parametrize("dryrun", [True, False])
 @pytest.mark.parametrize("run_args", [None, '--name "two words" --literal "$(echo literal)"'])
 @pytest.mark.parametrize(

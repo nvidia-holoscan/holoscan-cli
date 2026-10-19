@@ -28,14 +28,14 @@ from holoscan_cli.commands.registry import help_for
 from holoscan_cli.container.parsers import add_docker_build_args, add_local_container_args
 from holoscan_cli.metadata.utils import normalize_language
 from holoscan_cli.utils.docker import apply_container_cli_overrides, resolve_cli_docker_opts
-from holoscan_cli.utils.holohub import (
+from holoscan_cli.utils.io import format_cmd, run_command
+from holoscan_cli.utils.project import language_cmake_args, report_effective_configuration
+from holoscan_cli.utils.sdk import get_sdk_cmake_prefix_path, resolve_local_sdk_dir
+from holoscan_cli.utils.source_project import (
     check_skip_builds,
     determine_project_prefix,
     is_env_request_local_build,
 )
-from holoscan_cli.utils.io import format_cmd, run_command
-from holoscan_cli.utils.project import language_cmake_args, report_effective_configuration
-from holoscan_cli.utils.sdk import get_sdk_cmake_prefix_path, resolve_local_sdk_dir
 
 
 def register_test_parser(
