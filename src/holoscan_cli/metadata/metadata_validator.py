@@ -22,13 +22,12 @@ from referencing.jsonschema import DRAFT202012
 from holoscan_cli.metadata.utils import BASE_SCHEMA_PATH, SCHEMA_DIR, get_schema_path
 
 # Top-level keys that uniquely identify which schema applies to a metadata.json,
-# kept in sync with holohub/utilities/metadata/metadata_validator.py.
+# adapted from holohub/utilities/metadata/metadata_validator.py.
 KNOWN_ENVELOPES = (
     "application",
     "operator",
     "tutorial",
     "benchmark",
-    "gxf_extension",
     "module",
     "package",
 )
@@ -51,6 +50,8 @@ def validate_json(json_data, directory):
             schema_path = SCHEMA_DIR / f"{envelopes[0]}.schema.json"
     if schema_path is None:
         schema_path = get_schema_path(directory)
+    if not schema_path.is_file():
+        return False, f"No supported project type; expected one of: {', '.join(KNOWN_ENVELOPES)}"
     with open(schema_path, "r") as file:
         try:
             execute_api_schema = json.load(file)

@@ -39,8 +39,7 @@
       "type": "string",
       "enum": [
         "C++",
-        "Python",
-        "GXF"
+        "Python"
       ]
     },
     "multi_language": {
@@ -96,21 +95,6 @@
     "ranking": {
       "type": "integer"
     },
-    "versioned_dependency": {
-      "type": "object",
-      "properties": {
-        "name": {
-          "type": "string"
-        },
-        "version": {
-          "$ref": "#/$defs/version"
-        }
-      },
-      "required": [
-        "name",
-        "version"
-      ]
-    },
     "hardware_descriptor": {
       "type": "object",
       "properties": {
@@ -138,12 +122,6 @@
       "properties": {
         "data": {
           "type": "array"
-        },
-        "gxf_extensions": {
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/versioned_dependency"
-          }
         },
         "hardware": {
           "type": "array",

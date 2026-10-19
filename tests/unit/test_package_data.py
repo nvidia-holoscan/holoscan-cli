@@ -45,7 +45,6 @@ import pytest
 REQUIRED_SCHEMAS = {
     "application.schema.json",
     "benchmark.schema.json",
-    "gxf_extension.schema.json",
     "module.schema.json",
     "operator.schema.json",
     "package.schema.json",
