@@ -16,7 +16,6 @@
 
 # Import the holoscan modules we'll depend on
 import holoscan.core
-import holoscan.gxf
 
 # Load the Python binding and register any custom emitter/receiver types.
 from . import _@MODULE_NAME@ as _bindings

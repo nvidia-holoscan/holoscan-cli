@@ -51,7 +51,6 @@ PYPROJECT_FILENAME = "pyproject.toml"
 METADATA_DIRS = (
     "applications",
     "benchmarks",
-    "gxf_extensions",
     "modules",
     "operators",
     "pkg",

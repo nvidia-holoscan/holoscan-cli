@@ -47,6 +47,14 @@ def test_validate_json_rejects_violations():
     assert "required" in str(msg).lower() or "validation" in str(msg).lower()
 
 
+def test_validate_json_reports_unsupported_project_type():
+    # Metadata without a known top-level key in a folder without a schema has
+    # nothing to validate against.
+    ok, msg = metadata_validator.validate_json({"unknown_type": {"name": "x"}}, "unknown_types")
+    assert ok is False
+    assert msg.startswith("No supported project type; expected one of: application,")
+
+
 def test_validate_json_rejects_invalid_schema_file(tmp_path, monkeypatch):
     """If the schema file itself is not parseable, validate_json must return
     (False, JSONDecodeError) rather than crashing."""
