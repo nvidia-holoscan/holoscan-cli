@@ -272,6 +272,23 @@ def test_handle_run_container_skips_build_and_wraps_trailing_command(tmp_path, m
     assert run_call["extra_args"] == ["-c", "echo hello > hello-output.log"]
 
 
+def test_handle_run_container_leaves_variables_to_the_container_shell(tmp_path, monkeypatch):
+    cli = RecordingCLI(tmp_path)
+    monkeypatch.setattr(
+        containers_cmd,
+        "get_entrypoint_command_args",
+        lambda img, cmd, opts, dry_run=False: ("--entrypoint=/bin/bash", ["-c", cmd]),
+    )
+    monkeypatch.setenv("HOST_ONLY_VALUE", "from-host")
+
+    containers_cmd.handle_run_container(
+        cli,
+        _container_args(no_docker_build=True, _trailing_args=['echo "$HOST_ONLY_VALUE" ${HOME}']),
+    )
+
+    assert cli.container.run_calls[0]["extra_args"] == ["-c", 'echo "$HOST_ONLY_VALUE" ${HOME}']
+
+
 def test_build_project_locally_emits_application_cmake_and_build_commands(tmp_path, monkeypatch):
     cli = RecordingCLI(tmp_path)
     calls = []

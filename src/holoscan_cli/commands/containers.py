@@ -28,7 +28,6 @@ package while describing what these commands act on.
 """
 
 import argparse
-import os
 
 from holoscan_cli.commands.registry import help_for
 from holoscan_cli.container.parsers import add_docker_build_args
@@ -195,7 +194,8 @@ def handle_run_container(cli, args: argparse.Namespace) -> None:
     run_image = container.resolve_run_image(args.img)
     trailing_args = getattr(args, "_trailing_args", [])
     if trailing_args:  # additional commands requires a bash entrypoint
-        command = " ".join(os.path.expandvars(arg) for arg in trailing_args)
+        # Leave variables to the container's shell; the caller's quoting decides.
+        command = " ".join(trailing_args)
         docker_opts_extra, extra_args = get_entrypoint_command_args(
             run_image, command, docker_opts, dry_run=args.dryrun
         )
