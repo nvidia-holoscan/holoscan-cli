@@ -130,12 +130,11 @@ holoscan --help
 
 ### Create and work on a standalone module
 
-Creating a module requires the `create` extra. CLI 5.0 pre-releases are on
-NVIDIA's package index (`uv` 0.4.23 or later):
+Creating a module requires the `create` extra:
 
 ```bash
-uvx --index https://pypi.nvidia.com --from 'holoscan-cli[create]>=5.0.0rc1' holoscan create my-sensor --interactive false --context holoscan_version=5.0.0 --dryrun
-uvx --index https://pypi.nvidia.com --from 'holoscan-cli[create]>=5.0.0rc1' holoscan create my-sensor --interactive false --context holoscan_version=5.0.0
+uvx --from 'holoscan-cli[create]>=5.0.0' holoscan create my-sensor --interactive false --context holoscan_version=5.0.0 --dryrun
+uvx --from 'holoscan-cli[create]>=5.0.0' holoscan create my-sensor --interactive false --context holoscan_version=5.0.0
 cd holoscan-my-sensor
 uv run holoscan list --json
 uv run holoscan build my_sensor_pipeline --dryrun --verbose
@@ -152,7 +151,7 @@ For the pip alternative, install the same creation extra in the activated
 `.venv`, then run `holoscan create` with the same arguments:
 
 ```bash
-python -m pip install --extra-index-url https://pypi.nvidia.com 'holoscan-cli[create]>=5.0.0rc1'
+python -m pip install 'holoscan-cli[create]>=5.0.0'
 ```
 
 In an existing generated module, use its `requirements-cli.txt` to provision
