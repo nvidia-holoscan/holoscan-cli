@@ -141,6 +141,7 @@ jobs:
 
   # Reverse integration: a holoscan-cli PR must satisfy the real HoloHub
   # project-tree contract (HoloHub's own wrapper suite) before it merges.
+  # HoloHub keeps that tree and its wrapper suite on the archive-4x branch.
   holohub-integration:
     name: HoloHub wrapper integration
     runs-on: ubuntu-24.04
@@ -157,6 +158,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v6
         with:
           repository: nvidia-holoscan/holohub
+          ref: archive-4x
           path: holohub
           persist-credentials: false
 
