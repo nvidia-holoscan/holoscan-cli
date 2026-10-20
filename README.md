@@ -326,3 +326,13 @@ JSON manifest and was only tested with those SDK versions. Otherwise, migrate to
 the Holoscan SDK packaging workflows directly. See
 [issue #164](https://github.com/nvidia-holoscan/holoscan-cli/issues/164) for the
 deprecation timeline.
+
+### `pybind11_add_holohub_module()` CMake helper
+
+`holoscan create` no longer copies the pybind11 helper
+`pybind11_add_holohub_module.cmake` into new Modules; Modules created earlier
+keep their copy. Holoscan SDK 5 builds Python bindings with nanobind: see
+`python/CMakeLists.txt` in a Module created with
+`holoscan create --language cpp python`. Holoscan SDK 4 templates that call the
+helper, such as HoloHub's `modules/template`, need their own copy of it or
+holoscan-cli 4.6.

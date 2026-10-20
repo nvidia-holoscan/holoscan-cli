@@ -25,29 +25,19 @@ def _load_script(name):
     return module
 
 
-def test_cmake_support_keeps_export_and_pybind_contracts():
+def test_cmake_support_keeps_export_contracts():
     operator = (
         TEMPLATE
         / "{{cookiecutter.module_repo_name}}/operators"
         / "{{cookiecutter.operator_slug}}/CMakeLists.txt"
     ).read_text(encoding="utf-8")
     config = (CMAKE / "Config.cmake.in").read_text(encoding="utf-8")
-    pybind = (CMAKE / "pybind11_add_holohub_module.cmake").read_text(encoding="utf-8")
     deb = (CMAKE / "holohub_configure_deb.cmake").read_text(encoding="utf-8")
-    initializer = (CMAKE / "pybind11/__init__.py.in").read_text(encoding="utf-8")
 
     assert "PUBLIC holoscan::core" in operator
     assert "target_link_libraries(holoscan_{{ cookiecutter.module_slug }} INTERFACE" in operator
     assert "find_dependency(holoscan REQUIRED)" in config
-    assert "holoscan::pybind11" in pybind
-    assert "${CMAKE_SUBMODULE_OUT_DIR}" in pybind
-    assert "${CMAKE_BINARY_DIR}/${HOLOSCAN_INSTALL_LIB_DIR}" in pybind
     assert 'set(missingArgs "")' in deb
-    compile(
-        initializer.replace("@MODULE_NAME@", "example").replace("@MODULE_CLASS_NAME@", "ExampleOp"),
-        "cmake/pybind11/__init__.py",
-        "exec",
-    )
 
 
 def test_generated_gitutils_handles_untracked_files_and_safe_revisions(monkeypatch):

@@ -72,9 +72,6 @@ REQUIRED_CMAKE_FILES = {
     "Config.cmake.in",
     "HoloHubConfigHelpers.cmake",
     "holohub_configure_deb.cmake",
-    "pybind11_add_holohub_module.cmake",
-    "pybind11/__init__.py.in",
-    "pydoc/macros.hpp",
 }
 
 REQUIRED_MODULE_TEMPLATE_FILES = {
