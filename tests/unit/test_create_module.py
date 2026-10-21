@@ -307,7 +307,13 @@ def test_packaged_template_generates_python_bindings_for_cpp_python(cli, tmp_pat
         encoding="utf-8"
     )
     assert "nanobind_add_module(my_mod_python NB_STATIC STABLE_ABI" in python_cmake
-    assert "COMPONENT ${_component} EXCLUDE_FROM_ALL" in python_cmake
+    assert "set(_component holoscan-my_mod-python_libs)" in python_cmake
+    assert "EXCLUDE_FROM_ALL" not in python_cmake
+    assert (
+        "holoscan_install_python_module_metadata(\n"
+        "    MODULE my_mod\n"
+        '    REQUIRES "holoscan-core-cu13>=5.0.0")'
+    ) in python_cmake
     assert "set(HOLOSCAN_MY_MOD_BUILD_PYTHON ON\n" in root_cmake
     assert "option(HOLOSCAN_MY_MOD_BUILD_PYTHON" not in root_cmake
     assert 'option(HOLOSCAN_MY_MOD_BUILD_CPP "Build C++ applications" ON)' in root_cmake

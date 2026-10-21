@@ -60,11 +60,12 @@ from holoscan_{{ cookiecutter.module_slug }}.operators import {{ cookiecutter.op
   {{ cookiecutter.module_slug }}_pipeline` takes `--language cpp` or `--language python`. Without `--language`, the CLI picks
   Python. From a CMake build tree, run `PYTHONPATH=build/python/lib:$PYTHONPATH python3
   applications/{{ cookiecutter.module_slug }}_pipeline/python/{{ cookiecutter.module_slug }}_pipeline.py`.
-- The package is installed only on request and is not part of the Debian package:
-  `cmake --install build --component {{ cookiecutter.module_repo_name }}-python`.
-- Native installs support `import holoscan_{{ cookiecutter.module_slug }}`. Wheel packaging and the `holoscan.{{ cookiecutter.module_slug }}`
-  alias return in a later release; until then the `pyproject.toml` only provisions
-  development tooling.
+- The package is not part of the Debian package. Install it on its own with
+  `cmake --install build --component holoscan-{{ cookiecutter.module_slug }}-python_libs`.
+- The build tree and native installs carry the `holoscan-{{ cookiecutter.module_slug.replace('_', '-') }}-cu13` metadata written by
+  the SDK's `holoscan_install_python_module_metadata()`, so both `import holoscan_{{ cookiecutter.module_slug }}` and
+  `import holoscan.{{ cookiecutter.module_slug }}` work. Wheel packaging returns in a later release; until then the
+  `pyproject.toml` only provisions development tooling.
 {%- else -%}
 Holoscan SDK 5.0 is C++-first, so this scaffold contains no Python operator, pipeline, or
 binding layer. Python support returns in a later release; until then the `pyproject.toml` only

@@ -28,6 +28,15 @@ set({{ cookiecutter.module_slug | upper }}_PYTHON_INSTALL_DIR
 set(_python_install_var {{ cookiecutter.module_slug | upper }}_PYTHON_INSTALL_DIR)
 set(_package_install "${${_python_install_var}}/${_package}")
 
+# Publish the holoscan-{{ cookiecutter.module_slug.replace('_', '-') }}-cu13 metadata through which the SDK exposes
+# holoscan_{{ cookiecutter.module_slug }} as holoscan.{{ cookiecutter.module_slug }}, in the build tree and the install.
+# Plain CMake builds and installs do not run a Python packaging backend.
+set(HOLOSCAN_PYTHON_MODULE_ROOT "${_python_root}")
+set(HOLOSCAN_PYTHON_INSTALL_DIR "${${_python_install_var}}")
+holoscan_install_python_module_metadata(
+    MODULE {{ cookiecutter.module_slug }}
+    REQUIRES "holoscan-core-cu13>={{ cookiecutter.holoscan_version }}")
+
 foreach(package_file IN ITEMS __init__.py py.typed operators/__init__.py)
     configure_file("${_package}/${package_file}" "${_package_dir}/${package_file}" COPYONLY)
 endforeach()
@@ -60,12 +69,13 @@ if(HOLOSCAN_PYTHON_STUBS)
     list(APPEND _stub_files "${_package_dir}/operators/__init__.pyi")
 endif()
 
-# A separate component, excluded from the default install and the Debian package:
-#   cmake --install <build> --component {{ cookiecutter.module_repo_name }}-python
-set(_component {{ cookiecutter.module_repo_name }}-python)
+# The component that holoscan_install_python_module_metadata() installs the metadata into.
+# The Debian package carries no Python files: packaging turns the bindings off.
+#   cmake --install <build> --component holoscan-{{ cookiecutter.module_slug }}-python_libs
+set(_component holoscan-{{ cookiecutter.module_slug }}-python_libs)
 install(TARGETS {{ cookiecutter.module_slug }}_python
-    LIBRARY DESTINATION "${_package_install}" COMPONENT ${_component} EXCLUDE_FROM_ALL)
+    LIBRARY DESTINATION "${_package_install}" COMPONENT ${_component})
 install(FILES "${_package_dir}/__init__.py" "${_package_dir}/py.typed"
-    DESTINATION "${_package_install}" COMPONENT ${_component} EXCLUDE_FROM_ALL)
+    DESTINATION "${_package_install}" COMPONENT ${_component})
 install(FILES "${_package_dir}/operators/__init__.py" ${_stub_files}
-    DESTINATION "${_package_install}/operators" COMPONENT ${_component} EXCLUDE_FROM_ALL)
+    DESTINATION "${_package_install}/operators" COMPONENT ${_component})

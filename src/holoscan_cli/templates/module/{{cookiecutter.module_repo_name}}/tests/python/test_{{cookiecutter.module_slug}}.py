@@ -4,6 +4,7 @@
 
 """Check that the Python bindings register and run the Module's C++ operators."""
 
+import importlib.metadata
 import subprocess
 import sys
 from pathlib import Path
@@ -13,6 +14,7 @@ from holoscan_{{ cookiecutter.module_slug }}.operators import {{ op_class }}
 
 import holoscan as hs
 
+MODULE = "{{ cookiecutter.module_slug }}"
 REGISTRY_NAME = "holoscan.{{ cookiecutter.module_slug }}.{{ op_class }}"
 PIPELINE = (
     Path(__file__).resolve().parents[2]
@@ -25,6 +27,14 @@ PIPELINE = (
 
 def test_extension_uses_the_stable_abi():
     assert holoscan_{{ cookiecutter.module_slug }}._{{ cookiecutter.module_slug }}.__file__.endswith(".abi3.so")
+
+
+def test_module_metadata_exposes_holoscan_alias():
+    entries = importlib.metadata.entry_points(group="holoscan.modules", name=MODULE)
+    assert [entry.value for entry in entries] == [f"holoscan_{MODULE}"]
+    import holoscan.{{ cookiecutter.module_slug }}.operators as alias
+
+    assert alias.{{ op_class }} is {{ op_class }}
 
 
 def test_operator_is_registered():
