@@ -1,8 +1,8 @@
 # Holoscan CLI reference
 
-Use `holoscan` directly in a standalone Holoscan Module repository. HoloHub
-and other repositories may provide wrappers that add their own defaults;
-follow that repository's guidance when using a wrapper.
+Use `holoscan` directly in a standalone Holoscan Module repository. Other
+repositories may provide wrappers that add their own defaults; follow that
+repository's guidance when using a wrapper.
 
 This reference describes the CLI 5.x command surface. Check
 `holoscan version --json` and `holoscan <command> --help` for the installed
@@ -207,8 +207,8 @@ value is split using shell-style quoting, without shell expansion. An empty
 value (`--nsys-args=''`) supplies no profile options, using Nsight's defaults.
 Use `--run-args` separately for application arguments.
 
-The same options work with downstream wrappers such as `./holohub` and
-`./isaac_os` once their host and container CLI versions include this feature.
+The same options work with downstream wrappers once their host and container
+CLI versions include this feature.
 The application's mode, environment, arguments, and working directory are
 preserved. Relative output paths resolve from that working directory; for
 container runs, use a writable mounted path to keep reports on the host.
