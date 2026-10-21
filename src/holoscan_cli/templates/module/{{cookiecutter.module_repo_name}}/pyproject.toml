@@ -2,10 +2,14 @@
 # SPDX-License-Identifier: {{ cookiecutter._license }}
 
 {% if cookiecutter.__python_bindings == 'yes' -%}
-# Development tooling only. Holoscan SDK 5.0 Modules are C++ libraries shipped
-# as Debian packages; the CMake build adds the Python bindings, and wheel
-# packaging returns in a later release. This file pins the Holoscan CLI for
-# `uv run holoscan ...` and configures ruff for the repository's helper scripts.
+# Holoscan SDK 5.0 Modules are C++ libraries shipped as Debian packages. This
+# file also builds the Python bindings into a wheel with scikit-build-core
+# (`holoscan package <module> --pkg-generator WHEEL`), pins the Holoscan CLI for
+# `uv run holoscan ...`, and configures ruff for the repository's helper scripts.
+
+[build-system]
+requires = ["scikit-build-core~=1.0.3"]
+build-backend = "scikit_build_core.build"
 {%- else -%}
 # Development tooling only. Holoscan SDK 5.0 Modules are C++ libraries shipped
 # as Debian packages; Python bindings and wheel packaging return in a later
@@ -24,6 +28,10 @@ authors = [
 ]
 {% if cookiecutter.__python_bindings == 'yes' -%}
 requires-python = ">=3.12"
+dependencies = ["holoscan-core-cu13>={{ cookiecutter.holoscan_version }}"]
+
+[project.entry-points."holoscan.modules"]
+{{ cookiecutter.module_slug }} = "holoscan_{{ cookiecutter.module_slug }}"
 {%- else -%}
 requires-python = ">=3.11"
 {%- endif %}
@@ -38,8 +46,24 @@ dev = [
 ]
 
 [tool.uv]
+{% if cookiecutter.__python_bindings == 'yes' -%}
+# `uv sync` only provisions the dev tools; `holoscan package` builds the wheel.
+{%- else -%}
 # Not an installable Python package; `uv sync` only provisions the dev tools.
+{%- endif %}
 package = false
+{%- if cookiecutter.__python_bindings == 'yes' %}
+
+[tool.scikit-build]
+# Build only the operator and its Python bindings, and package only their install component.
+wheel.packages = []
+wheel.py-api = "cp312"
+install.components = ["holoscan-{{ cookiecutter.module_slug }}-python_libs"]
+cmake.define.BUILD_ALL = "OFF"
+cmake.define.OP_{{ cookiecutter.operator_slug }} = "ON"
+cmake.define.{{ cookiecutter.module_slug | upper }}_BUILD_TESTING = "OFF"
+cmake.define.HOLOSCAN_{{ cookiecutter.module_slug | upper }}_BUILD_PYTHON = "ON"
+{%- endif %}
 
 [tool.uv.sources]
 holoscan-cli = { index = "nvidia" }
