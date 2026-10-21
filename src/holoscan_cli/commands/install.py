@@ -22,6 +22,7 @@ import os
 import re
 import shlex
 import stat
+import sys
 import tempfile
 from dataclasses import dataclass
 from email.parser import Parser
@@ -686,9 +687,33 @@ def _install_metadata_dev_source(source: _DevSource, site_dir: Path, *, dryrun: 
     if "\n" in python_path or "\r" in python_path:
         fatal(f"Cannot represent Python build path in a .pth file: {python_path!r}")
     package_name = f"holoscan_{source.slug}"
-    if PathFinder.find_spec(package_name, [str(site_dir)]) is not None:
+    # A prior registration is still on this process's sys.path until restart.
+    # Exclude that path when checking the registration that will replace it.
+    replaced_root = None
+    if pth.is_file():
+        try:
+            lines = _read_dev_metadata(pth).splitlines()
+            if len(lines) == 1 and Path(lines[0]).is_absolute():
+                replaced_root = Path(lines[0]).resolve()
+        except (OSError, ValueError):
+            pass
+    # These entries survive replacement even when they also came from the .pth.
+    persistent_roots = {
+        Path(entry).resolve() for entry in os.environ.get("PYTHONPATH", "").split(os.pathsep)
+    }
+    persistent_roots.add(Path.cwd())
+    search_path = [
+        entry
+        for entry in sys.path
+        if Path(entry).resolve() != source.python_root
+        and (Path(entry).resolve() != replaced_root or Path(entry).resolve() in persistent_roots)
+    ]
+    conflict = PathFinder.find_spec(package_name, [str(site_dir)])
+    if conflict is None:
+        conflict = PathFinder.find_spec(package_name, search_path)
+    if conflict is not None:
         fatal(
-            f"Installed package '{package_name}' in {site_dir} would shadow the development "
+            f"Installed package '{package_name}' at {conflict.origin} would shadow the development "
             "build. Uninstall that package or use a clean Python environment, then retry."
         )
     if dryrun:

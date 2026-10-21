@@ -507,17 +507,26 @@ def test_install_dev_metadata_preview_does_not_change_registration(tmp_path):
 
 
 @pytest.mark.parametrize("layout", ["package", "module"])
-def test_install_dev_rejects_installed_package_before_replacing_hook(tmp_path, layout):
+@pytest.mark.parametrize("location", ["site", "sys-path", "pythonpath"])
+def test_install_dev_rejects_installed_package_before_replacing_hook(
+    tmp_path, monkeypatch, layout, location
+):
     build = tmp_path / "build"
     _metadata_build(build)
     site_dir = tmp_path / "site"
     site_dir.mkdir()
+    conflict_dir = site_dir if location == "site" else tmp_path / "conflict"
+    conflict_dir.mkdir(exist_ok=True)
+    if location != "site":
+        monkeypatch.syspath_prepend(str(conflict_dir))
+    if location == "pythonpath":
+        monkeypatch.setenv("PYTHONPATH", str(conflict_dir))
     if layout == "package":
-        package = site_dir / "holoscan_smoke"
+        package = conflict_dir / "holoscan_smoke"
         package.mkdir()
         (package / "__init__.py").write_text("raise AssertionError('must not import')\n")
     else:
-        (site_dir / "holoscan_smoke.py").write_text("raise AssertionError('must not import')\n")
+        (conflict_dir / "holoscan_smoke.py").write_text("raise AssertionError('must not import')\n")
     pth = site_dir / "holoscan-smoke-dev.pth"
     helper = site_dir / "holoscan_smoke_dev.py"
     pth.write_text("import holoscan_smoke_dev\n")
@@ -531,6 +540,40 @@ def test_install_dev_rejects_installed_package_before_replacing_hook(tmp_path, l
         assert pth.read_text() == "import holoscan_smoke_dev\n"
         assert helper.read_text() == "# original helper\n"
         assert not list(site_dir.glob(".holoscan-*-dev.pth.*"))
+
+
+@pytest.mark.parametrize("persistent_path", [None, "pythonpath", "cwd"])
+def test_install_dev_replaces_active_registration(tmp_path, monkeypatch, persistent_path):
+    old_root = _metadata_build(tmp_path / "old")
+    new_build = tmp_path / "new"
+    new_root = _metadata_build(new_build)
+    site = tmp_path / "site"
+    site.mkdir()
+    pth = site / "holoscan-smoke-dev.pth"
+    pth.write_text(f"{old_root.resolve()}\n")
+    monkeypatch.syspath_prepend(str(old_root))
+    if persistent_path == "pythonpath":
+        monkeypatch.setenv("PYTHONPATH", str(old_root))
+    else:
+        monkeypatch.delenv("PYTHONPATH", raising=False)
+    if persistent_path == "cwd":
+        monkeypatch.chdir(old_root)
+    cli = SimpleNamespace(DEFAULT_BUILD_PARENT_DIR=tmp_path, script_name="holoscan")
+    args = _dev_args(project="smoke", build_dir=new_build, site_dir=site)
+
+    if persistent_path:
+        with pytest.raises(SystemExit):
+            install_cmd.handle_install(cli, args)
+        assert pth.read_text() == f"{old_root.resolve()}\n"
+    else:
+        install_cmd.handle_install(cli, args)
+        assert pth.read_text() == f"{new_root.resolve()}\n"
+        # In a fresh process the new registration is already on the import path.
+        monkeypatch.setattr(
+            sys, "path", [str(new_root)] + [entry for entry in sys.path if entry != str(old_root)]
+        )
+        install_cmd.handle_install(cli, args)
+        assert pth.read_text() == f"{new_root.resolve()}\n"
 
 
 def test_install_dev_metadata_failed_replace_preserves_old_registration(tmp_path):

@@ -251,9 +251,12 @@ For metadata-enabled SDK 5.x Modules, registration adds the build's
 `holoscan_install_python_module_metadata()` and rebuild. Existing staged
 legacy hook pairs remain supported. Each metadata-enabled Python root must
 contain one Holoscan provider so registrations can be removed independently.
-An installed copy of the same package in the destination site directory is
-rejected because it would take precedence over the build path. Remove that
-copy or use a clean Python environment before registering the build.
+An installed copy of the same package in the destination site directory or
+elsewhere on the effective Python import path is rejected because it would
+take precedence over the build path. Remove that copy or use a clean Python
+environment before registering the build. Replacing an existing development
+registration remains supported; remove any `PYTHONPATH` entry pointing to the
+old build first.
 
 Use `install <module> --dev --uninstall` in the same environment to remove its
 registration without deleting build output. Start a new Python process to
