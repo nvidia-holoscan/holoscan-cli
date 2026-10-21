@@ -8,7 +8,7 @@
 # `uv run holoscan ...`, and configures ruff for the repository's helper scripts.
 
 [build-system]
-requires = ["scikit-build-core==1.0.3"]
+requires = ["scikit-build-core~=1.0.3"]
 build-backend = "scikit_build_core.build"
 {%- else -%}
 # Development tooling only. Holoscan SDK 5.0 Modules are C++ libraries shipped
