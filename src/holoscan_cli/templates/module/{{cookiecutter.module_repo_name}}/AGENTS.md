@@ -8,7 +8,8 @@ SDK {{ cookiecutter.holoscan_version }} or later. [README.md](README.md) covers 
 
 {% if cookiecutter.__python_bindings == 'yes' -%}
 - This Module's operators are C++ and ship as a Debian package. `python/` exposes them to
-  Python through the SDK operator registry; there are no operators implemented in Python and no wheel.
+  Python through the SDK operator registry and also ship as a wheel; there are no operators
+  implemented in Python.
 {%- else -%}
 - This Module is C++ only and ships as a Debian package. It has no Python operators, bindings,
   pytest suite, or wheel.
@@ -44,6 +45,9 @@ Install the CLI version pinned in `requirements-cli.txt` (see README.md), or pre
 | Run the tests | `holoscan test` |
 | Lint | `holoscan lint` |
 | Build the Debian package | `holoscan package {{ cookiecutter.module_repo_name }} --pkg-generator DEB` |
+{%- if cookiecutter.__python_bindings == 'yes' %}
+| Build the wheel | `holoscan package {{ cookiecutter.module_repo_name }} --pkg-generator WHEEL` |
+{%- endif %}
 | List projects and check the host | `holoscan list --json`, `holoscan env-check --json` |
 
 - `holoscan lint` runs the hooks in `.pre-commit-config.yaml` and fixes some files in place; review
@@ -88,7 +92,7 @@ and you can edit them. Upgrading the CLI does not update them; update them by ha
   installing the Debian package.
 {% if cookiecutter.__python_bindings == 'yes' -%}
 - Register every new operator in `python/_{{ cookiecutter.module_slug }}.cpp` and cover it in `tests/python`.
-- **Never** add Python-implemented operators or wheel packaging.
+- **Never** add Python-implemented operators.
 {%- else -%}
 - **Never** add Python operators, bindings, pytest suites, or wheel packaging.
 {%- endif %}

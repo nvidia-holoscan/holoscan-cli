@@ -14,7 +14,11 @@ distributing this Holoscan Module.
 ├── requirements-cli.txt            # Tested holoscan-cli development version
 ├── Dockerfile                      # Development container image
 ├── CMakeLists.txt                  # Root CMake — orchestrates operators/applications/tests
+{%- if cookiecutter.__python_bindings == 'yes' %}
+├── pyproject.toml                  # Development tooling (CLI pin, ruff) and the wheel build
+{%- else %}
 ├── pyproject.toml                  # Development tooling (CLI pin, ruff); no wheel build
+{%- endif %}
 ├── metadata.json                   # Module-level metadata (schema: urn:holoscan:module:v2)
 ├── AGENTS.md                       # Guidance for AI coding agents
 ├── cmake/                          # CMake helpers copied from the CLI at create time
@@ -64,8 +68,10 @@ from holoscan_{{ cookiecutter.module_slug }}.operators import {{ cookiecutter.op
   `cmake --install build --component holoscan-{{ cookiecutter.module_slug }}-python_libs`.
 - The build tree and native installs carry the `holoscan-{{ cookiecutter.module_slug.replace('_', '-') }}-cu13` metadata written by
   the SDK's `holoscan_install_python_module_metadata()`, so both `import holoscan_{{ cookiecutter.module_slug }}` and
-  `import holoscan.{{ cookiecutter.module_slug }}` work. Wheel packaging returns in a later release; until then the
-  `pyproject.toml` only provisions development tooling.
+  `import holoscan.{{ cookiecutter.module_slug }}` work.
+- `holoscan package {{ cookiecutter.module_repo_name }} --pkg-generator WHEEL` builds the same package into a
+  `holoscan-{{ cookiecutter.module_slug.replace('_', '-') }}` wheel with scikit-build-core, configured in `pyproject.toml`. The wheel declares its
+  own `holoscan.modules` entry point, so wheel builds skip `holoscan_install_python_module_metadata()`.
 {%- else -%}
 Holoscan SDK 5.0 is C++-first, so this scaffold contains no Python operator, pipeline, or
 binding layer. Python support returns in a later release; until then the `pyproject.toml` only

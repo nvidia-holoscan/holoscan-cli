@@ -310,10 +310,15 @@ def test_packaged_template_generates_python_bindings_for_cpp_python(cli, tmp_pat
     assert "set(_component holoscan-my_mod-python_libs)" in python_cmake
     assert "EXCLUDE_FROM_ALL" not in python_cmake
     assert (
-        "holoscan_install_python_module_metadata(\n"
-        "    MODULE my_mod\n"
-        '    REQUIRES "holoscan-core-cu13>=5.0.0")'
+        "if(NOT SKBUILD)\n"
+        '    set(HOLOSCAN_PYTHON_MODULE_ROOT "${_python_root}")\n'
+        '    set(HOLOSCAN_PYTHON_INSTALL_DIR "${${_python_install_var}}")\n'
+        "    holoscan_install_python_module_metadata(\n"
+        "        MODULE my_mod\n"
+        '        REQUIRES "holoscan-core-cu13>=5.0.0")\n'
+        "endif()"
     ) in python_cmake
+    assert 'set(MY_MOD_PYTHON_INSTALL_DIR "." CACHE PATH "" FORCE)' in python_cmake
     assert "set(HOLOSCAN_MY_MOD_BUILD_PYTHON ON\n" in root_cmake
     assert "option(HOLOSCAN_MY_MOD_BUILD_PYTHON" not in root_cmake
     assert 'option(HOLOSCAN_MY_MOD_BUILD_CPP "Build C++ applications" ON)' in root_cmake
@@ -331,6 +336,27 @@ def test_packaged_template_generates_python_bindings_for_cpp_python(cli, tmp_pat
     assert 'requires-python = ">=3.12"' in pyproject
     assert '"pytest",' in pyproject
     assert 'target-version = "py312"' in pyproject
+    pyproject_data = tomllib.loads(pyproject)
+    assert pyproject_data["build-system"] == {
+        "requires": ["scikit-build-core==1.0.3"],
+        "build-backend": "scikit_build_core.build",
+    }
+    assert pyproject_data["project"]["name"] == "holoscan-my-mod"
+    assert pyproject_data["project"]["dependencies"] == ["holoscan-core-cu13>=5.0.0"]
+    assert pyproject_data["project"]["entry-points"] == {
+        "holoscan.modules": {"my_mod": "holoscan_my_mod"}
+    }
+    skbuild = pyproject_data["tool"]["scikit-build"]
+    assert skbuild["install"]["components"] == ["holoscan-my_mod-python_libs"]
+    assert skbuild["cmake"]["define"] == {
+        "BUILD_ALL": "OFF",
+        "OP_my_mod_op": "ON",
+        "MY_MOD_BUILD_TESTING": "OFF",
+        "HOLOSCAN_MY_MOD_BUILD_PYTHON": "ON",
+    }
+    agents_py = (project / "AGENTS.md").read_text(encoding="utf-8")
+    assert "holoscan package holoscan-my-mod --pkg-generator WHEEL" in agents_py
+    assert "wheel packaging" not in agents_py
     module = json.loads((project / "metadata.json").read_text(encoding="utf-8"))["module"]
     assert module["language"] == ["C++", "Python"]
     operator = json.loads(

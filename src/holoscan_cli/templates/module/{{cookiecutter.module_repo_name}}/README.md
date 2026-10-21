@@ -10,8 +10,8 @@ A **Holoscan Module** — a self-contained, redistributable library that extends
 
 {% if cookiecutter.__python_bindings == 'yes' -%}
 > Holoscan SDK 5.0 is C++-first. This Module ships C++ operators plus Python bindings that expose
-> them through the SDK operator registry (`import holoscan_{{ cookiecutter.module_slug }}`). Wheel packaging returns in a
-> later release.
+> them through the SDK operator registry (`import holoscan_{{ cookiecutter.module_slug }}`). Build the bindings into a wheel
+> with `holoscan package {{ cookiecutter.module_repo_name }} --pkg-generator WHEEL`.
 {%- else -%}
 > Holoscan SDK 5.0 is C++-first. This Module ships C++ operators only; Python bindings and wheel
 > packaging return in a later release.
