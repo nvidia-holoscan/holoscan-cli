@@ -69,6 +69,7 @@ def make_local_build_command(
     mode_name: str | None,
     language: str | None,
     effective_build_type: str | None = None,
+    cmake_build_args: list[str] | None = None,
 ) -> str:
     """Build the recursive local-build command used inside a container."""
     command = [*shlex.split(cli_command), "build", str(args.project)]
@@ -98,6 +99,8 @@ def make_local_build_command(
     for target in getattr(args, "targets", None) or []:
         command.append(f"--target={target}")
     append_configure_args(command, args)
+    if cmake_build_args:
+        command.extend(["--", *cmake_build_args])
     return shlex.join(command)
 
 
@@ -106,7 +109,10 @@ def register_build_parser(
 ) -> argparse.ArgumentParser:
     """Register the ``build`` subcommand."""
     parser = subparsers.add_parser(
-        "build", help=help_for("build"), parents=[container_build, container_run]
+        "build",
+        help=help_for("build"),
+        parents=[container_build, container_run],
+        epilog="Arguments after -- are passed to cmake --build; a second -- passes options to the build tool.",
     )
     parser.add_argument("project", help="Project to build")
     parser.add_argument("mode", nargs="?", help="Mode to build (optional)")
@@ -213,6 +219,7 @@ def handle_build(cli, args: argparse.Namespace) -> None:
             extra_env=build_mode_env,
             local_sdk_root=getattr(args, "local_sdk_root", None),
             targets=getattr(args, "targets", None),
+            cmake_build_args=getattr(args, "_trailing_args", None),
         )
     else:
         # Build in container
@@ -259,6 +266,7 @@ def handle_build(cli, args: argparse.Namespace) -> None:
             mode_name,
             args.language,
             effective_build_type,
+            cmake_build_args=getattr(args, "_trailing_args", None),
         )
 
         img = container.resolve_run_image(getattr(args, "img", None))
@@ -305,6 +313,7 @@ def build_project_locally(
     extra_env: Optional[dict] = None,
     local_sdk_root: Optional[str | Path] = None,
     targets: Optional[list[str]] = None,
+    cmake_build_args: Optional[list[str]] = None,
 ) -> tuple[Path, dict]:
     """Helper to build a project locally (cmake + cmake --build)."""
     project_data = cli.find_project(project_name=project_name, language=language)
@@ -502,6 +511,7 @@ def build_project_locally(
     else:
         build_njobs = build_env.get("CMAKE_BUILD_PARALLEL_LEVEL", str(os.cpu_count()))
     build_cmd.extend(["-j", build_njobs])
+    build_cmd.extend(cmake_build_args or [])
 
     run_command(build_cmd, dry_run=dryrun, env=build_env)
 

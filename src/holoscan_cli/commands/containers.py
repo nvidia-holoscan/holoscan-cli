@@ -49,6 +49,7 @@ def register_build_container_parser(cli, subparsers, *, container_build) -> argp
         "build-container",
         help=help_for("build-container"),
         parents=[container_build],
+        epilog="Arguments after -- are passed to Docker build, after --build-args.",
     )
     parser.add_argument("project", nargs="?", help="Project to build container for")
     parser.add_argument("mode", nargs="?", help="Mode to build container for (optional)")
@@ -107,6 +108,7 @@ def handle_build_container(cli, args: argparse.Namespace) -> None:
         mode_build_args=mode_build_args,
         cuda_version=getattr(args, "cuda", None),
         extra_scripts=getattr(args, "extra_scripts", []),
+        extra_args=getattr(args, "_trailing_args", None),
     )
 
 

@@ -417,14 +417,18 @@ class HoloscanCLI:
     def run(self, argv: Optional[List[str]] = None) -> None:
         """Main entry point for the CLI"""
 
-        trailing_docker_args = []  # Handle " -- " separator for run-container command forwarding
+        trailing_args = []
         if argv is None:
             argv = sys.argv
         argv = list(argv)
         cmd_args = argv[1:]  # Skip script name, return a copy of the args
-        if len(cmd_args) >= 2 and cmd_args[0] == "run-container" and "--" in cmd_args:
+        if (
+            cmd_args
+            and cmd_args[0] in {"build", "build-container", "run", "run-container"}
+            and "--" in cmd_args
+        ):
             sep = cmd_args.index("--")
-            cmd_args, trailing_docker_args = cmd_args[:sep], cmd_args[sep + 1 :]
+            cmd_args, trailing_args = cmd_args[:sep], cmd_args[sep + 1 :]
 
         potential_command = cmd_args[0] if cmd_args else None
         dash_suggestion = None
@@ -433,8 +437,8 @@ class HoloscanCLI:
 
         try:
             args = self.parser.parse_args(cmd_args)
-            if trailing_docker_args:
-                args._trailing_args = trailing_docker_args  # " -- " used for run-container command
+            if trailing_args:
+                args._trailing_args = trailing_args
         except SystemExit as e:
             if len(cmd_args) > 0 and e.code != 0:  # exit code is 0 => help was successfully shown
                 if dash_suggestion:
