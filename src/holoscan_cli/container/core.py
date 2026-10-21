@@ -590,6 +590,7 @@ class HoloscanContainer:
         extra_scripts: Optional[List[str]] = None,
         cuda_version: Optional[Union[str, int]] = None,
         mode_build_args: Optional[str] = None,
+        extra_args: Optional[List[str]] = None,
     ) -> None:
         """
         Build the container image according to the procedure:
@@ -624,6 +625,7 @@ class HoloscanContainer:
             build_args=build_args,
         )
         raw_build_tokens = shlex.split(full_build_args) if full_build_args else []
+        raw_build_tokens.extend(extra_args or [])
         # Check if buildx exists
         if not self.dryrun:
             try:

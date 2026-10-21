@@ -153,6 +153,14 @@ holoscan build my_app --cuda 13 --base-img registry.example.com/sdk:reviewed
 - `--docker-opts`, `--configure-args`, and `--forward-env NAME` are repeatable and additive.
 - `--build-with` replaces mode operator dependencies; `--build-with=` selects none.
 
+Arguments after `--` apply only to the selected subcommand's stage. `build`
+appends them to `cmake --build` after its generated options; `build-container`
+adds them after the Docker build argument layers, with the same restrictions on
+CLI-owned build arguments; `run` appends them after `--run-args`. The destination
+tool decides how repeated options combine. See [argument forwarding](CLI_REFERENCE.md#preview-and-execution)
+for examples and the existing `run-container` command behavior.
+
 Add `--dryrun` to preview lifecycle commands and resolved settings with their
-sources. Docker/CMake option values and forwarded environment values stay hidden.
+sources. The configuration report hides Docker/CMake option values and forwarded
+environment values.
 See [preview and execution](CLI_REFERENCE.md#preview-and-execution) for precautions.

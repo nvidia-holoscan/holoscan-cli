@@ -127,7 +127,35 @@ HoloHub names: the bundled CMake helpers read `HOLOHUB_BUILD_OPERATORS` (from
 `HOLOHUB_EXT_OP_<op>_PROVIDER`, and HoloHub applications read the data folder
 from `HOLOHUB_DATA_DIR`.
 
-Only `run-container` accepts a command after `--`. With its normal shell
+Arguments after the first `--` are forwarded according to the subcommand:
+
+| Subcommand | Destination |
+| --- | --- |
+| `build` | `cmake --build` options, after the CLI's build options. |
+| `build-container` | Docker build options, after `--build-args`. |
+| `run` | Application arguments, after `--run-args`. |
+| `run-container` | A command inside the container. |
+
+Put Holoscan options before `--`; `--help` after it belongs to the destination.
+For `build`, a second `--` forwards options to the underlying build tool:
+
+```bash
+holoscan build my_app -- --clean-first --verbose
+holoscan build my_app -- --target my_target
+holoscan build my_app -- -- -v  # Ninja options for a Ninja build directory
+holoscan build-container my_app -- --progress plain --label "description=My app"
+holoscan run my_app -- --input "data/my input.json"
+```
+
+`build` still configures normally. Forwarded options do not change the configure
+step or automatic packaging. Use the CLI's `--target` before `--` to skip
+automatic CPack for a package project. Existing named options remain supported.
+
+For `build`, `build-container`, and `run`, argument boundaries are preserved,
+including empty arguments. The CLI does not expand shell variables in forwarded
+arguments; your shell processes quoting and expansions before invoking the CLI.
+
+`run-container` keeps its shell command behavior. With its normal shell
 entrypoint, quote a multi-argument or compound command as one argument:
 
 ```bash

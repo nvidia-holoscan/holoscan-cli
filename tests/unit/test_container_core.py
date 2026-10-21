@@ -932,12 +932,22 @@ def test_build_forwards_explicit_build_args_to_docker(tmp_path, monkeypatch):
         project_metadata=_project_metadata(project_dir),
     )
     c.dryrun = True
-    c.build(build_args="--build-arg TEST=value")
+    trailing = [
+        "--label",
+        "description=two words",
+        "--build-arg",
+        "LITERAL=$HOME",
+        "--label",
+        "empty=",
+    ]
+    c.build(build_args="--build-arg TEST=value", extra_args=trailing)
 
     cmd = calls[0]
     assert cmd[:2] == ["docker", "build"]
     assert "--build-arg" in cmd
     assert "TEST=value" in cmd
+    start = cmd.index("--label")
+    assert cmd[start : start + len(trailing)] == trailing
 
 
 def test_default_docker_build_args_env_propagates_to_docker_build(tmp_path, monkeypatch):
