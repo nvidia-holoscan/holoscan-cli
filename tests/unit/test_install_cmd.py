@@ -404,6 +404,66 @@ def test_install_dev_metadata_selection_and_explicit_override(tmp_path):
     assert (site / "holoscan-smoke-dev.pth").read_text() == f"{old_root.resolve()}\n"
 
 
+@pytest.mark.parametrize("problem", ["malformed", "shared-providers"])
+@pytest.mark.parametrize("project", [None, "smoke"])
+@pytest.mark.parametrize("dryrun", [False, True])
+def test_install_dev_skips_invalid_sibling_metadata(tmp_path, capsys, problem, project, dryrun):
+    builds = tmp_path / "builds"
+    good_root = _metadata_build(builds / "good")
+    bad_root = _metadata_build(builds / "bad", "other")
+    if problem == "malformed":
+        (bad_root / "holoscan_other_cu13.dist-info/entry_points.txt").write_text("invalid INI\n")
+    else:
+        _metadata_build(builds / "bad", "another")
+    cli = SimpleNamespace(DEFAULT_BUILD_PARENT_DIR=builds, script_name="holoscan")
+    site = tmp_path / "site"
+
+    install_cmd.handle_install(cli, _dev_args(project=project, site_dir=site, dryrun=dryrun))
+
+    output = capsys.readouterr()
+    assert "Invalid Python development metadata" in output.err
+    assert str(bad_root.resolve()) in output.err
+    assert "skipping" in output.err
+    if dryrun:
+        assert f"Would register {good_root.resolve()}" in output.out
+        assert not site.exists()
+    else:
+        assert (site / "holoscan-smoke-dev.pth").read_text() == f"{good_root.resolve()}\n"
+        assert len(list(site.iterdir())) == 1
+
+
+@pytest.mark.parametrize("umask,expected_mode", [(0o022, 0o644), (0o027, 0o640), (0o077, 0o600)])
+def test_install_dev_registration_respects_umask(tmp_path, umask, expected_mode):
+    build = tmp_path / "build"
+    python_root = _metadata_build(build)
+    site = tmp_path / "site"
+    site.mkdir()
+    # Isolate the process-wide umask and verify it is unchanged by registration.
+    subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            "import os, sys; from pathlib import Path; "
+            "sys.path.insert(0, sys.argv[1]); "
+            "from holoscan_cli.commands.install import _DevSource, _install_metadata_dev_source; "
+            "mask = int(sys.argv[4]); os.umask(mask); "
+            "source = _DevSource('smoke', Path(sys.argv[2]), 0, Path(sys.argv[2])); "
+            "_install_metadata_dev_source(source, Path(sys.argv[3]), dryrun=False); "
+            "assert os.umask(mask) == mask",
+            str(Path(install_cmd.__file__).resolve().parents[2]),
+            str(python_root),
+            str(site),
+            str(umask),
+        ],
+        check=True,
+    )
+
+    pth = site / "holoscan-smoke-dev.pth"
+    assert pth.stat().st_mode & 0o777 == expected_mode
+    assert pth.read_text() == f"{python_root}\n"
+    assert len(list(site.iterdir())) == 1
+
+
 def test_install_dev_metadata_build_on_demand_uses_returned_directory(tmp_path, monkeypatch):
     cli = _standalone_cli(tmp_path)
     returned_build = tmp_path / "custom-build"

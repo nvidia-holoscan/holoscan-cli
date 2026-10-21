@@ -47,7 +47,7 @@ from holoscan_cli.utils.holohub import (
     is_env_request_local_build,
     update_env,
 )
-from holoscan_cli.utils.io import Color, fatal, run_command
+from holoscan_cli.utils.io import Color, fatal, run_command, warn
 from holoscan_cli.utils.project import (
     append_configure_args,
     report_effective_configuration,
@@ -483,7 +483,7 @@ def _handle_install_dev(cli, args: argparse.Namespace) -> None:
             [d for d in build_parent.iterdir() if d.is_dir()] if build_parent.is_dir() else []
         )
 
-    by_slug = _find_dev_sources(search_dirs)
+    by_slug = _find_dev_sources(search_dirs, strict=args.build_dir is not None)
     module_slug = _dev_hook_slug(module_name) if module_name else None
     requested_slug = _dev_hook_slug(args.project) if args.project else module_slug
     if (
@@ -509,7 +509,7 @@ def _handle_install_dev(cli, args: argparse.Namespace) -> None:
             return
         # Inspect the actual result, not an unrelated pre-existing build.
         search_dirs = [build_dir]
-        by_slug = _find_dev_sources(search_dirs)
+        by_slug = _find_dev_sources(search_dirs, strict=args.build_dir is not None)
 
     if args.project:
         target = _dev_hook_slug(args.project)
@@ -614,7 +614,7 @@ def _read_dev_metadata(path: Path) -> str:
     return content.decode("utf-8")
 
 
-def _metadata_dev_source(build_dir: Path) -> _DevSource | None:
+def _metadata_dev_source(build_dir: Path, *, strict: bool) -> _DevSource | None:
     python_root = (build_dir / "python/lib").resolve()
     providers = []
     try:
@@ -650,15 +650,19 @@ def _metadata_dev_source(build_dir: Path) -> _DevSource | None:
                 "so development registrations can be removed independently"
             )
     except (OSError, ValueError, configparser.Error) as exc:
-        fatal(f"Invalid Python development metadata in {python_root}: {exc}")
+        message = f"Invalid Python development metadata in {python_root}: {exc}"
+        if strict:
+            fatal(message)
+        warn(f"{message}; skipping")
+        return None
     return providers[0] if providers else None
 
 
-def _find_dev_sources(search_dirs: list[Path]) -> dict[str, _DevSource]:
+def _find_dev_sources(search_dirs: list[Path], *, strict: bool) -> dict[str, _DevSource]:
     by_slug = {}
     for build_dir in search_dirs:
         legacy = _find_dev_hooks([build_dir])
-        modern = _metadata_dev_source(build_dir)
+        modern = _metadata_dev_source(build_dir, strict=strict)
         if modern is not None:
             # Never revive an obsolete namespace hook for a modern provider.
             legacy.pop(modern.slug, None)
@@ -692,20 +696,17 @@ def _install_metadata_dev_source(source: _DevSource, site_dir: Path, *, dryrun: 
         if helper.exists():
             print(f"Would remove obsolete legacy helper {helper}")
         return
-    temporary = None
     try:
-        with tempfile.NamedTemporaryFile(
-            mode="w", encoding="utf-8", dir=site_dir, prefix=f".{pth.name}.", delete=False
-        ) as file:
-            temporary = Path(file.name)
-            file.write(python_path + "\n")
-        os.replace(temporary, pth)
+        with tempfile.TemporaryDirectory(dir=site_dir, prefix=f".{pth.name}.") as directory:
+            temporary = Path(directory) / pth.name
+            # Normal creation applies the umask without changing process-wide state.
+            # The private directory protects the file until it is ready to replace.
+            with temporary.open("x", encoding="utf-8") as file:
+                file.write(python_path + "\n")
+            os.replace(temporary, pth)
         helper.unlink(missing_ok=True)
     except OSError as exc:
         fatal(f"Failed to register Python build for '{source.slug}': {exc}")
-    finally:
-        if temporary is not None:
-            temporary.unlink(missing_ok=True)
     print(f"Registered {python_path} in {pth}")
 
 

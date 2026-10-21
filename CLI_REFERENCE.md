@@ -240,6 +240,8 @@ is the default; add `--local` for the current interpreter. Inspect
 `env-info --json` and use `--build-dir <directory>` to select an existing build
 without rebuilding it. Otherwise the newest provider metadata or legacy hook
 under the build parent selects the build for each module.
+Implicit discovery warns about invalid Python metadata and skips it; invalid
+metadata in an explicit `--build-dir` is an error.
 
 For metadata-enabled SDK 5.x Modules, registration adds the build's
 `python/lib` directory through a `.pth` file. The SDK discovers its
