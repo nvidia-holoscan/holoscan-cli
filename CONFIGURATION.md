@@ -132,7 +132,7 @@ aarch64 = "registry.example.com/holoscan/sdk-build-aarch64:5.0.0-cuda13"
   where Docker supports that behavior.
 - `base-images`, when present, must include the selected architecture. References
   are used unchanged and cannot be empty or contain whitespace. `--base-img`, then
-  `HOLOSCAN_CLI_BASE_IMAGE`, take precedence.
+  `HOLOSCAN_CLI_BASE_IMAGE`, take precedence; see [base images](#base-images).
 - `forward-env` accepts valid host variable names, never values. Existing host
   values are inherited without appearing on the Docker command line. Names combine
   with `HOLOSCAN_CLI_FORWARD_ENV` and repeated `--forward-env NAME` options.
@@ -141,6 +141,56 @@ aarch64 = "registry.example.com/holoscan/sdk-build-aarch64:5.0.0-cuda13"
 
 Unknown Holoscan keys are rejected. Keep credentials and machine-specific paths
 out of project configuration.
+
+## Base images
+
+The CLI does not choose a container base image from its own version. When your
+component's Dockerfile uses `FROM ${BASE_IMAGE}`, set the base image in one of
+these ways:
+
+1. Pass the image to the `--base-img` flag:
+
+   ```bash
+   holoscan build-container my_app --base-img nvcr.io/nvidia/clara-holoscan/holoscan:v4.4.0-cuda13
+   ```
+
+2. Set `HOLOSCAN_CLI_BASE_IMAGE` to an exact tagged or digested image. It is
+   used without adding another tag:
+
+   ```bash
+   export HOLOSCAN_CLI_BASE_IMAGE=nvcr.io/nvidia/clara-holoscan/holoscan:v4.4.0-cuda13
+   holoscan build-container my_app
+   ```
+
+3. Set `HOLOSCAN_CLI_BASE_IMAGE` to an image repository (no tag) and
+   `HOLOSCAN_CLI_BASE_SDK_VERSION` to a Holoscan semantic version. The base image
+   then resolves to
+   `$HOLOSCAN_CLI_BASE_IMAGE:v$HOLOSCAN_CLI_BASE_SDK_VERSION-$CUDA_TAG`, with the
+   CUDA tag chosen dynamically from your host environment:
+
+   ```bash
+   export HOLOSCAN_CLI_BASE_IMAGE=nvcr.io/nvidia/clara-holoscan/holoscan
+   export HOLOSCAN_CLI_BASE_SDK_VERSION=4.4.0
+   # Resolves to nvcr.io/nvidia/clara-holoscan/holoscan:v4.4.0-cuda13 on hosts with NVIDIA drivers >= 580
+   holoscan build-container my_app
+   ```
+
+   SDK 5.x supports CUDA 13 only. For those versions the tag is always
+   `cuda13`, and the `CUDA_MAJOR` build argument defaults to `13` instead of
+   following the host driver. Requesting another CUDA version for SDK 5.x is
+   an error.
+
+A standalone Module can also set `[tool.holoscan.base-images]`, which applies
+when neither `--base-img` nor `HOLOSCAN_CLI_BASE_IMAGE` is set. If none of these
+is configured, the CLI asks for a base image instead of inferring one from its
+own package version.
+
+For custom naming schemes, `HOLOSCAN_CLI_BASE_IMAGE_FORMAT` can use
+`{base_image}`, `{sdk_version}`, and `{cuda_tag}`, and
+`HOLOSCAN_CLI_DEFAULT_IMAGE_FORMAT` can use `{container_prefix}`,
+`{sdk_version}`, and `{cuda_tag}`. An explicit base-image format controls
+composition; without one, tagged images and digests are exact while an
+untagged environment repository uses the SDK/CUDA-derived tag.
 
 ## Command options
 
