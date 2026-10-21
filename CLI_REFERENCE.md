@@ -172,7 +172,9 @@ Unrestricted hosts receive no automatic CPU options.
 
 Image builds and compile containers (`build`, `install`, `package`, `test`) keep
 the affinity/quota-based smaller CPU set for tools that size parallel work from
-affinity, such as `nproc`. Builds inside `run` and `run-container` use runtime limits.
+affinity, such as `nproc`. Builds inside `run` and `run-container` use runtime
+limits, except that `run --as-root` builds in a separate compile container with
+the smaller CPU set.
 The CLI's default CMake job count uses `os.cpu_count()`, which ignores affinity.
 Use `--parallel` or `CMAKE_BUILD_PARALLEL_LEVEL` to set that job count explicitly.
 

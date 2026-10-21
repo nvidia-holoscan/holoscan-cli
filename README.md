@@ -15,7 +15,7 @@ The CLI presents a single command surface for the source-project development lif
 - **Workspace:** `lint`, `setup`, `clear-cache`, `create`
 
 Run `holoscan <command> --help` for per-command flags, and `holoscan env-info`
-for every environment variable the CLI reads in the current shell. The
+for the values of the main environment variables the CLI reads. The
 [CLI reference](https://github.com/nvidia-holoscan/holoscan-cli/blob/main/CLI_REFERENCE.md)
 describes command behavior, including JSON output and CPU limits.
 [Configuring Holoscan CLI](https://github.com/nvidia-holoscan/holoscan-cli/blob/main/CONFIGURATION.md)

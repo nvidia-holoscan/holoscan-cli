@@ -68,11 +68,15 @@ links checked. They do not require unrelated SDK/GPU builds.
 ```text
 src/holoscan_cli/
   cli.py              top-level argparse + dispatch (HoloscanCLI)
-  configuration.py    effective-configuration reporting
+  project_context.py  source-project discovery and standalone Module contracts
+  status.py           `status` display
+  system_check.py     `env-check` host checks
+  version/            `version` command
   commands/           one file per subcommand + a central registry
   container/          HoloscanContainer + docker arg helpers + parser builders
   cmake/              packaged CMake support copied into standalone Modules
-  utils/              io.py, text.py, sdk.py, docker.py, host_setup.py,
+  utils/              shared helpers, e.g. io.py, sdk.py, docker.py,
+                      project.py (effective-configuration reporting),
                       env_info.py, holohub.py
   setup_scripts/      bundled bash scripts backing `setup --scripts` and
                       `build-container --extra-scripts`
@@ -165,8 +169,8 @@ one application whose `metadata.json` validates against the application
 schema. To point the CLI at it directly from your shell:
 
 ```bash
-HOLOSCAN_CLI_ROOT=tests/fixtures/holohub_smoke holoscan list
-HOLOSCAN_CLI_ROOT=tests/fixtures/holohub_smoke holoscan modes smoke_app
+HOLOSCAN_CLI_ROOT=tests/fixtures/holohub_smoke /tmp/holoscan-cli-smoke/bin/holoscan list
+HOLOSCAN_CLI_ROOT=tests/fixtures/holohub_smoke /tmp/holoscan-cli-smoke/bin/holoscan modes smoke_app
 ```
 
 ## Triggering CI

@@ -181,13 +181,16 @@ these ways:
    an error.
 
 A standalone Module can also set `[tool.holoscan.base-images]`, which applies
-when neither `--base-img` nor `HOLOSCAN_CLI_BASE_IMAGE` is set. If none of these
-is configured, the CLI asks for a base image instead of inferring one from its
-own package version.
+when neither `--base-img` nor `HOLOSCAN_CLI_BASE_IMAGE` is set. Without any of
+these, an SDK version from `HOLOSCAN_CLI_BASE_SDK_VERSION` or the Module's
+`module.holoscan_sdk.minimum_required_version` selects
+`nvcr.io/nvidia/clara-holoscan/holoscan:v<version>-<cuda_tag>`. If no SDK version
+is set either, the command fails and asks you to configure a base image; the CLI
+never infers one from its own package version.
 
 For custom naming schemes, `HOLOSCAN_CLI_BASE_IMAGE_FORMAT` can use
-`{base_image}`, `{sdk_version}`, and `{cuda_tag}`, and
-`HOLOSCAN_CLI_DEFAULT_IMAGE_FORMAT` can use `{container_prefix}`,
+`{base_image}`, `{sdk_version}`, and `{cuda_tag}`. The name of the built
+image, set by `HOLOSCAN_CLI_DEFAULT_IMAGE_FORMAT`, can use `{container_prefix}`,
 `{sdk_version}`, and `{cuda_tag}`. An explicit base-image format controls
 composition; without one, tagged images and digests are exact while an
 untagged environment repository uses the SDK/CUDA-derived tag.
