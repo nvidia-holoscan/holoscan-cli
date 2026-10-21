@@ -539,7 +539,7 @@ def test_packaged_template_creates_a_standalone_module(cli, tmp_path, monkeypatc
         text=True,
         check=True,
     )
-    assert "build 'holoscan-my-mod' if its dev hook is not staged" in preview.stdout
+    assert "build 'holoscan-my-mod' if its Python build is not ready" in preview.stdout
     assert "holoscan install --dev --local --dryrun" in preview.stdout
     assert not (project / "build").exists()
 

@@ -234,15 +234,28 @@ repository-wide tests and focused CTest/pytest targets. A module name in a
 multi-project repository does not imply module-scoped test coverage. Inspect
 the driver's build-directory cleanup before testing an existing workspace.
 
-`install --dev` installs hooks from an already built module into the CLI's
-Python environment. For a module created with `--language cpp python`, the hook
-puts the build tree's `python/lib`, which holds the package and its
-`holoscan.modules` metadata, on that environment's path, so
-`import holoscan.<module>` loads the build. Inspect `env-info --json`, name the
-module, and select the build directory explicitly when multiple builds exist.
-After consumer testing, use `install <module> --dev --uninstall` in the same
-environment and verify the hooks are removed. Omitting the module can affect
-multiple hooks.
+`install <module> --dev` registers a live Python build in the CLI's Python
+environment, building a standalone Module first when needed. Container Python
+is the default; add `--local` for the current interpreter. Inspect
+`env-info --json` and use `--build-dir <directory>` to select an existing build
+without rebuilding it. Otherwise the newest provider metadata or legacy hook
+under the build parent selects the build for each module.
+
+For metadata-enabled SDK 5.x Modules, registration adds the build's
+`python/lib` directory through a `.pth` file. The SDK discovers its
+`holoscan.modules` entry point, making both `holoscan_<slug>` and
+`holoscan.<slug>` available in a new Python process without setting the module's
+`PYTHONPATH`. Python bindings must be built, and older 5.x Modules must adopt
+`holoscan_install_python_module_metadata()` and rebuild. Existing staged
+legacy hook pairs remain supported. Each metadata-enabled Python root must
+contain one Holoscan provider so registrations can be removed independently.
+An installed copy of the same package in the destination site directory is
+rejected because it would take precedence over the build path. Remove that
+copy or use a clean Python environment before registering the build.
+
+Use `install <module> --dev --uninstall` in the same environment to remove its
+registration without deleting build output. Start a new Python process to
+verify removal. Omitting the module can affect multiple registrations.
 
 `package <module> --pkg-generator DEB,WHEEL` builds distribution artifacts.
 Inspect their metadata and payload, then test installation in a clean consumer.
