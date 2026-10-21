@@ -338,7 +338,7 @@ def test_packaged_template_generates_python_bindings_for_cpp_python(cli, tmp_pat
     assert 'target-version = "py312"' in pyproject
     pyproject_data = tomllib.loads(pyproject)
     assert pyproject_data["build-system"] == {
-        "requires": ["scikit-build-core==1.0.3"],
+        "requires": ["scikit-build-core~=1.0.3"],
         "build-backend": "scikit_build_core.build",
     }
     assert pyproject_data["project"]["name"] == "holoscan-my-mod"
