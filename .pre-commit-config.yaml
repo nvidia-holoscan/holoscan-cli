@@ -47,24 +47,24 @@ repos:
       - id: trailing-whitespace
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.15.12
+    rev: v0.17.2
     hooks:
       - id: ruff
         args: [--ignore, E712, --cache-dir, .cache/ruff]
 
   - repo: https://github.com/PyCQA/isort
-    rev: 8.0.1
+    rev: 10.0.0b1
     hooks:
       - id: isort
         args: [--settings-path, .]
 
   - repo: https://github.com/psf/black-pre-commit-mirror
-    rev: 26.3.1
+    rev: 26.10.1
     hooks:
       - id: black
 
   - repo: https://github.com/codespell-project/codespell
-    rev: v2.4.2
+    rev: v2.4.3
     hooks:
       - id: codespell
         args:
@@ -72,7 +72,7 @@ repos:
           - --exclude-file=.lint/codespell.txt
 
   - repo: https://github.com/igorshubovych/markdownlint-cli
-    rev: v0.48.0
+    rev: v0.50.0
     hooks:
       - id: markdownlint
         args: [--config, .lint/markdownlint.yaml, --ignore-path, .lint/markdownlintignore]
