@@ -22,6 +22,10 @@ set(_package holoscan_{{ cookiecutter.module_slug }})
 set(_python_root "${CMAKE_CURRENT_BINARY_DIR}/lib")
 set(_package_dir "${_python_root}/${_package}")
 set({{ cookiecutter.module_slug | upper }}_PYTHON_BUILD_DIR "${_python_root}" PARENT_SCOPE)
+if(SKBUILD)
+    # scikit-build-core installs relative to the wheel's platlib root.
+    set({{ cookiecutter.module_slug | upper }}_PYTHON_INSTALL_DIR "." CACHE PATH "" FORCE)
+endif()
 set({{ cookiecutter.module_slug | upper }}_PYTHON_INSTALL_DIR
     "${CMAKE_INSTALL_LIBDIR}/python${Python_VERSION_MAJOR}.${Python_VERSION_MINOR}/site-packages"
     CACHE PATH "Install directory of the holoscan_{{ cookiecutter.module_slug }} Python package")
@@ -30,12 +34,15 @@ set(_package_install "${${_python_install_var}}/${_package}")
 
 # Publish the holoscan-{{ cookiecutter.module_slug.replace('_', '-') }}-cu13 metadata through which the SDK exposes
 # holoscan_{{ cookiecutter.module_slug }} as holoscan.{{ cookiecutter.module_slug }}, in the build tree and the install.
-# Plain CMake builds and installs do not run a Python packaging backend.
-set(HOLOSCAN_PYTHON_MODULE_ROOT "${_python_root}")
-set(HOLOSCAN_PYTHON_INSTALL_DIR "${${_python_install_var}}")
-holoscan_install_python_module_metadata(
-    MODULE {{ cookiecutter.module_slug }}
-    REQUIRES "holoscan-core-cu13>={{ cookiecutter.holoscan_version }}")
+# Plain CMake builds and installs do not run a Python packaging backend; wheel builds
+# take this metadata from pyproject.toml instead.
+if(NOT SKBUILD)
+    set(HOLOSCAN_PYTHON_MODULE_ROOT "${_python_root}")
+    set(HOLOSCAN_PYTHON_INSTALL_DIR "${${_python_install_var}}")
+    holoscan_install_python_module_metadata(
+        MODULE {{ cookiecutter.module_slug }}
+        REQUIRES "holoscan-core-cu13>={{ cookiecutter.holoscan_version }}")
+endif()
 
 foreach(package_file IN ITEMS __init__.py py.typed operators/__init__.py)
     configure_file("${_package}/${package_file}" "${_package_dir}/${package_file}" COPYONLY)
