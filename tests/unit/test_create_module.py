@@ -357,6 +357,12 @@ def test_packaged_template_generates_python_bindings_for_cpp_python(cli, tmp_pat
     agents_py = (project / "AGENTS.md").read_text(encoding="utf-8")
     assert "holoscan package holoscan-my-mod --pkg-generator WHEEL" in agents_py
     assert "wheel packaging" not in agents_py
+    assert "uv run --only-group dev" in agents_py
+    readme_py = (project / "README.md").read_text(encoding="utf-8")
+    developer_py = (project / "DEVELOPER.md").read_text(encoding="utf-8")
+    assert "uv run --only-group dev holoscan run my_mod_pipeline --language cpp" in readme_py
+    assert "uv run --only-group dev holoscan test" in developer_py
+    assert "uv sync --only-group dev" in developer_py
     module = json.loads((project / "metadata.json").read_text(encoding="utf-8"))["module"]
     assert module["language"] == ["C++", "Python"]
     operator = json.loads(
@@ -540,6 +546,7 @@ def test_packaged_template_creates_a_standalone_module(cli, tmp_path, monkeypatc
     assert "--extra-index-url https://pypi.nvidia.com" in dockerfile
     assert "python3 -m venv .venv" in readme
     assert "uv run holoscan" in readme
+    assert "--only-group" not in readme
     assert 'option(HOLOSCAN_MY_MOD_BUILD_CPP "Build C++ applications" ON)' in root_cmake
     assert "HOLOSCAN_MY_MOD_BUILD_PYTHON" not in root_cmake
     assert "if(HOLOSCAN_MY_MOD_BUILD_CPP)\n    add_subdirectory(cpp)\nendif()" in app_cmake

@@ -5,7 +5,7 @@
 # Holoscan SDK 5.0 Modules are C++ libraries shipped as Debian packages. This
 # file also builds the Python bindings into a wheel with scikit-build-core
 # (`holoscan package <module> --pkg-generator WHEEL`), pins the Holoscan CLI for
-# `uv run holoscan ...`, and configures ruff for the repository's helper scripts.
+# `uv run --only-group dev holoscan ...`, and configures ruff for the repository's helper scripts.
 
 [build-system]
 requires = ["scikit-build-core~=1.0.3"]
@@ -47,7 +47,8 @@ dev = [
 
 [tool.uv]
 {% if cookiecutter.__python_bindings == 'yes' -%}
-# `uv sync` only provisions the dev tools; `holoscan package` builds the wheel.
+# UV never installs the Module itself; `holoscan package` builds the wheel.
+# Use `uv sync --only-group dev` to skip the wheel's runtime dependencies.
 {%- else -%}
 # Not an installable Python package; `uv sync` only provisions the dev tools.
 {%- endif %}

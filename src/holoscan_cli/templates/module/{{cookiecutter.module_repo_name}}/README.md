@@ -41,13 +41,14 @@ holoscan run {{ cookiecutter.module_slug }}_pipeline --language python
 ```
 
 If you use [uv](https://docs.astral.sh/uv/), no separate environment setup or activation is
-needed. Prefix the same commands with `uv run`, for example:
+needed. Prefix the same commands with `uv run{% if cookiecutter.__python_bindings == 'yes' %} --only-group dev{% endif %}`, for example:
 
 ```bash
-uv run holoscan run {{ cookiecutter.module_slug }}_pipeline{% if cookiecutter.__python_bindings == 'yes' %} --language cpp{% endif %}
+uv run{% if cookiecutter.__python_bindings == 'yes' %} --only-group dev{% endif %} holoscan run {{ cookiecutter.module_slug }}_pipeline{% if cookiecutter.__python_bindings == 'yes' %} --language cpp{% endif %}
 ```
 
-The project configuration installs the development tools without building the Module on the host.
+The project configuration installs the development tools without building the Module on the host.{% if cookiecutter.__python_bindings == 'yes' %}
+`--only-group dev` also skips the wheel's `holoscan-core-cu13` runtime dependency.{% endif %}
 
 ---
 

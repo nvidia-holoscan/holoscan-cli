@@ -135,15 +135,17 @@ build and package contract, and delegate to the installed `holoscan` command. Ho
 
 If you use [uv](https://docs.astral.sh/uv/), the project config selects NVIDIA's package index for
 `holoscan-cli` while leaving other dependencies on PyPI. It also avoids installing the Module
-during normal UV commands, so no separate setup or activation is needed:
+during normal UV commands, so no separate setup or activation is needed{% if cookiecutter.__python_bindings == 'yes' %}. Pass
+`--only-group dev` so UV installs only the development tools, not the wheel's
+`holoscan-core-cu13` runtime dependency{% endif %}:
 
 ```bash
-uv run holoscan test
+uv run{% if cookiecutter.__python_bindings == 'yes' %} --only-group dev{% endif %} holoscan test
 ```
 
 To upgrade the tested development environment, update the CLI pin in
 `requirements-cli.txt`, `pyproject.toml`, and `.pre-commit-config.yaml`, reinstall the
-requirements (or rerun `uv sync`), and rebuild the image. Upgrading the CLI does not update
+requirements (or rerun `uv sync{% if cookiecutter.__python_bindings == 'yes' %} --only-group dev{% endif %}`), and rebuild the image. Upgrading the CLI does not update
 the helpers in `cmake/`; they belong to this Module, so update them by hand if needed.
 
 ---
@@ -177,7 +179,8 @@ ctest --test-dir build --output-on-failure -L unit
 ## `pyproject.toml`
 
 `pyproject.toml` records a PEP 735 development dependency group and the ruff configuration for the
-repository's helper scripts. It does not build a Python package (`[tool.uv].package = false`).
+repository's helper scripts.{% if cookiecutter.__python_bindings == 'yes' %} It also configures the scikit-build-core wheel build; UV never
+installs the Module itself (`[tool.uv].package = false`).{% else %} It does not build a Python package (`[tool.uv].package = false`).{% endif %}
 
 | Field | Purpose |
 | --- | --- |

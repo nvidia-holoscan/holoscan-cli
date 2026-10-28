@@ -32,7 +32,7 @@ SDK {{ cookiecutter.holoscan_version }} or later. [README.md](README.md) covers 
 ## Commands
 
 Install the CLI version pinned in `requirements-cli.txt` (see README.md), or prefix commands with
-`uv run`. Build, run, test, and package commands run in the development container unless you pass
+`uv run{% if cookiecutter.__python_bindings == 'yes' %} --only-group dev{% endif %}`. Build, run, test, and package commands run in the development container unless you pass
 `--local`.
 
 | Task | Command |
