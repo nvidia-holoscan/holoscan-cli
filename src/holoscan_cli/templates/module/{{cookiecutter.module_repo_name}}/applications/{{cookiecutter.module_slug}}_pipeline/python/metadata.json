@@ -24,7 +24,7 @@
         "default_mode": "default",
         "modes": {
             "default": {
-                "description": "Run the Python {{ cookiecutter.module_slug }} pipeline through the operator bindings",
+                "description": "Run the Python {{ cookiecutter.module_slug }} pipeline{% if cookiecutter.__python_bindings == 'yes' %} through the operator bindings{% endif %}",
                 "run": {
                     "command": "python3 <holohub_app_source>/{{ cookiecutter.module_slug }}_pipeline.py",
                     "workdir": "holohub_bin"

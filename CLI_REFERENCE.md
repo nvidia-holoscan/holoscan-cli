@@ -218,8 +218,10 @@ configured base SDK version overrides the default, and explicit context values
 take precedence. `--language cpp python` (or `cpp,python`) also generates a
 nanobind extension that registers the module's C++ operators with the SDK
 operator registry, a Python example, and CTest-run pytest suites; the default
-`--language cpp` stays C++ only, and `--language python` alone stays rejected
-until pure-Python modules are supported. The project name may come before or
+`--language cpp` stays C++ only. `--language python` alone creates a module whose
+operators and example application are implemented in Python, with no C++ code: a
+pure-Python wheel built by `package --pkg-generator WHEEL`, and a CMake project
+that only stages the package and runs its pytest suite. The project name may come before or
 after `--language`; a project named after a language, such as `python`, must
 come first. See
 [template defaults](src/holoscan_cli/templates/module/cookiecutter.json) and
@@ -235,7 +237,7 @@ multi-project repository does not imply module-scoped test coverage. Inspect
 the driver's build-directory cleanup before testing an existing workspace.
 
 `install --dev` installs hooks from an already built module into the CLI's
-Python environment. For a module created with `--language cpp python`, the hook
+Python environment. For a module created with `--language cpp python` or `--language python`, the hook
 puts the build tree's `python/lib`, which holds the package and its
 `holoscan.modules` metadata, on that environment's path, so
 `import holoscan.<module>` loads the build. Inspect `env-info --json`, name the

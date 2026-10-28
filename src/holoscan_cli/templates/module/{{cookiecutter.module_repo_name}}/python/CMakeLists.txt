@@ -1,5 +1,37 @@
 # SPDX-FileCopyrightText: Copyright (c) {% now 'utc', '%Y' %} {{ cookiecutter.full_name }}{% if cookiecutter.affiliation %} / {{ cookiecutter.affiliation }}{% endif %}. All rights reserved.
 # SPDX-License-Identifier: {{ cookiecutter._license }}
+{%- if cookiecutter.__pure_python == 'yes' %}
+
+# Stage the holoscan_{{ cookiecutter.module_slug }} package and its holoscan-{{ cookiecutter.module_slug.replace('_', '-') }} distribution metadata in the
+# build tree, so `holoscan run` and the tests can import it as holoscan_{{ cookiecutter.module_slug }} and as
+# holoscan.{{ cookiecutter.module_slug }}. Wheels take the same package and metadata from pyproject.toml.
+
+set(_package holoscan_{{ cookiecutter.module_slug }})
+set(_python_root "${CMAKE_CURRENT_BINARY_DIR}/lib")
+set({{ cookiecutter.module_slug | upper }}_PYTHON_BUILD_DIR "${_python_root}" PARENT_SCOPE)
+set({{ cookiecutter.module_slug | upper }}_PYTHON_INSTALL_DIR
+    "lib/python${Python_VERSION_MAJOR}.${Python_VERSION_MINOR}/site-packages"
+    CACHE PATH "Install directory of the holoscan_{{ cookiecutter.module_slug }} Python package")
+set(_python_install_var {{ cookiecutter.module_slug | upper }}_PYTHON_INSTALL_DIR)
+
+file(GLOB_RECURSE _package_files RELATIVE "${CMAKE_CURRENT_SOURCE_DIR}" CONFIGURE_DEPENDS
+    "${_package}/*.py" "${_package}/*.pyi" "${_package}/py.typed")
+foreach(package_file IN LISTS _package_files)
+    configure_file("${package_file}" "${_python_root}/${package_file}" COPYONLY)
+endforeach()
+
+set(_dist_info "${_python_root}/holoscan_{{ cookiecutter.module_slug }}-${PROJECT_VERSION}.dist-info")
+file(WRITE "${_dist_info}/METADATA"
+    "Metadata-Version: 2.1\nName: holoscan-{{ cookiecutter.module_slug.replace('_', '-') }}\nVersion: ${PROJECT_VERSION}\n")
+file(WRITE "${_dist_info}/entry_points.txt"
+    "[holoscan.modules]\n{{ cookiecutter.module_slug }} = holoscan_{{ cookiecutter.module_slug }}\n")
+
+# Install the staged package without a packaging backend:
+#   cmake --install <build> --component holoscan-{{ cookiecutter.module_slug }}-python_libs
+install(DIRECTORY "${_python_root}/"
+    DESTINATION "${${_python_install_var}}"
+    COMPONENT holoscan-{{ cookiecutter.module_slug }}-python_libs)
+{%- else %}
 
 # Python bindings: a nanobind extension that registers this Module's C++ operators with the
 # Holoscan SDK operator registry, wrapped in the holoscan_{{ cookiecutter.module_slug }} package.
@@ -86,3 +118,4 @@ install(FILES "${_package_dir}/__init__.py" "${_package_dir}/py.typed"
     DESTINATION "${_package_install}" COMPONENT ${_component})
 install(FILES "${_package_dir}/operators/__init__.py" ${_stub_files}
     DESTINATION "${_package_install}/operators" COMPONENT ${_component})
+{%- endif %}

@@ -38,6 +38,8 @@ repos:
           - --ignore-words=codespell_ignore_words.txt
           - --exclude-file=codespell.txt
 
+{%- if cookiecutter.__pure_python != 'yes' %}
+
   # C++: cpplint
   - repo: https://github.com/cpplint/cpplint
     rev: 2.0.2
@@ -52,6 +54,7 @@ repos:
         args:
           - --quiet
           - --filter=-readability/todo,-whitespace/line_length
+{%- endif %}
 
   # Markdown
   - repo: https://github.com/igorshubovych/markdownlint-cli

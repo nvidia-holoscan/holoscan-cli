@@ -1,0 +1,24 @@
+# SPDX-FileCopyrightText: Copyright (c) {% now 'utc', '%Y' %} {{ cookiecutter.full_name }}{% if cookiecutter.affiliation %} / {{ cookiecutter.affiliation }}{% endif %}. All rights reserved.
+# SPDX-License-Identifier: {{ cookiecutter._license }}
+{%- set op_class = cookiecutter.operator_slug.split('_')|map('capitalize')|join('') %}
+
+"""The {{ op_class }} operator."""
+
+import holoscan as hs
+
+
+# TODO: rename {{ op_class }} and update the port declarations.
+#
+# Holoscan SDK 5 operators declare typed ports as class attributes. With one
+# connected input and no contract() override, compilation applies the
+# OnAnyInput default: compute() runs once per accepted sample.
+class {{ op_class }}(hs.Operator):
+    """Forward each received value unchanged."""
+
+    # TODO: replace hs.payload.uint32 with your payload type.
+    inp = hs.Input("in", hs.payload.uint32)
+    out = hs.Output("out", hs.payload.uint32)
+
+    def compute(self, context: hs.ExecutionContext) -> None:
+        # TODO: implement your compute logic.
+        self.out.emit(self.inp.receive_data())

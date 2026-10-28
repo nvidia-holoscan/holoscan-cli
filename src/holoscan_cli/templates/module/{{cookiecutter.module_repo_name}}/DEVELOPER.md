@@ -1,3 +1,200 @@
+{% if cookiecutter.__pure_python == 'yes' -%}
+# Developer Guide — {{ cookiecutter.project_name }}
+
+{%- set op_class = cookiecutter.operator_slug.split('_')|map('capitalize')|join('') %}
+
+This guide covers the layout, build system, and day-to-day workflow for developing and
+distributing this Holoscan Module.
+
+---
+
+## Module layout
+
+```text
+{{ cookiecutter.module_repo_name }}/
+├── requirements-cli.txt            # Tested holoscan-cli development version
+├── Dockerfile                      # Development container image
+├── CMakeLists.txt                  # Root CMake — stages the package and runs the tests (no compiler)
+├── pyproject.toml                  # Wheel build (scikit-build-core), CLI pin, ruff
+├── metadata.json                   # Module-level metadata (schema: urn:holoscan:module:v2)
+├── AGENTS.md                       # Guidance for AI coding agents
+├── cmake/                          # CMake helpers copied from the CLI at create time
+├── python/
+│   ├── CMakeLists.txt              # Stages holoscan_{{ cookiecutter.module_slug }} in the build tree
+│   └── holoscan_{{ cookiecutter.module_slug }}/
+│       └── operators/
+│           └── {{ cookiecutter.operator_slug }}.py      # Operator implementation (typed ports)
+├── operators/
+│   └── {{ cookiecutter.operator_slug }}/
+│       └── metadata.json           # Operator-level metadata
+├── applications/
+│   └── {{ cookiecutter.module_slug }}_pipeline/
+│       └── python/                 # Python pipeline (compose → compile → run) + metadata.json
+└── tests/
+    └── python/                     # pytest suite: OperatorTestHarness + pipeline run
+```
+
+The operators are Python classes in the `holoscan_{{ cookiecutter.module_slug }}` package:
+
+```python
+import holoscan as hs
+from holoscan_{{ cookiecutter.module_slug }}.operators import {{ op_class }}
+```
+
+- Add each new operator as a module under `python/holoscan_{{ cookiecutter.module_slug }}/operators/`, export it from
+  `operators/__init__.py`, and describe it in an `operators/<name>/metadata.json`.
+- The package's `holoscan.modules` entry point makes `import holoscan.{{ cookiecutter.module_slug }}` load
+  `holoscan_{{ cookiecutter.module_slug }}`. `pyproject.toml` declares it for the wheel, and `python/CMakeLists.txt` writes
+  the same `holoscan-{{ cookiecutter.module_slug.replace('_', '-') }}` metadata into the build tree's `python/lib`.
+- `holoscan build` stages the package in `build/<project>/python/lib`; nothing is compiled.
+  `holoscan run` adds that directory to `PYTHONPATH`. To run the example from a CMake build tree,
+  use `PYTHONPATH=build/python/lib:$PYTHONPATH python3
+  applications/{{ cookiecutter.module_slug }}_pipeline/python/{{ cookiecutter.module_slug }}_pipeline.py`.
+- `tests/python` runs through CTest (label `python`), or directly with pytest after
+  `python -m pip install -e .`.
+- `holoscan package {{ cookiecutter.module_repo_name }} --pkg-generator WHEEL` builds a `py3-none-any`
+  `holoscan-{{ cookiecutter.module_slug.replace('_', '-') }}` wheel that depends on `holoscan-cu13`. There is no Debian package.
+
+---
+
+## Holoscan SDK 5 Python API cheat sheet
+
+| 4.x | 5 |
+| --- | --- |
+| `class Op(holoscan.core.Operator)` | `class Op(holoscan.Operator)` |
+| `spec.input("in")` in `setup()` | `inp = holoscan.Input("in", holoscan.payload.uint32)` class attribute |
+| `spec.param("factor", 2)` | `factor = holoscan.Param(2)` class attribute |
+| `compute(self, op_input, op_output, context)` | `compute(self, context)` |
+| `op_input.receive("in")` | `self.inp.receive_data()` |
+| `op_output.emit(v, "out")` | `self.out.emit(v)` |
+| `Application.compose()` + `self.add_flow(a, b, {("out", "in")})` | `holoscan.Graph` + `graph.op(Op, "name")` + `graph.add_flow(a["out"], b["in"])` |
+| `app.run()` | `holoscan.compile(graph)` → `plan.require_no_errors()` → `holoscan.run(plan)` / `holoscan.run_async(plan)` |
+| Conditions (`PeriodicCondition`, ...) | `contract()` returning a `holoscan.Contract` (`OnClock`, `OnEach`, ...) |
+
+Sources must opt into time: give the graph a default clock (`holoscan.Graph(...,
+default_clock=holoscan.RealtimeClock)`) before compiling a graph that uses `OnClock`.
+
+---
+
+## Holoscan CLI environment and commands
+
+Create the development environment with the exact CLI version committed by this Module:
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install \
+  --extra-index-url https://pypi.nvidia.com \
+  -r requirements-cli.txt
+```
+
+The exact pin makes fresh host environments and development images reproducible. The global
+`holoscan` command discovers this Module from its metadata. Target architecture and CUDA default
+to host detection, and lifecycle commands use containers unless you pass `--local`. Run a
+lifecycle command with `--verbose` to see what was selected.
+
+| Command | What it does |
+| --- | --- |
+| `holoscan run-container` | Build and start the development container |
+| `holoscan build {{ cookiecutter.module_slug }}_pipeline` | Stage the package inside the container |
+| `holoscan run {{ cookiecutter.module_slug }}_pipeline` | Run the example pipeline |
+| `holoscan test` | Run CTest (the `tests/python` pytest suite) |
+| `holoscan package {{ cookiecutter.module_repo_name }} --pkg-generator WHEEL` | Build the wheel |
+
+If you use [uv](https://docs.astral.sh/uv/), the project config selects NVIDIA's package index for
+`holoscan-cli` while leaving other dependencies on PyPI. Pass `--only-group dev` so UV installs
+only the development tools, not this Module or its `holoscan-cu13` dependency:
+
+```bash
+uv run --only-group dev holoscan test
+```
+
+To upgrade the tested development environment, update the CLI pin in
+`requirements-cli.txt`, `pyproject.toml`, and `.pre-commit-config.yaml`, reinstall the
+requirements (or rerun `uv sync --only-group dev`), and rebuild the image. Upgrading the CLI does
+not update the helpers in `cmake/`; they belong to this Module, so update them by hand if needed.
+
+---
+
+## Working without the Holoscan CLI
+
+With Python 3.12+ and glibc 2.39 or newer (for example Ubuntu 24.04), pip installs the Module and
+the Holoscan SDK wheels it depends on:
+
+```bash
+python -m pip install -e . pytest
+python -m pytest tests/python
+python -m pip wheel --no-deps -w dist .
+```
+
+The CMake project needs only CMake 3.24 or newer and Python; it enables no compiled languages:
+
+```bash
+cmake -S . -B build -D{{ cookiecutter.module_slug | upper }}_BUILD_TESTING=ON
+cmake --build build
+ctest --test-dir build --output-on-failure -L unit
+```
+
+`{{ cookiecutter.module_slug | upper }}_BUILD_TESTING` defaults to `ON` for a standalone build
+and `OFF` when this module is included by a parent project. The standard
+`-DBUILD_TESTING=OFF` does not control this module's tests.
+
+---
+
+## `pyproject.toml`
+
+| Field | Purpose |
+| --- | --- |
+| `[build-system]` | scikit-build-core builds the wheel; `CMakeLists.txt` returns early for wheel builds |
+| `[project].version` | Sync with `metadata.json:module.version` |
+| `[project].dependencies` | Runtime dependencies; `holoscan-cu13` installs the Holoscan SDK Python packages |
+| `[project.entry-points."holoscan.modules"]` | Exposes `holoscan_{{ cookiecutter.module_slug }}` as `holoscan.{{ cookiecutter.module_slug }}` |
+| `[tool.scikit-build]` | Packages `python/holoscan_{{ cookiecutter.module_slug }}` into a pure-Python wheel |
+| `[dependency-groups].dev` | Exact CLI convenience pin, ruff, and pytest; keep the CLI pin synchronized with `requirements-cli.txt` |
+| `[tool.uv]` | NVIDIA index selection for the pinned `holoscan-cli` development dependency |
+| `[tool.holoscan]` | Optional Module-wide CUDA, CTest, Docker, environment, and base-image defaults consumed by the CLI |
+| `[tool.ruff]` | Lint configuration used by `.pre-commit-config.yaml` and CI |
+
+The supported `[tool.holoscan]` keys are `cuda`, `ctest-script`, `docker-build-args`,
+`docker-run-args`, `forward-env`, `search-paths`, and `base-images.{x86_64,aarch64}`.
+Docker argument arrays contain one command token per element. Do not store credentials or
+machine paths here.
+
+---
+
+## Module identity and support level
+
+`metadata.json:module` records the Module's public identity:
+
+| Field | Purpose |
+| --- | --- |
+| `name` | Repository name: `holoscan-` followed by the lowercase, hyphen-separated Module slug (`holoscan-{{ cookiecutter.module_slug.replace('_', '-') }}`) |
+| `support_level` | Self-declared support level shown on the HoloHub ecosystem page: `community`, `supported_external`, or `supported_core` |
+| `binary_packages.wheel` | Normalized Python wheel distribution name that installs the Module |
+| `binary_packages.install_commands` | Recommended shell commands to install the binary packages |
+
+Declare Python dependencies, including other Modules' wheels, in `[project].dependencies`.
+
+---
+
+## Naming conventions
+
+| Context | Convention | Example |
+| --- | --- | --- |
+| Python package | `holoscan_<slug>` | `holoscan_{{ cookiecutter.module_slug }}` |
+| Python alias | `holoscan.<slug>` | `holoscan.{{ cookiecutter.module_slug }}` |
+| Repository folder | `holoscan-<slug>` (kebab) | `{{ cookiecutter.module_repo_name }}` |
+| Wheel distribution | `holoscan-<slug>` (kebab) | `holoscan-{{ cookiecutter.module_slug.replace('_', '-') }}` |
+| CMake option prefix | `UPPER_SNAKE` | `{{ cookiecutter.module_slug | upper }}_BUILD_TESTING` |
+
+---
+
+## Further reading
+
+- [HoloHub documentation](https://github.com/nvidia-holoscan/holohub)
+- [Holoscan SDK documentation](https://docs.nvidia.com/holoscan/sdk-user-guide/introduction/getting-started)
+- [Holoscan Module ecosystem](https://nvidia-holoscan.github.io/)
+{%- else -%}
 # Developer Guide — {{ cookiecutter.project_name }}
 
 {%- set op_class = cookiecutter.operator_slug.split('_')|map('capitalize')|join('') %}
@@ -288,3 +485,4 @@ target_link_libraries(holoscan_{{ cookiecutter.module_slug }} INTERFACE holoscan
 - [HoloHub documentation](https://github.com/nvidia-holoscan/holohub)
 - [Holoscan SDK documentation](https://docs.nvidia.com/holoscan/sdk-user-guide/introduction/getting-started)
 - [Holoscan Module ecosystem](https://nvidia-holoscan.github.io/)
+{%- endif %}

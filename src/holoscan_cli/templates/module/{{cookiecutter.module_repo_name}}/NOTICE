@@ -6,7 +6,11 @@ Copyright (c) {% now 'utc', '%Y' %} {{ cookiecutter.full_name }}{% if cookiecutt
 Holoscan SDK (https://github.com/nvidia-holoscan/holoscan-sdk)
 Copyright (c) NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 Licensed under Apache-2.0 (https://github.com/nvidia-holoscan/holoscan-sdk/blob/main/LICENSE.txt)
+{%- if cookiecutter.__pure_python == 'yes' %}
+The operators use the Holoscan SDK Python packages, which the wheel declares as dependencies. This package does not redistribute them.
+{%- else %}
 The operators link the Holoscan SDK installed on the system. This package does not redistribute it.
+{%- endif %}
 {%- if cookiecutter.__python_bindings == 'yes' %}
 
 nanobind (https://github.com/wjakob/nanobind)
@@ -15,9 +19,11 @@ Version 3.0.1
 Licensed under BSD-3-Clause (https://github.com/wjakob/nanobind/blob/v3.0.1/LICENSE)
 Compiled into the Python extension module. The Debian package does not include the Python bindings.
 {%- endif %}
+{%- if cookiecutter.__pure_python != 'yes' %}
 
 GoogleTest (https://github.com/google/googletest)
 Copyright 2008, Google Inc. All rights reserved.
 Version 1.17.0
 Licensed under BSD-3-Clause (https://github.com/google/googletest/blob/v1.17.0/LICENSE)
 Used only to build and run unit tests. It is not installed by this package.
+{%- endif %}

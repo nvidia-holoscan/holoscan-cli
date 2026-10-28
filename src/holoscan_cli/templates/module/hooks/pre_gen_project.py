@@ -31,13 +31,8 @@ def reject(message: str) -> None:
     raise SystemExit(1)
 
 
-if LANGUAGE == "python":
-    reject(
-        "language 'python' is not available for Holoscan SDK 5.0 Modules: pure-Python Modules "
-        "return in a later release. Use 'cpp,python' to call the C++ operators from Python."
-    )
-if LANGUAGE not in ("cpp", "cpp,python"):
-    reject("language must be 'cpp' or 'cpp,python'.")
+if LANGUAGE not in ("cpp", "cpp,python", "python"):
+    reject("language must be 'cpp', 'cpp,python', or 'python'.")
 
 version_match = _SEMVER.fullmatch(HOLOSCAN_VERSION)
 if version_match is None:

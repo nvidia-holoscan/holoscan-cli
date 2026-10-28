@@ -12,11 +12,18 @@
       }
     ],
     "license": "{{ cookiecutter._license }}",
+{%- if cookiecutter.__pure_python == 'yes' %}
+    "language": ["Python"],
+    "namespace": {
+      "python": "holoscan_{{ cookiecutter.module_slug }}"
+    },
+{%- else %}
     "language": [{% if cookiecutter.__python_bindings == 'yes' %}"C++", "Python"{% else %}"C++"{% endif %}],
     "namespace": {
       "cpp": "holoscan::{{ cookiecutter.module_slug }}"{% if cookiecutter.__python_bindings == 'yes' %},
       "python": "holoscan_{{ cookiecutter.module_slug }}"{% endif %}
     },
+{%- endif %}
     "holoscan_sdk": {
       "minimum_required_version": "{{ cookiecutter.holoscan_version }}",
       "tested_versions": ["{{ cookiecutter.holoscan_version }}"]
@@ -28,14 +35,23 @@
     "dependencies": [],
     "dockerfile": "Dockerfile",
     "binary_packages": {
+{%- if cookiecutter.__pure_python == 'yes' %}
+      "wheel": "holoscan-{{ cookiecutter.module_slug.replace('_', '-') }}",
+      "install_commands": ["python -m pip install ./holoscan_{{ cookiecutter.module_slug }}-{{ cookiecutter.version }}-py3-none-any.whl"]
+{%- else %}
       "debian": "holoscan-{{ cookiecutter.module_slug.replace('_', '-') }}",
       "install_commands": ["sudo apt install ./holoscan-{{ cookiecutter.module_slug.replace('_', '-') }}_{{ cookiecutter.version }}_$(dpkg --print-architecture).deb"]
+{%- endif %}
     },
     "documentation": {
       "readme": "README.md"
     },
     "testing": {
+{%- if cookiecutter.__pure_python == 'yes' %}
+      "python": "pytest"
+{%- else %}
       "cpp": "ctest"
+{%- endif %}
     }
   }
 }

@@ -1,5 +1,52 @@
 # SPDX-FileCopyrightText: Copyright (c) {% now 'utc', '%Y' %} {{ cookiecutter.full_name }}{% if cookiecutter.affiliation %} / {{ cookiecutter.affiliation }}{% endif %}. All rights reserved.
 # SPDX-License-Identifier: {{ cookiecutter._license }}
+{%- if cookiecutter.__pure_python == 'yes' %}
+
+{%- set op_class = cookiecutter.operator_slug.split('_')|map('capitalize')|join('') %}
+
+"""Test the {{ op_class }} operator and the Python pipeline."""
+
+import importlib.metadata
+import subprocess
+import sys
+from pathlib import Path
+
+from holoscan_{{ cookiecutter.module_slug }}.operators import {{ op_class }}
+
+from holoscan.testing import OperatorTestHarness
+
+MODULE = "{{ cookiecutter.module_slug }}"
+PIPELINE = (
+    Path(__file__).resolve().parents[2]
+    / "applications"
+    / "{{ cookiecutter.module_slug }}_pipeline"
+    / "python"
+    / "{{ cookiecutter.module_slug }}_pipeline.py"
+)
+
+
+def test_module_metadata_exposes_holoscan_alias():
+    entries = importlib.metadata.entry_points(group="holoscan.modules", name=MODULE)
+    assert [entry.value for entry in entries] == [f"holoscan_{MODULE}"]
+    import holoscan.{{ cookiecutter.module_slug }}.operators as alias
+
+    assert alias.{{ op_class }} is {{ op_class }}
+
+
+def test_operator_forwards_each_value():
+    # TODO: update the inputs and expected outputs as the operator grows.
+    with OperatorTestHarness({{ op_class }}) as harness:
+        harness.push_many("in", [1, 2, 3])
+        result = harness.run()
+    assert result.values("out") == [1, 2, 3]
+
+
+def test_python_pipeline_runs():
+    result = subprocess.run(
+        [sys.executable, str(PIPELINE)], capture_output=True, text=True, timeout=60, check=False
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+{%- else %}
 {%- set op_class = cookiecutter.operator_slug.split('_')|map('capitalize')|join('') %}
 
 """Check that the Python bindings register and run the Module's C++ operators."""
@@ -54,3 +101,4 @@ def test_python_pipeline_runs():
         [sys.executable, str(PIPELINE)], capture_output=True, text=True, timeout=60, check=False
     )
     assert result.returncode == 0, result.stdout + result.stderr
+{%- endif %}
