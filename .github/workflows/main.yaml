@@ -62,7 +62,7 @@ jobs:
           poetry -vvv install --with test
 
       - name: Run pre-commit Check
-        run: poetry run pre-commit run --all-files
+        run: poetry run pre-commit run --all-files --show-diff-on-failure --color=always
 
       - name: Run holoscan linting
         # The pre-commit step above stays the enforcing gate. This runs the same
