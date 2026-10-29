@@ -181,9 +181,9 @@ x86_64 = "example.test/holoscan:fixed"
 @pytest.mark.parametrize(
     "sdk_path",
     [
-        "module/holoscan-sdk/public/install-x86_64",
-        "holoscan-sdk/public/install-x86_64",
-        "holoscan-sdk/public/build-x86_64",
+        "module/holoscan-sdk/install-x86_64",
+        "holoscan-sdk/install-x86_64",
+        "holoscan-sdk/build-x86_64",
     ],
 )
 def test_module_ignores_sdk_checkouts_near_the_project(
