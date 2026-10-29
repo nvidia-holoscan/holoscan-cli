@@ -256,7 +256,9 @@ elsewhere on the effective Python import path is rejected because it would
 take precedence over the build path. Remove that copy or use a clean Python
 environment before registering the build. Replacing an existing development
 registration remains supported; remove any `PYTHONPATH` entry pointing to the
-old build first. A failed hook replacement preserves the previous registration.
+old build first. If the old build's `python/lib` is the current working directory,
+change to another directory before replacing it. A failed hook replacement
+preserves the previous registration.
 If an obsolete legacy helper cannot be removed after metadata registration,
 installation succeeds with a warning; remove that helper manually.
 

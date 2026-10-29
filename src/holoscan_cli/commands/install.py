@@ -635,7 +635,7 @@ def _read_dev_metadata(path: Path) -> str:
     return content.decode("utf-8")
 
 
-def _metadata_dev_source(build_dir: Path, *, strict: bool) -> _DevSource | None:
+def _metadata_dev_source(build_dir: Path, *, strict: bool) -> tuple[_DevSource | None, bool]:
     python_root = (build_dir / "python/lib").resolve()
     providers = []
     try:
@@ -675,15 +675,18 @@ def _metadata_dev_source(build_dir: Path, *, strict: bool) -> _DevSource | None:
         if strict:
             fatal(message)
         warn(f"{message}; skipping")
-        return None
-    return providers[0] if providers else None
+        return None, True
+    return (providers[0] if providers else None), False
 
 
 def _find_dev_sources(search_dirs: list[Path], *, strict: bool) -> dict[str, _DevSource]:
     by_slug = {}
     for build_dir in search_dirs:
         legacy = _find_dev_hooks([build_dir])
-        modern = _metadata_dev_source(build_dir, strict=strict)
+        modern, invalid_metadata = _metadata_dev_source(build_dir, strict=strict)
+        if invalid_metadata:
+            # Malformed metadata cannot safely be matched to a legacy hook.
+            continue
         if modern is not None:
             # Never revive an obsolete namespace hook for a modern provider.
             legacy.pop(modern.slug, None)

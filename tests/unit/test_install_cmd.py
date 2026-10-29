@@ -415,6 +415,8 @@ def test_install_dev_skips_invalid_sibling_metadata(tmp_path, capsys, problem, p
         (bad_root / "holoscan_other_cu13.dist-info/entry_points.txt").write_text("invalid INI\n")
     else:
         _metadata_build(builds / "bad", "another")
+    (builds / "bad/holoscan-other-dev.pth").write_text("import holoscan_other_dev\n")
+    (builds / "bad/holoscan_other_dev.py").write_text("# stale hook\n")
     cli = SimpleNamespace(DEFAULT_BUILD_PARENT_DIR=builds, script_name="holoscan")
     site = tmp_path / "site"
 
