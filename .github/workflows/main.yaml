@@ -62,10 +62,10 @@ jobs:
           poetry -vvv install --with test
 
       - name: Run pre-commit Check
-        uses: pre-commit/action@2c7b3805fd2a0fd8c1884dcaebf91fc102a13ecd # v3.0.1
+        run: poetry run pre-commit run --all-files --show-diff-on-failure --color=always
 
       - name: Run holoscan linting
-        # The action above stays the enforcing gate. This step runs the same
+        # The pre-commit step above stays the enforcing gate. This runs the same
         # hooks through the CLI's own lint command so a regression in runner
         # resolution, project-root discovery, or path scoping surfaces here
         # instead of in a downstream project. Hook environments are already
