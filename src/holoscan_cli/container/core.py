@@ -410,8 +410,8 @@ class HoloscanContainer:
     ) -> Optional[Path]:
         """Return the SDK path selected once for this invocation.
 
-        Standalone Modules resolve their bounded project search and explicit
-        override before container construction. Reuse that exact installation
+        Standalone Modules resolve their SDK selection before container
+        construction. Reuse that exact installation
         for the mount and PYTHONPATH instead of running the broader legacy SDK
         search a second time.
         """
