@@ -147,8 +147,6 @@ def _source_label(source: Optional[str]) -> str:
         return f"command line ({source})"
     if source.startswith("container:"):
         return source
-    if source.startswith("automatic:"):
-        return "automatic discovery"
     if source.startswith("HOLOSCAN_") or source == "CMAKE_BUILD_TYPE":
         return f"environment ({source})"
     return source
