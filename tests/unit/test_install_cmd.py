@@ -596,6 +596,60 @@ def test_install_dev_metadata_failed_replace_preserves_old_registration(tmp_path
     assert len(list(site.iterdir())) == 2
 
 
+@pytest.mark.parametrize("failure", ["helper", "pth"])
+def test_install_dev_legacy_failed_replace_preserves_old_registration(tmp_path, failure):
+    build = tmp_path / "build"
+    build.mkdir()
+    (build / "holoscan-smoke-dev.pth").write_text("import holoscan_smoke_dev\n")
+    (build / "holoscan_smoke_dev.py").write_text("# new helper\n")
+    site = tmp_path / "site"
+    site.mkdir()
+    pth = site / "holoscan-smoke-dev.pth"
+    helper = site / "holoscan_smoke_dev.py"
+    pth.write_text("import holoscan_smoke_dev\n")
+    helper.write_text("# old helper\n")
+    cli = SimpleNamespace(DEFAULT_BUILD_PARENT_DIR=tmp_path, script_name="holoscan")
+    original_replace = os.replace
+
+    def fail_replacement(source, destination):
+        if Path(destination) == (helper if failure == "helper" else pth):
+            raise OSError("write denied")
+        return original_replace(source, destination)
+
+    with patch.object(install_cmd.os, "replace", side_effect=fail_replacement):
+        with pytest.raises(SystemExit):
+            install_cmd.handle_install(
+                cli, _dev_args(project="smoke", build_dir=build, site_dir=site)
+            )
+
+    assert pth.read_text() == "import holoscan_smoke_dev\n"
+    assert helper.read_text() == "# old helper\n"
+    assert sorted(path.name for path in site.iterdir()) == [pth.name, helper.name]
+
+
+def test_install_dev_metadata_helper_cleanup_failure_warns_after_registration(tmp_path, capsys):
+    build = tmp_path / "build"
+    python_root = _metadata_build(build)
+    site = tmp_path / "site"
+    site.mkdir()
+    helper = site / "holoscan_smoke_dev.py"
+    helper.write_text("# old helper\n")
+    cli = SimpleNamespace(DEFAULT_BUILD_PARENT_DIR=tmp_path, script_name="holoscan")
+    original_unlink = Path.unlink
+
+    def fail_helper_unlink(path, *args, **kwargs):
+        if path == helper:
+            raise OSError("cleanup denied")
+        return original_unlink(path, *args, **kwargs)
+
+    with patch.object(Path, "unlink", fail_helper_unlink):
+        install_cmd.handle_install(cli, _dev_args(project="smoke", build_dir=build, site_dir=site))
+
+    assert (site / "holoscan-smoke-dev.pth").read_text() == f"{python_root.resolve()}\n"
+    assert helper.read_text() == "# old helper\n"
+    assert "Could not remove obsolete legacy helper" in capsys.readouterr().err
+
+
 @pytest.mark.parametrize("problem", ["target", "malformed", "duplicate", "missing-version"])
 def test_install_dev_rejects_invalid_metadata_before_writing(tmp_path, problem):
     build = tmp_path / "build"

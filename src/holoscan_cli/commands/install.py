@@ -558,7 +558,6 @@ def _handle_install_dev(cli, args: argparse.Namespace) -> None:
             print(f"Would install {helper_dst} from {build_dir}")
             continue
         try:
-            _shutil.copy2(build_dir / pth_name, pth_dst)
             helper_text = (build_dir / helper_name).read_text(encoding="utf-8")
             host_build_path = (build_dir / "python" / "lib" / "holoscan").resolve()
             helper_text = "".join(
@@ -569,13 +568,34 @@ def _handle_install_dev(cli, args: argparse.Namespace) -> None:
                 )
                 for line in helper_text.splitlines(keepends=True)
             )
-            helper_dst.write_text(helper_text, encoding="utf-8")
-        except OSError as exc:
-            for path in (pth_dst, helper_dst):
+            with tempfile.TemporaryDirectory(dir=site_dir, prefix=f".{pth_name}.") as directory:
+                staging = Path(directory)
+                staged_pth = staging / pth_name
+                staged_helper = staging / helper_name
+                _shutil.copy2(build_dir / pth_name, staged_pth)
+                staged_helper.write_text(helper_text, encoding="utf-8")
+                replacements = ((staged_helper, helper_dst), (staged_pth, pth_dst))
+                backups = {}
+                for _, destination in replacements:
+                    if destination.exists():
+                        backup = staging / f"{destination.name}.old"
+                        _shutil.copy2(destination, backup)
+                        backups[destination] = backup
+                replaced = []
                 try:
-                    path.unlink(missing_ok=True)
+                    # Activate the new .pth only after its helper is in place.
+                    for staged, destination in replacements:
+                        os.replace(staged, destination)
+                        replaced.append(destination)
                 except OSError:
-                    pass
+                    for destination in reversed(replaced):
+                        backup = backups.get(destination)
+                        if backup is None:
+                            destination.unlink()
+                        else:
+                            os.replace(backup, destination)
+                    raise
+        except OSError as exc:
             fatal(f"Failed to install dev hook for '{slug}': {exc}")
         print(f"Installed {pth_dst}")
         print(f"          {helper_dst}")
@@ -729,9 +749,12 @@ def _install_metadata_dev_source(source: _DevSource, site_dir: Path, *, dryrun: 
             with temporary.open("x", encoding="utf-8") as file:
                 file.write(python_path + "\n")
             os.replace(temporary, pth)
-        helper.unlink(missing_ok=True)
     except OSError as exc:
         fatal(f"Failed to register Python build for '{source.slug}': {exc}")
+    try:
+        helper.unlink(missing_ok=True)
+    except OSError as exc:
+        warn(f"Could not remove obsolete legacy helper {helper}: {exc}")
     print(f"Registered {python_path} in {pth}")
 
 
