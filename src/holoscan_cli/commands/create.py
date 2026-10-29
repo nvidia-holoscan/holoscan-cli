@@ -43,7 +43,7 @@ from holoscan_cli.utils.text import parse_key_value_pairs, to_snake_case
 LEGACY_MODULE_TEMPLATE = Path("modules/template")
 CREATE_TEMPLATE_ENV = "HOLOSCAN_CLI_CREATE_TEMPLATE"
 LOCAL_SOURCE_VERSION = "0.0.0+local"
-RESERVED_CONTEXT_KEYS = {"_holoscan_cli_version", "__python_bindings"}
+RESERVED_CONTEXT_KEYS = {"_holoscan_cli_version", "__python_bindings", "__pure_python"}
 LANGUAGES = ("cpp", "python")
 PRESERVED_DESTINATION_ENTRIES = {".git"}
 
@@ -75,9 +75,9 @@ def register_create_parser(cli, subparsers) -> argparse.ArgumentParser:
         help=(
             "Languages for the project (default: cpp). For the packaged Module template, "
             "'cpp python' (or 'cpp,python') adds Python bindings that expose the C++ operators "
-            "through the Holoscan SDK operator registry; pure-Python Modules return in a later "
-            "release. Custom templates take one language. The project name may come before "
-            "or after --language."
+            "through the Holoscan SDK operator registry, and 'python' creates a Module whose "
+            "operators and applications are implemented in Python. Custom templates take one "
+            "language. The project name may come before or after --language."
         ),
     )
     parser.add_argument(
@@ -337,12 +337,6 @@ def handle_create(cli, args: argparse.Namespace) -> None:
         # The packaged template combines languages; caller templates keep their
         # own single-language support.
         languages = _normalize_languages(args.language)
-        if use_packaged_template and languages == ["python"]:
-            fatal(
-                "--language python is not available for Holoscan SDK 5.0 Modules: pure-Python "
-                "Modules return in a later release. Use --language cpp python to call the "
-                "Module's C++ operators from Python."
-            )
         if not use_packaged_template and len(languages) > 1:
             fatal(
                 f"--language {' '.join(languages)} is only supported by the packaged Module "
@@ -516,9 +510,13 @@ def handle_create(cli, args: argparse.Namespace) -> None:
             git_initialized = _initialize_module_git(project_dir)
 
         if is_module:
+            operators_dir = project_dir / "operators"
+            if use_packaged_template and languages == ["python"]:
+                package = "holoscan_" + project_dir.name.removeprefix("holoscan-").replace("-", "_")
+                operators_dir = project_dir / "python" / package / "operators"
             msg_next = (
                 f"Possible next steps:\n"
-                f"- Implement your operator in {project_dir}/operators/\n"
+                f"- Implement your operator in {operators_dir}/\n"
                 f"- Update metadata.json: {metadata_path}\n"
                 f"- Update project README\n"
                 f"- Follow the Quick Start in {project_dir / 'README.md'}\n"

@@ -43,7 +43,28 @@ PYTHON_BINDING_PATHS = (
     f"applications/{MODULE_SLUG}_pipeline/python",
 )
 
-if PYTHON_BINDINGS != "yes":
+PURE_PYTHON = {{ cookiecutter.__pure_python | tojson }}
+# A pure-Python Module keeps python/, tests/python and the Python application,
+# and drops the C++ operator, application, tests, bindings and Debian package.
+CPP_PATHS = (
+    ".clang-format",
+    "pkg",
+    "operators/CMakeLists.txt",
+    f"operators/{OPERATOR_SLUG}/CMakeLists.txt",
+    f"operators/{OPERATOR_SLUG}/{OPERATOR_SLUG}.cpp",
+    f"operators/{OPERATOR_SLUG}/{OPERATOR_SLUG}.hpp",
+    f"applications/{MODULE_SLUG}_pipeline/cpp",
+    f"python/_{MODULE_SLUG}.cpp",
+    "tests/cpp",
+)
+
+if PURE_PYTHON == "yes":
+    for path in CPP_PATHS:
+        if os.path.isdir(path):
+            shutil.rmtree(path)
+        elif os.path.exists(path):
+            os.remove(path)
+elif PYTHON_BINDINGS != "yes":
     for path in PYTHON_BINDING_PATHS:
         shutil.rmtree(path, ignore_errors=True)
 
@@ -55,7 +76,10 @@ OPERATOR_CLASS = "".join(p.capitalize() for p in op_parts)
 
 print(f"\n\033[32mHoloscan Module '{MODULE_SLUG}' created successfully!\033[0m\n")
 print(f"Implement your operator ({OPERATOR_CLASS}) in:")
-print(f"  operators/{OPERATOR_SLUG}/{OPERATOR_SLUG}.cpp\n")
+if PURE_PYTHON == "yes":
+    print(f"  python/holoscan_{MODULE_SLUG}/operators/{OPERATOR_SLUG}.py\n")
+else:
+    print(f"  operators/{OPERATOR_SLUG}/{OPERATOR_SLUG}.cpp\n")
 
 print("Next steps:")
 print("  See README.md for environment setup, build, run, and test instructions.\n")

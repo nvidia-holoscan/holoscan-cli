@@ -207,17 +207,6 @@ def test_missing_cookiecutter_points_to_the_create_extra(cli, tmp_path, monkeypa
     assert "pip install 'holoscan-cli[create]'" in capsys.readouterr().err
 
 
-def test_module_template_rejects_python_language(cli, tmp_path, capsys):
-    with pytest.raises(SystemExit):
-        create.handle_create(cli, _args(language="python", directory=tmp_path / "output"))
-
-    err = capsys.readouterr().err
-    assert "not available for Holoscan SDK 5.0" in err
-    assert "pure-Python Modules return in a later release" in err
-    assert "--language cpp python" in err
-    assert not (tmp_path / "output").exists()
-
-
 def test_custom_module_template_rejects_multiple_languages(cli, tmp_path, capsys):
     _write_template(tmp_path, "modules/template", module=True)
 
@@ -234,11 +223,19 @@ def test_custom_module_template_rejects_multiple_languages(cli, tmp_path, capsys
     assert "custom templates take one language" in capsys.readouterr().err
 
 
-@pytest.mark.parametrize("language", [["cpp"], ["cpp", "python"], ["python,cpp", "cpp"]])
-def test_packaged_template_receives_normalized_languages(cli, tmp_path, capsys, language):
+@pytest.mark.parametrize(
+    ("language", "expected"),
+    [
+        (["cpp"], "cpp"),
+        (["cpp", "python"], "cpp,python"),
+        (["python,cpp", "cpp"], "cpp,python"),
+        (["python"], "python"),
+        ("python", "python"),
+    ],
+)
+def test_packaged_template_receives_normalized_languages(cli, tmp_path, capsys, language, expected):
     create.handle_create(cli, _args(language=language, directory=tmp_path / "output"))
 
-    expected = "cpp,python" if any("python" in value for value in language) else "cpp"
     assert f"  language: {expected}\n" in capsys.readouterr().out
 
 
@@ -250,14 +247,15 @@ def test_create_rejects_unknown_languages(cli, tmp_path, capsys, language):
     assert "--language" in capsys.readouterr().err
 
 
-def test_create_manages_the_python_bindings_context(cli, tmp_path, capsys):
+@pytest.mark.parametrize("key", ["__python_bindings", "__pure_python"])
+def test_create_manages_the_language_context(cli, tmp_path, capsys, key):
     with pytest.raises(SystemExit):
         create.handle_create(
             cli,
-            _args(context=["__python_bindings=yes"], directory=tmp_path / "output"),
+            _args(context=[f"{key}=yes"], directory=tmp_path / "output"),
         )
 
-    assert "'__python_bindings' is managed by holoscan create" in capsys.readouterr().err
+    assert f"'{key}' is managed by holoscan create" in capsys.readouterr().err
 
 
 def test_custom_module_template_allows_python_language(cli, tmp_path, capsys):
@@ -392,6 +390,157 @@ def test_packaged_template_generates_python_bindings_for_cpp_python(cli, tmp_pat
     assert "    └── python/" in developer
     assert "PYTHONPATH=build/python/lib:$PYTHONPATH python3" in developer
     assert "C++ unit tests and the `tests/python` pytest suite" in developer
+
+
+def test_packaged_template_generates_a_pure_python_module(cli, tmp_path, monkeypatch, capsys):
+    pytest.importorskip("cookiecutter")
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    (tmp_path / "home").mkdir()
+    monkeypatch.setattr(create, "_initialize_module_git", lambda _path: False)
+
+    create.handle_create(cli, _args(dryrun=False, language="python", directory=tmp_path / "output"))
+
+    project = tmp_path / "output/holoscan-my-mod"
+    out = capsys.readouterr().out
+    assert f"Implement your operator in {project}/python/holoscan_my_mod/operators/" in out
+    for removed in (
+        ".clang-format",
+        "pkg",
+        "operators/CMakeLists.txt",
+        "operators/my_mod_op/CMakeLists.txt",
+        "operators/my_mod_op/my_mod_op.cpp",
+        "operators/my_mod_op/my_mod_op.hpp",
+        "applications/my_mod_pipeline/cpp",
+        "python/_my_mod.cpp",
+        "tests/cpp",
+    ):
+        assert not (project / removed).exists(), removed
+    assert not list(project.rglob("*.[ch]pp"))
+
+    operator = (project / "python/holoscan_my_mod/operators/my_mod_op.py").read_text(
+        encoding="utf-8"
+    )
+    assert "class MyModOp(hs.Operator):" in operator
+    assert 'inp = hs.Input("in", hs.payload.uint32)' in operator
+    assert "def compute(self, context: hs.ExecutionContext) -> None:" in operator
+    operators = (project / "python/holoscan_my_mod/operators/__init__.py").read_text(
+        encoding="utf-8"
+    )
+    assert "from .my_mod_op import MyModOp" in operators
+    assert "registry" not in operators
+    application = (project / "applications/my_mod_pipeline/python/my_mod_pipeline.py").read_text(
+        encoding="utf-8"
+    )
+    assert 'graph.op(MyModOp, "my_mod_op")' in application
+    tests = (project / "tests/python/test_my_mod.py").read_text(encoding="utf-8")
+    assert "OperatorTestHarness(MyModOp)" in tests
+
+    root_cmake = (project / "CMakeLists.txt").read_text(encoding="utf-8")
+    assert "LANGUAGES NONE" in root_cmake
+    assert "if(SKBUILD)\n    return()\nendif()" in root_cmake
+    assert "find_package(holoscan" not in root_cmake
+    assert "CMAKE_CXX_STANDARD" not in root_cmake
+    assert "find_package(Python 3.12 REQUIRED COMPONENTS Interpreter)" in root_cmake
+    python_cmake = (project / "python/CMakeLists.txt").read_text(encoding="utf-8")
+    assert "nanobind" not in python_cmake
+    assert "holoscan_install_python_module_metadata" not in python_cmake
+    assert "[holoscan.modules]\\nmy_mod = holoscan_my_mod\\n" in python_cmake
+
+    pyproject = tomllib.loads((project / "pyproject.toml").read_text(encoding="utf-8"))
+    assert pyproject["build-system"] == {
+        "requires": ["scikit-build-core~=1.0.3"],
+        "build-backend": "scikit_build_core.build",
+    }
+    assert pyproject["project"]["requires-python"] == ">=3.12"
+    assert pyproject["project"]["dependencies"] == ["holoscan-cu13>=5.0.0"]
+    assert pyproject["project"]["entry-points"]["holoscan.modules"] == {"my_mod": "holoscan_my_mod"}
+    assert pyproject["tool"]["scikit-build"]["wheel"] == {
+        "packages": ["python/holoscan_my_mod"],
+        "platlib": False,
+    }
+    assert "pytest" in pyproject["dependency-groups"]["dev"]
+    assert pyproject["tool"]["ruff"]["target-version"] == "py312"
+
+    metadata = json.loads((project / "metadata.json").read_text(encoding="utf-8"))["module"]
+    assert metadata["language"] == ["Python"]
+    assert metadata["namespace"] == {"python": "holoscan_my_mod"}
+    assert metadata["binary_packages"]["wheel"] == "holoscan-my-mod"
+    assert "debian" not in metadata["binary_packages"]
+    assert metadata["testing"] == {"python": "pytest"}
+    operator_metadata = json.loads(
+        (project / "operators/my_mod_op/metadata.json").read_text(encoding="utf-8")
+    )["operator"]
+    assert operator_metadata["language"] == ["Python"]
+    app_metadata = json.loads(
+        (project / "applications/my_mod_pipeline/python/metadata.json").read_text(encoding="utf-8")
+    )["application"]
+    assert app_metadata["modes"]["default"]["description"] == "Run the Python my_mod pipeline"
+    _validate_generated_metadata(project)
+
+    dockerfile = (project / "Dockerfile").read_text(encoding="utf-8")
+    assert "libgtest-dev" not in dockerfile
+    assert "clang-format" not in dockerfile
+    pre_commit = (project / ".pre-commit-config.yaml").read_text(encoding="utf-8")
+    assert "cpplint" not in pre_commit
+    ci = (project / ".github/workflows/ci.yml").read_text(encoding="utf-8")
+    assert "clang-format" not in ci
+    assert "python -m build --wheel" in ci
+    notice = (project / "NOTICE").read_text(encoding="utf-8")
+    assert "GoogleTest" not in notice
+    assert "nanobind" not in notice
+    readme = (project / "README.md").read_text(encoding="utf-8")
+    agents = (project / "AGENTS.md").read_text(encoding="utf-8")
+    developer = (project / "DEVELOPER.md").read_text(encoding="utf-8")
+    assert "holoscan package holoscan-my-mod --pkg-generator WHEEL" in readme
+    assert "holoscan package holoscan-my-mod --pkg-generator WHEEL" in agents
+    assert "--pkg-generator DEB" not in readme + agents + developer
+    assert "uv run --only-group dev holoscan run my_mod_pipeline" in readme
+    assert "my_mod_op.py      # Operator implementation" in developer
+    for path in project.rglob("*"):
+        if path.is_file() and not {"cmake", "__pycache__"} & set(path.parts):
+            text = path.read_text(encoding="utf-8")
+            assert "{{" not in text and "{%" not in text, path
+
+
+def test_pure_python_module_stages_its_package_without_an_sdk(cli, tmp_path, monkeypatch):
+    """Configure the generated CMake project with only CMake and Python 3.12."""
+    pytest.importorskip("cookiecutter")
+    cmake = shutil.which("cmake")
+    python = sys.executable if sys.version_info >= (3, 12) else shutil.which("python3.12")
+    if cmake is None or python is None:
+        pytest.skip("CMake and Python 3.12 are required to configure the generated project")
+    monkeypatch.setattr(create, "_initialize_module_git", lambda _path: False)
+    create.handle_create(cli, _args(dryrun=False, language="python", directory=tmp_path / "output"))
+    project = tmp_path / "output/holoscan-my-mod"
+    build = tmp_path / "build"
+    prefix = tmp_path / "install"
+
+    def run(*args):
+        result = subprocess.run(args, capture_output=True, text=True)
+        assert result.returncode == 0, result.stdout + result.stderr
+        return result.stdout
+
+    run(cmake, "-S", str(project), "-B", str(build), f"-DPython_EXECUTABLE={python}")
+    run(cmake, "--build", str(build))
+    python_lib = build / "python/lib"
+    for name in ("__init__.py", "py.typed", "operators/__init__.py", "operators/my_mod_op.py"):
+        assert (python_lib / "holoscan_my_mod" / name).is_file(), name
+    entry_points = python_lib / "holoscan_my_mod-0.1.0.dist-info/entry_points.txt"
+    assert entry_points.read_text(encoding="utf-8") == (
+        "[holoscan.modules]\nmy_mod = holoscan_my_mod\n"
+    )
+    tests = run("ctest", "--test-dir", str(build), "-N", "-L", "unit")
+    assert "python.my_mod" in tests
+    run(cmake, "--install", str(build), "--prefix", str(prefix))
+    version = subprocess.check_output(
+        [python, "-c", "import sys; print(f'{sys.version_info[0]}.{sys.version_info[1]}')"],
+        text=True,
+    ).strip()
+    site = prefix / f"lib/python{version}/site-packages"
+    assert (site / "holoscan_my_mod/operators/my_mod_op.py").is_file()
+    assert (site / "holoscan_my_mod-0.1.0.dist-info/entry_points.txt").is_file()
+    for name in ("LICENSE", "NOTICE"):
+        assert (prefix / "share/doc/holoscan-my-mod" / name).is_file(), name
 
 
 @pytest.mark.parametrize("holoscan_version", ["4.1.0", "5.0", "latest"])

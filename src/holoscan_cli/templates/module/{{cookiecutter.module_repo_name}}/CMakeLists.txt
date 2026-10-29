@@ -1,5 +1,81 @@
 # SPDX-FileCopyrightText: Copyright (c) {% now 'utc', '%Y' %} {{ cookiecutter.full_name }}{% if cookiecutter.affiliation %} / {{ cookiecutter.affiliation }}{% endif %}. All rights reserved.
 # SPDX-License-Identifier: {{ cookiecutter._license }}
+{%- if cookiecutter.__pure_python == 'yes' %}
+
+cmake_minimum_required(VERSION 3.24)
+
+# This Module is implemented in Python. CMake only stages the package for
+# `holoscan build|run|test` and runs the pytest suite through CTest, so it
+# enables no compiled languages.
+project(holoscan_{{ cookiecutter.module_slug }}
+    VERSION {{ cookiecutter.version }}
+    DESCRIPTION "{{ cookiecutter.description }}"
+    LANGUAGES NONE
+)
+
+# Wheel builds (scikit-build-core) take the package and its metadata from pyproject.toml.
+if(SKBUILD)
+    return()
+endif()
+
+# ---------------------------------------------------------------------------
+# Build options
+# ---------------------------------------------------------------------------
+# BUILD_ALL toggles every application on by default. Each application is a
+# CMake option (APP_<name>) defined by add_holohub_application, defaulting to
+# ${BUILD_ALL}. It is ON when this is the top-level project and OFF when the
+# Module is nested in another project.
+if(NOT DEFINED BUILD_ALL)
+    if(PROJECT_IS_TOP_LEVEL)
+        set(BUILD_ALL ON CACHE BOOL "Build all applications by default")
+    else()
+        set(BUILD_ALL OFF)
+    endif()
+endif()
+
+# Module tests live behind a module-namespaced flag rather than the standard
+# CMake BUILD_TESTING variable, so a parent project keeps its own setting.
+# Defaults ON when standalone, OFF when nested.
+if(NOT DEFINED {{ cookiecutter.module_slug | upper }}_BUILD_TESTING)
+    if(PROJECT_IS_TOP_LEVEL)
+        set({{ cookiecutter.module_slug | upper }}_BUILD_TESTING ON
+            CACHE BOOL "Build the {{ cookiecutter.module_slug }} module's CTest suite")
+    else()
+        set({{ cookiecutter.module_slug | upper }}_BUILD_TESTING OFF
+            CACHE BOOL "Build the {{ cookiecutter.module_slug }} module's CTest suite")
+    endif()
+endif()
+
+# Found at the root so python/ and tests/python/ see the same interpreter.
+if(Python3_EXECUTABLE AND NOT Python_EXECUTABLE)
+    set(Python_EXECUTABLE "${Python3_EXECUTABLE}")
+endif()
+find_package(Python 3.12 REQUIRED COMPONENTS Interpreter)
+
+# ---------------------------------------------------------------------------
+# CMake helpers
+# ---------------------------------------------------------------------------
+# HoloHubConfigHelpers.cmake provides add_holohub_application, which gates each
+# application on its own APP_<name> option. The helpers are bundled in this
+# generated repository so it builds without a HoloHub clone.
+list(PREPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
+include(HoloHubConfigHelpers)
+
+# Every install carries the license and third-party notices.
+install(FILES LICENSE NOTICE
+    DESTINATION "share/doc/{{ cookiecutter.module_repo_name }}")
+
+# ---------------------------------------------------------------------------
+# Subprojects
+# ---------------------------------------------------------------------------
+add_subdirectory(python)
+add_subdirectory(applications)
+
+if({{ cookiecutter.module_slug | upper }}_BUILD_TESTING)
+    enable_testing()
+    add_subdirectory(tests)
+endif()
+{%- else %}
 
 cmake_minimum_required(VERSION 4.0)
 
@@ -140,3 +216,4 @@ endif()
 # PKG_{{ cookiecutter.module_repo_name.replace('-', '_') }} option, FORCEs the OP_/APP_ deps to ON when the
 # package is enabled, and enters pkg/{{ cookiecutter.module_repo_name }}/CMakeLists.txt
 # for the holohub_configure_deb() call.
+{%- endif %}
