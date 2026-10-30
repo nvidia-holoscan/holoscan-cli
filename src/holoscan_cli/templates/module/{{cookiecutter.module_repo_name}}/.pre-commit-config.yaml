@@ -5,6 +5,10 @@
 # Run `pre-commit run --all-files` to lint the whole tree.
 # Run `pre-commit autoupdate` to refresh to latest compatible versions.
 
+# Use a tested LTS runtime instead of nodeenv's moving default.
+default_language_version:
+  node: "24.22.2"
+
 # Build outputs, dev-container HOME junk, and scaffolded third-party cmake/
 # helpers (vendored, not maintained here) are excluded from all hooks.
 exclude: '^(build[^/]*|install[^/]*|dist|\.cache|\.local|\.cupy|_CPack_Packages|cmake)/'

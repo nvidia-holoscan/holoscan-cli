@@ -13,6 +13,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+# Use a tested LTS runtime instead of nodeenv's moving default.
+default_language_version:
+  node: "24.22.2"
+
 # HoloHub-derived lint baseline for the consolidated Holoscan CLI.
 # Run `pre-commit autoupdate` to refresh to latest compatible versions.
 #

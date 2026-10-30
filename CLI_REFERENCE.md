@@ -79,6 +79,13 @@ rules, file-size limits, and search-path overrides.
 Read command help for accepted options and required project inputs. Metadata
 and the selected mode determine available applications and their behavior.
 
+`lint --install-dependencies` uses the project's `requirements-lint.txt` or
+`utilities/requirements.lint.txt` when present. Otherwise, it installs
+pre-commit 4.7+ and nodeenv 1.11.1+ within their current major versions.
+Node runtime selection belongs to the project's `.pre-commit-config.yaml`.
+Run this option explicitly to update existing lint tooling; ordinary lint
+runs reuse an available pre-commit installation.
+
 ## Preview and execution
 
 | Commands | Preview flags |
