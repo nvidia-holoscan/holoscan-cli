@@ -5,6 +5,10 @@
 # Run `pre-commit run --all-files` to lint the whole tree.
 # Run `pre-commit autoupdate` to refresh to latest compatible versions.
 
+# Follow Node LTS releases and exclude prerelease runtimes.
+default_language_version:
+  node: lts
+
 # Build outputs, dev-container HOME junk, and scaffolded third-party cmake/
 # helpers (vendored, not maintained here) are excluded from all hooks.
 exclude: '^(build[^/]*|install[^/]*|dist|\.cache|\.local|\.cupy|_CPack_Packages|cmake)/'

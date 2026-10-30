@@ -133,7 +133,7 @@ def test_lint_dryrun_limits_to_git_tracked_path(tmp_path, monkeypatch):
     ]
 
 
-def test_install_lint_deps_falls_back_to_pre_commit_package(tmp_path, monkeypatch):
+def test_install_lint_deps_falls_back_to_supported_tool_versions(tmp_path, monkeypatch):
     root = tmp_path / "repo"
     root.mkdir()
     (root / ".pre-commit-config.yaml").write_text("repos: []\n")
@@ -149,7 +149,14 @@ def test_install_lint_deps_falls_back_to_pre_commit_package(tmp_path, monkeypatc
 
     commands_lint._install_lint_deps(lint_cli, dry_run=True, env={})
 
-    assert calls[0]["cmd"] == [sys.executable, "-m", "pip", "install", "pre-commit"]
+    assert calls[0]["cmd"] == [
+        sys.executable,
+        "-m",
+        "pip",
+        "install",
+        "pre-commit",
+        "nodeenv>=1.11.1",
+    ]
     assert calls[0]["dry_run"] is True
     assert calls[1]["cmd"] == [sys.executable, "-m", "pre_commit", "install-hooks"]
     assert calls[1]["dry_run"] is True
