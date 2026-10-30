@@ -83,8 +83,9 @@ workflow installs, so passing locally is a strong signal.
 
 The test dependencies require pre-commit 4.7+ and nodeenv 1.11.1+, which
 excludes Node prereleases from automatic selection. Repository and generated
-module hooks also pin a tested Node LTS patch release. Review that pin when
-updating lint tooling; changing the CLI template affects newly created modules.
+module hooks select the current Node LTS release. New hook environments can
+select a newer LTS major; cached environments retain their installed runtime
+until refreshed. Changing the CLI template affects newly created modules.
 
 ### Run the same checks CI runs
 

@@ -81,7 +81,7 @@ and the selected mode determine available applications and their behavior.
 
 `lint --install-dependencies` uses the project's `requirements-lint.txt` or
 `utilities/requirements.lint.txt` when present. Otherwise, it installs
-pre-commit 4.7+ and nodeenv 1.11.1+ within their current major versions.
+pre-commit and nodeenv 1.11.1 or newer.
 Node runtime selection belongs to the project's `.pre-commit-config.yaml`.
 Run this option explicitly to update existing lint tooling; ordinary lint
 runs reuse an available pre-commit installation.

@@ -154,8 +154,8 @@ def test_install_lint_deps_falls_back_to_supported_tool_versions(tmp_path, monke
         "-m",
         "pip",
         "install",
-        "pre-commit>=4.7.0,<5",
-        "nodeenv>=1.11.1,<2",
+        "pre-commit",
+        "nodeenv>=1.11.1",
     ]
     assert calls[0]["dry_run"] is True
     assert calls[1]["cmd"] == [sys.executable, "-m", "pre_commit", "install-hooks"]

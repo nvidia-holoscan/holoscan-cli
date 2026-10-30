@@ -185,7 +185,7 @@ def _install_lint_deps(cli, dry_run: bool, env: dict) -> None:
         pip_install_cmd.extend(["-r", str(lint_requirements)])
     else:
         # nodeenv 1.11.1 excludes Node prereleases from its default selection.
-        pip_install_cmd.extend(["pre-commit>=4.7.0,<5", "nodeenv>=1.11.1,<2"])
+        pip_install_cmd.extend(["pre-commit", "nodeenv>=1.11.1"])
     run_command(
         pip_install_cmd,
         dry_run=dry_run,
