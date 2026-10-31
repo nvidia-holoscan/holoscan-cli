@@ -14,94 +14,12 @@ The CLI presents a single command surface for the source-project development lif
 - **Discovery / diagnostics:** `list`, `modes`, `status`, `env-info`, `env-check`, `autocompletion_list`, `version`
 - **Workspace:** `lint`, `setup`, `clear-cache`, `create`
 
-Run `holoscan <command> --help` for per-command flags.
-
-Per-repo wrappers install this package and delegate to `holoscan`, layering on their own configuration via `HOLOSCAN_CLI_*` environment variables:
-
-| Repo | Wrapper | Adds |
-| --- | --- | --- |
-| [HoloHub](https://github.com/nvidia-holoscan/holohub) | `./holohub` | source-project metadata search paths, container/workspace names |
-| [I4H Workflows](https://github.com/isaac-for-healthcare/i4h-workflows) | `./i4h` | RTI DDS license auto-download + mount, TTY serial device passthrough |
-
-Common env vars:
-
-- `HOLOSCAN_CLI_ROOT` — repo root
-- `HOLOSCAN_CLI_SEARCH_PATH` — directories or exact `metadata.json` files to discover
-- `HOLOSCAN_CLI_PATH_PREFIX` — placeholder prefix in metadata templates
-- `HOLOSCAN_CLI_REPO_PREFIX` — container image name prefix
-- `HOLOSCAN_CLI_CONTAINER_PREFIX` — standalone Module image name prefix
-- `HOLOSCAN_CLI_CREATE_TEMPLATE` — default template for `holoscan create`
-
-`holoscan env-info` lists every env var the CLI reads in the current shell.
-
-## Project trust model
-
-Holoscan source projects are executable code, not passive data. In particular,
-`metadata.json` can define a `run.command` (directly or through a mode), and
-`holoscan run` executes that project-defined command. Build files, Dockerfiles,
-setup scripts, and test configuration can execute project code as well. Review
-the source and metadata before building or running a repository you do not
-trust.
-
-For a plain `run.command` string, the CLI expands Holoscan placeholders, parses
-the result into an argument vector, and launches it without an implicit shell.
-A project can still request a shell explicitly (for example, `bash -c ...`) or
-name any other executable. Local execution runs with the invoking user's
-permissions; elevation happens only when the user explicitly passes
-`--as-root`.
-
-Use `holoscan run <project> --dryrun --local --verbose` to inspect the resolved
-local build and run commands without executing them. A dry run helps with
-review, but it is not a sandbox and does not make untrusted project code safe.
-
-## JSON output
-
-`list`, `modes`, `status`, `env-info`, `env-check`, and `version` accept `--json`
-and print a single machine-readable document instead of prose.
-
-Every payload starts with a `schema_version` field, currently `1`. Within a
-version the payloads change additively: new keys may appear, existing keys are
-not removed or renamed. Consumers should ignore keys they do not recognize; a
-removal or rename bumps `schema_version`.
-
-`env-info --json` reports host state, so the values vary by machine — the
-`docker`, `cuda_gpu`, and `git` sections are `null` when unavailable.
-
-## CPU limits
-
-For local Docker daemons, `run` and `run-container` forward the caller's cgroup
-CPU set and CPU-time quota separately. They do not restrict containers to the
-launcher's thread affinity or shrink the permitted CPU set to match the quota.
-Applications can pin threads to isolated cores when the cgroup permits those cores.
-Unrestricted hosts receive no automatic CPU options.
-
-Image builds and compile containers (`build`, `install`, `package`, `test`) keep
-the affinity/quota-based smaller CPU set for tools that size parallel work from
-affinity, such as `nproc`. Builds inside `run` and `run-container` use runtime limits.
-The CLI's default CMake job count uses `os.cpu_count()`, which ignores affinity.
-Use `--parallel` or `CMAKE_BUILD_PARALLEL_LEVEL` to set that job count explicitly.
-
-To choose runtime cores explicitly, use `--docker-opts='--cpuset-cpus=0,11-13'`,
-not `taskset`. Supplying `--cpuset-cpus`, `--cpus`, `--cpu-quota`, or `--cpu-period`
-in the configured Docker run options disables all automatic run CPU limits.
-
-## Source layout
-
-```text
-src/holoscan_cli/
-  cli.py              top-level argparse + dispatch (HoloscanCLI)
-  configuration.py    effective-configuration reporting
-  commands/           one file per subcommand + a central registry
-  container/          HoloscanContainer + docker arg helpers + parser builders
-  cmake/              packaged CMake support copied into standalone Modules
-  utils/              io.py, text.py, sdk.py, docker.py, host_setup.py,
-                      env_info.py, holohub.py
-  setup_scripts/      bundled bash scripts backing `setup --scripts` and
-                      `build-container --extra-scripts`
-  metadata/           project metadata JSON schemas
-  templates/module/   standalone Module cookiecutter
-  testing/            CTest helpers shipped in the wheel
-```
+Run `holoscan <command> --help` for per-command flags, and `holoscan env-info`
+for the values of the main environment variables the CLI reads. The
+[CLI reference](https://github.com/nvidia-holoscan/holoscan-cli/blob/main/CLI_REFERENCE.md)
+describes command behavior, including JSON output and CPU limits.
+[Configuring Holoscan CLI](https://github.com/nvidia-holoscan/holoscan-cli/blob/main/CONFIGURATION.md)
+covers settings, base images, and their precedence.
 
 ## Prerequisites
 
@@ -156,12 +74,10 @@ python -m pip install 'holoscan-cli[create]>=5.0.0'
 
 In an existing generated module, use its `requirements-cli.txt` to provision
 a pip environment. Follow its `README.md` and `DEVELOPER.md` for implementation,
-tests, packaging, and consumer verification. No HoloHub checkout or copied
-wrapper is needed.
+tests, packaging, and consumer verification.
 
 See the [CLI reference](https://github.com/nvidia-holoscan/holoscan-cli/blob/main/CLI_REFERENCE.md) for project selection, command
-semantics, previews, diagnostics, and cleanup. For contributing to the CLI
-itself, see [CONTRIBUTING.md](https://github.com/nvidia-holoscan/holoscan-cli/blob/main/CONTRIBUTING.md).
+semantics, previews, diagnostics, and cleanup.
 
 ### Project configuration
 
@@ -188,6 +104,26 @@ architectures. Use command options for one-off choices. See
 [Configuring Holoscan CLI](https://github.com/nvidia-holoscan/holoscan-cli/blob/main/CONFIGURATION.md)
 for the complete user-facing behavior.
 
+## Project trust model
+
+Holoscan source projects are executable code, not passive data. In particular,
+`metadata.json` can define a `run.command` (directly or through a mode), and
+`holoscan run` executes that project-defined command. Build files, Dockerfiles,
+setup scripts, and test configuration can execute project code as well. Review
+the source and metadata before building or running a repository you do not
+trust.
+
+For a plain `run.command` string, the CLI expands Holoscan placeholders, parses
+the result into an argument vector, and launches it without an implicit shell.
+A project can still request a shell explicitly (for example, `bash -c ...`) or
+name any other executable. Local execution runs with the invoking user's
+permissions; elevation happens only when the user explicitly passes
+`--as-root`.
+
+Use `holoscan run <project> --dryrun --local --verbose` to inspect the resolved
+local build and run commands without executing them. A dry run helps with
+review, but it is not a sandbox and does not make untrusted project code safe.
+
 ## Versioning
 
 `holoscan-cli` release versions are aligned with Holoscan SDK GA release
@@ -200,110 +136,16 @@ release line, for example `holoscan-cli==4.4.1` before the next SDK-aligned
 `4.5.0` release.
 
 Version alignment does not imply that the CLI selects, installs, or requires a
-matching Holoscan SDK runtime or container base image. For container builds, the
-base image can be set with the CLI when your component's Dockerfile is configured
-with `FROM ${BASE_IMAGE}`, using any of the methods below:
-
-1. Pass the image to the `--base-img` flag:
-
-   ```bash
-   holoscan build-container my_app --base-img nvcr.io/nvidia/clara-holoscan/holoscan:v4.4.0-cuda13
-   ```
-
-2. Set `HOLOSCAN_CLI_BASE_IMAGE` to an exact tagged or digested image. It is
-   used without adding another tag:
-
-   ```bash
-   export HOLOSCAN_CLI_BASE_IMAGE=nvcr.io/nvidia/clara-holoscan/holoscan:v4.4.0-cuda13
-   holoscan build-container my_app
-   ```
-
-3. Set `HOLOSCAN_CLI_BASE_IMAGE` to an image repository (no tag) and
-   `HOLOSCAN_CLI_BASE_SDK_VERSION` to a Holoscan semantic version. The base image
-   then resolves to
-   `$HOLOSCAN_CLI_BASE_IMAGE:v$HOLOSCAN_CLI_BASE_SDK_VERSION-$CUDA_TAG`, with the
-   CUDA tag chosen dynamically from your host environment:
-
-   ```bash
-   export HOLOSCAN_CLI_BASE_IMAGE=nvcr.io/nvidia/clara-holoscan/holoscan
-   export HOLOSCAN_CLI_BASE_SDK_VERSION=4.4.0
-   # Resolves to nvcr.io/nvidia/clara-holoscan/holoscan:v4.4.0-cuda13 on hosts with NVIDIA drivers >= 580
-   holoscan build-container my_app
-   ```
-
-   SDK 5.x supports CUDA 13 only. For those versions the tag is always
-   `cuda13`, and the `CUDA_MAJOR` build argument defaults to `13` instead of
-   following the host driver. Requesting another CUDA version for SDK 5.x is
-   an error.
-
-If none of these is configured, the CLI asks for a base image instead of
-inferring one from its own package version.
-
-Advanced wrappers can set `HOLOSCAN_CLI_BASE_IMAGE_FORMAT` with
-`{base_image}`, `{sdk_version}`, and `{cuda_tag}`, or
-`HOLOSCAN_CLI_DEFAULT_IMAGE_FORMAT` with `{container_prefix}`,
-`{sdk_version}`, and `{cuda_tag}`. An explicit base-image format controls
-composition; without one, tagged images and digests are exact while an
-untagged environment repository uses the SDK/CUDA-derived tag.
-
-## Build from source
-
-Python 3.11–3.14 and [Poetry 2.0+](https://python-poetry.org/docs/#installation) required.
-
-```bash
-# Create + activate a virtual environment
-poetry env use python3.12
-eval $(poetry env activate)
-
-# Install dependencies + dev tooling
-poetry install --with test
-pre-commit install
-
-# Run the test suite
-poetry run pytest
-
-# Build sdist + wheel
-poetry build
-```
-
-### Testing against an in-tree source-project fixture
-
-The repo ships a minimal HoloHub-style fixture at
-`tests/fixtures/holohub_smoke/` (one application with a `metadata.json` that
-validates against the application schema). Point the CLI at it without
-needing a HoloHub / I4H checkout:
-
-```bash
-HOLOSCAN_CLI_ROOT=tests/fixtures/holohub_smoke holoscan list
-HOLOSCAN_CLI_ROOT=tests/fixtures/holohub_smoke holoscan modes smoke_app
-```
-
-The same fixture is what `.github/scripts/smoke_test.sh` exercises against
-the installed wheel on every CI run, so a passing fixture run locally is a
-strong proxy for the `smoke-test` job passing on push.
-
-### Testing against the downstream wrappers
-
-Each consuming repo (HoloHub / I4H Workflows) carries a
-`test_holoscan_cli_consolidation.py` that exercises the unified `holoscan`
-CLI against its project tree. Point the wrapper at a local checkout via
-`HOLOSCAN_CLI_SOURCE`:
-
-```bash
-cd /path/to/holohub
-HOLOSCAN_CLI_SOURCE=/path/to/holoscan-cli \
-  python -m pytest -q -o addopts='' utilities/cli/tests/test_holoscan_cli_consolidation.py
-```
-
-The wrapper prepends `<HOLOSCAN_CLI_SOURCE>/src` to `PYTHONPATH`, so an
-in-progress branch can be exercised end-to-end without publishing a wheel
-first.
+matching Holoscan SDK runtime or container base image. Choose the base image for
+container builds with `--base-img`, `HOLOSCAN_CLI_BASE_IMAGE`, or a Module's
+`[tool.holoscan.base-images]`; see
+[base images](https://github.com/nvidia-holoscan/holoscan-cli/blob/main/CONFIGURATION.md#base-images).
 
 ## Contributing
 
 See
 [CONTRIBUTING.md](https://github.com/nvidia-holoscan/holoscan-cli/blob/main/CONTRIBUTING.md)
-for details.
+for development setup, tests, and builds.
 [`.github/CI.md`](https://github.com/nvidia-holoscan/holoscan-cli/blob/main/.github/CI.md)
 covers the CI/release pipelines that back the workflow badges at the top of
 this page.
@@ -317,8 +159,8 @@ and the `monai-deploy` console script are intentionally not provided. The curren
 `holoscan package` command is for building Holoscan Module distribution artifacts;
 it is not the legacy HAP/MAP application packager. Before holoscan v4.3.0,
 `holoscan run` was the HAP/MAP packaged-image runner; since v4.3.0 the same name
-now drives the HoloHub-style source-project runner, so it no longer launches
-packaged images. Developers that still rely on HAP/MAP packaging should pin both
+now drives the source-project runner, so it no longer launches packaged images.
+Developers that still rely on HAP/MAP packaging should pin both
 `holoscan-cli<=4.2.0`, the last CLI release that shipped that interface, and
 `holoscan<=4.2.0`, because the legacy package command depends on the artifacts
 JSON manifest and was only tested with those SDK versions. Otherwise, migrate to
@@ -333,5 +175,4 @@ deprecation timeline.
 keep their copy. Holoscan SDK 5 builds Python bindings with nanobind: see
 `python/CMakeLists.txt` in a Module created with
 `holoscan create --language cpp python`. Holoscan SDK 4 templates that call the
-helper, such as HoloHub's `modules/template`, need their own copy of it or
-holoscan-cli 4.6.
+helper need their own copy of it or holoscan-cli 4.6.
