@@ -95,7 +95,7 @@ pre-commit = "^4.7.0"
 nodeenv = ">=1.11.1"
 pytest-cov= "^7.0.0"
 pytest-mock= "^3.17.0"
-pytest = "^9.1.1"
+pytest = "^9.2.0"
 coveralls = { version = "^4.1.0", markers = "python_version < '3.13'" }
 # Mirrors the runtime ``[create]`` extra so the unit tests for the
 # schema validator (``test_metadata_validator.py``) and the smoke
