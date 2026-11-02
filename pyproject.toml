@@ -89,8 +89,8 @@ version = "0.0.0"
 gitchangelog = "^3.0.4"
 
 [tool.poetry.group.test.dependencies]
-coverage= "^7.16.2"
-mypy= "^2.4.0"
+coverage= "^7.17.0"
+mypy= "^2.4.1"
 pre-commit = "^4.7.0"
 nodeenv = ">=1.11.1"
 pytest-cov= "^7.0.0"
