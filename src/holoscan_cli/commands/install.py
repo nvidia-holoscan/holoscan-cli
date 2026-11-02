@@ -16,9 +16,17 @@
 """``holoscan install`` — install a built source project (locally or in a container)."""
 
 import argparse
+import configparser
+import keyword
 import os
+import re
 import shlex
-from importlib.metadata import PathDistribution
+import stat
+import sys
+import tempfile
+from dataclasses import dataclass
+from email.parser import Parser
+from importlib.machinery import EXTENSION_SUFFIXES, PathFinder
 from pathlib import Path
 
 from holoscan_cli.commands.build import build_project_locally
@@ -28,7 +36,7 @@ from holoscan_cli.container.parsers import (
     add_docker_build_args,
     add_local_container_args,
 )
-from holoscan_cli.metadata.utils import read_metadata
+from holoscan_cli.metadata.utils import MAX_METADATA_BYTES, read_metadata
 from holoscan_cli.utils.docker import (
     apply_container_cli_overrides,
     get_entrypoint_command_args,
@@ -40,7 +48,7 @@ from holoscan_cli.utils.holohub import (
     is_env_request_local_build,
     update_env,
 )
-from holoscan_cli.utils.io import Color, fatal, run_command
+from holoscan_cli.utils.io import Color, fatal, run_command, warn
 from holoscan_cli.utils.project import (
     append_configure_args,
     report_effective_configuration,
@@ -59,7 +67,7 @@ def register_install_parser(
         "project",
         nargs="?",
         default=None,
-        help="Project to install (omit with --dev to install every staged hook)",
+        help="Project to install (omit with --dev to register every discovered module)",
     )
     parser.add_argument("mode", nargs="?", help="Mode to install (optional)")
     add_local_container_args(parser, "Install")
@@ -67,7 +75,7 @@ def register_install_parser(
         "--dev",
         action="store_true",
         help=(
-            "Build a standalone Module if needed and install its dev hook, so "
+            "Build a standalone Module if needed and register its Python build, so "
             "`import holoscan.<module>` resolves to the live build tree without "
             "a wheel install. Container Python is the default; use --local for host Python."
         ),
@@ -75,15 +83,15 @@ def register_install_parser(
     parser.add_argument(
         "--uninstall",
         action="store_true",
-        help="Used with --dev: remove the previously installed dev hook.",
+        help="Used with --dev: remove the development registration or legacy dev hook.",
     )
     parser.add_argument(
         "--build-dir",
         type=Path,
         default=None,
         help=(
-            "Used with --dev: build directory whose staged dev hook should be installed. "
-            "Default: most-recently-modified <build-parent>/*/ hook."
+            "Used with --dev: build directory containing Python metadata or legacy hooks. "
+            "Default: most-recently-modified <build-parent>/*/ provider metadata or hook."
         ),
     )
     parser.add_argument("--site-dir", type=Path, default=None, help=argparse.SUPPRESS)
@@ -328,8 +336,8 @@ def _handle_install_dev_in_container(cli, args: argparse.Namespace, module_name:
 
     if args.dryrun and not args.uninstall:
         print(
-            f"In container: build '{module_name}' if its dev hook is not staged, "
-            "then install it."
+            f"In container: build '{module_name}' if its Python build is not ready, "
+            "then register it."
         )
 
     container = cli.make_project_container(project_name=module_name)
@@ -409,7 +417,7 @@ def _handle_install_dev_in_container(cli, args: argparse.Namespace, module_name:
 
 
 def _handle_install_dev(cli, args: argparse.Namespace) -> None:
-    """Install or remove staged Holoscan Module namespace dev hooks."""
+    """Register or remove live Python builds, retaining legacy dev-hook support."""
     import shutil as _shutil
     import site as _site
     import sys as _sys
@@ -476,7 +484,7 @@ def _handle_install_dev(cli, args: argparse.Namespace) -> None:
             [d for d in build_parent.iterdir() if d.is_dir()] if build_parent.is_dir() else []
         )
 
-    by_slug = _find_dev_hooks(search_dirs)
+    by_slug = _find_dev_sources(search_dirs, strict=args.build_dir is not None)
     module_slug = _dev_hook_slug(module_name) if module_name else None
     requested_slug = _dev_hook_slug(args.project) if args.project else module_slug
     if (
@@ -498,10 +506,11 @@ def _handle_install_dev(cli, args: argparse.Namespace) -> None:
             local_sdk_root=getattr(args, "local_sdk_root", None),
         )
         if dryrun:
-            print(f"Would build '{module_name}' and install its staged dev hook from {build_dir}")
+            print(f"Would build '{module_name}' and register its Python build from {build_dir}")
             return
-        search_dirs = [d for d in cli.DEFAULT_BUILD_PARENT_DIR.iterdir() if d.is_dir()]
-        by_slug = _find_dev_hooks(search_dirs)
+        # Inspect the actual result, not an unrelated pre-existing build.
+        search_dirs = [build_dir]
+        by_slug = _find_dev_sources(search_dirs, strict=args.build_dir is not None)
 
     if args.project:
         target = _dev_hook_slug(args.project)
@@ -509,8 +518,10 @@ def _handle_install_dev(cli, args: argparse.Namespace) -> None:
             by_slug = {target: by_slug[target]}
         else:
             fatal(
-                f"No dev hook found for module '{args.project}'. "
-                f"Looked under: {', '.join(str(d) for d in search_dirs)}"
+                f"No built Python development provider found for module '{args.project}'. "
+                f"Looked under: {', '.join(str(d) for d in search_dirs)}. "
+                "Enable and build Python bindings with the SDK metadata helper, "
+                "or use a build with legacy staged hooks."
             )
 
     if not by_slug:
@@ -520,10 +531,9 @@ def _handle_install_dev(cli, args: argparse.Namespace) -> None:
                 "Run a Module build first, or pass --build-dir."
             )
         fatal(
-            f"No dev hooks found under {', '.join(str(d) for d in search_dirs)}: "
-            "no python/lib with holoscan.modules metadata and no staged "
-            "holoscan_*_dev.py. Build a Holoscan Module with Python bindings, or an "
-            "app that depends on one, first."
+            f"No built Python development providers or legacy staged hooks found under "
+            f"{', '.join(str(d) for d in search_dirs)}. Enable and build Python bindings "
+            "with holoscan_install_python_module_metadata(), or use legacy staged hooks."
         )
 
     if not dryrun:
@@ -533,7 +543,11 @@ def _handle_install_dev(cli, args: argparse.Namespace) -> None:
             fatal(f"Cannot create site-packages directory {site_dir}: {exc}")
 
     for slug in sorted(by_slug):
-        build_dir, _, python_lib = by_slug[slug]
+        source = by_slug[slug]
+        build_dir = source.build_dir
+        if source.python_root is not None:
+            _install_metadata_dev_source(source, site_dir, dryrun=dryrun)
+            continue
         kebab = slug.replace("_", "-")
         helper_name = f"holoscan_{slug}_dev.py"
         pth_name = f"holoscan-{kebab}-dev.pth"
@@ -541,39 +555,51 @@ def _handle_install_dev(cli, args: argparse.Namespace) -> None:
         pth_dst = site_dir / pth_name
         if dryrun:
             print(f"Would install {pth_dst} from {build_dir}")
-            if python_lib is None:
-                print(f"Would install {helper_dst} from {build_dir}")
+            print(f"Would install {helper_dst} from {build_dir}")
             continue
         try:
-            if python_lib is not None:
-                # A path entry exposes the package and its holoscan.modules metadata.
-                python_lib = python_lib.resolve()
-                helper_dst.unlink(missing_ok=True)
-                pth_dst.write_text(f"{python_lib}\n", encoding="utf-8")
-            else:
-                _shutil.copy2(build_dir / pth_name, pth_dst)
-                helper_text = (build_dir / helper_name).read_text(encoding="utf-8")
-                host_build_path = (build_dir / "python" / "lib" / "holoscan").resolve()
-                helper_text = "".join(
-                    (
-                        f"_BUILD_PATH = {str(host_build_path)!r}\n"
-                        if line.startswith("_BUILD_PATH = ")
-                        else line
-                    )
-                    for line in helper_text.splitlines(keepends=True)
+            helper_text = (build_dir / helper_name).read_text(encoding="utf-8")
+            host_build_path = (build_dir / "python" / "lib" / "holoscan").resolve()
+            helper_text = "".join(
+                (
+                    f"_BUILD_PATH = {str(host_build_path)!r}\n"
+                    if line.startswith("_BUILD_PATH = ")
+                    else line
                 )
-                helper_dst.write_text(helper_text, encoding="utf-8")
-        except OSError as exc:
-            for path in (pth_dst, helper_dst):
+                for line in helper_text.splitlines(keepends=True)
+            )
+            with tempfile.TemporaryDirectory(dir=site_dir, prefix=f".{pth_name}.") as directory:
+                staging = Path(directory)
+                staged_pth = staging / pth_name
+                staged_helper = staging / helper_name
+                _shutil.copy2(build_dir / pth_name, staged_pth)
+                staged_helper.write_text(helper_text, encoding="utf-8")
+                replacements = ((staged_helper, helper_dst), (staged_pth, pth_dst))
+                backups = {}
+                for _, destination in replacements:
+                    if destination.exists():
+                        backup = staging / f"{destination.name}.old"
+                        _shutil.copy2(destination, backup)
+                        backups[destination] = backup
+                replaced = []
                 try:
-                    path.unlink(missing_ok=True)
+                    # Activate the new .pth only after its helper is in place.
+                    for staged, destination in replacements:
+                        os.replace(staged, destination)
+                        replaced.append(destination)
                 except OSError:
-                    pass
+                    for destination in reversed(replaced):
+                        backup = backups.get(destination)
+                        if backup is None:
+                            destination.unlink()
+                        else:
+                            os.replace(backup, destination)
+                    raise
+        except OSError as exc:
             fatal(f"Failed to install dev hook for '{slug}': {exc}")
         print(f"Installed {pth_dst}")
-        if python_lib is None:
-            print(f"          {helper_dst}")
-        print(f"  wiring `import holoscan.{slug}` to {python_lib or build_dir}")
+        print(f"          {helper_dst}")
+        print(f"  wiring `import holoscan.{slug}` to {build_dir}")
 
     if not dryrun:
         print()
@@ -588,13 +614,156 @@ def _handle_install_dev(cli, args: argparse.Namespace) -> None:
         print(f"To remove: {Path(cli.script_name).name} install --dev --uninstall")
 
 
-def _find_dev_hooks(search_dirs: list[Path]) -> dict[str, tuple[Path, float, Path | None]]:
-    # SDK 4 builds stage a holoscan_<slug>_dev.py helper and .pth pair. SDK 5 Modules with
-    # Python bindings write the package and its holoscan.modules metadata to python/lib,
-    # which only has to be on sys.path; the third item is that directory.
-    by_slug: dict[str, tuple[Path, float, Path | None]] = {}
+@dataclass(frozen=True)
+class _DevSource:
+    slug: str
+    build_dir: Path
+    mtime: float
+    python_root: Path | None = None
+    built: bool = True
+
+
+def _read_dev_metadata(path: Path) -> str:
+    """Read bounded regular text without importing build-tree Python code."""
+    flags = os.O_RDONLY | os.O_NONBLOCK | os.O_NOFOLLOW
+    with os.fdopen(os.open(path, flags), "rb") as file:
+        if not stat.S_ISREG(os.fstat(file.fileno()).st_mode):
+            raise ValueError(f"{path} must be a regular file")
+        content = file.read(MAX_METADATA_BYTES + 1)
+    if len(content) > MAX_METADATA_BYTES:
+        raise ValueError(f"{path} exceeds the 1 MiB limit")
+    return content.decode("utf-8")
+
+
+def _metadata_dev_source(build_dir: Path, *, strict: bool) -> tuple[_DevSource | None, bool]:
+    python_root = (build_dir / "python/lib").resolve()
+    providers = []
+    try:
+        for info in sorted(python_root.glob("*.dist-info")):
+            entries = info / "entry_points.txt"
+            if not entries.exists():
+                continue
+            parser = configparser.ConfigParser(interpolation=None)
+            parser.optionxform = str
+            parser.read_string(_read_dev_metadata(entries))
+            if not parser.has_section("holoscan.modules"):
+                continue
+            for slug, target in parser.items("holoscan.modules"):
+                if (
+                    not re.fullmatch(r"[a-z][a-z0-9_]*", slug)
+                    or keyword.iskeyword(slug)
+                    or target.strip() != f"holoscan_{slug}"
+                ):
+                    raise ValueError(f"invalid holoscan.modules entry {slug!r} in {entries}")
+                metadata = Parser().parsestr(_read_dev_metadata(info / "METADATA"))
+                if not metadata.get("Name") or not metadata.get("Version"):
+                    raise ValueError(f"missing distribution Name or Version in {info}")
+                package = python_root / f"holoscan_{slug}"
+                built = (package / "__init__.py").is_file() and any(
+                    (package / f"_{slug}{suffix}").is_file() for suffix in EXTENSION_SUFFIXES
+                )
+                providers.append(
+                    _DevSource(slug, build_dir, entries.stat().st_mtime, python_root, built)
+                )
+        if len(providers) > 1:
+            raise ValueError(
+                f"multiple Holoscan providers in {python_root}; use separate module builds "
+                "so development registrations can be removed independently"
+            )
+    except (OSError, ValueError, configparser.Error) as exc:
+        message = f"Invalid Python development metadata in {python_root}: {exc}"
+        if strict:
+            fatal(message)
+        warn(f"{message}; skipping")
+        return None, True
+    return (providers[0] if providers else None), False
+
+
+def _find_dev_sources(search_dirs: list[Path], *, strict: bool) -> dict[str, _DevSource]:
+    by_slug = {}
     for build_dir in search_dirs:
-        hooks = _module_metadata_hooks(build_dir / "python" / "lib")
+        legacy = _find_dev_hooks([build_dir])
+        modern, invalid_metadata = _metadata_dev_source(build_dir, strict=strict)
+        if invalid_metadata:
+            # Malformed metadata cannot safely be matched to a legacy hook.
+            continue
+        if modern is not None:
+            # Never revive an obsolete namespace hook for a modern provider.
+            legacy.pop(modern.slug, None)
+        candidates = [_DevSource(slug, path, mtime) for slug, (path, mtime) in legacy.items()]
+        if modern is not None and modern.built:
+            candidates.append(modern)
+        for source in candidates:
+            previous = by_slug.get(source.slug)
+            if previous is None or (source.mtime, str(source.build_dir)) > (
+                previous.mtime,
+                str(previous.build_dir),
+            ):
+                by_slug[source.slug] = source
+    return by_slug
+
+
+def _install_metadata_dev_source(source: _DevSource, site_dir: Path, *, dryrun: bool) -> None:
+    pth = site_dir / f"holoscan-{source.slug.replace('_', '-')}-dev.pth"
+    helper = site_dir / f"holoscan_{source.slug}_dev.py"
+    python_path = str(source.python_root)
+    if "\n" in python_path or "\r" in python_path:
+        fatal(f"Cannot represent Python build path in a .pth file: {python_path!r}")
+    package_name = f"holoscan_{source.slug}"
+    # A prior registration is still on this process's sys.path until restart.
+    # Exclude that path when checking the registration that will replace it.
+    replaced_root = None
+    if pth.is_file():
+        try:
+            lines = _read_dev_metadata(pth).splitlines()
+            if len(lines) == 1 and Path(lines[0]).is_absolute():
+                replaced_root = Path(lines[0]).resolve()
+        except (OSError, ValueError):
+            pass
+    # These entries survive replacement even when they also came from the .pth.
+    persistent_roots = {
+        Path(entry).resolve() for entry in os.environ.get("PYTHONPATH", "").split(os.pathsep)
+    }
+    persistent_roots.add(Path.cwd())
+    search_path = [
+        entry
+        for entry in sys.path
+        if Path(entry).resolve() != source.python_root
+        and (Path(entry).resolve() != replaced_root or Path(entry).resolve() in persistent_roots)
+    ]
+    conflict = PathFinder.find_spec(package_name, [str(site_dir)])
+    if conflict is None:
+        conflict = PathFinder.find_spec(package_name, search_path)
+    if conflict is not None:
+        fatal(
+            f"Installed package '{package_name}' at {conflict.origin} would shadow the development "
+            "build. Uninstall that package or use a clean Python environment, then retry."
+        )
+    if dryrun:
+        print(f"Would register {python_path} in {pth}")
+        if helper.exists():
+            print(f"Would remove obsolete legacy helper {helper}")
+        return
+    try:
+        with tempfile.TemporaryDirectory(dir=site_dir, prefix=f".{pth.name}.") as directory:
+            temporary = Path(directory) / pth.name
+            # Normal creation applies the umask without changing process-wide state.
+            # The private directory protects the file until it is ready to replace.
+            with temporary.open("x", encoding="utf-8") as file:
+                file.write(python_path + "\n")
+            os.replace(temporary, pth)
+    except OSError as exc:
+        fatal(f"Failed to register Python build for '{source.slug}': {exc}")
+    try:
+        helper.unlink(missing_ok=True)
+    except OSError as exc:
+        warn(f"Could not remove obsolete legacy helper {helper}: {exc}")
+    print(f"Registered {python_path} in {pth}")
+
+
+def _find_dev_hooks(search_dirs: list[Path]) -> dict[str, tuple[Path, float]]:
+    by_slug: dict[str, tuple[Path, float]] = {}
+    for build_dir in search_dirs:
         for helper in build_dir.glob("holoscan_*_dev.py"):
             if not helper.is_file():
                 continue
@@ -604,18 +773,7 @@ def _find_dev_hooks(search_dirs: list[Path]) -> dict[str, tuple[Path, float, Pat
             pth = build_dir / f"holoscan-{slug.replace('_', '-')}-dev.pth"
             if not pth.exists():
                 continue
-            hooks.append((slug, helper.stat().st_mtime, None))
-        for slug, mtime, python_lib in hooks:
+            mtime = helper.stat().st_mtime
             if slug not in by_slug or by_slug[slug][1] < mtime:
-                by_slug[slug] = (build_dir, mtime, python_lib)
+                by_slug[slug] = (build_dir, mtime)
     return by_slug
-
-
-def _module_metadata_hooks(python_lib: Path) -> list[tuple[str, float, Path | None]]:
-    hooks: list[tuple[str, float, Path | None]] = []
-    for entry_points_file in python_lib.glob("*.dist-info/entry_points.txt"):
-        mtime = entry_points_file.stat().st_mtime
-        distribution = PathDistribution(entry_points_file.parent)
-        for entry_point in distribution.entry_points.select(group="holoscan.modules"):
-            hooks.append((entry_point.name, mtime, python_lib))
-    return hooks
