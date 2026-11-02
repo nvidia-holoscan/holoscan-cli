@@ -80,6 +80,13 @@ rules, file-size limits, and search-path overrides.
 Read command help for accepted options and required project inputs. Metadata
 and the selected mode determine available applications and their behavior.
 
+`lint --install-dependencies` uses the project's `requirements-lint.txt` or
+`utilities/requirements.lint.txt` when present. Otherwise, it installs
+pre-commit and nodeenv 1.11.1 or newer.
+Node runtime selection belongs to the project's `.pre-commit-config.yaml`.
+Run this option explicitly to update existing lint tooling; ordinary lint
+runs reuse an available pre-commit installation.
+
 ## Preview and execution
 
 | Commands | Preview flags |
@@ -256,10 +263,14 @@ multi-project repository does not imply module-scoped test coverage. Inspect
 the driver's build-directory cleanup before testing an existing workspace.
 
 `install --dev` installs hooks from an already built module into the CLI's
-Python environment. Inspect `env-info --json`, name the module, and select the
-build directory explicitly when multiple builds exist. After consumer testing,
-use `install <module> --dev --uninstall` in the same environment and verify the
-hooks are removed. Omitting the module can affect multiple hooks.
+Python environment. For a module created with `--language cpp python`, the hook
+puts the build tree's `python/lib`, which holds the package and its
+`holoscan.modules` metadata, on that environment's path, so
+`import holoscan.<module>` loads the build. Inspect `env-info --json`, name the
+module, and select the build directory explicitly when multiple builds exist.
+After consumer testing, use `install <module> --dev --uninstall` in the same
+environment and verify the hooks are removed. Omitting the module can affect
+multiple hooks.
 
 `package <module> --pkg-generator DEB,WHEEL` builds distribution artifacts.
 Inspect their metadata and payload, then test installation in a clean consumer.

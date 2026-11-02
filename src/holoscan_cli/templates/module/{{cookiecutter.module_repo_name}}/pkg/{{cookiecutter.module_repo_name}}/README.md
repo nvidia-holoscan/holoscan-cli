@@ -21,4 +21,8 @@ holoscan package {{ cookiecutter.module_repo_name }} --pkg-generator DEB
   `module.dockerfile`.
 
 The package depends on `holoscan (>= {{ cookiecutter.holoscan_version }})`, the Debian alias of
-`holoscan-cuda-13` on Holoscan SDK 5.0 platforms. Python wheel packaging returns in a later release.
+`holoscan-cuda-13` on Holoscan SDK 5.0 platforms.
+{%- if cookiecutter.__python_bindings == 'yes' %} The Python bindings ship separately as a wheel
+(`holoscan package {{ cookiecutter.module_repo_name }} --pkg-generator WHEEL`).
+{%- else %} Python wheel packaging returns in a later release.
+{%- endif %}

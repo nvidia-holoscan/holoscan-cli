@@ -45,6 +45,23 @@ def _standalone_cli(tmp_path):
     )
 
 
+def _sdk5_module_build(build_dir, slug="smoke"):
+    """Lay out python/lib as an SDK 5 Module build with Python bindings writes it."""
+    python_lib = build_dir / "python" / "lib"
+    package = python_lib / f"holoscan_{slug}"
+    package.mkdir(parents=True)
+    (package / "__init__.py").write_text("", encoding="utf-8")
+    dist_info = python_lib / f"holoscan_{slug}_cu13.dist-info"
+    dist_info.mkdir()
+    (dist_info / "METADATA").write_text(
+        f"Metadata-Version: 2.1\nName: holoscan-{slug}-cu13\nVersion: 0.1.0\n", encoding="utf-8"
+    )
+    (dist_info / "entry_points.txt").write_text(
+        f"[holoscan.modules]\n{slug} = holoscan_{slug}\n", encoding="utf-8"
+    )
+    return python_lib
+
+
 def test_install_dev_invalid_fifo_metadata_exits_without_hanging(tmp_path):
     root = tmp_path / "module"
     root.mkdir()
@@ -94,6 +111,66 @@ def test_install_dev_copies_staged_hook_pair(tmp_path):
         encoding="utf-8"
     ) == f"_BUILD_PATH = {str(build_dir / 'python/lib/holoscan')!r}\n"
     assert (site_dir / "holoscan-smoke-dev.pth").exists()
+
+
+def test_install_dev_links_sdk5_module_build_tree(tmp_path):
+    python_lib = _sdk5_module_build(tmp_path / "build" / "holoscan-smoke")
+    site_dir = tmp_path / "site"
+    cli = SimpleNamespace(DEFAULT_BUILD_PARENT_DIR=tmp_path / "build", script_name="holoscan")
+
+    install_cmd.handle_install(cli, _dev_args(project="holoscan-smoke", site_dir=site_dir))
+
+    assert (site_dir / "holoscan-smoke-dev.pth").read_text(encoding="utf-8") == (
+        f"{python_lib.resolve()}\n"
+    )
+    assert not (site_dir / "holoscan_smoke_dev.py").exists()
+    # A fresh interpreter that processes the site directory finds the package and the
+    # holoscan.modules entry point through which the SDK exposes holoscan.smoke.
+    probe = subprocess.run(
+        [
+            sys.executable,
+            "-I",
+            "-c",
+            "import importlib.metadata, site, sys; site.addsitedir(sys.argv[1]); "
+            "import holoscan_smoke; print(holoscan_smoke.__file__); "
+            "print([e.value for e in importlib.metadata.entry_points("
+            "group='holoscan.modules', name='smoke')])",
+            str(site_dir),
+        ],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    module_file, entry_points = probe.stdout.splitlines()
+    assert Path(module_file).is_relative_to(python_lib.resolve())
+    assert entry_points == "['holoscan_smoke']"
+
+    install_cmd.handle_install(
+        cli, _dev_args(project="holoscan-smoke", site_dir=site_dir, uninstall=True)
+    )
+    assert not (site_dir / "holoscan-smoke-dev.pth").exists()
+
+
+def test_install_dev_builds_fresh_sdk5_module_locally(tmp_path, monkeypatch):
+    cli = _standalone_cli(tmp_path)
+    site_dir = tmp_path / "site"
+    calls = []
+
+    def build_module(_cli, *, project_name, **kwargs):
+        calls.append(project_name)
+        build_dir = cli.DEFAULT_BUILD_PARENT_DIR / project_name
+        _sdk5_module_build(build_dir)
+        return build_dir, {}
+
+    monkeypatch.setattr(install_cmd, "build_project_locally", build_module)
+    args = _dev_args(local=True, site_dir=site_dir)
+    install_cmd.handle_install(cli, args)
+    install_cmd.handle_install(cli, args)
+
+    assert calls == ["holoscan-smoke"]
+    assert (site_dir / "holoscan-smoke-dev.pth").read_text(encoding="utf-8") == (
+        f"{(cli.DEFAULT_BUILD_PARENT_DIR / 'holoscan-smoke/python/lib').resolve()}\n"
+    )
 
 
 def test_install_dev_uses_most_recent_hook_per_slug(tmp_path):

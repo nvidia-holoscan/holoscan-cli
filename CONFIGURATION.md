@@ -60,11 +60,12 @@ and modes. Other settings resolve in this order, highest priority first:
 | Build type | `--build-type` → `CMAKE_BUILD_TYPE` → selected mode → release |
 
 SDK selection uses `--local-sdk-root`, `HOLOSCAN_SDK_ROOT`, the mounted
-`/workspace/holoscan-sdk` for local container builds, a nearby `holoscan-sdk`,
-then `/usr` (Holoscan SDK 5) or, when `/usr` has no SDK, `/opt/nvidia/holoscan`
-(SDK 4). `HOLOSCAN_CLI_DEFAULT_HSDK_DIR` replaces both. Nearby installs take
-priority over configured source builds; both `install-cu13-x86_64` and
-`install-x86_64` layouts are supported.
+`/workspace/holoscan-sdk` for local container builds, then `/usr` (Holoscan
+SDK 5) or, when `/usr` has no SDK, `/opt/nvidia/holoscan` (SDK 4).
+`HOLOSCAN_CLI_DEFAULT_HSDK_DIR` replaces both. The CLI does not search nearby
+directories for an SDK checkout; select a local SDK explicitly. A selected SDK
+checkout prefers installs over configured source builds; both
+`install-cu13-x86_64` and `install-x86_64` layouts are supported.
 An invalid `HOLOSCAN_SDK_ROOT` warns without falling back.
 
 To use a local SDK installation with an existing compatible development image:

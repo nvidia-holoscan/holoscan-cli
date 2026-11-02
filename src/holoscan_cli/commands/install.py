@@ -18,6 +18,7 @@
 import argparse
 import os
 import shlex
+from importlib.metadata import PathDistribution
 from pathlib import Path
 
 from holoscan_cli.commands.build import build_project_locally
@@ -508,7 +509,7 @@ def _handle_install_dev(cli, args: argparse.Namespace) -> None:
             by_slug = {target: by_slug[target]}
         else:
             fatal(
-                f"No staged dev hook found for module '{args.project}'. "
+                f"No dev hook found for module '{args.project}'. "
                 f"Looked under: {', '.join(str(d) for d in search_dirs)}"
             )
 
@@ -519,9 +520,10 @@ def _handle_install_dev(cli, args: argparse.Namespace) -> None:
                 "Run a Module build first, or pass --build-dir."
             )
         fatal(
-            f"No staged dev hooks (holoscan_*_dev.py) found under "
-            f"{', '.join(str(d) for d in search_dirs)}. Run a build of a "
-            "Holoscan Module, or an app that depends on one, first."
+            f"No dev hooks found under {', '.join(str(d) for d in search_dirs)}: "
+            "no python/lib with holoscan.modules metadata and no staged "
+            "holoscan_*_dev.py. Build a Holoscan Module with Python bindings, or an "
+            "app that depends on one, first."
         )
 
     if not dryrun:
@@ -531,7 +533,7 @@ def _handle_install_dev(cli, args: argparse.Namespace) -> None:
             fatal(f"Cannot create site-packages directory {site_dir}: {exc}")
 
     for slug in sorted(by_slug):
-        build_dir, _ = by_slug[slug]
+        build_dir, _, python_lib = by_slug[slug]
         kebab = slug.replace("_", "-")
         helper_name = f"holoscan_{slug}_dev.py"
         pth_name = f"holoscan-{kebab}-dev.pth"
@@ -539,21 +541,28 @@ def _handle_install_dev(cli, args: argparse.Namespace) -> None:
         pth_dst = site_dir / pth_name
         if dryrun:
             print(f"Would install {pth_dst} from {build_dir}")
-            print(f"Would install {helper_dst} from {build_dir}")
+            if python_lib is None:
+                print(f"Would install {helper_dst} from {build_dir}")
             continue
         try:
-            _shutil.copy2(build_dir / pth_name, pth_dst)
-            helper_text = (build_dir / helper_name).read_text(encoding="utf-8")
-            host_build_path = (build_dir / "python" / "lib" / "holoscan").resolve()
-            helper_text = "".join(
-                (
-                    f"_BUILD_PATH = {str(host_build_path)!r}\n"
-                    if line.startswith("_BUILD_PATH = ")
-                    else line
+            if python_lib is not None:
+                # A path entry exposes the package and its holoscan.modules metadata.
+                python_lib = python_lib.resolve()
+                helper_dst.unlink(missing_ok=True)
+                pth_dst.write_text(f"{python_lib}\n", encoding="utf-8")
+            else:
+                _shutil.copy2(build_dir / pth_name, pth_dst)
+                helper_text = (build_dir / helper_name).read_text(encoding="utf-8")
+                host_build_path = (build_dir / "python" / "lib" / "holoscan").resolve()
+                helper_text = "".join(
+                    (
+                        f"_BUILD_PATH = {str(host_build_path)!r}\n"
+                        if line.startswith("_BUILD_PATH = ")
+                        else line
+                    )
+                    for line in helper_text.splitlines(keepends=True)
                 )
-                for line in helper_text.splitlines(keepends=True)
-            )
-            helper_dst.write_text(helper_text, encoding="utf-8")
+                helper_dst.write_text(helper_text, encoding="utf-8")
         except OSError as exc:
             for path in (pth_dst, helper_dst):
                 try:
@@ -562,8 +571,9 @@ def _handle_install_dev(cli, args: argparse.Namespace) -> None:
                     pass
             fatal(f"Failed to install dev hook for '{slug}': {exc}")
         print(f"Installed {pth_dst}")
-        print(f"          {helper_dst}")
-        print(f"  wiring `import holoscan.{slug}` to {build_dir}")
+        if python_lib is None:
+            print(f"          {helper_dst}")
+        print(f"  wiring `import holoscan.{slug}` to {python_lib or build_dir}")
 
     if not dryrun:
         print()
@@ -578,9 +588,13 @@ def _handle_install_dev(cli, args: argparse.Namespace) -> None:
         print(f"To remove: {Path(cli.script_name).name} install --dev --uninstall")
 
 
-def _find_dev_hooks(search_dirs: list[Path]) -> dict[str, tuple[Path, float]]:
-    by_slug: dict[str, tuple[Path, float]] = {}
+def _find_dev_hooks(search_dirs: list[Path]) -> dict[str, tuple[Path, float, Path | None]]:
+    # SDK 4 builds stage a holoscan_<slug>_dev.py helper and .pth pair. SDK 5 Modules with
+    # Python bindings write the package and its holoscan.modules metadata to python/lib,
+    # which only has to be on sys.path; the third item is that directory.
+    by_slug: dict[str, tuple[Path, float, Path | None]] = {}
     for build_dir in search_dirs:
+        hooks = _module_metadata_hooks(build_dir / "python" / "lib")
         for helper in build_dir.glob("holoscan_*_dev.py"):
             if not helper.is_file():
                 continue
@@ -590,7 +604,18 @@ def _find_dev_hooks(search_dirs: list[Path]) -> dict[str, tuple[Path, float]]:
             pth = build_dir / f"holoscan-{slug.replace('_', '-')}-dev.pth"
             if not pth.exists():
                 continue
-            mtime = helper.stat().st_mtime
+            hooks.append((slug, helper.stat().st_mtime, None))
+        for slug, mtime, python_lib in hooks:
             if slug not in by_slug or by_slug[slug][1] < mtime:
-                by_slug[slug] = (build_dir, mtime)
+                by_slug[slug] = (build_dir, mtime, python_lib)
     return by_slug
+
+
+def _module_metadata_hooks(python_lib: Path) -> list[tuple[str, float, Path | None]]:
+    hooks: list[tuple[str, float, Path | None]] = []
+    for entry_points_file in python_lib.glob("*.dist-info/entry_points.txt"):
+        mtime = entry_points_file.stat().st_mtime
+        distribution = PathDistribution(entry_points_file.parent)
+        for entry_point in distribution.entry_points.select(group="holoscan.modules"):
+            hooks.append((entry_point.name, mtime, python_lib))
+    return hooks
