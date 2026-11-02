@@ -140,7 +140,9 @@ uv run holoscan list --json
 uv run holoscan build my_sensor_pipeline --dryrun --verbose
 ```
 
-The packaged template creates C++ modules for Holoscan SDK 5.0.0 or later.
+The packaged template creates C++ modules for Holoscan SDK 5.0.0 or later;
+`--language cpp python` adds Python bindings, and `--language python` creates a
+module whose operators are implemented in Python, with no C++ code.
 Replace `5.0.0` with the module's intended minimum SDK version. CLI and SDK
 versions are independent. Review the preview before running the build without
 `--dryrun`; builds require the module's documented SDK/container prerequisites.

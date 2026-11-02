@@ -23,6 +23,9 @@ endforeach()
 set(_dist_info "${_python_root}/holoscan_{{ cookiecutter.module_slug }}-${PROJECT_VERSION}.dist-info")
 file(WRITE "${_dist_info}/METADATA"
     "Metadata-Version: 2.1\nName: holoscan-{{ cookiecutter.module_slug.replace('_', '-') }}\nVersion: ${PROJECT_VERSION}\n")
+# Root-Is-Purelib marks the build as complete without a compiled extension for `holoscan install --dev`.
+file(WRITE "${_dist_info}/WHEEL"
+    "Wheel-Version: 1.0\nGenerator: holoscan-cli\nRoot-Is-Purelib: true\nTag: py3-none-any\n")
 file(WRITE "${_dist_info}/entry_points.txt"
     "[holoscan.modules]\n{{ cookiecutter.module_slug }} = holoscan_{{ cookiecutter.module_slug }}\n")
 

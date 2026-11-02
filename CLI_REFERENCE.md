@@ -254,7 +254,8 @@ For metadata-enabled SDK 5.x Modules, registration adds the build's
 `python/lib` directory through a `.pth` file. The SDK discovers its
 `holoscan.modules` entry point, making both `holoscan_<slug>` and
 `holoscan.<slug>` available in a new Python process without setting the module's
-`PYTHONPATH`. Python bindings must be built, and older 5.x Modules must adopt
+`PYTHONPATH`. Python bindings must be built (a module created with `--language python`
+has none; its build stages pure-Python package metadata instead), and older 5.x Modules must adopt
 `holoscan_install_python_module_metadata()` and rebuild. Existing staged
 legacy hook pairs remain supported. Each metadata-enabled Python root must
 contain one Holoscan provider so registrations can be removed independently.

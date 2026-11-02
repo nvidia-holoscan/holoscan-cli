@@ -529,6 +529,8 @@ def test_pure_python_module_stages_its_package_without_an_sdk(cli, tmp_path, mon
     assert entry_points.read_text(encoding="utf-8") == (
         "[holoscan.modules]\nmy_mod = holoscan_my_mod\n"
     )
+    wheel = python_lib / "holoscan_my_mod-0.1.0.dist-info/WHEEL"
+    assert "Root-Is-Purelib: true\n" in wheel.read_text(encoding="utf-8")
     tests = run("ctest", "--test-dir", str(build), "-N", "-L", "unit")
     assert "python.my_mod" in tests
     run(cmake, "--install", str(build), "--prefix", str(prefix))
