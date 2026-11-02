@@ -54,16 +54,20 @@ Creating a module requires the `create` extra:
 uvx --from 'holoscan-cli[create]>=5.0.0' holoscan create my-sensor --interactive false --context holoscan_version=5.0.0 --dryrun
 uvx --from 'holoscan-cli[create]>=5.0.0' holoscan create my-sensor --interactive false --context holoscan_version=5.0.0
 cd holoscan-my-sensor
-uv run holoscan list --json
-uv run holoscan build my_sensor_pipeline --dryrun --verbose
+uv run --only-group dev holoscan list --json
+uv run --only-group dev holoscan build my_sensor_pipeline --dryrun --verbose
 ```
 
 The packaged template creates C++ modules for Holoscan SDK 5.0.0 or later.
 Replace `5.0.0` with the module's intended minimum SDK version. CLI and SDK
 versions are independent. Review the preview before running the build without
 `--dryrun`; builds require the module's documented SDK/container prerequisites.
-The generated project records the creating CLI version, and `uv run` prepares
-its development environment without installing the module itself.
+The generated project records the creating CLI version.
+`uv run --only-group dev` installs only that CLI and the lint and test tools,
+not the module itself. A module with Python bindings (`--language cpp python`)
+also lists the Holoscan SDK wheel as a runtime dependency; without
+`--only-group dev`, uv installs it too, which needs glibc 2.39 (Ubuntu 24.04)
+or newer.
 
 For the pip alternative, install the same creation extra in the activated
 `.venv`, then run `holoscan create` with the same arguments:

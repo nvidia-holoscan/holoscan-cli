@@ -11,8 +11,9 @@ version. CLI versions do not select or guarantee a matching SDK version.
 ## Select a project and environment
 
 Follow the [installation and standalone quick start](README.md#installation).
-Inside a generated module, `uv run holoscan` uses its committed development
-dependencies. With an activated pip environment, use `holoscan` directly.
+Inside a generated module, `uv run --only-group dev holoscan` uses its committed
+development dependencies without the module's runtime dependencies. With an
+activated pip environment, use `holoscan` directly.
 
 The CLI discovers the project root from the current directory and its
 ancestors. To select a different root, place the global option before the
@@ -92,8 +93,8 @@ between preview and execution. A dry run is not a sandbox; see the
 [project trust model](README.md#project-trust-model).
 
 ```bash
-uv run holoscan build my_sensor_pipeline --dryrun --verbose
-uv run holoscan build my_sensor_pipeline --verbose
+uv run --only-group dev holoscan build my_sensor_pipeline --dryrun --verbose
+uv run --only-group dev holoscan build my_sensor_pipeline --verbose
 ```
 
 Build and run use containers by default. `--local` selects native execution;
@@ -159,7 +160,7 @@ arguments; your shell processes quoting and expansions before invoking the CLI.
 entrypoint, quote a multi-argument or compound command as one argument:
 
 ```bash
-uv run holoscan run-container -- "holoscan list --json"
+uv run --only-group dev holoscan run-container -- "holoscan list --json"
 ```
 
 ## CPU limits
