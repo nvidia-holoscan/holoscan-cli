@@ -53,6 +53,7 @@ def test_module_discovery_and_activation(tmp_path, monkeypatch):
     context = discover_project_context(cwd=descendant, environ={})
 
     assert context.root == root
+    assert context.module_name == "holoscan-my-sensor"
     assert context.repo_prefix == "my_sensor"
     assert context.base_sdk_version == "4.6.0"
     assert context.forward_env == ()
@@ -124,9 +125,7 @@ def test_root_precedence_and_invalid_environment_fallback(tmp_path):
     assert fallback.warnings
 
 
-def test_module_pyproject_resolves_project_contract_and_nearby_sdk(
-    tmp_path, monkeypatch, make_sdk_directory
-):
+def test_module_pyproject_resolves_project_contract(tmp_path, monkeypatch, make_sdk_directory):
     root = _module(
         tmp_path / "module",
         pyproject="""
@@ -145,10 +144,10 @@ search-paths = ["examples", "./tools/"]
 x86_64 = "example.test/holoscan:fixed"
 """,
     )
-    sdk = make_sdk_directory(tmp_path / "holoscan-sdk/public/install-x86_64")
+    sdk = make_sdk_directory(tmp_path / "sdk/install-x86_64")
     monkeypatch.setattr("holoscan_cli.project_context.platform.machine", lambda: "x86_64")
 
-    context = discover_project_context(cwd=root, environ={})
+    context = discover_project_context(cwd=root, environ={"HOLOSCAN_SDK_ROOT": str(sdk)})
     profile = context.profile_environment()
 
     assert context.base_image == "example.test/holoscan:fixed"
@@ -179,6 +178,27 @@ x86_64 = "example.test/holoscan:fixed"
     }.isdisjoint(profile)
 
 
+@pytest.mark.parametrize(
+    "sdk_path",
+    [
+        "module/holoscan-sdk/install-x86_64",
+        "holoscan-sdk/install-x86_64",
+        "holoscan-sdk/build-x86_64",
+    ],
+)
+def test_module_ignores_sdk_checkouts_near_the_project(
+    tmp_path, monkeypatch, make_sdk_directory, sdk_path
+):
+    root = _module(tmp_path / "module")
+    make_sdk_directory(tmp_path / sdk_path, build="build-" in sdk_path)
+    monkeypatch.setattr("holoscan_cli.project_context.platform.machine", lambda: "x86_64")
+
+    context = discover_project_context(cwd=root, environ={})
+
+    assert context.sdk_root is None
+    assert context.sdk_root_source is None
+
+
 def test_module_environment_resolves_4x_sdk_build_tree(tmp_path, monkeypatch, make_sdk_directory):
     root = _module(tmp_path / "module")
     sdk_root = tmp_path / "holoscan-sdk"
@@ -199,6 +219,31 @@ def test_module_environment_resolves_4x_sdk_build_tree(tmp_path, monkeypatch, ma
     assert context.sdk_root == build.resolve()
     assert context.sdk_root_source == "HOLOSCAN_SDK_ROOT"
     assert context.warnings == ()
+
+
+@pytest.mark.parametrize(
+    ("triplet", "resolves"),
+    [("aarch64-linux-gnu", True), ("x86_64-linux-gnu", False)],
+)
+def test_module_environment_checks_debian_libdir_for_target_arch(
+    tmp_path, monkeypatch, make_sdk_directory, triplet, resolves
+):
+    root = _module(tmp_path / "module")
+    usr = make_sdk_directory(tmp_path / "usr", libdir=f"lib/{triplet}")
+    monkeypatch.setattr("holoscan_cli.project_context.platform.machine", lambda: "x86_64")
+    monkeypatch.setattr("holoscan_cli.utils.sdk.get_host_arch", lambda: "x86_64")
+
+    context = discover_project_context(
+        cwd=root,
+        environ={"HOLOSCAN_SDK_ROOT": str(usr), "HOLOSCAN_CLI_TARGET_ARCH": "aarch64"},
+    )
+
+    if resolves:
+        assert context.sdk_root == usr.resolve()
+        assert context.sdk_root_source == "HOLOSCAN_SDK_ROOT"
+    else:
+        assert context.sdk_root is None
+        assert any("not a valid SDK directory for aarch64" in w for w in context.warnings)
 
 
 @pytest.mark.parametrize(

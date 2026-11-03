@@ -47,7 +47,7 @@ def test_collect_platform_info_uses_probes(monkeypatch, tmp_path):
     monkeypatch.setattr(
         project_status,
         "get_sdk_version",
-        lambda path: observed_sdk_paths.append(path) or "3.4.0",
+        lambda path, arch=None: observed_sdk_paths.append((path, arch)) or "3.4.0",
     )
 
     info = project_status.collect_platform_info()
@@ -60,7 +60,7 @@ def test_collect_platform_info_uses_probes(monkeypatch, tmp_path):
         cuda_version="12.6",
         holoscan_version="3.4.0",
     )
-    assert observed_sdk_paths == [sdk_root / "install-aarch64"]
+    assert observed_sdk_paths == [(sdk_root / "install-aarch64", "aarch64")]
 
 
 def test_collect_platform_info_handles_missing_gpu(monkeypatch):
@@ -68,7 +68,7 @@ def test_collect_platform_info_handles_missing_gpu(monkeypatch):
     monkeypatch.setattr(project_status, "get_host_arch", lambda: "aarch64")
     monkeypatch.setattr(project_status, "get_host_gpu", lambda: "unknown")
     monkeypatch.setattr(project_status, "get_gpu_name", lambda: None)
-    monkeypatch.setattr(project_status, "get_sdk_version", lambda _path: "n/a")
+    monkeypatch.setattr(project_status, "get_sdk_version", lambda _path, _arch=None: "n/a")
     monkeypatch.setenv("HOLOSCAN_CLI_DEFAULT_CUDA_VERSION", "13")
 
     info = project_status.collect_platform_info()

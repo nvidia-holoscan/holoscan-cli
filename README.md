@@ -130,18 +130,18 @@ holoscan --help
 
 ### Create and work on a standalone module
 
-Creating a module requires the `create` extra. For the CLI 5.0.0a1 integration
-release, use NVIDIA's package index (`uv` 0.4.23 or later):
+Creating a module requires the `create` extra:
 
 ```bash
-uvx --index https://pypi.nvidia.com --from 'holoscan-cli[create]==5.0.0a1' holoscan create my-sensor --language python --interactive false --context holoscan_version=4.6.0 --dryrun
-uvx --index https://pypi.nvidia.com --from 'holoscan-cli[create]==5.0.0a1' holoscan create my-sensor --language python --interactive false --context holoscan_version=4.6.0
+uvx --from 'holoscan-cli[create]>=5.0.0' holoscan create my-sensor --interactive false --context holoscan_version=5.0.0 --dryrun
+uvx --from 'holoscan-cli[create]>=5.0.0' holoscan create my-sensor --interactive false --context holoscan_version=5.0.0
 cd holoscan-my-sensor
 uv run holoscan list --json
 uv run holoscan build my_sensor_pipeline --dryrun --verbose
 ```
 
-Replace `4.6.0` with the module's intended minimum SDK version. CLI and SDK
+The packaged template creates C++ modules for Holoscan SDK 5.0.0 or later.
+Replace `5.0.0` with the module's intended minimum SDK version. CLI and SDK
 versions are independent. Review the preview before running the build without
 `--dryrun`; builds require the module's documented SDK/container prerequisites.
 The generated project records the creating CLI version, and `uv run` prepares
@@ -151,7 +151,7 @@ For the pip alternative, install the same creation extra in the activated
 `.venv`, then run `holoscan create` with the same arguments:
 
 ```bash
-python -m pip install --extra-index-url https://pypi.nvidia.com 'holoscan-cli[create]==5.0.0a1'
+python -m pip install 'holoscan-cli[create]>=5.0.0'
 ```
 
 In an existing generated module, use its `requirements-cli.txt` to provision
@@ -177,8 +177,8 @@ docker-build-args = ["--build-arg", "PROJECT_FEATURE=ON"]
 docker-run-args = ["--network=host"]
 
 [tool.holoscan.base-images]
-x86_64 = "registry.example.com/holoscan/sdk-build-x86_64:4.5.0-cuda13"
-aarch64 = "registry.example.com/holoscan/sdk-build-aarch64:4.5.0-cuda13"
+x86_64 = "registry.example.com/holoscan/sdk-build-x86_64:5.0.0-cuda13"
+aarch64 = "registry.example.com/holoscan/sdk-build-aarch64:5.0.0-cuda13"
 ```
 
 `cuda` and `ctest-script` provide Module-wide toolchain defaults,
@@ -230,6 +230,11 @@ with `FROM ${BASE_IMAGE}`, using any of the methods below:
    # Resolves to nvcr.io/nvidia/clara-holoscan/holoscan:v4.4.0-cuda13 on hosts with NVIDIA drivers >= 580
    holoscan build-container my_app
    ```
+
+   SDK 5.x supports CUDA 13 only. For those versions the tag is always
+   `cuda13`, and the `CUDA_MAJOR` build argument defaults to `13` instead of
+   following the host driver. Requesting another CUDA version for SDK 5.x is
+   an error.
 
 If none of these is configured, the CLI asks for a base image instead of
 inferring one from its own package version.
@@ -320,3 +325,13 @@ JSON manifest and was only tested with those SDK versions. Otherwise, migrate to
 the Holoscan SDK packaging workflows directly. See
 [issue #164](https://github.com/nvidia-holoscan/holoscan-cli/issues/164) for the
 deprecation timeline.
+
+### `pybind11_add_holohub_module()` CMake helper
+
+`holoscan create` no longer copies the pybind11 helper
+`pybind11_add_holohub_module.cmake` into new Modules; Modules created earlier
+keep their copy. Holoscan SDK 5 builds Python bindings with nanobind: see
+`python/CMakeLists.txt` in a Module created with
+`holoscan create --language cpp python`. Holoscan SDK 4 templates that call the
+helper, such as HoloHub's `modules/template`, need their own copy of it or
+holoscan-cli 4.6.

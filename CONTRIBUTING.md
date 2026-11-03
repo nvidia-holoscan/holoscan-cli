@@ -81,6 +81,12 @@ pre-commit install                         # installs the local Git hooks
 `poetry install --with test` mirrors the exact dependency set the `Code Check`
 workflow installs, so passing locally is a strong signal.
 
+The test dependencies require pre-commit 4.7+ and nodeenv 1.11.1+, which
+excludes Node prereleases from automatic selection. Repository and generated
+module hooks select the current Node LTS release. New hook environments can
+select a newer LTS major; cached environments retain their installed runtime
+until refreshed. Changing the CLI template affects newly created modules.
+
 ### Run the same checks CI runs
 
 ```bash

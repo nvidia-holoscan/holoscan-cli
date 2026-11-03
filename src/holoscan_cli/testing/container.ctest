@@ -18,7 +18,7 @@
 # via `ctest -DAPP=my_app -DTAG=<tag> -S <path-to-container.ctest> -VV`.
 #
 # CTest -D variables:
-#   APP                   Project name (required unless OP/PKG/EXT is set)
+#   APP                   Project name (required unless OP or PKG is set)
 #   TAG                   Image tag / branch identifier (default: "latest")
 #   CTEST_SITE            CDash site name (default: "SITE_NA")
 #   PLATFORM_NAME         Platform portion of the build name (default: "linux")
@@ -59,13 +59,10 @@ if(OP)
 elseif(PKG)
   set(PROJ_NAME ${PKG})
   set(PROJ_PREFIX PKG)
-elseif(EXT)
-  set(PROJ_NAME ${EXT})
-  set(PROJ_PREFIX EXT)
 elseif(APP)
   set(PROJ_NAME ${APP})
 else()
-  message(STATUS "No APP/OP/PKG/EXT provided; running repository-wide tests")
+  message(STATUS "No APP/OP/PKG provided; running repository-wide tests")
 endif()
 
 if(NOT TAG)

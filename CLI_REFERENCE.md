@@ -79,6 +79,13 @@ rules, file-size limits, and search-path overrides.
 Read command help for accepted options and required project inputs. Metadata
 and the selected mode determine available applications and their behavior.
 
+`lint --install-dependencies` uses the project's `requirements-lint.txt` or
+`utilities/requirements.lint.txt` when present. Otherwise, it installs
+pre-commit and nodeenv 1.11.1 or newer.
+Node runtime selection belongs to the project's `.pre-commit-config.yaml`.
+Run this option explicitly to update existing lint tooling; ordinary lint
+runs reuse an available pre-commit installation.
+
 ## Preview and execution
 
 | Commands | Preview flags |
@@ -113,7 +120,49 @@ omit it to build the default target. For example:
 holoscan build my_app --target my_target
 ```
 
-Only `run-container` accepts a command after `--`. With its normal shell
+`build` and `test` pass the selected language to CMake: `build` uses
+`--language` or the project's metadata, and `test` uses `--language`. In a
+Module, or for a Module selected in a HoloHub checkout, these options start
+with `module.name` in upper case, with each character other than a letter or
+digit replaced by `_`. For `holoscan-my-sensor`, `--language python` passes
+`-DHOLOSCAN_MY_SENSOR_BUILD_PYTHON=ON -DHOLOSCAN_MY_SENSOR_BUILD_CPP=OFF`.
+HoloHub projects read `HOLOHUB_BUILD_PYTHON` and `HOLOHUB_BUILD_CPP`. Modules
+still receive these too, but should read their own names; a later release will
+stop passing the HoloHub names to Modules. Other CMake variables keep their
+HoloHub names: the bundled CMake helpers read `HOLOHUB_BUILD_OPERATORS` (from
+`--build-with`), `HOLOHUB_PYTHON_MODULE_OUT_DIR`, and
+`HOLOHUB_EXT_OP_<op>_PROVIDER`, and HoloHub applications read the data folder
+from `HOLOHUB_DATA_DIR`.
+
+Arguments after the first `--` are forwarded according to the subcommand:
+
+| Subcommand | Destination |
+| --- | --- |
+| `build` | `cmake --build` options, after the CLI's build options. |
+| `build-container` | Docker build options, after `--build-args`. |
+| `run` | Application arguments, after `--run-args`. |
+| `run-container` | A command inside the container. |
+
+Put Holoscan options before `--`; `--help` after it belongs to the destination.
+For `build`, a second `--` forwards options to the underlying build tool:
+
+```bash
+holoscan build my_app -- --clean-first --verbose
+holoscan build my_app -- --target my_target
+holoscan build my_app -- -- -v  # Ninja options for a Ninja build directory
+holoscan build-container my_app -- --progress plain --label "description=My app"
+holoscan run my_app -- --input "data/my input.json"
+```
+
+`build` still configures normally. Forwarded options do not change the configure
+step or automatic packaging. Use the CLI's `--target` before `--` to skip
+automatic CPack for a package project. Existing named options remain supported.
+
+For `build`, `build-container`, and `run`, argument boundaries are preserved,
+including empty arguments. The CLI does not expand shell variables in forwarded
+arguments; your shell processes quoting and expansions before invoking the CLI.
+
+`run-container` keeps its shell command behavior. With its normal shell
 entrypoint, quote a multi-argument or compound command as one argument. The
 shell in the container expands its variables, so single-quote a command that
 reads container values:
@@ -174,11 +223,19 @@ launch `nsys profile` yourself for commands run directly in that container.
 output parent. A selected application template can have different defaults.
 
 Choose the SDK minimum explicitly with `--context holoscan_version=<version>`.
-The packaged 5.0.0a1 template contains a `4.5.0` fallback; a configured base SDK
-version overrides it, and explicit context values take precedence. See
+The packaged template defaults to `5.0.0` and rejects older versions; a
+configured base SDK version overrides the default, and explicit context values
+take precedence. `--language cpp python` (or `cpp,python`) also generates a
+nanobind extension that registers the module's C++ operators with the SDK
+operator registry, a Python example, and CTest-run pytest suites; the default
+`--language cpp` stays C++ only, and `--language python` alone stays rejected
+until pure-Python modules are supported. The project name may come before or
+after `--language`; a project named after a language, such as `python`, must
+come first. See
 [template defaults](src/holoscan_cli/templates/module/cookiecutter.json) and
 [creation](src/holoscan_cli/commands/create.py). The generated module's
-`README.md` and `DEVELOPER.md` document its implementation and consumer flow.
+`README.md` and `DEVELOPER.md` document its implementation and consumer flow,
+and its `AGENTS.md` gives AI coding agents its commands and boundaries.
 
 ## Test, install, and package
 
@@ -187,11 +244,37 @@ repository-wide tests and focused CTest/pytest targets. A module name in a
 multi-project repository does not imply module-scoped test coverage. Inspect
 the driver's build-directory cleanup before testing an existing workspace.
 
-`install --dev` installs hooks from an already built module into the CLI's
-Python environment. Inspect `env-info --json`, name the module, and select the
-build directory explicitly when multiple builds exist. After consumer testing,
-use `install <module> --dev --uninstall` in the same environment and verify the
-hooks are removed. Omitting the module can affect multiple hooks.
+`install <module> --dev` registers a live Python build in the CLI's Python
+environment, building a standalone Module first when needed. Container Python
+is the default; add `--local` for the current interpreter. Inspect
+`env-info --json` and use `--build-dir <directory>` to select an existing build
+without rebuilding it. Otherwise the newest provider metadata or legacy hook
+under the build parent selects the build for each module.
+Implicit discovery warns about invalid Python metadata and skips it; invalid
+metadata in an explicit `--build-dir` is an error.
+
+For metadata-enabled SDK 5.x Modules, registration adds the build's
+`python/lib` directory through a `.pth` file. The SDK discovers its
+`holoscan.modules` entry point, making both `holoscan_<slug>` and
+`holoscan.<slug>` available in a new Python process without setting the module's
+`PYTHONPATH`. Python bindings must be built, and older 5.x Modules must adopt
+`holoscan_install_python_module_metadata()` and rebuild. Existing staged
+legacy hook pairs remain supported. Each metadata-enabled Python root must
+contain one Holoscan provider so registrations can be removed independently.
+An installed copy of the same package in the destination site directory or
+elsewhere on the effective Python import path is rejected because it would
+take precedence over the build path. Remove that copy or use a clean Python
+environment before registering the build. Replacing an existing development
+registration remains supported; remove any `PYTHONPATH` entry pointing to the
+old build first. If the old build's `python/lib` is the current working directory,
+change to another directory before replacing it. A failed hook replacement
+preserves the previous registration.
+If an obsolete legacy helper cannot be removed after metadata registration,
+installation succeeds with a warning; remove that helper manually.
+
+Use `install <module> --dev --uninstall` in the same environment to remove its
+registration without deleting build output. Start a new Python process to
+verify removal. Omitting the module can affect multiple registrations.
 
 `package <module> --pkg-generator DEB,WHEEL` builds distribution artifacts.
 Inspect their metadata and payload, then test installation in a clean consumer.

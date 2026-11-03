@@ -219,6 +219,8 @@ def _project_dispatch_argv(
 
     command = project_argv[1] if len(project_argv) > 1 else None
     for arg in project_argv[2:]:
+        if arg == "--":
+            break
         if arg == "--project-root" or arg.startswith("--project-root="):
             program = _program_name(argv)
             raise DispatchUsageError(

@@ -1,27 +1,23 @@
 # SPDX-FileCopyrightText: Copyright (c) {% now 'utc', '%Y' %} {{ cookiecutter.full_name }}{% if cookiecutter.affiliation %} / {{ cookiecutter.affiliation }}{% endif %}. All rights reserved.
 # SPDX-License-Identifier: {{ cookiecutter._license }}
 
-cmake_minimum_required(VERSION 3.24)
+cmake_minimum_required(VERSION 4.0)
 
 project(holoscan_{{ cookiecutter.module_slug }}
     VERSION {{ cookiecutter.version }}
     DESCRIPTION "{{ cookiecutter.description }}"
-    LANGUAGES {% if cookiecutter.language == 'cpp' %}CXX{% else %}NONE{% endif %}
+    LANGUAGES CXX
 )
 
-{% if cookiecutter.language == 'cpp' %}
-set(CMAKE_CXX_STANDARD 17)
+# Holoscan SDK 5.0 headers require C++20.
+set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
-{% endif %}
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 # ---------------------------------------------------------------------------
 # Dependencies
 # ---------------------------------------------------------------------------
-{% if cookiecutter.language == 'cpp' %}
-find_package(holoscan {{ cookiecutter.holoscan_version }} REQUIRED
-    PATHS /opt/nvidia/holoscan)
-{% endif %}
+find_package(holoscan 5.0 REQUIRED CONFIG COMPONENTS core)
 
 # ---------------------------------------------------------------------------
 # Build options
@@ -53,38 +49,40 @@ endif()
 if(NOT DEFINED {{ cookiecutter.module_slug | upper }}_BUILD_TESTING)
     if(PROJECT_IS_TOP_LEVEL)
         set({{ cookiecutter.module_slug | upper }}_BUILD_TESTING ON
-            CACHE BOOL "Build the {{ cookiecutter.module_slug }} module's CTest and pytest suites")
+            CACHE BOOL "Build the {{ cookiecutter.module_slug }} module's CTest suite")
     else()
         set({{ cookiecutter.module_slug | upper }}_BUILD_TESTING OFF
-            CACHE BOOL "Build the {{ cookiecutter.module_slug }} module's CTest and pytest suites")
+            CACHE BOOL "Build the {{ cookiecutter.module_slug }} module's CTest suite")
     endif()
 endif()
+{%- if cookiecutter.__python_bindings == 'yes' %}
 
-# ---------------------------------------------------------------------------
-# Python package root in the build tree.
-# PYTHONPATH=${{'{'}}{{ cookiecutter.module_slug | upper }}_PYTHON_ROOT} lets Python find
-# holoscan.{{ cookiecutter.module_slug }} alongside the installed Holoscan SDK package.
-#
-# The package lands under python/lib/ (not just python/) to match the layout
-# the Holoscan CLI expects in default `holoscan run` mode — it resolves the
-# module from <build>/python/lib, so `import holoscan.{{ cookiecutter.module_slug }}` fails if the
-# package is staged one directory higher.
-# ---------------------------------------------------------------------------
-
-set({{ cookiecutter.module_slug | upper }}_PYTHON_ROOT
-    ${CMAKE_BINARY_DIR}/python/lib)
-set({{ cookiecutter.module_slug | upper }}_PYTHON_PKG_DIR
-    ${{'{'}}{{ cookiecutter.module_slug | upper }}_PYTHON_ROOT}/holoscan/{{ cookiecutter.module_slug }})
-
-# Variables consumed by pybind11_add_holohub_module:
-#   HOLOHUB_PYTHON_MODULE_OUT_DIR — where per-operator subpackages land
-#   HOLOSCAN_INSTALL_LIB_DIR     — relative lib dir, used for rpath resolution
-set(HOLOHUB_PYTHON_MODULE_OUT_DIR
-    ${{'{'}}{{ cookiecutter.module_slug | upper }}_PYTHON_PKG_DIR})
-file(MAKE_DIRECTORY ${HOLOHUB_PYTHON_MODULE_OUT_DIR})
-if(NOT DEFINED HOLOSCAN_INSTALL_LIB_DIR)
-    set(HOLOSCAN_INSTALL_LIB_DIR lib)
+# The Python bindings follow the same rule: ON when standalone, OFF when nested.
+# They are also OFF when packaging, because the Debian package ships no Python files.
+if(NOT DEFINED HOLOSCAN_{{ cookiecutter.module_slug | upper }}_BUILD_PYTHON)
+    if(PROJECT_IS_TOP_LEVEL AND NOT PKG_{{ cookiecutter.module_repo_name.replace('-', '_') }})
+        set(HOLOSCAN_{{ cookiecutter.module_slug | upper }}_BUILD_PYTHON ON
+            CACHE BOOL "Build the holoscan_{{ cookiecutter.module_slug }} Python bindings")
+    else()
+        set(HOLOSCAN_{{ cookiecutter.module_slug | upper }}_BUILD_PYTHON OFF
+            CACHE BOOL "Build the holoscan_{{ cookiecutter.module_slug }} Python bindings")
+    endif()
 endif()
+if(HOLOSCAN_{{ cookiecutter.module_slug | upper }}_BUILD_PYTHON)
+    # The operator libraries are linked into the Python extension module.
+    set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+    # Found at the root so python/ and tests/python/ see the same interpreter.
+    if(Python3_EXECUTABLE AND NOT Python_EXECUTABLE)
+        set(Python_EXECUTABLE "${Python3_EXECUTABLE}")
+    endif()
+    find_package(Python 3.12 REQUIRED
+        COMPONENTS Interpreter Development.Module Development.SABIModule)
+endif()
+{%- endif %}
+
+# Application languages. The Holoscan CLI sets these from --language or the
+# application's metadata.json; a plain CMake build includes every language.
+option(HOLOSCAN_{{ cookiecutter.module_slug | upper }}_BUILD_CPP "Build C++ applications" ON)
 
 # ---------------------------------------------------------------------------
 # CMake helpers
@@ -95,6 +93,18 @@ endif()
 # without a HoloHub clone.
 list(PREPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 include(HoloHubConfigHelpers)
+
+add_library(holoscan_{{ cookiecutter.module_slug }} INTERFACE)
+add_library(holoscan::{{ cookiecutter.module_slug }} ALIAS holoscan_{{ cookiecutter.module_slug }})
+set_target_properties(holoscan_{{ cookiecutter.module_slug }} PROPERTIES
+    EXPORT_NAME {{ cookiecutter.module_slug }})
+install(TARGETS holoscan_{{ cookiecutter.module_slug }}
+    EXPORT holoscan_{{ cookiecutter.module_slug }}_targets)
+
+# Every install and package carries the license and third-party notices.
+include(GNUInstallDirs)
+install(FILES LICENSE NOTICE
+    DESTINATION "${CMAKE_INSTALL_DATAROOTDIR}/doc/{{ cookiecutter.module_repo_name }}")
 
 # ---------------------------------------------------------------------------
 # Subprojects
@@ -109,6 +119,12 @@ include(HoloHubConfigHelpers)
 add_subdirectory(pkg)
 add_subdirectory(operators)
 add_subdirectory(applications)
+{%- if cookiecutter.__python_bindings == 'yes' %}
+
+if(HOLOSCAN_{{ cookiecutter.module_slug | upper }}_BUILD_PYTHON)
+    add_subdirectory(python)
+endif()
+{%- endif %}
 
 if({{ cookiecutter.module_slug | upper }}_BUILD_TESTING)
     enable_testing()
@@ -116,45 +132,9 @@ if({{ cookiecutter.module_slug | upper }}_BUILD_TESTING)
 endif()
 
 # ---------------------------------------------------------------------------
-# Stage dev-mode hook files in the build tree
-# ---------------------------------------------------------------------------
-# `holoscan install --dev` copies these into the user's
-# Python user-site so `import holoscan.{{ cookiecutter.module_slug }}` works in
-# any shell — without a wheel install. We only *stage* them here; the install
-# itself is opt-in so a plain `holoscan build` never
-# touches the host's Python environment.
-
-set(_DEV_HELPER_FILE "${CMAKE_BINARY_DIR}/holoscan_{{ cookiecutter.module_slug }}_dev.py")
-set(_DEV_PTH_FILE    "${CMAKE_BINARY_DIR}/holoscan-{{ cookiecutter.module_slug.replace('_', '-') }}-dev.pth")
-set(_DEV_TARGET_PATH "${{ '{' }}{{ cookiecutter.module_slug | upper }}_PYTHON_ROOT}/holoscan")
-
-file(WRITE ${_DEV_HELPER_FILE}
-"# Auto-generated by holoscan build — do not edit.
-# Extends holoscan.__path__ to include this module's build tree, so that
-# `import holoscan.{{ cookiecutter.module_slug }}` resolves to the live build
-# output without a wheel install. Installed to user-site by
-# `holoscan install --dev`.
-import os
-
-_BUILD_PATH = r\"${_DEV_TARGET_PATH}\"
-
-try:
-    import holoscan
-    if os.path.isdir(_BUILD_PATH) and _BUILD_PATH not in holoscan.__path__:
-        holoscan.__path__.insert(0, _BUILD_PATH)
-except Exception:
-    # Stay silent — a stale dev hook must never abort Python startup.
-    pass
-")
-
-file(WRITE ${_DEV_PTH_FILE}
-"import holoscan_{{ cookiecutter.module_slug }}_dev
-")
-
-# ---------------------------------------------------------------------------
 # Packaging
 # ---------------------------------------------------------------------------
-# Debian / wheel packaging lives under pkg/. pkg/CMakeLists.txt calls
+# Debian packaging lives under pkg/. pkg/CMakeLists.txt calls
 # add_holohub_package({{ cookiecutter.module_repo_name }} OPERATORS {{ cookiecutter.operator_slug }}
 # APPLICATIONS {{ cookiecutter.module_slug }}_pipeline), which defines the
 # PKG_{{ cookiecutter.module_repo_name.replace('-', '_') }} option, FORCEs the OP_/APP_ deps to ON when the

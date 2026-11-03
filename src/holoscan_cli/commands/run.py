@@ -50,7 +50,7 @@ from holoscan_cli.utils.project import (
     report_effective_configuration,
     resolve_effective_build_type,
 )
-from holoscan_cli.utils.sdk import resolve_local_sdk_dir
+from holoscan_cli.utils.sdk import get_sdk_python_paths, resolve_local_sdk_dir
 
 
 def _transient_builder_docker_opts(docker_opts):
@@ -104,7 +104,10 @@ def register_run_parser(
 ) -> argparse.ArgumentParser:
     """Register the ``run`` subcommand."""
     parser = subparsers.add_parser(
-        "run", help=help_for("run"), parents=[container_build, container_run]
+        "run",
+        help=help_for("run"),
+        parents=[container_build, container_run],
+        epilog="Arguments after -- are appended to the application command, after --run-args.",
     )
     parser.add_argument(
         "project",
@@ -288,9 +291,13 @@ def handle_run(cli, args: argparse.Namespace) -> None:
             getattr(args, "local_sdk_root", None),
             environ=sdk_environment,
         )
-        run_env["PYTHONPATH"] = (
-            f"{run_env.get('PYTHONPATH', '')}:{sdk_dir}/python/lib:"
-            f"{build_dir}/python/lib:{cli.HOLOHUB_ROOT}"
+        run_env["PYTHONPATH"] = ":".join(
+            [
+                run_env.get("PYTHONPATH", ""),
+                *get_sdk_python_paths(sdk_dir),
+                f"{build_dir}/python/lib",
+                str(cli.HOLOHUB_ROOT),
+            ]
         )
         run_env["HOLOSCAN_CLI_DATA_PATH"] = str(cli.DEFAULT_DATA_DIR)
         run_env["HOLOSCAN_INPUT_PATH"] = run_env.get(
@@ -355,6 +362,7 @@ def handle_run(cli, args: argparse.Namespace) -> None:
         # plain strings out of a shell: projects that need shell semantics must
         # request an interpreter explicitly (for example, `bash -c ...`).
         cmd_to_run = cmd if isinstance(cmd, list) else shlex.split(cmd)
+        cmd_to_run.extend(getattr(args, "_trailing_args", []))
 
         # Handle Nsight Systems profiling. Nsight checks permissions for the
         # requested collectors; NVTX-only tracing does not need CPU perf events.
@@ -455,7 +463,6 @@ def handle_run(cli, args: argparse.Namespace) -> None:
         if getattr(args, "parallel", None) is not None:
             run_tokens.extend(["--parallel", str(args.parallel)])
         append_configure_args(run_tokens, args)
-        run_cmd = shlex.join(run_tokens)
 
         img = container.resolve_run_image(getattr(args, "img", None))
         docker_opts = run_args.get("docker_opts", build_args.get("docker_opts", ""))
@@ -492,7 +499,11 @@ def handle_run(cli, args: argparse.Namespace) -> None:
                 extra_args=builder_extra_args,
             )
             run_tokens.append("--no-local-build")
-            run_cmd = shlex.join(run_tokens)
+
+        trailing_args = getattr(args, "_trailing_args", [])
+        if trailing_args:
+            run_tokens.extend(["--", *trailing_args])
+        run_cmd = shlex.join(run_tokens)
 
         app_docker_opts = effective_docker_opts
         docker_opts_extra, extra_args = get_entrypoint_command_args(

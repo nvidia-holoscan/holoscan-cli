@@ -1,6 +1,6 @@
 {
     "module": {
-        "name": "module_with_name_only_dependency",
+        "name": "holoscan-module-with-name-only-dependency",
         "description": "Module with a minimal name-only dependency declaration.",
         "authors": [{ "name": "NVIDIA", "affiliation": "NVIDIA" }],
         "version": "0.1.0",

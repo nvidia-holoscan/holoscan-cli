@@ -1,9 +1,21 @@
 # SPDX-FileCopyrightText: Copyright (c) {% now 'utc', '%Y' %} {{ cookiecutter.full_name }}{% if cookiecutter.affiliation %} / {{ cookiecutter.affiliation }}{% endif %}. All rights reserved.
 # SPDX-License-Identifier: {{ cookiecutter._license }}
 
+{% if cookiecutter.__python_bindings == 'yes' -%}
+# Holoscan SDK 5.0 Modules are C++ libraries shipped as Debian packages. This
+# file also builds the Python bindings into a wheel with scikit-build-core
+# (`holoscan package <module> --pkg-generator WHEEL`), pins the Holoscan CLI for
+# `uv run --only-group dev holoscan ...`, and configures ruff for the repository's helper scripts.
+
 [build-system]
-requires = ["scikit-build-core>=0.10"]
+requires = ["scikit-build-core~=1.0.3"]
 build-backend = "scikit_build_core.build"
+{%- else -%}
+# Development tooling only. Holoscan SDK 5.0 Modules are C++ libraries shipped
+# as Debian packages; Python bindings and wheel packaging return in a later
+# release. This file pins the Holoscan CLI for `uv run holoscan ...` and
+# configures ruff for the repository's helper scripts.
+{%- endif %}
 
 [project]
 name = "holoscan-{{ cookiecutter.module_slug.replace('_', '-') }}"
@@ -14,17 +26,45 @@ license = { text = "{{ cookiecutter._license }}" }
 authors = [
     { name = "{{ cookiecutter.full_name }}" },
 ]
+{% if cookiecutter.__python_bindings == 'yes' -%}
+requires-python = ">=3.12"
+dependencies = ["holoscan-core-cu13>={{ cookiecutter.holoscan_version }}"]
+
+[project.entry-points."holoscan.modules"]
+{{ cookiecutter.module_slug }} = "holoscan_{{ cookiecutter.module_slug }}"
+{%- else -%}
 requires-python = ">=3.11"
-dependencies = ["holoscan-cu13>={{ cookiecutter.holoscan_version }},<5.0"]
+{%- endif %}
 
 [dependency-groups]
 dev = [
     "holoscan-cli=={{ cookiecutter._holoscan_cli_version }}",
-    "pytest>=8.2",
+    "ruff",
+{%- if cookiecutter.__python_bindings == 'yes' %}
+    "pytest",
+{%- endif %}
 ]
 
 [tool.uv]
+{% if cookiecutter.__python_bindings == 'yes' -%}
+# UV never installs the Module itself; `holoscan package` builds the wheel.
+# Use `uv sync --only-group dev` to skip the wheel's runtime dependencies.
+{%- else -%}
+# Not an installable Python package; `uv sync` only provisions the dev tools.
+{%- endif %}
 package = false
+{%- if cookiecutter.__python_bindings == 'yes' %}
+
+[tool.scikit-build]
+# Build only the operator and its Python bindings, and package only their install component.
+wheel.packages = []
+wheel.py-api = "cp312"
+install.components = ["holoscan-{{ cookiecutter.module_slug }}-python_libs"]
+cmake.define.BUILD_ALL = "OFF"
+cmake.define.OP_{{ cookiecutter.operator_slug }} = "ON"
+cmake.define.{{ cookiecutter.module_slug | upper }}_BUILD_TESTING = "OFF"
+cmake.define.HOLOSCAN_{{ cookiecutter.module_slug | upper }}_BUILD_PYTHON = "ON"
+{%- endif %}
 
 [tool.uv.sources]
 holoscan-cli = { index = "nvidia" }
@@ -34,24 +74,24 @@ name = "nvidia"
 url = "https://pypi.nvidia.com"
 explicit = true
 
-[tool.scikit-build]
-cmake.version = ">=3.24"
-# Build only what the wheel needs: turn off test and app subprojects, and
-# turn off the deb option (which is build-type-driven, not wheel-driven).
-cmake.args = [
-    "-D{{ cookiecutter.module_slug | upper }}_BUILD_TESTING=OFF",
-    "-DBUILD_ALL=OFF",
-    "-DOP_{{ cookiecutter.operator_slug }}=ON",
-]
-# Wheel content comes from CMake install rules. Use *relative* DESTINATIONs in
-# install(...) calls — scikit-build-core stages those into the wheel root.
-# Setting wheel.install-dir = "/" would require the experimental flag.
-wheel.packages = []
+[tool.holoscan]
+# Module-wide defaults for `holoscan build|run|test|run-container`. See DEVELOPER.md
+# for the full list of supported keys. Keep the CUDA major and base images in step
+# with the Dockerfile's default BASE_IMAGE.
+cuda = 13
+# ctest-script = "ci/container.ctest"
+# forward-env = ["IS_CI_BUILD"]
+# docker-build-args = ["--build-arg", "PROJECT_FEATURE=ON"]
+# docker-run-args = ["--network=host"]
+
+[tool.holoscan.base-images]
+x86_64 = "nvcr.io/nvidia/clara-holoscan/holoscan:v{{ cookiecutter.holoscan_version }}-cuda13"
+aarch64 = "nvcr.io/nvidia/clara-holoscan/holoscan:v{{ cookiecutter.holoscan_version }}-cuda13"
 
 [tool.ruff]
 line-length = 100
-target-version = "py311"
-# build*/, dist/ are CMake/wheel outputs; .local/, .cache/, .cupy/ are
+target-version = "{% if cookiecutter.__python_bindings == 'yes' %}py312{% else %}py311{% endif %}"
+# build*/, dist/ are CMake/packaging outputs; .local/, .cache/, .cupy/ are
 # dev-container HOME junk.
 exclude = [
     "build*",

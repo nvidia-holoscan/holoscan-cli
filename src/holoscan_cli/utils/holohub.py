@@ -49,7 +49,6 @@ DEFAULT_GIT_REF = "latest"
 PROJECT_PREFIXES = {
     "application": "APP",
     "benchmark": "APP",
-    "gxf_extension": "EXT",
     "module": "MODULE",
     "operator": "OP",
     "package": "PKG",

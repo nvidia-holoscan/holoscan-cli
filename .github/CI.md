@@ -36,7 +36,6 @@ surface is exercised before merge. Jobs run in this order:
 | ----------------------------- | -------------------------------------------------------------------------- |
 | `pre-commit`                  | Run all hooks listed in `.pre-commit-config.yaml` on Python 3.12.          |
 | `test` matrix                 | `poetry run pytest` on Python 3.11, 3.12, 3.13, and 3.14 (Ubuntu).         |
-| `HoloHub project integration` | Test current CLI against HoloHub's real project tree and wrapper suite.    |
 | `build wheel + sdist`         | `poetry build` + `twine check` + `assert_wheel_contents.sh`.               |
 | `installed artifact smoke`    | Test clean wheel and sdist installs, the `create` extra, uvx, and pipx.    |
 | `CPU CLI + Docker smoke test` | Installed-wheel source-project dry-runs plus a tiny CPU Docker build.      |
