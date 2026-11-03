@@ -369,3 +369,94 @@ def test_list_uses_search_paths_and_skips_generated_folders(tmp_path):
     assert list_projects() == [example, module]
     assert list_projects(HOLOSCAN_CLI_SEARCH_PATH="operators") == [operator, module]
     assert list_projects(HOLOSCAN_CLI_SEARCH_PATH=".") == [example, operator, module]
+
+
+def _source_project(root: Path, pyproject: str | None = None) -> Path:
+    app = root / "applications/example"
+    app.mkdir(parents=True)
+    (app / "metadata.json").write_text('{"application": {}}', encoding="utf-8")
+    if pyproject is not None:
+        (root / "pyproject.toml").write_text(pyproject, encoding="utf-8")
+    return root
+
+
+def test_source_project_reads_shared_pyproject_defaults(tmp_path, monkeypatch):
+    from holoscan_cli.project_context import activated_environment_source
+
+    root = _source_project(
+        tmp_path / "apps",
+        "[tool.ruff]\nline-length = 100\n\n"
+        "[tool.holoscan]\ncuda = 13\nforward-env = ['IS_CI_BUILD']\n"
+        "docker-run-args = ['--shm-size=1g']\n\n"
+        "[tool.holoscan.base-images]\n"
+        "x86_64 = 'registry.example.com/sdk:x86'\naarch64 = 'registry.example.com/sdk:arm'\n",
+    )
+
+    context = discover_project_context(
+        cwd=root / "applications/example", environ={"HOLOSCAN_CLI_TARGET_ARCH": "aarch64"}
+    )
+
+    assert (context.kind, context.root) == ("source", root)
+    assert context.base_image == "registry.example.com/sdk:arm"
+    assert context.cuda == "13"
+    assert context.forward_env == ("IS_CI_BUILD",)
+    assert context.docker_run_args == "--shm-size=1g"
+    # Module-derived defaults stay off source projects.
+    assert context.profile_environment() == {
+        "HOLOSCAN_CLI_ROOT": str(root),
+        "HOLOSCAN_CLI_DEFAULT_CUDA_VERSION": "13",
+        "HOLOSCAN_CLI_BASE_IMAGE": "registry.example.com/sdk:arm",
+    }
+
+    monkeypatch.setattr(os, "environ", os.environ.copy())
+    monkeypatch.delenv("HOLOSCAN_CLI_BASE_IMAGE", raising=False)
+    activate_project_context(context)
+    assert os.environ["HOLOSCAN_CLI_BASE_IMAGE"] == "registry.example.com/sdk:arm"
+    assert activated_environment_source("HOLOSCAN_CLI_BASE_IMAGE") == "project"
+
+    monkeypatch.setenv("HOLOSCAN_CLI_BASE_IMAGE", "registry.example.com/override:1")
+    activate_project_context(context)
+    assert os.environ["HOLOSCAN_CLI_BASE_IMAGE"] == "registry.example.com/override:1"
+    assert activated_environment_source("HOLOSCAN_CLI_BASE_IMAGE") == "environment"
+
+
+def test_source_project_without_holoscan_table_is_unchanged(tmp_path):
+    root = _source_project(tmp_path / "apps", "[tool.ruff]\nline-length = 100\n")
+
+    context = discover_project_context(cwd=root, environ={})
+
+    assert context.kind == "source"
+    assert context.profile_environment() == {"HOLOSCAN_CLI_ROOT": str(root)}
+
+
+def test_source_project_naming_keys_are_opt_in(tmp_path):
+    root = _source_project(
+        tmp_path / "apps", "[tool.holoscan]\nrepo-prefix = 'holoscan-applications'\n"
+    )
+
+    environment = discover_project_context(cwd=root, environ={}).profile_environment()
+
+    assert environment["HOLOSCAN_CLI_REPO_PREFIX"] == "holoscan-applications"
+    assert environment["HOLOSCAN_CLI_CONTAINER_PREFIX"] == "holoscan-applications"
+    assert "HOLOSCAN_CLI_WORKSPACE_NAME" not in environment
+
+
+@pytest.mark.parametrize(
+    "pyproject",
+    [
+        "[tool.holoscan]\nsearch-paths = ['applications']\n",
+        "[tool.holoscan]\nctest-script = 'ci/container.ctest'\n",
+    ],
+)
+def test_source_project_rejects_module_only_keys(tmp_path, pyproject):
+    root = _source_project(tmp_path / "apps", pyproject)
+
+    with pytest.raises(ProjectContextError, match="can be set only at a Module root"):
+        discover_project_context(cwd=root, environ={})
+
+
+def test_source_project_validates_shared_keys(tmp_path):
+    root = _source_project(tmp_path / "apps", "[tool.holoscan.base-images]\nx86_64 = 'bad image'\n")
+
+    with pytest.raises(ProjectContextError, match="base-images"):
+        discover_project_context(cwd=root, environ={"HOLOSCAN_CLI_TARGET_ARCH": "x86_64"})

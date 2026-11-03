@@ -94,8 +94,12 @@ NVTX-only capture and output-path behavior.
 
 ## `pyproject.toml` settings
 
-Standalone Modules can set defaults in `[tool.holoscan]`. Other TOML tables are
-unrelated to CLI configuration. Supported keys:
+Standalone Modules and source-project repositories can set defaults in
+`[tool.holoscan]` in their root `pyproject.toml`. A source-project repository
+keeps its projects in folders such as `applications/`, without a root Module.
+It accepts every key except `ctest-script` and `search-paths`, and without the
+naming keys its image names and `/workspace` folder keep the CLI defaults.
+Other TOML tables are unrelated to CLI configuration. Supported keys:
 
 | Key | Type / default | Purpose |
 | --- | --- | --- |
