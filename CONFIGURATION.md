@@ -94,18 +94,15 @@ NVTX-only capture and output-path behavior.
 
 ## `pyproject.toml` settings
 
-Standalone Modules and source-project repositories can set defaults in
-`[tool.holoscan]` in their root `pyproject.toml`. A source-project repository
-keeps its projects in folders such as `applications/`, without a root Module.
-It accepts every key except `ctest-script` and `search-paths`, and without the
-naming keys its image names and `/workspace` folder keep the CLI defaults.
-Other TOML tables are unrelated to CLI configuration. Supported keys:
+A project can set defaults in `[tool.holoscan]` in its root `pyproject.toml`;
+`ctest-script` and `search-paths` apply only to Modules. Other TOML tables are
+unrelated to CLI configuration. Supported keys:
 
 | Key | Type / default | Purpose |
 | --- | --- | --- |
 | `cuda` | Integer / host detection | CUDA major version. |
 | `ctest-script` | Relative path / bundled script | CTest driver; must stay within the Module root. |
-| `repo-prefix` | String / Module metadata | Repository naming prefix. |
+| `repo-prefix` | String / Module metadata, else built-in default | Repository naming prefix. |
 | `container-prefix` | String / repository prefix | Docker image prefix. |
 | `workspace-name` | String / repository prefix | Directory under `/workspace`. |
 | `forward-env` | String array / `[]` | Host variable names to forward into containers. |

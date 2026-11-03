@@ -460,3 +460,54 @@ def test_source_project_validates_shared_keys(tmp_path):
 
     with pytest.raises(ProjectContextError, match="base-images"):
         discover_project_context(cwd=root, environ={"HOLOSCAN_CLI_TARGET_ARCH": "x86_64"})
+
+
+@pytest.mark.parametrize(
+    ("pyproject", "container_prefix"),
+    [
+        ("[tool.holoscan]\nrepo-prefix = 'from-file'\n", None),
+        ("[tool.holoscan]\nrepo-prefix = 'from-file'\ncontainer-prefix = 'images'\n", "images"),
+    ],
+)
+def test_environment_repo_prefix_sets_the_default_container_prefix(
+    tmp_path, monkeypatch, pyproject, container_prefix
+):
+    root = _source_project(tmp_path / "apps", pyproject)
+    context = discover_project_context(cwd=root, environ={})
+
+    monkeypatch.setattr(os, "environ", os.environ.copy())
+    monkeypatch.delenv("HOLOSCAN_CLI_CONTAINER_PREFIX", raising=False)
+    monkeypatch.setenv("HOLOSCAN_CLI_REPO_PREFIX", "from-env")
+    activate_project_context(context)
+
+    assert os.environ["HOLOSCAN_CLI_REPO_PREFIX"] == "from-env"
+    assert os.environ.get("HOLOSCAN_CLI_CONTAINER_PREFIX") == container_prefix
+
+
+def test_standalone_application_reads_shared_pyproject_defaults(tmp_path):
+    root = tmp_path / "my_app"
+    root.mkdir()
+    application = {"name": "Example", "holoscan_sdk": {"minimum_required_version": "5.0.0"}}
+    (root / "metadata.json").write_text(json.dumps({"application": application}), encoding="utf-8")
+    defaults = {"HOLOSCAN_CLI_ROOT": str(root), "HOLOSCAN_CLI_SEARCH_PATH": "metadata.json"}
+    environ = {"HOLOSCAN_CLI_TARGET_ARCH": "x86_64"}
+
+    context = discover_project_context(cwd=root, environ=environ)
+    assert (context.kind, context.application_name) == ("application", "my_app")
+    assert context.profile_environment() == defaults
+
+    (root / "pyproject.toml").write_text(
+        "[tool.holoscan.base-images]\nx86_64 = 'registry.example.com/sdk:x86'\n", encoding="utf-8"
+    )
+    context = discover_project_context(cwd=root, environ=environ)
+    assert (context.kind, context.application_name) == ("application", "my_app")
+    assert context.profile_environment() == {
+        **defaults,
+        "HOLOSCAN_CLI_BASE_IMAGE": "registry.example.com/sdk:x86",
+    }
+
+    (root / "pyproject.toml").write_text(
+        "[tool.holoscan]\nctest-script = 'ci/container.ctest'\n", encoding="utf-8"
+    )
+    with pytest.raises(ProjectContextError, match="can be set only at a Module root"):
+        discover_project_context(cwd=root, environ=environ)
