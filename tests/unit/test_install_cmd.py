@@ -154,6 +154,48 @@ def test_install_dev_links_sdk5_module_build_tree(tmp_path):
     assert not (site_dir / "holoscan-smoke-dev.pth").exists()
 
 
+def _pure_python_module_build(build_dir, slug="pure", purelib=True):
+    python_lib = build_dir / "python" / "lib"
+    (python_lib / f"holoscan_{slug}").mkdir(parents=True)
+    (python_lib / f"holoscan_{slug}" / "__init__.py").write_text("", encoding="utf-8")
+    info = python_lib / f"holoscan_{slug}-0.1.0.dist-info"
+    info.mkdir()
+    (info / "METADATA").write_text(
+        f"Metadata-Version: 2.1\nName: holoscan-{slug}\nVersion: 0.1.0\n", encoding="utf-8"
+    )
+    (info / "entry_points.txt").write_text(
+        f"[holoscan.modules]\n{slug} = holoscan_{slug}\n", encoding="utf-8"
+    )
+    if purelib:
+        (info / "WHEEL").write_text(
+            "Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n", encoding="utf-8"
+        )
+    return python_lib
+
+
+def test_install_dev_links_pure_python_module_build_tree(tmp_path):
+    python_lib = _pure_python_module_build(tmp_path / "build" / "holoscan-pure")
+    site_dir = tmp_path / "site"
+    cli = SimpleNamespace(DEFAULT_BUILD_PARENT_DIR=tmp_path / "build", script_name="holoscan")
+
+    install_cmd.handle_install(cli, _dev_args(project="holoscan-pure", site_dir=site_dir))
+
+    assert (site_dir / "holoscan-pure-dev.pth").read_text(encoding="utf-8") == (
+        f"{python_lib.resolve()}\n"
+    )
+
+
+def test_install_dev_rejects_pure_python_build_without_purelib_marker(tmp_path, capsys):
+    _pure_python_module_build(tmp_path / "build" / "holoscan-pure", purelib=False)
+    cli = SimpleNamespace(DEFAULT_BUILD_PARENT_DIR=tmp_path / "build", script_name="holoscan")
+
+    with pytest.raises(SystemExit):
+        install_cmd.handle_install(
+            cli, _dev_args(project="holoscan-pure", site_dir=tmp_path / "site")
+        )
+    assert not (tmp_path / "site" / "holoscan-pure-dev.pth").exists()
+
+
 def test_install_dev_builds_fresh_sdk5_module_locally(tmp_path, monkeypatch):
     cli = _standalone_cli(tmp_path)
     site_dir = tmp_path / "site"

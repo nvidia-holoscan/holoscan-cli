@@ -225,8 +225,10 @@ configured base SDK version overrides the default, and explicit context values
 take precedence. `--language cpp python` (or `cpp,python`) also generates a
 nanobind extension that registers the module's C++ operators with the SDK
 operator registry, a Python example, and CTest-run pytest suites; the default
-`--language cpp` stays C++ only, and `--language python` alone stays rejected
-until pure-Python modules are supported. The project name may come before or
+`--language cpp` stays C++ only. `--language python` alone creates a module whose
+operators and example application are implemented in Python, with no C++ code: a
+pure-Python wheel built by `package --pkg-generator WHEEL`, and a CMake project
+that only stages the package and runs its pytest suite. The project name may come before or
 after `--language`; a project named after a language, such as `python`, must
 come first. See
 [template defaults](src/holoscan_cli/templates/module/cookiecutter.json) and
@@ -254,7 +256,8 @@ For metadata-enabled SDK 5.x Modules, registration adds the build's
 `python/lib` directory through a `.pth` file. The SDK discovers its
 `holoscan.modules` entry point, making both `holoscan_<slug>` and
 `holoscan.<slug>` available in a new Python process without setting the module's
-`PYTHONPATH`. Python bindings must be built, and older 5.x Modules must adopt
+`PYTHONPATH`. Python bindings must be built (a module created with `--language python`
+has none; its build stages pure-Python package metadata instead), and older 5.x Modules must adopt
 `holoscan_install_python_module_metadata()` and rebuild. Existing staged
 legacy hook pairs remain supported. Each metadata-enabled Python root must
 contain one Holoscan provider so registrations can be removed independently.

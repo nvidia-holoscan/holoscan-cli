@@ -1,5 +1,15 @@
 # SPDX-FileCopyrightText: Copyright (c) {% now 'utc', '%Y' %} {{ cookiecutter.full_name }}{% if cookiecutter.affiliation %} / {{ cookiecutter.affiliation }}{% endif %}. All rights reserved.
 # SPDX-License-Identifier: {{ cookiecutter._license }}
+{%- if cookiecutter.__pure_python == 'yes' %}
+
+{%- set op_class = cookiecutter.operator_slug.split('_')|map('capitalize')|join('') %}
+
+"""{{ cookiecutter.project_name }} operators."""
+
+from .{{ cookiecutter.operator_slug }} import {{ op_class }}
+
+__all__ = ["{{ op_class }}"]
+{%- else %}
 
 """Registered {{ cookiecutter.project_name }} operator proxies."""
 
@@ -15,3 +25,4 @@ _operator_types = {
 }
 globals().update(_operator_types)
 __all__: list[str] = sorted(_operator_types)
+{%- endif %}
