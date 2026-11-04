@@ -64,10 +64,10 @@ versions are independent. Review the preview before running the build without
 `--dryrun`; builds require the module's documented SDK/container prerequisites.
 The generated project records the creating CLI version.
 `uv run --only-group dev` installs only that CLI and the lint and test tools,
-not the module itself. A module with Python bindings (`--language cpp python`)
-also lists the Holoscan SDK wheel as a runtime dependency; without
-`--only-group dev`, uv installs it too, which needs glibc 2.39 (Ubuntu 24.04)
-or newer.
+not the module itself. A module created with `--language cpp python` or
+`--language python` also lists the Holoscan SDK wheel as a runtime dependency;
+without `--only-group dev`, uv installs it too, which needs glibc 2.39
+(Ubuntu 24.04) or newer.
 
 For the pip alternative, install the same creation extra in the activated
 `.venv`, then run `holoscan create` with the same arguments:
