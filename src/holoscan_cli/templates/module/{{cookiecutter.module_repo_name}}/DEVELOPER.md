@@ -53,7 +53,7 @@ from holoscan_{{ cookiecutter.module_slug }}.operators import {{ op_class }}
 - `tests/python` runs through CTest (label `python`), or directly with pytest after
   `python -m pip install -e .`.
 - `holoscan package {{ cookiecutter.module_repo_name }} --pkg-generator WHEEL` builds a `py3-none-any`
-  `holoscan-{{ cookiecutter.module_slug.replace('_', '-') }}` wheel that depends on `holoscan-cu13`. There is no Debian package.
+  `holoscan-{{ cookiecutter.module_slug.replace('_', '-') }}` wheel that depends on `holoscan-core-cu13`. There is no Debian package.
 
 ---
 
@@ -103,7 +103,7 @@ lifecycle command with `--verbose` to see what was selected.
 
 If you use [uv](https://docs.astral.sh/uv/), the project config selects NVIDIA's package index for
 `holoscan-cli` while leaving other dependencies on PyPI. Pass `--only-group dev` so UV installs
-only the development tools, not this Module or its `holoscan-cu13` dependency:
+only the development tools, not this Module or its `holoscan-core-cu13` dependency:
 
 ```bash
 uv run --only-group dev holoscan test
@@ -147,7 +147,7 @@ and `OFF` when this module is included by a parent project. The standard
 | --- | --- |
 | `[build-system]` | scikit-build-core builds the wheel; `CMakeLists.txt` returns early for wheel builds |
 | `[project].version` | Sync with `metadata.json:module.version` |
-| `[project].dependencies` | Runtime dependencies; `holoscan-cu13` installs the Holoscan SDK Python packages |
+| `[project].dependencies` | Runtime dependencies; `holoscan-core-cu13` installs the Holoscan SDK core; add `holoscan-vision-cu13`, `holoscan-visualization-cu13` or `holoscan-inference-cu13` if the Module imports them |
 | `[project.entry-points."holoscan.modules"]` | Exposes `holoscan_{{ cookiecutter.module_slug }}` as `holoscan.{{ cookiecutter.module_slug }}` |
 | `[tool.scikit-build]` | Packages `python/holoscan_{{ cookiecutter.module_slug }}` into a pure-Python wheel |
 | `[dependency-groups].dev` | Exact CLI convenience pin, ruff, and pytest; keep the CLI pin synchronized with `requirements-cli.txt` |

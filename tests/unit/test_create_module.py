@@ -452,7 +452,7 @@ def test_packaged_template_generates_a_pure_python_module(cli, tmp_path, monkeyp
         "build-backend": "scikit_build_core.build",
     }
     assert pyproject["project"]["requires-python"] == ">=3.12"
-    assert pyproject["project"]["dependencies"] == ["holoscan-cu13>=5.0.0"]
+    assert pyproject["project"]["dependencies"] == ["holoscan-core-cu13>=5.0.0"]
     assert pyproject["project"]["entry-points"]["holoscan.modules"] == {"my_mod": "holoscan_my_mod"}
     assert pyproject["tool"]["scikit-build"]["wheel"] == {
         "packages": ["python/holoscan_my_mod"],

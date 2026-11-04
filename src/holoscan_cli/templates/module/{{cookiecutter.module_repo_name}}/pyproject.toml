@@ -37,7 +37,7 @@ authors = [
 ]
 {% if cookiecutter.__pure_python == 'yes' -%}
 requires-python = ">=3.12"
-dependencies = ["holoscan-cu13>={{ cookiecutter.holoscan_version }}"]
+dependencies = ["holoscan-core-cu13>={{ cookiecutter.holoscan_version }}"]
 
 [project.entry-points."holoscan.modules"]
 {{ cookiecutter.module_slug }} = "holoscan_{{ cookiecutter.module_slug }}"

@@ -36,7 +36,7 @@ needed. Prefix the same commands with `uv run --only-group dev`, for example:
 uv run --only-group dev holoscan run {{ cookiecutter.module_slug }}_pipeline
 ```
 
-`--only-group dev` installs only the development tools, not this Module or its `holoscan-cu13`
+`--only-group dev` installs only the development tools, not this Module or its `holoscan-core-cu13`
 dependency.
 
 ---
@@ -84,7 +84,7 @@ its own termination with `holoscan.run_async`.
 | Requirement | Version |
 | --- | --- |
 | Python | 3.12+ on Linux |
-| Holoscan SDK | ≥ {{ cookiecutter.holoscan_version }} (the `holoscan-cu13` wheels, installed as a dependency) |
+| Holoscan SDK | ≥ {{ cookiecutter.holoscan_version }} (the `holoscan-core-cu13` wheel, installed as a dependency) |
 | CUDA | A driver that supports CUDA 13 |
 
 The Holoscan SDK wheels need glibc 2.39 or newer, for example Ubuntu 24.04. Install the Module
