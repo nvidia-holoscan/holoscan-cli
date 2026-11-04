@@ -63,6 +63,20 @@ _PYTHON_SEGMENT_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
 _IMAGE_REFERENCE_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._/:@+-]{0,254}")
 _SUPPORTED_ARCHITECTURES = {"x86_64", "aarch64"}
 _TRUE_ENV_VALUES = {"1", "true", "yes", "on"}
+# Keys that do not depend on Module metadata, so every project root, such as a
+# repository of applications or a standalone application, can set them.
+_SHARED_PROJECT_KEYS = frozenset(
+    {
+        "base-images",
+        "container-prefix",
+        "cuda",
+        "docker-build-args",
+        "docker-run-args",
+        "forward-env",
+        "repo-prefix",
+        "workspace-name",
+    }
+)
 
 
 class ModuleMetadataError(ProjectContextError):
@@ -102,13 +116,24 @@ class ProjectContext:
 
     def profile_environment(self) -> dict[str, str]:
         """Return project-derived defaults consumed by existing CLI classes."""
+        # Values from [tool.holoscan] that any project root can set.
+        configured_values = {
+            "HOLOSCAN_CLI_REPO_PREFIX": self.repo_prefix,
+            "HOLOSCAN_CLI_CONTAINER_PREFIX": self.container_prefix
+            or (self.repo_prefix.replace("_", "-") if self.repo_prefix else None),
+            "HOLOSCAN_CLI_WORKSPACE_NAME": self.workspace_name,
+            "HOLOSCAN_CLI_DEFAULT_CUDA_VERSION": self.cuda,
+            "HOLOSCAN_CLI_BASE_IMAGE": self.base_image,
+        }
+        configured = {key: value for key, value in configured_values.items() if value}
         if self.kind == "application":
             return {
                 "HOLOSCAN_CLI_ROOT": str(self.root),
                 "HOLOSCAN_CLI_SEARCH_PATH": MODULE_METADATA_FILENAME,
+                **configured,
             }
         if not self.is_module:
-            return {"HOLOSCAN_CLI_ROOT": str(self.root)}
+            return {"HOLOSCAN_CLI_ROOT": str(self.root), **configured}
 
         values = {
             "HOLOSCAN_CLI_ROOT": str(self.root),
@@ -119,15 +144,10 @@ class ProjectContext:
             ),
         }
         optional_values = {
-            "HOLOSCAN_CLI_REPO_PREFIX": self.repo_prefix,
-            "HOLOSCAN_CLI_CONTAINER_PREFIX": self.container_prefix
-            or (self.repo_prefix.replace("_", "-") if self.repo_prefix else None),
-            "HOLOSCAN_CLI_WORKSPACE_NAME": self.workspace_name,
+            **configured_values,
             "HOLOSCAN_CLI_BASE_SDK_VERSION": self.base_sdk_version,
             "HOLOSCAN_CLI_DEFAULT_DOCKERFILE": str(self.dockerfile) if self.dockerfile else None,
-            "HOLOSCAN_CLI_DEFAULT_CUDA_VERSION": self.cuda,
             "HOLOSCAN_CLI_CTEST_SCRIPT": self.ctest_script,
-            "HOLOSCAN_CLI_BASE_IMAGE": self.base_image,
             "HOLOSCAN_SDK_ROOT": str(self.sdk_root) if self.sdk_root else None,
             "HOLOSCAN_CLI_TARGET_ARCH": self.target_arch,
         }
@@ -263,6 +283,7 @@ def _resolve_project_profile(
     config_path: Optional[Path],
     *,
     environ: Mapping[str, str],
+    resolve_sdk: bool = True,
 ) -> dict:
     """Resolve the small project contract and machine-local SDK selection."""
     config_source = config_path or root / PYPROJECT_FILENAME
@@ -394,6 +415,9 @@ def _resolve_project_profile(
                 "valid image reference without whitespace."
             ) from exc
         resolved["base_image"] = base_image
+
+    if not resolve_sdk:
+        return resolved
 
     sdk_cuda = environ.get("HOLOSCAN_CLI_DEFAULT_CUDA_VERSION") or (
         str(cuda) if cuda is not None else None
@@ -553,6 +577,56 @@ def _build_module_context(
     )
 
 
+def _build_project_context(
+    root: Path,
+    kind: str,
+    *,
+    discovery: str,
+    warnings: tuple[str, ...] = (),
+    environ: Optional[Mapping[str, str]] = None,
+    application_name: Optional[str] = None,
+) -> ProjectContext:
+    """Apply the Module-independent ``[tool.holoscan]`` keys of a non-Module root."""
+    config_path, config = _read_holoscan_project_config(root)
+    if not config:
+        return ProjectContext(
+            root=root,
+            kind=kind,
+            discovery=discovery,
+            application_name=application_name,
+            warnings=warnings,
+        )
+    module_only = sorted(set(config) - _SHARED_PROJECT_KEYS)
+    if module_only:
+        names = ", ".join(f"tool.holoscan.{key}" for key in module_only)
+        raise ProjectContextError(
+            f"{config_path}: {names} can be set only at a Module root, whose metadata.json "
+            "declares a module."
+        )
+    profile = _resolve_project_profile(
+        root,
+        config,
+        config_path,
+        environ=os.environ if environ is None else environ,
+        resolve_sdk=False,
+    )
+    return ProjectContext(
+        root=root,
+        kind=kind,
+        discovery=discovery,
+        application_name=application_name,
+        repo_prefix=profile.get("repo_prefix"),
+        container_prefix=profile.get("container_prefix"),
+        workspace_name=profile.get("workspace_name"),
+        cuda=profile.get("cuda"),
+        base_image=profile.get("base_image"),
+        docker_build_args=profile.get("docker_build_args"),
+        docker_run_args=profile.get("docker_run_args"),
+        forward_env=profile.get("forward_env", ()),
+        warnings=(*warnings, *profile.get("warnings", [])),
+    )
+
+
 def _selected_context(
     root: Path,
     *,
@@ -590,14 +664,17 @@ def _selected_context(
             or "\x00" in application_name
         ):
             raise ProjectContextError("HOLOSCAN_CLI_APP_NAME must be a directory name.")
-        return ProjectContext(
-            root=root,
-            kind="application",
+        return _build_project_context(
+            root,
+            "application",
             discovery=discovery,
-            application_name=application_name,
             warnings=warnings,
+            environ=env,
+            application_name=application_name,
         )
-    return ProjectContext(root=root, kind="source", discovery=discovery, warnings=warnings)
+    return _build_project_context(
+        root, "source", discovery=discovery, warnings=warnings, environ=environ
+    )
 
 
 def discover_project_context(
@@ -706,6 +783,10 @@ def activate_project_context(context: ProjectContext) -> None:
     os.environ["HOLOSCAN_CLI_ROOT"] = root_value
     if not root_was_present:
         _PROJECT_DERIVED_ENVIRONMENT["HOLOSCAN_CLI_ROOT"] = root_value
+    if "HOLOSCAN_CLI_REPO_PREFIX" in os.environ and not context.container_prefix:
+        # Without an explicit container prefix, image names follow the
+        # repository prefix in effect, which the environment overrides.
+        values.pop("HOLOSCAN_CLI_CONTAINER_PREFIX", None)
     for key, value in values.items():
         if key not in os.environ:
             os.environ[key] = value
