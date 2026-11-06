@@ -459,6 +459,7 @@ def test_packaged_template_generates_a_pure_python_module(cli, tmp_path, monkeyp
     assert pyproject["project"]["entry-points"]["holoscan.modules"] == {"my_mod": "holoscan_my_mod"}
     skbuild = pyproject["tool"]["scikit-build"]
     assert skbuild["wheel"] == {"packages": [], "platlib": False}
+    assert skbuild["overrides"] == [{"if": {"state": "editable"}, "build-dir": "build/editable"}]
     assert skbuild["install"] == {"components": ["holoscan-my_mod-python_libs"]}
     assert skbuild["cmake"]["define"] == {
         "BUILD_ALL": "OFF",
@@ -502,6 +503,7 @@ def test_packaged_template_generates_a_pure_python_module(cli, tmp_path, monkeyp
     assert "holoscan package holoscan-my-mod --pkg-generator WHEEL" in agents
     assert "--pkg-generator DEB" not in readme + agents + developer
     assert "uv run --only-group dev holoscan run my_mod_pipeline" in readme
+    assert "--no-build-isolation -Ceditable.rebuild=true -e ." in readme
     assert "my_mod_op.py      # Operator implementation" in developer
     for path in project.rglob("*"):
         if path.is_file() and not {"cmake", "__pycache__"} & set(path.parts):

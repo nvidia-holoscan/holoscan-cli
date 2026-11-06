@@ -46,8 +46,9 @@ unless you pass `--local`.
 - With the SDK on the host, add `--local` and set
   `HOLOSCAN_CLI_BUILD_PARENT_DIR="$PWD/build-native"` so native output stays apart from container
   output.
-- Without the CLI, `python -m pip install -e . pytest` and `python -m pytest tests/python` work
-  in any environment with the SDK wheels.
+- Without the CLI, an editable install (see README.md) and `python -m pytest tests/python` work in
+  any environment with the SDK wheels. The editable install rebuilds on import, so source edits
+  take effect without reinstalling.
 
 A change is done when `holoscan lint` and `holoscan test` pass.
 

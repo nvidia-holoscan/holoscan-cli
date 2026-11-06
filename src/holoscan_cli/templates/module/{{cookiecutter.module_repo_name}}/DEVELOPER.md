@@ -59,8 +59,7 @@ from holoscan_{{ cookiecutter.module_slug }}.operators import {{ op_class }}
   use `PYTHONPATH=build/python/lib:$PYTHONPATH python3
   applications/{{ cookiecutter.module_slug }}_pipeline/python/{{ cookiecutter.module_slug }}_pipeline.py`.
 - `tests/python` runs through CTest (label `python`), or directly with pytest after
-  `python -m pip install -e .`. The editable install copies the operators, so rerun it after
-  editing them, or use `holoscan build` with `holoscan install --dev` for a live build tree.
+  an editable install (see [Working without the Holoscan CLI](#working-without-the-holoscan-cli)).
 - `holoscan package {{ cookiecutter.module_repo_name }} --pkg-generator WHEEL` builds a `py3-none-any`
   `holoscan-{{ cookiecutter.module_slug.replace('_', '-') }}` wheel that depends on `holoscan-core-cu13`. There is no Debian package.
 
@@ -131,10 +130,16 @@ With Python 3.12+ and glibc 2.39 or newer (for example Ubuntu 24.04), pip instal
 the Holoscan SDK wheels it depends on:
 
 ```bash
-python -m pip install -e . pytest
+python -m pip install "scikit-build-core~=1.0.3" cmake ninja pytest
+python -m pip install --no-build-isolation -Ceditable.rebuild=true -e .
 python -m pytest tests/python
 python -m pip wheel --no-deps -w dist .
 ```
+
+The editable install keeps its CMake build in `build/editable` and re-stages the enabled operators
+when the package is imported, so source edits take effect without reinstalling.
+`--no-build-isolation` lets that rebuild find CMake and Ninja. A plain `pip install -e .` also
+works, but it copies the operators, so rerun it after editing them.
 
 The CMake project needs only CMake 3.24 or newer and Python; it enables no compiled languages:
 
