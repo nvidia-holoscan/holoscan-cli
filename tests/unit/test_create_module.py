@@ -402,7 +402,7 @@ def test_packaged_template_generates_a_pure_python_module(cli, tmp_path, monkeyp
 
     project = tmp_path / "output/holoscan-my-mod"
     out = capsys.readouterr().out
-    assert f"Implement your operator in {project}/python/holoscan_my_mod/operators/" in out
+    assert f"Implement your operator in {project}/operators/" in out
     for removed in (
         ".clang-format",
         "pkg",
@@ -412,22 +412,21 @@ def test_packaged_template_generates_a_pure_python_module(cli, tmp_path, monkeyp
         "operators/my_mod_op/my_mod_op.hpp",
         "applications/my_mod_pipeline/cpp",
         "python/_my_mod.cpp",
+        "python/holoscan_my_mod/operators",
         "tests/cpp",
     ):
         assert not (project / removed).exists(), removed
     assert not list(project.rglob("*.[ch]pp"))
 
-    operator = (project / "python/holoscan_my_mod/operators/my_mod_op.py").read_text(
-        encoding="utf-8"
-    )
+    operator = (project / "operators/my_mod_op/my_mod_op.py").read_text(encoding="utf-8")
     assert "class MyModOp(hs.Operator):" in operator
     assert 'inp = hs.Input("in", hs.payload.uint32)' in operator
     assert "def compute(self, context: hs.ExecutionContext) -> None:" in operator
-    operators = (project / "python/holoscan_my_mod/operators/__init__.py").read_text(
-        encoding="utf-8"
-    )
+    operators = (project / "operators/__init__.py").read_text(encoding="utf-8")
     assert "from .my_mod_op import MyModOp" in operators
     assert "registry" not in operators
+    operator_package = (project / "operators/my_mod_op/__init__.py").read_text(encoding="utf-8")
+    assert "from .my_mod_op import MyModOp" in operator_package
     application = (project / "applications/my_mod_pipeline/python/my_mod_pipeline.py").read_text(
         encoding="utf-8"
     )
@@ -455,8 +454,12 @@ def test_packaged_template_generates_a_pure_python_module(cli, tmp_path, monkeyp
     assert pyproject["project"]["dependencies"] == ["holoscan-core-cu13>=5.0.0"]
     assert pyproject["project"]["entry-points"]["holoscan.modules"] == {"my_mod": "holoscan_my_mod"}
     assert pyproject["tool"]["scikit-build"]["wheel"] == {
-        "packages": ["python/holoscan_my_mod"],
         "platlib": False,
+        "exclude": ["holoscan_my_mod/operators/*/metadata.json"],
+        "packages": {
+            "holoscan_my_mod": "python/holoscan_my_mod",
+            "holoscan_my_mod/operators": "operators",
+        },
     }
     assert "pytest" in pyproject["dependency-groups"]["dev"]
     assert pyproject["tool"]["ruff"]["target-version"] == "py312"
@@ -523,8 +526,15 @@ def test_pure_python_module_stages_its_package_without_an_sdk(cli, tmp_path, mon
     run(cmake, "-S", str(project), "-B", str(build), f"-DPython_EXECUTABLE={python}")
     run(cmake, "--build", str(build))
     python_lib = build / "python/lib"
-    for name in ("__init__.py", "py.typed", "operators/__init__.py", "operators/my_mod_op.py"):
+    for name in (
+        "__init__.py",
+        "py.typed",
+        "operators/__init__.py",
+        "operators/my_mod_op/__init__.py",
+        "operators/my_mod_op/my_mod_op.py",
+    ):
         assert (python_lib / "holoscan_my_mod" / name).is_file(), name
+    assert not (python_lib / "holoscan_my_mod/operators/my_mod_op/metadata.json").exists()
     entry_points = python_lib / "holoscan_my_mod-0.1.0.dist-info/entry_points.txt"
     assert entry_points.read_text(encoding="utf-8") == (
         "[holoscan.modules]\nmy_mod = holoscan_my_mod\n"
@@ -539,7 +549,7 @@ def test_pure_python_module_stages_its_package_without_an_sdk(cli, tmp_path, mon
         text=True,
     ).strip()
     site = prefix / f"lib/python{version}/site-packages"
-    assert (site / "holoscan_my_mod/operators/my_mod_op.py").is_file()
+    assert (site / "holoscan_my_mod/operators/my_mod_op/my_mod_op.py").is_file()
     assert (site / "holoscan_my_mod-0.1.0.dist-info/entry_points.txt").is_file()
     for name in ("LICENSE", "NOTICE"):
         assert (prefix / "share/doc/holoscan-my-mod" / name).is_file(), name
@@ -626,6 +636,8 @@ def test_packaged_template_creates_a_standalone_module(cli, tmp_path, monkeypatc
     assert "[NOTICE](NOTICE)" in readme
     assert (project / "tests/cpp/test_operators.cpp").is_file()
     for removed in (
+        "operators/__init__.py",
+        "operators/my_mod_op/__init__.py",
         "operators/my_mod_op/my_mod_op.py",
         "operators/my_mod_op/python",
         "applications/my_mod_pipeline/python",

@@ -19,6 +19,14 @@ file(GLOB_RECURSE _package_files RELATIVE "${CMAKE_CURRENT_SOURCE_DIR}" CONFIGUR
 foreach(package_file IN LISTS _package_files)
     configure_file("${package_file}" "${_python_root}/${package_file}" COPYONLY)
 endforeach()
+# operators/ holds the operator sources; stage it as ${_package}.operators.
+set(_operators_dir "${CMAKE_CURRENT_SOURCE_DIR}/../operators")
+file(GLOB_RECURSE _operator_files RELATIVE "${_operators_dir}" CONFIGURE_DEPENDS
+    "${_operators_dir}/*.py" "${_operators_dir}/*.pyi")
+foreach(operator_file IN LISTS _operator_files)
+    configure_file("${_operators_dir}/${operator_file}"
+        "${_python_root}/${_package}/operators/${operator_file}" COPYONLY)
+endforeach()
 
 set(_dist_info "${_python_root}/holoscan_{{ cookiecutter.module_slug }}-${PROJECT_VERSION}.dist-info")
 file(WRITE "${_dist_info}/METADATA"

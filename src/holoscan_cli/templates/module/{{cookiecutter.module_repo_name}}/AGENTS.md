@@ -58,8 +58,8 @@ A change is done when `holoscan lint` and `holoscan test` pass.
   `metadata.json` files.
 - SDK version and image: `Dockerfile`, `pyproject.toml`, `.github/workflows/ci.yml`, and the
   Module, operator, and application `metadata.json` files.
-- New operators: a module under `python/holoscan_{{ cookiecutter.module_slug }}/operators/`, its export in
-  `operators/__init__.py`, an `operators/<name>/metadata.json`, `module.operator_names` in the
+- New operators: an `operators/<name>/` directory with `__init__.py`, the implementation, and
+  `metadata.json`, its export in `operators/__init__.py`, `module.operator_names` in the
   root `metadata.json`, the tests, and the operator table in README.md.
 - Operator ports or parameters: the operator's `metadata.json`, the tests, and the operator table in
   README.md.

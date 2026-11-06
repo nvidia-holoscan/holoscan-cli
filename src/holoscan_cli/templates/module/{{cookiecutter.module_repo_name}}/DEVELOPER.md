@@ -21,12 +21,13 @@ distributing this Holoscan Module.
 ├── cmake/                          # CMake helpers copied from the CLI at create time
 ├── python/
 │   ├── CMakeLists.txt              # Stages holoscan_{{ cookiecutter.module_slug }} in the build tree
-│   └── holoscan_{{ cookiecutter.module_slug }}/
-│       └── operators/
-│           └── {{ cookiecutter.operator_slug }}.py      # Operator implementation (typed ports)
-├── operators/
+│   └── holoscan_{{ cookiecutter.module_slug }}/        # Package root (__init__.py, py.typed)
+├── operators/                      # holoscan_{{ cookiecutter.module_slug }}.operators
+│   ├── __init__.py                 # Exports every operator
 │   └── {{ cookiecutter.operator_slug }}/
-│       └── metadata.json           # Operator-level metadata
+│       ├── __init__.py
+│       ├── {{ cookiecutter.operator_slug }}.py      # Operator implementation (typed ports)
+│       └── metadata.json           # Operator-level metadata (not packaged)
 ├── applications/
 │   └── {{ cookiecutter.module_slug }}_pipeline/
 │       └── python/                 # Python pipeline (compose → compile → run) + metadata.json
@@ -41,8 +42,9 @@ import holoscan as hs
 from holoscan_{{ cookiecutter.module_slug }}.operators import {{ op_class }}
 ```
 
-- Add each new operator as a module under `python/holoscan_{{ cookiecutter.module_slug }}/operators/`, export it from
-  `operators/__init__.py`, and describe it in an `operators/<name>/metadata.json`.
+- Add each new operator in its own `operators/<name>/` directory with an `__init__.py`, the
+  implementation, and a `metadata.json`, then export it from `operators/__init__.py`. The wheel and
+  the build tree install `operators/` as the `holoscan_{{ cookiecutter.module_slug }}.operators` package.
 - The package's `holoscan.modules` entry point makes `import holoscan.{{ cookiecutter.module_slug }}` load
   `holoscan_{{ cookiecutter.module_slug }}`. `pyproject.toml` declares it for the wheel, and `python/CMakeLists.txt` writes
   the same `holoscan-{{ cookiecutter.module_slug.replace('_', '-') }}` metadata into the build tree's `python/lib`.
