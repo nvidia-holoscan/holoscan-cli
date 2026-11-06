@@ -49,8 +49,6 @@ PURE_PYTHON = {{ cookiecutter.__pure_python | tojson }}
 CPP_PATHS = (
     ".clang-format",
     "pkg",
-    "operators/CMakeLists.txt",
-    f"operators/{OPERATOR_SLUG}/CMakeLists.txt",
     f"operators/{OPERATOR_SLUG}/{OPERATOR_SLUG}.cpp",
     f"operators/{OPERATOR_SLUG}/{OPERATOR_SLUG}.hpp",
     f"applications/{MODULE_SLUG}_pipeline/cpp",

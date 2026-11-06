@@ -71,14 +71,14 @@ package = false
 {%- if cookiecutter.__pure_python == 'yes' %}
 
 [tool.scikit-build]
-# The wheel holds only the Python package; CMake builds nothing (see CMakeLists.txt).
-# operators/ becomes holoscan_{{ cookiecutter.module_slug }}.operators; operator metadata stays out of the wheel.
+# CMake compiles nothing; it stages the package and the operators enabled below.
+# Add one cmake.define.OP_<name> = "ON" line per operator the wheel ships.
+wheel.packages = []
 wheel.platlib = false
-wheel.exclude = ["holoscan_{{ cookiecutter.module_slug }}/operators/*/metadata.json"]
-
-[tool.scikit-build.wheel.packages]
-"holoscan_{{ cookiecutter.module_slug }}" = "python/holoscan_{{ cookiecutter.module_slug }}"
-"holoscan_{{ cookiecutter.module_slug }}/operators" = "operators"
+install.components = ["holoscan-{{ cookiecutter.module_slug }}-python_libs"]
+cmake.define.BUILD_ALL = "OFF"
+cmake.define.OP_{{ cookiecutter.operator_slug }} = "ON"
+cmake.define.{{ cookiecutter.module_slug | upper }}_BUILD_TESTING = "OFF"
 {%- elif cookiecutter.__python_bindings == 'yes' %}
 
 [tool.scikit-build]

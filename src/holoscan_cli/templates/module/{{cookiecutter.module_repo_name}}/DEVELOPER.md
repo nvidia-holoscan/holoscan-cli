@@ -23,8 +23,10 @@ distributing this Holoscan Module.
 │   ├── CMakeLists.txt              # Stages holoscan_{{ cookiecutter.module_slug }} in the build tree
 │   └── holoscan_{{ cookiecutter.module_slug }}/        # Package root (__init__.py, py.typed)
 ├── operators/                      # holoscan_{{ cookiecutter.module_slug }}.operators
-│   ├── __init__.py                 # Exports every operator
+│   ├── CMakeLists.txt              # add_holohub_operator() per operator (OP_<name>)
+│   ├── __init__.py                 # Exports every enabled operator
 │   └── {{ cookiecutter.operator_slug }}/
+│       ├── CMakeLists.txt          # Stages the operator's Python sources
 │       ├── __init__.py
 │       ├── {{ cookiecutter.operator_slug }}.py      # Operator implementation (typed ports)
 │       └── metadata.json           # Operator-level metadata (not packaged)
@@ -42,9 +44,13 @@ import holoscan as hs
 from holoscan_{{ cookiecutter.module_slug }}.operators import {{ op_class }}
 ```
 
-- Add each new operator in its own `operators/<name>/` directory with an `__init__.py`, the
-  implementation, and a `metadata.json`, then export it from `operators/__init__.py`. The wheel and
-  the build tree install `operators/` as the `holoscan_{{ cookiecutter.module_slug }}.operators` package.
+- Add each new operator in its own `operators/<name>/` directory with an `__init__.py` that exports
+  it, the implementation, a `metadata.json`, and a `CMakeLists.txt` calling
+  `holoscan_{{ cookiecutter.module_slug }}_add_python_operator()`. Then add `add_holohub_operator(<name>)` to
+  `operators/CMakeLists.txt` and `cmake.define.OP_<name> = "ON"` to `pyproject.toml`.
+- Only operators whose `OP_<name>` option is ON (default `${BUILD_ALL}`) are staged in the build tree
+  and installed into the wheel as `holoscan_{{ cookiecutter.module_slug }}.operators.<name>`;
+  `operators/__init__.py` exports whichever are present.
 - The package's `holoscan.modules` entry point makes `import holoscan.{{ cookiecutter.module_slug }}` load
   `holoscan_{{ cookiecutter.module_slug }}`. `pyproject.toml` declares it for the wheel, and `python/CMakeLists.txt` writes
   the same `holoscan-{{ cookiecutter.module_slug.replace('_', '-') }}` metadata into the build tree's `python/lib`.
@@ -53,7 +59,8 @@ from holoscan_{{ cookiecutter.module_slug }}.operators import {{ op_class }}
   use `PYTHONPATH=build/python/lib:$PYTHONPATH python3
   applications/{{ cookiecutter.module_slug }}_pipeline/python/{{ cookiecutter.module_slug }}_pipeline.py`.
 - `tests/python` runs through CTest (label `python`), or directly with pytest after
-  `python -m pip install -e .`.
+  `python -m pip install -e .`. The editable install copies the operators, so rerun it after
+  editing them, or use `holoscan build` with `holoscan install --dev` for a live build tree.
 - `holoscan package {{ cookiecutter.module_repo_name }} --pkg-generator WHEEL` builds a `py3-none-any`
   `holoscan-{{ cookiecutter.module_slug.replace('_', '-') }}` wheel that depends on `holoscan-core-cu13`. There is no Debian package.
 
@@ -147,11 +154,11 @@ and `OFF` when this module is included by a parent project. The standard
 
 | Field | Purpose |
 | --- | --- |
-| `[build-system]` | scikit-build-core builds the wheel; `CMakeLists.txt` returns early for wheel builds |
+| `[build-system]` | scikit-build-core builds the wheel; CMake stages the package and compiles nothing |
 | `[project].version` | Sync with `metadata.json:module.version` |
 | `[project].dependencies` | Runtime dependencies; `holoscan-core-cu13` installs the Holoscan SDK core; add `holoscan-vision-cu13`, `holoscan-visualization-cu13` or `holoscan-inference-cu13` if the Module imports them |
 | `[project.entry-points."holoscan.modules"]` | Exposes `holoscan_{{ cookiecutter.module_slug }}` as `holoscan.{{ cookiecutter.module_slug }}` |
-| `[tool.scikit-build]` | Packages `python/holoscan_{{ cookiecutter.module_slug }}` into a pure-Python wheel |
+| `[tool.scikit-build]` | Installs the `holoscan-{{ cookiecutter.module_slug }}-python_libs` component, with the operators enabled by `cmake.define.OP_<name>`, into a pure-Python wheel |
 | `[dependency-groups].dev` | Exact CLI convenience pin, ruff, and pytest; keep the CLI pin synchronized with `requirements-cli.txt` |
 | `[tool.uv]` | NVIDIA index selection for the pinned `holoscan-cli` development dependency |
 | `[tool.holoscan]` | Optional Module-wide CUDA, CTest, Docker, environment, and base-image defaults consumed by the CLI |
