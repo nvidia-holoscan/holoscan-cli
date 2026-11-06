@@ -462,7 +462,7 @@ def _module_identity(module: dict, metadata_path: Path) -> tuple[str, Optional[s
                 f"Module metadata at {metadata_path} has an invalid Python namespace: "
                 f"{python_namespace!r}."
             )
-        repo_prefix = segments[-1]
+        repo_prefix = "_".join(segments)
     else:
         normalized_name = module_name.strip().lower().removeprefix("holoscan-")
         repo_prefix = re.sub(r"[^a-z0-9]+", "_", normalized_name).strip("_")
