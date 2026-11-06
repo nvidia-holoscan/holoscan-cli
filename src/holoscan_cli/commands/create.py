@@ -518,7 +518,8 @@ def handle_create(cli, args: argparse.Namespace) -> None:
                 except (OSError, ValueError, AttributeError):
                     namespace = None
                 if isinstance(namespace, str) and namespace:
-                    operators_dir = project_dir / "python" / namespace / "operators"
+                    package = namespace.replace(".", "_")
+                    operators_dir = project_dir / "python" / package / "operators"
             msg_next = (
                 f"Possible next steps:\n"
                 f"- Implement your operator in {operators_dir}/\n"

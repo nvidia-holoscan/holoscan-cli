@@ -54,7 +54,7 @@ def test_module_discovery_and_activation(tmp_path, monkeypatch):
 
     assert context.root == root
     assert context.module_name == "holoscan-my-sensor"
-    assert context.repo_prefix == "my_sensor"
+    assert context.repo_prefix == "holoscan_my_sensor"
     assert context.base_sdk_version == "4.6.0"
     assert context.forward_env == ()
 
@@ -66,8 +66,25 @@ def test_module_discovery_and_activation(tmp_path, monkeypatch):
     assert os.environ["HOLOSCAN_CLI_ROOT"] == str(root)
     assert os.environ["HOLOSCAN_CLI_BUILD_PARENT_DIR"] == str(root / "build")
     assert os.environ["HOLOSCAN_CLI_DATA_DIR"] == "/custom/data"
-    assert os.environ["HOLOSCAN_CLI_REPO_PREFIX"] == "my_sensor"
-    assert os.environ["HOLOSCAN_CLI_CONTAINER_PREFIX"] == "my-sensor"
+    assert os.environ["HOLOSCAN_CLI_REPO_PREFIX"] == "holoscan_my_sensor"
+    assert os.environ["HOLOSCAN_CLI_CONTAINER_PREFIX"] == "holoscan-my-sensor"
+
+
+@pytest.mark.parametrize(
+    ("namespace", "expected"),
+    [
+        ({"python": "holoscan.my_sensor"}, "holoscan_my_sensor"),
+        ({"python": "holoscan_my_sensor"}, "holoscan_my_sensor"),
+        ({"cpp": "holoscan::my_sensor"}, "my_sensor"),
+    ],
+)
+def test_module_repo_prefix_follows_the_python_namespace(tmp_path, namespace, expected):
+    root = _module(tmp_path / "module")
+    metadata = json.loads((root / "metadata.json").read_text(encoding="utf-8"))
+    metadata["module"]["namespace"] = namespace
+    (root / "metadata.json").write_text(json.dumps(metadata), encoding="utf-8")
+
+    assert discover_project_context(cwd=root, environ={}).repo_prefix == expected
 
 
 def test_implicit_discovery_tolerates_malformed_module_metadata(tmp_path):

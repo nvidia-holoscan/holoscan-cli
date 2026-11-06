@@ -5,7 +5,7 @@
 
 A **Holoscan Module** — a self-contained, redistributable package that extends
 [Holoscan SDK](https://developer.nvidia.com/holoscan-sdk) 5 with reusable operators implemented
-in Python, in the `holoscan_{{ cookiecutter.module_slug }}` package (also importable as `holoscan.{{ cookiecutter.module_slug }}`).
+in Python, imported as `holoscan.{{ cookiecutter.module_slug }}` (implemented by the `holoscan_{{ cookiecutter.module_slug }}` package).
 {%- set op_class = cookiecutter.operator_slug.split('_')|map('capitalize')|join('') %}
 
 > This Module needs no C++ code or compiler. It ships as a pure-Python wheel; build it with
@@ -49,7 +49,7 @@ dependency.
 
 ### Namespace
 
-- Python: `holoscan_{{ cookiecutter.module_slug }}`, also importable as `holoscan.{{ cookiecutter.module_slug }}`
+- Python: `holoscan.{{ cookiecutter.module_slug }}` (implemented by the `holoscan_{{ cookiecutter.module_slug }}` package)
 
 ---
 
@@ -61,7 +61,7 @@ mismatches, missing clocks) are reported as diagnostics at compile time, before 
 
 ```python
 import holoscan as hs
-from holoscan_{{ cookiecutter.module_slug }}.operators import {{ op_class }}
+from holoscan.{{ cookiecutter.module_slug }}.operators import {{ op_class }}
 
 graph = hs.Graph("my-pipeline", default_clock=hs.RealtimeClock)
 op = graph.op({{ op_class }}, "{{ cookiecutter.operator_slug }}")
@@ -128,7 +128,7 @@ A **Holoscan Module** — a self-contained, redistributable library that extends
 
 {% if cookiecutter.__python_bindings == 'yes' -%}
 > Holoscan SDK 5.0 is C++-first. This Module ships C++ operators plus Python bindings that expose
-> them through the SDK operator registry (`import holoscan_{{ cookiecutter.module_slug }}`). Build the bindings into a wheel
+> them through the SDK operator registry (`import holoscan.{{ cookiecutter.module_slug }}`). Build the bindings into a wheel
 > with `holoscan package {{ cookiecutter.module_repo_name }} --pkg-generator WHEEL`.
 {%- else -%}
 > Holoscan SDK 5.0 is C++-first. This Module ships C++ operators only; Python bindings and wheel
@@ -179,6 +179,9 @@ The project configuration installs the development tools without building the Mo
 ### Namespace
 
 - C++: `holoscan::{{ cookiecutter.module_slug }}`
+{%- if cookiecutter.__python_bindings == 'yes' %}
+- Python: `holoscan.{{ cookiecutter.module_slug }}` (implemented by the `holoscan_{{ cookiecutter.module_slug }}` package)
+{%- endif %}
 
 ---
 
