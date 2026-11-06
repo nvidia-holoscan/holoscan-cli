@@ -511,14 +511,6 @@ def handle_create(cli, args: argparse.Namespace) -> None:
 
         if is_module:
             operators_dir = project_dir / "operators"
-            if use_packaged_template and languages == ["python"]:
-                try:
-                    module = json.loads(metadata_path.read_text(encoding="utf-8")).get("module", {})
-                    namespace = module.get("namespace", {}).get("python")
-                except (OSError, ValueError, AttributeError):
-                    namespace = None
-                if isinstance(namespace, str) and namespace:
-                    operators_dir = project_dir / "python" / namespace / "operators"
             msg_next = (
                 f"Possible next steps:\n"
                 f"- Implement your operator in {operators_dir}/\n"

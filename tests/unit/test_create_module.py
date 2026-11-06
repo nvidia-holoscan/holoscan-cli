@@ -402,32 +402,34 @@ def test_packaged_template_generates_a_pure_python_module(cli, tmp_path, monkeyp
 
     project = tmp_path / "output/holoscan-my-mod"
     out = capsys.readouterr().out
-    assert f"Implement your operator in {project}/python/holoscan_my_mod/operators/" in out
+    assert f"Implement your operator in {project}/operators/" in out
     for removed in (
         ".clang-format",
         "pkg",
-        "operators/CMakeLists.txt",
-        "operators/my_mod_op/CMakeLists.txt",
         "operators/my_mod_op/my_mod_op.cpp",
         "operators/my_mod_op/my_mod_op.hpp",
         "applications/my_mod_pipeline/cpp",
         "python/_my_mod.cpp",
+        "python/holoscan_my_mod/operators",
         "tests/cpp",
     ):
         assert not (project / removed).exists(), removed
     assert not list(project.rglob("*.[ch]pp"))
 
-    operator = (project / "python/holoscan_my_mod/operators/my_mod_op.py").read_text(
-        encoding="utf-8"
-    )
+    operator = (project / "operators/my_mod_op/my_mod_op.py").read_text(encoding="utf-8")
     assert "class MyModOp(hs.Operator):" in operator
     assert 'inp = hs.Input("in", hs.payload.uint32)' in operator
     assert "def compute(self, context: hs.ExecutionContext) -> None:" in operator
-    operators = (project / "python/holoscan_my_mod/operators/__init__.py").read_text(
-        encoding="utf-8"
-    )
-    assert "from .my_mod_op import MyModOp" in operators
+    operators = (project / "operators/__init__.py").read_text(encoding="utf-8")
+    assert "pkgutil.iter_modules(__path__)" in operators
     assert "registry" not in operators
+    operators_cmake = (project / "operators/CMakeLists.txt").read_text(encoding="utf-8")
+    assert "add_holohub_operator(my_mod_op)" in operators_cmake
+    operator_cmake = (project / "operators/my_mod_op/CMakeLists.txt").read_text(encoding="utf-8")
+    assert "holoscan_my_mod_add_python_operator()" in operator_cmake
+    assert "add_library" not in operator_cmake
+    operator_package = (project / "operators/my_mod_op/__init__.py").read_text(encoding="utf-8")
+    assert "from .my_mod_op import MyModOp" in operator_package
     application = (project / "applications/my_mod_pipeline/python/my_mod_pipeline.py").read_text(
         encoding="utf-8"
     )
@@ -437,7 +439,8 @@ def test_packaged_template_generates_a_pure_python_module(cli, tmp_path, monkeyp
 
     root_cmake = (project / "CMakeLists.txt").read_text(encoding="utf-8")
     assert "LANGUAGES NONE" in root_cmake
-    assert "if(SKBUILD)\n    return()\nendif()" in root_cmake
+    assert "return()" not in root_cmake
+    assert "add_subdirectory(operators)" in root_cmake
     assert "find_package(holoscan" not in root_cmake
     assert "CMAKE_CXX_STANDARD" not in root_cmake
     assert "find_package(Python 3.12 REQUIRED COMPONENTS Interpreter)" in root_cmake
@@ -454,9 +457,14 @@ def test_packaged_template_generates_a_pure_python_module(cli, tmp_path, monkeyp
     assert pyproject["project"]["requires-python"] == ">=3.12"
     assert pyproject["project"]["dependencies"] == ["holoscan-core-cu13>=5.0.0"]
     assert pyproject["project"]["entry-points"]["holoscan.modules"] == {"my_mod": "holoscan_my_mod"}
-    assert pyproject["tool"]["scikit-build"]["wheel"] == {
-        "packages": ["python/holoscan_my_mod"],
-        "platlib": False,
+    skbuild = pyproject["tool"]["scikit-build"]
+    assert skbuild["wheel"] == {"packages": [], "platlib": False}
+    assert skbuild["overrides"] == [{"if": {"state": "editable"}, "build-dir": "build/editable"}]
+    assert skbuild["install"] == {"components": ["holoscan-my_mod-python_libs"]}
+    assert skbuild["cmake"]["define"] == {
+        "BUILD_ALL": "OFF",
+        "OP_my_mod_op": "ON",
+        "MY_MOD_BUILD_TESTING": "OFF",
     }
     assert "pytest" in pyproject["dependency-groups"]["dev"]
     assert pyproject["tool"]["ruff"]["target-version"] == "py312"
@@ -495,6 +503,7 @@ def test_packaged_template_generates_a_pure_python_module(cli, tmp_path, monkeyp
     assert "holoscan package holoscan-my-mod --pkg-generator WHEEL" in agents
     assert "--pkg-generator DEB" not in readme + agents + developer
     assert "uv run --only-group dev holoscan run my_mod_pipeline" in readme
+    assert "--no-build-isolation -Ceditable.rebuild=true -e ." in readme
     assert "my_mod_op.py      # Operator implementation" in developer
     for path in project.rglob("*"):
         if path.is_file() and not {"cmake", "__pycache__"} & set(path.parts):
@@ -523,8 +532,28 @@ def test_pure_python_module_stages_its_package_without_an_sdk(cli, tmp_path, mon
     run(cmake, "-S", str(project), "-B", str(build), f"-DPython_EXECUTABLE={python}")
     run(cmake, "--build", str(build))
     python_lib = build / "python/lib"
-    for name in ("__init__.py", "py.typed", "operators/__init__.py", "operators/my_mod_op.py"):
+    for name in (
+        "__init__.py",
+        "py.typed",
+        "operators/__init__.py",
+        "operators/my_mod_op/__init__.py",
+        "operators/my_mod_op/my_mod_op.py",
+    ):
         assert (python_lib / "holoscan_my_mod" / name).is_file(), name
+    assert not (python_lib / "holoscan_my_mod/operators/my_mod_op/metadata.json").exists()
+    disabled = tmp_path / "build-disabled"
+    run(
+        cmake,
+        "-S",
+        str(project),
+        "-B",
+        str(disabled),
+        f"-DPython_EXECUTABLE={python}",
+        "-DOP_my_mod_op=OFF",
+    )
+    disabled_operators = disabled / "python/lib/holoscan_my_mod/operators"
+    assert (disabled_operators / "__init__.py").is_file()
+    assert not (disabled_operators / "my_mod_op").exists()
     entry_points = python_lib / "holoscan_my_mod-0.1.0.dist-info/entry_points.txt"
     assert entry_points.read_text(encoding="utf-8") == (
         "[holoscan.modules]\nmy_mod = holoscan_my_mod\n"
@@ -539,7 +568,7 @@ def test_pure_python_module_stages_its_package_without_an_sdk(cli, tmp_path, mon
         text=True,
     ).strip()
     site = prefix / f"lib/python{version}/site-packages"
-    assert (site / "holoscan_my_mod/operators/my_mod_op.py").is_file()
+    assert (site / "holoscan_my_mod/operators/my_mod_op/my_mod_op.py").is_file()
     assert (site / "holoscan_my_mod-0.1.0.dist-info/entry_points.txt").is_file()
     for name in ("LICENSE", "NOTICE"):
         assert (prefix / "share/doc/holoscan-my-mod" / name).is_file(), name
@@ -626,6 +655,8 @@ def test_packaged_template_creates_a_standalone_module(cli, tmp_path, monkeypatc
     assert "[NOTICE](NOTICE)" in readme
     assert (project / "tests/cpp/test_operators.cpp").is_file()
     for removed in (
+        "operators/__init__.py",
+        "operators/my_mod_op/__init__.py",
         "operators/my_mod_op/my_mod_op.py",
         "operators/my_mod_op/python",
         "applications/my_mod_pipeline/python",

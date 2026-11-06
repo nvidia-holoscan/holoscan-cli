@@ -49,13 +49,13 @@ PURE_PYTHON = {{ cookiecutter.__pure_python | tojson }}
 CPP_PATHS = (
     ".clang-format",
     "pkg",
-    "operators/CMakeLists.txt",
-    f"operators/{OPERATOR_SLUG}/CMakeLists.txt",
     f"operators/{OPERATOR_SLUG}/{OPERATOR_SLUG}.cpp",
     f"operators/{OPERATOR_SLUG}/{OPERATOR_SLUG}.hpp",
     f"applications/{MODULE_SLUG}_pipeline/cpp",
     f"python/_{MODULE_SLUG}.cpp",
     "tests/cpp",
+    # operators/ replaces the python/ package's operators subpackage.
+    f"python/holoscan_{MODULE_SLUG}/operators",
 )
 
 if PURE_PYTHON == "yes":
@@ -77,7 +77,7 @@ OPERATOR_CLASS = "".join(p.capitalize() for p in op_parts)
 print(f"\n\033[32mHoloscan Module '{MODULE_SLUG}' created successfully!\033[0m\n")
 print(f"Implement your operator ({OPERATOR_CLASS}) in:")
 if PURE_PYTHON == "yes":
-    print(f"  python/holoscan_{MODULE_SLUG}/operators/{OPERATOR_SLUG}.py\n")
+    print(f"  operators/{OPERATOR_SLUG}/{OPERATOR_SLUG}.py\n")
 else:
     print(f"  operators/{OPERATOR_SLUG}/{OPERATOR_SLUG}.cpp\n")
 

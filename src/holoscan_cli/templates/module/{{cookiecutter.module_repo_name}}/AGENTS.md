@@ -46,8 +46,9 @@ unless you pass `--local`.
 - With the SDK on the host, add `--local` and set
   `HOLOSCAN_CLI_BUILD_PARENT_DIR="$PWD/build-native"` so native output stays apart from container
   output.
-- Without the CLI, `python -m pip install -e . pytest` and `python -m pytest tests/python` work
-  in any environment with the SDK wheels.
+- Without the CLI, an editable install (see README.md) and `python -m pytest tests/python` work in
+  any environment with the SDK wheels. The editable install rebuilds on import, so source edits
+  take effect without reinstalling.
 
 A change is done when `holoscan lint` and `holoscan test` pass.
 
@@ -58,8 +59,9 @@ A change is done when `holoscan lint` and `holoscan test` pass.
   `metadata.json` files.
 - SDK version and image: `Dockerfile`, `pyproject.toml`, `.github/workflows/ci.yml`, and the
   Module, operator, and application `metadata.json` files.
-- New operators: a module under `python/holoscan_{{ cookiecutter.module_slug }}/operators/`, its export in
-  `operators/__init__.py`, an `operators/<name>/metadata.json`, `module.operator_names` in the
+- New operators: an `operators/<name>/` directory with `__init__.py`, the implementation,
+  `metadata.json`, and `CMakeLists.txt`, `add_holohub_operator(<name>)` in
+  `operators/CMakeLists.txt`, `cmake.define.OP_<name>` in `pyproject.toml`, `module.operator_names` in the
   root `metadata.json`, the tests, and the operator table in README.md.
 - Operator ports or parameters: the operator's `metadata.json`, the tests, and the operator table in
   README.md.
