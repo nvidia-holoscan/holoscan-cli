@@ -367,7 +367,7 @@ def test_packaged_template_generates_python_bindings_for_cpp_python(cli, tmp_pat
         (project / "operators/my_mod_op/metadata.json").read_text(encoding="utf-8")
     )["operator"]
     assert operator["language"] == ["C++", "Python"]
-    assert module["namespace"] == {"cpp": "holoscan::my_mod", "python": "holoscan_my_mod"}
+    assert module["namespace"] == {"cpp": "holoscan::my_mod", "python": "holoscan.my_mod"}
     _validate_generated_metadata(project)
     apps = {
         lang: json.loads(
@@ -436,6 +436,7 @@ def test_packaged_template_generates_a_pure_python_module(cli, tmp_path, monkeyp
         encoding="utf-8"
     )
     assert 'graph.op(MyModOp, "my_mod_op")' in application
+    assert "from holoscan.my_mod.operators import MyModOp" in application
     tests = (project / "tests/python/test_my_mod.py").read_text(encoding="utf-8")
     assert "OperatorTestHarness(MyModOp)" in tests
 
@@ -473,7 +474,7 @@ def test_packaged_template_generates_a_pure_python_module(cli, tmp_path, monkeyp
 
     metadata = json.loads((project / "metadata.json").read_text(encoding="utf-8"))["module"]
     assert metadata["language"] == ["Python"]
-    assert metadata["namespace"] == {"python": "holoscan_my_mod"}
+    assert metadata["namespace"] == {"python": "holoscan.my_mod"}
     assert metadata["binary_packages"]["wheel"] == "holoscan-my-mod"
     assert "debian" not in metadata["binary_packages"]
     assert metadata["testing"] == {"python": "pytest"}

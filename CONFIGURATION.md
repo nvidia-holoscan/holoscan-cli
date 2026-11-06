@@ -124,6 +124,10 @@ x86_64 = "registry.example.com/holoscan/sdk-build-x86_64:5.0.0-cuda13"
 aarch64 = "registry.example.com/holoscan/sdk-build-aarch64:5.0.0-cuda13"
 ```
 
+- The default `repo-prefix` joins the segments of `metadata.json`
+  `module.namespace.python` with `_`, so `holoscan.my_sensor` gives
+  `holoscan_my_sensor`. Without a Python namespace, it is `module.name` without
+  its `holoscan-` prefix, with other characters replaced by `_`.
 - Naming values use lowercase letters, digits, `.`, `_`, or `-`, starting with
   a letter or digit. `HOLOSCAN_CLI_REPO_PREFIX`, `HOLOSCAN_CLI_CONTAINER_PREFIX`,
   and `HOLOSCAN_CLI_WORKSPACE_NAME` override their project settings.

@@ -9,9 +9,8 @@
 import threading
 import time
 
-from holoscan_{{ cookiecutter.module_slug }}.operators import {{ op_class }}
-
 import holoscan as hs
+from holoscan.{{ cookiecutter.module_slug }}.operators import {{ op_class }}
 
 TICK_LIMIT = 10
 
@@ -108,9 +107,8 @@ if __name__ == "__main__":
 import threading
 import time
 
-from holoscan_{{ cookiecutter.module_slug }}.operators import {{ op_class }}
-
 import holoscan as hs
+from holoscan.{{ cookiecutter.module_slug }}.operators import {{ op_class }}
 
 TICK_LIMIT = 10
 

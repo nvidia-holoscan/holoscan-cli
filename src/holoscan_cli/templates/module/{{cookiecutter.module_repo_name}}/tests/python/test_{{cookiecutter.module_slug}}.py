@@ -11,8 +11,9 @@ import subprocess
 import sys
 from pathlib import Path
 
-from holoscan_{{ cookiecutter.module_slug }}.operators import {{ op_class }}
+import pytest
 
+from holoscan.{{ cookiecutter.module_slug }}.operators import {{ op_class }}
 from holoscan.testing import OperatorTestHarness
 
 MODULE = "{{ cookiecutter.module_slug }}"
@@ -25,12 +26,27 @@ PIPELINE = (
 )
 
 
-def test_module_metadata_exposes_holoscan_alias():
+def test_module_metadata_exposes_holoscan_namespace():
     entries = importlib.metadata.entry_points(group="holoscan.modules", name=MODULE)
     assert [entry.value for entry in entries] == [f"holoscan_{MODULE}"]
-    import holoscan.{{ cookiecutter.module_slug }}.operators as alias
+    package = importlib.import_module(f"holoscan_{MODULE}.operators")
 
-    assert alias.{{ op_class }} is {{ op_class }}
+    assert package.{{ op_class }} is {{ op_class }}
+
+
+@pytest.mark.parametrize("first", [f"holoscan.{MODULE}", f"holoscan_{MODULE}"])
+def test_import_orders_load_one_package(first):
+    second = f"holoscan_{MODULE}" if first.startswith("holoscan.") else f"holoscan.{MODULE}"
+    script = (
+        "import importlib\n"
+        f"first = importlib.import_module('{first}.operators')\n"
+        f"second = importlib.import_module('{second}.operators')\n"
+        "assert first is second and first.{{ op_class }} is second.{{ op_class }}\n"
+    )
+    result = subprocess.run(
+        [sys.executable, "-c", script], capture_output=True, text=True, timeout=60, check=False
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
 
 
 def test_operator_forwards_each_value():
@@ -57,9 +73,10 @@ import sys
 from pathlib import Path
 
 import holoscan_{{ cookiecutter.module_slug }}
-from holoscan_{{ cookiecutter.module_slug }}.operators import {{ op_class }}
+import pytest
 
 import holoscan as hs
+from holoscan.{{ cookiecutter.module_slug }}.operators import {{ op_class }}
 
 MODULE = "{{ cookiecutter.module_slug }}"
 REGISTRY_NAME = "holoscan.{{ cookiecutter.module_slug }}.{{ op_class }}"
@@ -76,12 +93,27 @@ def test_extension_uses_the_stable_abi():
     assert holoscan_{{ cookiecutter.module_slug }}._{{ cookiecutter.module_slug }}.__file__.endswith(".abi3.so")
 
 
-def test_module_metadata_exposes_holoscan_alias():
+def test_module_metadata_exposes_holoscan_namespace():
     entries = importlib.metadata.entry_points(group="holoscan.modules", name=MODULE)
     assert [entry.value for entry in entries] == [f"holoscan_{MODULE}"]
-    import holoscan.{{ cookiecutter.module_slug }}.operators as alias
+    package = importlib.import_module(f"holoscan_{MODULE}.operators")
 
-    assert alias.{{ op_class }} is {{ op_class }}
+    assert package.{{ op_class }} is {{ op_class }}
+
+
+@pytest.mark.parametrize("first", [f"holoscan.{MODULE}", f"holoscan_{MODULE}"])
+def test_import_orders_load_one_package(first):
+    second = f"holoscan_{MODULE}" if first.startswith("holoscan.") else f"holoscan.{MODULE}"
+    script = (
+        "import importlib\n"
+        f"first = importlib.import_module('{first}.operators')\n"
+        f"second = importlib.import_module('{second}.operators')\n"
+        "assert first is second and first.{{ op_class }} is second.{{ op_class }}\n"
+    )
+    result = subprocess.run(
+        [sys.executable, "-c", script], capture_output=True, text=True, timeout=60, check=False
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
 
 
 def test_operator_is_registered():
