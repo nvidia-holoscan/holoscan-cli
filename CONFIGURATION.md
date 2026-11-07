@@ -152,7 +152,7 @@ these ways:
 1. Pass the image to the `--base-img` flag:
 
    ```bash
-   holoscan build-container my_app --base-img nvcr.io/nvidia/clara-holoscan/holoscan:v4.4.0-cuda13
+   holoscan build-container my_app --base-img nvcr.io/nvidia/clara-holoscan/holoscan:v5.0.0-cuda13
    ```
 
 2. Set `HOLOSCAN_CLI_BASE_IMAGE` to an exact tagged or digested image. It is
