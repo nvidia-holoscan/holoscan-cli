@@ -159,20 +159,21 @@ these ways:
    used without adding another tag:
 
    ```bash
-   export HOLOSCAN_CLI_BASE_IMAGE=nvcr.io/nvidia/clara-holoscan/holoscan:v4.4.0-cuda13
+   export HOLOSCAN_CLI_BASE_IMAGE=nvcr.io/nvidia/clara-holoscan/holoscan:v5.0.0-cuda13
    holoscan build-container my_app
    ```
 
 3. Set `HOLOSCAN_CLI_BASE_IMAGE` to an image repository (no tag) and
    `HOLOSCAN_CLI_BASE_SDK_VERSION` to a Holoscan semantic version. The base image
    then resolves to
-   `$HOLOSCAN_CLI_BASE_IMAGE:v$HOLOSCAN_CLI_BASE_SDK_VERSION-$CUDA_TAG`, with the
-   CUDA tag chosen dynamically from your host environment:
+   `$HOLOSCAN_CLI_BASE_IMAGE:v$HOLOSCAN_CLI_BASE_SDK_VERSION-$CUDA_TAG`. The CUDA
+   tag comes from `--cuda`, `HOLOSCAN_CLI_DEFAULT_CUDA_VERSION`, or
+   `tool.holoscan.cuda`; without any of them, from your host:
 
    ```bash
    export HOLOSCAN_CLI_BASE_IMAGE=nvcr.io/nvidia/clara-holoscan/holoscan
    export HOLOSCAN_CLI_BASE_SDK_VERSION=5.0.0
-   # Resolves to nvcr.io/nvidia/clara-holoscan/holoscan:v4.4.0-cuda13 on hosts with NVIDIA drivers >= 580
+   # Resolves to nvcr.io/nvidia/clara-holoscan/holoscan:v5.0.0-cuda13
    holoscan build-container my_app
    ```
 

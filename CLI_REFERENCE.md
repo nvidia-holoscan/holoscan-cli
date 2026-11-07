@@ -172,17 +172,18 @@ uv run --only-group dev holoscan run-container -- "holoscan list --json"
 
 ## CPU limits
 
-For local Docker daemons, `run` and `run-container` forward the caller's cgroup
-CPU set and CPU-time quota separately. They do not restrict containers to the
-launcher's thread affinity or shrink the permitted CPU set to match the quota.
+For local Docker daemons (neither `DOCKER_HOST` nor `DOCKER_CONTEXT` is set),
+`run` and `run-container` forward the caller's cgroup CPU set and CPU-time quota
+separately. They do not restrict containers to the launcher's thread affinity
+or shrink the permitted CPU set to match the quota.
 Applications can pin threads to isolated cores when the cgroup permits those cores.
 Unrestricted hosts receive no automatic CPU options.
 
 Image builds and compile containers (`build`, `install`, `package`, `test`) keep
 the affinity/quota-based smaller CPU set for tools that size parallel work from
-affinity, such as `nproc`. Builds inside `run` and `run-container` use runtime
-limits, except that `run --as-root` builds in a separate compile container with
-the smaller CPU set.
+affinity, such as `nproc`; image builds skip it when `BUILDX_BUILDER` is set.
+Builds inside `run` and `run-container` use runtime limits, except that
+`run --as-root` builds in a separate compile container with the smaller CPU set.
 The CLI's default CMake job count uses `os.cpu_count()`, which ignores affinity.
 Use `--parallel` or `CMAKE_BUILD_PARALLEL_LEVEL` to set that job count explicitly.
 
