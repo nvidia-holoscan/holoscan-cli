@@ -171,7 +171,7 @@ these ways:
 
    ```bash
    export HOLOSCAN_CLI_BASE_IMAGE=nvcr.io/nvidia/clara-holoscan/holoscan
-   export HOLOSCAN_CLI_BASE_SDK_VERSION=4.4.0
+   export HOLOSCAN_CLI_BASE_SDK_VERSION=5.0.0
    # Resolves to nvcr.io/nvidia/clara-holoscan/holoscan:v4.4.0-cuda13 on hosts with NVIDIA drivers >= 580
    holoscan build-container my_app
    ```
