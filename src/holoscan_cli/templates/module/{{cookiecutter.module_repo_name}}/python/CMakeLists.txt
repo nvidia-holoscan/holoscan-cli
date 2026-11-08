@@ -4,15 +4,23 @@
 
 # Stage the holoscan_{{ cookiecutter.module_slug }} package and its holoscan-{{ cookiecutter.module_slug.replace('_', '-') }} distribution metadata in the
 # build tree, so `holoscan run` and the tests can import it as holoscan_{{ cookiecutter.module_slug }} and as
-# holoscan.{{ cookiecutter.module_slug }}. Wheels take the same package and metadata from pyproject.toml.
+# holoscan.{{ cookiecutter.module_slug }}. Operators join the package through
+# holoscan_{{ cookiecutter.module_slug }}_add_python_operator() when their OP_<name> option is ON.
+# Wheel builds install the same component; pyproject.toml supplies the metadata.
 
 set(_package holoscan_{{ cookiecutter.module_slug }})
 set(_python_root "${CMAKE_CURRENT_BINARY_DIR}/lib")
 set({{ cookiecutter.module_slug | upper }}_PYTHON_BUILD_DIR "${_python_root}" PARENT_SCOPE)
+if(SKBUILD)
+    set({{ cookiecutter.module_slug | upper }}_PYTHON_INSTALL_DIR "." CACHE PATH "" FORCE)
+endif()
 set({{ cookiecutter.module_slug | upper }}_PYTHON_INSTALL_DIR
     "lib/python${Python_VERSION_MAJOR}.${Python_VERSION_MINOR}/site-packages"
     CACHE PATH "Install directory of the holoscan_{{ cookiecutter.module_slug }} Python package")
 set(_python_install_var {{ cookiecutter.module_slug | upper }}_PYTHON_INSTALL_DIR)
+
+# Drop operators staged by an earlier configure, in case their OP_<name> option is now OFF.
+file(REMOVE_RECURSE "${_python_root}/${_package}/operators")
 
 file(GLOB_RECURSE _package_files RELATIVE "${CMAKE_CURRENT_SOURCE_DIR}" CONFIGURE_DEPENDS
     "${_package}/*.py" "${_package}/*.pyi" "${_package}/py.typed")
@@ -20,14 +28,30 @@ foreach(package_file IN LISTS _package_files)
     configure_file("${package_file}" "${_python_root}/${package_file}" COPYONLY)
 endforeach()
 
-set(_dist_info "${_python_root}/holoscan_{{ cookiecutter.module_slug }}-${PROJECT_VERSION}.dist-info")
-file(WRITE "${_dist_info}/METADATA"
-    "Metadata-Version: 2.1\nName: holoscan-{{ cookiecutter.module_slug.replace('_', '-') }}\nVersion: ${PROJECT_VERSION}\n")
-# Root-Is-Purelib marks the build as complete without a compiled extension for `holoscan install --dev`.
-file(WRITE "${_dist_info}/WHEEL"
-    "Wheel-Version: 1.0\nGenerator: holoscan-cli\nRoot-Is-Purelib: true\nTag: py3-none-any\n")
-file(WRITE "${_dist_info}/entry_points.txt"
-    "[holoscan.modules]\n{{ cookiecutter.module_slug }} = holoscan_{{ cookiecutter.module_slug }}\n")
+# Stage the Python sources of the calling operators/<name>/ directory as
+# holoscan_{{ cookiecutter.module_slug }}.operators.<name>. add_holohub_operator() only adds that directory when
+# OP_<name> is ON, so disabled operators stay out of the build tree and the wheel.
+function(holoscan_{{ cookiecutter.module_slug }}_add_python_operator)
+    get_filename_component(_name "${CMAKE_CURRENT_SOURCE_DIR}" NAME)
+    set(_python_build_var {{ cookiecutter.module_slug | upper }}_PYTHON_BUILD_DIR)
+    file(GLOB _sources RELATIVE "${CMAKE_CURRENT_SOURCE_DIR}" CONFIGURE_DEPENDS "*.py" "*.pyi")
+    foreach(source IN LISTS _sources)
+        configure_file("${source}"
+            "${${_python_build_var}}/holoscan_{{ cookiecutter.module_slug }}/operators/${_name}/${source}"
+            COPYONLY)
+    endforeach()
+endfunction()
+
+if(NOT SKBUILD)
+    set(_dist_info "${_python_root}/holoscan_{{ cookiecutter.module_slug }}-${PROJECT_VERSION}.dist-info")
+    file(WRITE "${_dist_info}/METADATA"
+        "Metadata-Version: 2.1\nName: holoscan-{{ cookiecutter.module_slug.replace('_', '-') }}\nVersion: ${PROJECT_VERSION}\n")
+    # Root-Is-Purelib marks the build as complete without a compiled extension for `holoscan install --dev`.
+    file(WRITE "${_dist_info}/WHEEL"
+        "Wheel-Version: 1.0\nGenerator: holoscan-cli\nRoot-Is-Purelib: true\nTag: py3-none-any\n")
+    file(WRITE "${_dist_info}/entry_points.txt"
+        "[holoscan.modules]\n{{ cookiecutter.module_slug }} = holoscan_{{ cookiecutter.module_slug }}\n")
+endif()
 
 # Install the staged package without a packaging backend:
 #   cmake --install <build> --component holoscan-{{ cookiecutter.module_slug }}-python_libs

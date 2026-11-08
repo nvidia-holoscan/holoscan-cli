@@ -13,21 +13,16 @@ project(holoscan_{{ cookiecutter.module_slug }}
     LANGUAGES NONE
 )
 
-# Wheel builds (scikit-build-core) take the package and its metadata from pyproject.toml.
-if(SKBUILD)
-    return()
-endif()
-
 # ---------------------------------------------------------------------------
 # Build options
 # ---------------------------------------------------------------------------
-# BUILD_ALL toggles every application on by default. Each application is a
-# CMake option (APP_<name>) defined by add_holohub_application, defaulting to
-# ${BUILD_ALL}. It is ON when this is the top-level project and OFF when the
-# Module is nested in another project.
+# BUILD_ALL toggles every operator and application on by default. Each one is a
+# CMake option (OP_<name> or APP_<name>) defined by add_holohub_operator or
+# add_holohub_application, defaulting to ${BUILD_ALL}. It is ON when this is the
+# top-level project and OFF when the Module is nested in another project.
 if(NOT DEFINED BUILD_ALL)
     if(PROJECT_IS_TOP_LEVEL)
-        set(BUILD_ALL ON CACHE BOOL "Build all applications by default")
+        set(BUILD_ALL ON CACHE BOOL "Build all operators and applications by default")
     else()
         set(BUILD_ALL OFF)
     endif()
@@ -69,6 +64,7 @@ install(FILES LICENSE NOTICE
 # Subprojects
 # ---------------------------------------------------------------------------
 add_subdirectory(python)
+add_subdirectory(operators)
 add_subdirectory(applications)
 
 if({{ cookiecutter.module_slug | upper }}_BUILD_TESTING)

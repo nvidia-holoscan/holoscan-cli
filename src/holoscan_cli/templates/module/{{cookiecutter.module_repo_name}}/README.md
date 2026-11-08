@@ -91,9 +91,13 @@ The Holoscan SDK wheels need glibc 2.39 or newer, for example Ubuntu 24.04. Inst
 with pip, then run its tests:
 
 ```bash
-python -m pip install -e . pytest
+python -m pip install "scikit-build-core~=1.0.3" cmake ninja pytest
+python -m pip install --no-build-isolation -Ceditable.rebuild=true -e .
 python -m pytest tests/python
 ```
+
+The editable install rebuilds on import, so operator edits take effect without reinstalling. It
+needs `--no-build-isolation` so the rebuild can find CMake and Ninja.
 
 Building the wheel needs CMake 3.24 or newer, which pip downloads when it is missing, but no
 compiler.

@@ -1,0 +1,23 @@
+# SPDX-FileCopyrightText: Copyright (c) {% now 'utc', '%Y' %} {{ cookiecutter.full_name }}{% if cookiecutter.affiliation %} / {{ cookiecutter.affiliation }}{% endif %}. All rights reserved.
+# SPDX-License-Identifier: {{ cookiecutter._license }}
+{%- set op_class = cookiecutter.operator_slug.split('_')|map('capitalize')|join('') %}
+
+"""{{ cookiecutter.project_name }} operators.
+
+Exports every operator package staged next to this file. The build and the wheel include an
+operator only when its ``OP_<name>`` CMake option is ON.
+"""
+
+import importlib
+import pkgutil
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:  # one import per operator, for type checkers and IDEs
+    from .{{ cookiecutter.operator_slug }} import {{ op_class }} as {{ op_class }}
+
+__all__: list[str] = []
+for _info in pkgutil.iter_modules(__path__):
+    _operator = importlib.import_module(f".{_info.name}", __name__)
+    for _name in getattr(_operator, "__all__", ()):
+        globals()[_name] = getattr(_operator, _name)
+        __all__.append(_name)
