@@ -635,6 +635,14 @@ def _read_dev_metadata(path: Path) -> str:
     return content.decode("utf-8")
 
 
+def _is_purelib(info: Path) -> bool:
+    """Return whether a staged dist-info marks a pure-Python package (no compiled extension)."""
+    wheel = info / "WHEEL"
+    if not wheel.is_file():
+        return False
+    return Parser().parsestr(_read_dev_metadata(wheel)).get("Root-Is-Purelib", "").lower() == "true"
+
+
 def _metadata_dev_source(build_dir: Path, *, strict: bool) -> tuple[_DevSource | None, bool]:
     python_root = (build_dir / "python/lib").resolve()
     providers = []
@@ -659,8 +667,11 @@ def _metadata_dev_source(build_dir: Path, *, strict: bool) -> tuple[_DevSource |
                 if not metadata.get("Name") or not metadata.get("Version"):
                     raise ValueError(f"missing distribution Name or Version in {info}")
                 package = python_root / f"holoscan_{slug}"
-                built = (package / "__init__.py").is_file() and any(
-                    (package / f"_{slug}{suffix}").is_file() for suffix in EXTENSION_SUFFIXES
+                built = (package / "__init__.py").is_file() and (
+                    _is_purelib(info)
+                    or any(
+                        (package / f"_{slug}{suffix}").is_file() for suffix in EXTENSION_SUFFIXES
+                    )
                 )
                 providers.append(
                     _DevSource(slug, build_dir, entries.stat().st_mtime, python_root, built)

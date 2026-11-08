@@ -1,8 +1,8 @@
 # Holoscan CLI reference
 
-Use `holoscan` directly in a standalone Holoscan Module repository. HoloHub
-and other repositories may provide wrappers that add their own defaults;
-follow that repository's guidance when using a wrapper.
+Use `holoscan` directly in a standalone Holoscan Module repository. Other
+repositories may provide wrappers that add their own defaults; follow that
+repository's guidance when using a wrapper.
 
 This reference describes the CLI 5.x command surface. Check
 `holoscan version --json` and `holoscan <command> --help` for the installed
@@ -11,8 +11,9 @@ version. CLI versions do not select or guarantee a matching SDK version.
 ## Select a project and environment
 
 Follow the [installation and standalone quick start](README.md#installation).
-Inside a generated module, `uv run holoscan` uses its committed development
-dependencies. With an activated pip environment, use `holoscan` directly.
+Inside a generated module, `uv run --only-group dev holoscan` uses its committed
+development dependencies without the module's runtime dependencies. With an
+activated pip environment, use `holoscan` directly.
 
 The CLI discovers the project root from the current directory and its
 ancestors. To select a different root, place the global option before the
@@ -99,8 +100,8 @@ between preview and execution. A dry run is not a sandbox; see the
 [project trust model](README.md#project-trust-model).
 
 ```bash
-uv run holoscan build my_sensor_pipeline --dryrun --verbose
-uv run holoscan build my_sensor_pipeline --verbose
+uv run --only-group dev holoscan build my_sensor_pipeline --dryrun --verbose
+uv run --only-group dev holoscan build my_sensor_pipeline --verbose
 ```
 
 Build and run use containers by default. `--local` selects native execution;
@@ -168,9 +169,30 @@ shell in the container expands its variables, so single-quote a command that
 reads container values:
 
 ```bash
-uv run holoscan run-container -- "holoscan list --json"
-uv run holoscan run-container -- 'echo "$HOME"'
+uv run --only-group dev holoscan run-container -- "holoscan list --json"
+uv run --only-group dev holoscan run-container -- 'echo "$HOME"'
 ```
+
+## CPU limits
+
+For local Docker daemons (neither `DOCKER_HOST` nor `DOCKER_CONTEXT` is set),
+`run` and `run-container` forward the caller's cgroup CPU set and CPU-time quota
+separately. They do not restrict containers to the launcher's thread affinity
+or shrink the permitted CPU set to match the quota.
+Applications can pin threads to isolated cores when the cgroup permits those cores.
+Unrestricted hosts receive no automatic CPU options.
+
+Image builds and compile containers (`build`, `install`, `package`, `test`) keep
+the affinity/quota-based smaller CPU set for tools that size parallel work from
+affinity, such as `nproc`; image builds skip it when `BUILDX_BUILDER` is set.
+Builds inside `run` and `run-container` use runtime limits, except that
+`run --as-root` builds in a separate compile container with the smaller CPU set.
+The CLI's default CMake job count uses `os.cpu_count()`, which ignores affinity.
+Use `--parallel` or `CMAKE_BUILD_PARALLEL_LEVEL` to set that job count explicitly.
+
+To choose runtime cores explicitly, use `--docker-opts='--cpuset-cpus=0,11-13'`,
+not `taskset`. Supplying `--cpuset-cpus`, `--cpus`, `--cpu-quota`, or `--cpu-period`
+in the configured Docker run options disables all automatic run CPU limits.
 
 ## Profile an application
 
@@ -197,8 +219,8 @@ value is split using shell-style quoting, without shell expansion. An empty
 value (`--nsys-args=''`) supplies no profile options, using Nsight's defaults.
 Use `--run-args` separately for application arguments.
 
-The same options work with downstream wrappers such as `./holohub` and
-`./isaac_os` once their host and container CLI versions include this feature.
+The same options work with downstream wrappers once their host and container
+CLI versions include this feature.
 The application's mode, environment, arguments, and working directory are
 preserved. Relative output paths resolve from that working directory; for
 container runs, use a writable mounted path to keep reports on the host.
@@ -228,8 +250,10 @@ configured base SDK version overrides the default, and explicit context values
 take precedence. `--language cpp python` (or `cpp,python`) also generates a
 nanobind extension that registers the module's C++ operators with the SDK
 operator registry, a Python example, and CTest-run pytest suites; the default
-`--language cpp` stays C++ only, and `--language python` alone stays rejected
-until pure-Python modules are supported. The project name may come before or
+`--language cpp` stays C++ only. `--language python` alone creates a module whose
+operators and example application are implemented in Python, with no C++ code: a
+pure-Python wheel built by `package --pkg-generator WHEEL`, and a CMake project
+that only stages the package and runs its pytest suite. The project name may come before or
 after `--language`; a project named after a language, such as `python`, must
 come first. See
 [template defaults](src/holoscan_cli/templates/module/cookiecutter.json) and
@@ -257,7 +281,8 @@ For metadata-enabled SDK 5.x Modules, registration adds the build's
 `python/lib` directory through a `.pth` file. The SDK discovers its
 `holoscan.modules` entry point, making both `holoscan_<slug>` and
 `holoscan.<slug>` available in a new Python process without setting the module's
-`PYTHONPATH`. Python bindings must be built, and older 5.x Modules must adopt
+`PYTHONPATH`. Python bindings must be built (a module created with `--language python`
+has none; its build stages pure-Python package metadata instead), and older 5.x Modules must adopt
 `holoscan_install_python_module_metadata()` and rebuild. Existing staged
 legacy hook pairs remain supported. Each metadata-enabled Python root must
 contain one Holoscan provider so registrations can be removed independently.
@@ -287,6 +312,13 @@ or unpacked archive does not prove that dependency is satisfied.
 Parse stdout separately from stderr, tolerate additive JSON fields, and retain
 `env-check` output even when it exits nonzero. Check whether the failed
 capability is required for the intended operation.
+
+Every JSON payload starts with a `schema_version` field, currently `1`. Within a
+version the payloads change additively: new keys may appear, existing keys are
+not removed or renamed. Consumers should ignore keys they do not recognize; a
+removal or rename bumps `schema_version`. `env-info --json` reports host state,
+so the values vary by machine; the `docker`, `cuda_gpu`, and `git` sections are
+`null` when unavailable.
 
 `clear-cache` without a scope selects all supported caches. Preview a narrow
 scope, such as `clear-cache --build --dryrun`, and inspect the resolved paths

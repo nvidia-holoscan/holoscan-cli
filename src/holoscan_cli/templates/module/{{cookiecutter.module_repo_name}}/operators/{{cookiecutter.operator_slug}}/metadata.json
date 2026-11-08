@@ -8,7 +8,7 @@
                 "affiliation": "{{ cookiecutter.affiliation }}"
             }
         ],
-        "language": [{% if cookiecutter.__python_bindings == 'yes' %}"C++", "Python"{% else %}"C++"{% endif %}],
+        "language": [{% if cookiecutter.__pure_python == 'yes' %}"Python"{% elif cookiecutter.__python_bindings == 'yes' %}"C++", "Python"{% else %}"C++"{% endif %}],
         "version": "{{ cookiecutter.version }}",
         "changelog": {
             "{{ cookiecutter.version }}": "TODO: describe what this operator does"
