@@ -61,8 +61,9 @@ A change is done when `holoscan lint` and `holoscan test` pass.
   Module, operator, and application `metadata.json` files.
 - New operators: an `operators/<name>/` directory with `__init__.py`, the implementation,
   `metadata.json`, and `CMakeLists.txt`, `add_holohub_operator(<name>)` in
-  `operators/CMakeLists.txt`, `cmake.define.OP_<name>` in `pyproject.toml`, `module.operator_names` in the
-  root `metadata.json`, the tests, and the operator table in README.md.
+  `operators/CMakeLists.txt`, a `TYPE_CHECKING` import in `operators/__init__.py`,
+  `cmake.define.OP_<name>` in `pyproject.toml`, `module.operator_names` in the root
+  `metadata.json`, the tests, and the operator table in README.md.
 - Operator ports or parameters: the operator's `metadata.json`, the tests, and the operator table in
   README.md.
 - Third-party dependencies: `pyproject.toml` and `NOTICE`, which lists each one with its version

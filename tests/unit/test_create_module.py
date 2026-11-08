@@ -422,6 +422,8 @@ def test_packaged_template_generates_a_pure_python_module(cli, tmp_path, monkeyp
     assert "def compute(self, context: hs.ExecutionContext) -> None:" in operator
     operators = (project / "operators/__init__.py").read_text(encoding="utf-8")
     assert "pkgutil.iter_modules(__path__)" in operators
+    assert "if TYPE_CHECKING:" in operators
+    assert "from .my_mod_op import MyModOp as MyModOp" in operators
     assert "registry" not in operators
     operators_cmake = (project / "operators/CMakeLists.txt").read_text(encoding="utf-8")
     assert "add_holohub_operator(my_mod_op)" in operators_cmake

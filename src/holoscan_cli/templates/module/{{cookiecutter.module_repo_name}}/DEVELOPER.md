@@ -50,7 +50,8 @@ from holoscan_{{ cookiecutter.module_slug }}.operators import {{ op_class }}
   `operators/CMakeLists.txt` and `cmake.define.OP_<name> = "ON"` to `pyproject.toml`.
 - Only operators whose `OP_<name>` option is ON (default `${BUILD_ALL}`) are staged in the build tree
   and installed into the wheel as `holoscan_{{ cookiecutter.module_slug }}.operators.<name>`;
-  `operators/__init__.py` exports whichever are present.
+  `operators/__init__.py` exports whichever are present at runtime. Also add the operator to its
+  `if TYPE_CHECKING:` imports so type checkers and IDEs resolve it.
 - The package's `holoscan.modules` entry point makes `import holoscan.{{ cookiecutter.module_slug }}` load
   `holoscan_{{ cookiecutter.module_slug }}`. `pyproject.toml` declares it for the wheel, and `python/CMakeLists.txt` writes
   the same `holoscan-{{ cookiecutter.module_slug.replace('_', '-') }}` metadata into the build tree's `python/lib`.
