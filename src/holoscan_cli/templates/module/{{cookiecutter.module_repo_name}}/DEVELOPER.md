@@ -37,11 +37,12 @@ distributing this Holoscan Module.
     └── python/                     # pytest suite: OperatorTestHarness + pipeline run
 ```
 
-The operators are Python classes in the `holoscan_{{ cookiecutter.module_slug }}` package:
+The operators are Python classes in the `holoscan_{{ cookiecutter.module_slug }}` package. Import them as
+`holoscan.{{ cookiecutter.module_slug }}`:
 
 ```python
 import holoscan as hs
-from holoscan_{{ cookiecutter.module_slug }}.operators import {{ op_class }}
+from holoscan.{{ cookiecutter.module_slug }}.operators import {{ op_class }}
 ```
 
 - Add each new operator in its own `operators/<name>/` directory with an `__init__.py` that exports
@@ -52,8 +53,9 @@ from holoscan_{{ cookiecutter.module_slug }}.operators import {{ op_class }}
   and installed into the wheel as `holoscan_{{ cookiecutter.module_slug }}.operators.<name>`;
   `operators/__init__.py` exports whichever are present at runtime. Also add the operator to its
   `if TYPE_CHECKING:` imports so type checkers and IDEs resolve it.
-- The package's `holoscan.modules` entry point makes `import holoscan.{{ cookiecutter.module_slug }}` load
-  `holoscan_{{ cookiecutter.module_slug }}`. `pyproject.toml` declares it for the wheel, and `python/CMakeLists.txt` writes
+- The package's `holoscan.modules` entry point makes `import holoscan.{{ cookiecutter.module_slug }}` (the
+  `module.namespace.python` value in `metadata.json`) load `holoscan_{{ cookiecutter.module_slug }}`.
+  `pyproject.toml` declares it for the wheel, and `python/CMakeLists.txt` writes
   the same `holoscan-{{ cookiecutter.module_slug.replace('_', '-') }}` metadata into the build tree's `python/lib`.
 - `holoscan build` stages the package in `build/<project>/python/lib`; nothing is compiled.
   `holoscan run` adds that directory to `PYTHONPATH`. To run the example from a CMake build tree,
@@ -196,8 +198,8 @@ Declare Python dependencies, including other Modules' wheels, in `[project].depe
 
 | Context | Convention | Example |
 | --- | --- | --- |
-| Python package | `holoscan_<slug>` | `holoscan_{{ cookiecutter.module_slug }}` |
-| Python alias | `holoscan.<slug>` | `holoscan.{{ cookiecutter.module_slug }}` |
+| Python import (`namespace.python`) | `holoscan.<slug>` | `holoscan.{{ cookiecutter.module_slug }}` |
+| Python package (implementation) | `holoscan_<slug>` | `holoscan_{{ cookiecutter.module_slug }}` |
 | Repository folder | `holoscan-<slug>` (kebab) | `{{ cookiecutter.module_repo_name }}` |
 | Wheel distribution | `holoscan-<slug>` (kebab) | `holoscan-{{ cookiecutter.module_slug.replace('_', '-') }}` |
 | CMake option prefix | `UPPER_SNAKE` | `{{ cookiecutter.module_slug | upper }}_BUILD_TESTING` |
@@ -258,11 +260,11 @@ distributing this Holoscan Module.
 {% if cookiecutter.__python_bindings == 'yes' -%}
 Holoscan SDK 5.0 is C++-first. The C++ operators are the implementation; `python/` adds a
 nanobind extension that registers them with the SDK operator registry when
-`holoscan_{{ cookiecutter.module_slug }}` is imported. Python code then uses the typed registry proxies:
+`holoscan.{{ cookiecutter.module_slug }}` is imported. Python code then uses the typed registry proxies:
 
 ```python
 import holoscan as hs
-from holoscan_{{ cookiecutter.module_slug }}.operators import {{ cookiecutter.operator_slug.split('_')|map('capitalize')|join('') }}
+from holoscan.{{ cookiecutter.module_slug }}.operators import {{ cookiecutter.operator_slug.split('_')|map('capitalize')|join('') }}
 ```
 
 - Register each new operator with `HOLOSCAN_REGISTER_OPERATOR` in
@@ -279,8 +281,8 @@ from holoscan_{{ cookiecutter.module_slug }}.operators import {{ cookiecutter.op
 - The package is not part of the Debian package. Install it on its own with
   `cmake --install build --component holoscan-{{ cookiecutter.module_slug }}-python_libs`.
 - The build tree and native installs carry the `holoscan-{{ cookiecutter.module_slug.replace('_', '-') }}-cu13` metadata written by
-  the SDK's `holoscan_install_python_module_metadata()`, so both `import holoscan_{{ cookiecutter.module_slug }}` and
-  `import holoscan.{{ cookiecutter.module_slug }}` work.
+  the SDK's `holoscan_install_python_module_metadata()`, so `import holoscan.{{ cookiecutter.module_slug }}` loads the
+  `holoscan_{{ cookiecutter.module_slug }}` package there too.
 - `holoscan package {{ cookiecutter.module_repo_name }} --pkg-generator WHEEL` builds the same package into a
   `holoscan-{{ cookiecutter.module_slug.replace('_', '-') }}` wheel with scikit-build-core, configured in `pyproject.toml`. The wheel declares its
   own `holoscan.modules` entry point, so wheel builds skip `holoscan_install_python_module_metadata()`.
