@@ -114,10 +114,11 @@ unrelated to CLI configuration. Supported keys:
 ```toml
 [tool.holoscan]
 cuda = 13
-ctest-script = "ci/container.ctest"
 forward-env = ["IS_CI_BUILD"]
 docker-build-args = ["--build-arg", "PROJECT_FEATURE=ON"]
 docker-run-args = ["--network=host"]
+# Modules only:
+ctest-script = "ci/container.ctest"
 search-paths = ["operators", "examples"]
 
 [tool.holoscan.base-images]
