@@ -53,8 +53,9 @@ from holoscan.{{ cookiecutter.module_slug }}.operators import {{ op_class }}
   and installed into the wheel as `holoscan_{{ cookiecutter.module_slug }}.operators.<name>`;
   `operators/__init__.py` exports whichever are present at runtime. Also add the operator to its
   `if TYPE_CHECKING:` imports so type checkers and IDEs resolve it.
-- The package's `holoscan.modules` entry point makes `import holoscan.{{ cookiecutter.module_slug }}`, the
-  `metadata.json` `module.namespace.python`, load `holoscan_{{ cookiecutter.module_slug }}`. `pyproject.toml` declares it for the wheel, and `python/CMakeLists.txt` writes
+- The package's `holoscan.modules` entry point makes `import holoscan.{{ cookiecutter.module_slug }}` (the
+  `module.namespace.python` value in `metadata.json`) load `holoscan_{{ cookiecutter.module_slug }}`.
+  `pyproject.toml` declares it for the wheel, and `python/CMakeLists.txt` writes
   the same `holoscan-{{ cookiecutter.module_slug.replace('_', '-') }}` metadata into the build tree's `python/lib`.
 - `holoscan build` stages the package in `build/<project>/python/lib`; nothing is compiled.
   `holoscan run` adds that directory to `PYTHONPATH`. To run the example from a CMake build tree,
