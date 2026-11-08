@@ -1,7 +1,7 @@
 {
     "$schema": "holoscan/module/v2",
     "module": {
-        "name": "module_documentation_extra_field",
+        "name": "holoscan-module-documentation-extra-field",
         "description": "documentation block with an unknown field should fail additionalProperties check.",
         "authors": [{ "name": "NVIDIA", "affiliation": "NVIDIA" }],
         "version": "1.0.0",

@@ -54,15 +54,18 @@ and modes. Other settings resolve in this order, highest priority first:
 | Setting | Precedence |
 | --- | --- |
 | Architecture | `HOLOSCAN_CLI_TARGET_ARCH` → host |
-| CUDA | `--cuda` → `HOLOSCAN_CLI_DEFAULT_CUDA_VERSION` → `tool.holoscan.cuda` → host detection |
+| CUDA | `--cuda` → `HOLOSCAN_CLI_DEFAULT_CUDA_VERSION` → `tool.holoscan.cuda` → 13 for SDK 5.x, otherwise host detection |
 | CTest script | `--ctest-script` → `HOLOSCAN_CLI_CTEST_SCRIPT` → `tool.holoscan.ctest-script` → bundled script |
 | Execution | `--local` → `HOLOSCAN_CLI_BUILD_LOCAL` → selected mode → container |
 | Build type | `--build-type` → `CMAKE_BUILD_TYPE` → selected mode → release |
 
 SDK selection uses `--local-sdk-root`, `HOLOSCAN_SDK_ROOT`, the mounted
-`/workspace/holoscan-sdk` for local container builds, a nearby `holoscan-sdk`,
-then `/opt/nvidia/holoscan`. Nearby installs take priority over configured source
-builds; both `install-cu13-x86_64` and `install-x86_64` layouts are supported.
+`/workspace/holoscan-sdk` for local container builds, then `/usr` (Holoscan
+SDK 5) or, when `/usr` has no SDK, `/opt/nvidia/holoscan` (SDK 4).
+`HOLOSCAN_CLI_DEFAULT_HSDK_DIR` replaces both. The CLI does not search nearby
+directories for an SDK checkout; select a local SDK explicitly. A selected SDK
+checkout prefers installs over configured source builds; both
+`install-cu13-x86_64` and `install-x86_64` layouts are supported.
 An invalid `HOLOSCAN_SDK_ROOT` warns without falling back.
 
 To use a local SDK installation with an existing compatible development image:
@@ -140,7 +143,7 @@ aarch64 = "registry.example.com/holoscan/sdk-build-aarch64:5.0.0-cuda13"
   An entry is skipped when another option already uses its container path.
 - `base-images`, when present, must include the selected architecture. References
   are used unchanged and cannot be empty or contain whitespace. `--base-img`, then
-  `HOLOSCAN_CLI_BASE_IMAGE`, take precedence.
+  `HOLOSCAN_CLI_BASE_IMAGE`, take precedence; see [base images](#base-images).
 - `forward-env` accepts valid host variable names, never values. Existing host
   values are inherited without appearing on the Docker command line. Names combine
   with `HOLOSCAN_CLI_FORWARD_ENV` and repeated `--forward-env NAME` options.
@@ -149,6 +152,60 @@ aarch64 = "registry.example.com/holoscan/sdk-build-aarch64:5.0.0-cuda13"
 
 Unknown Holoscan keys are rejected. Keep credentials and machine-specific paths
 out of project configuration.
+
+## Base images
+
+The CLI does not choose a container base image from its own version. When your
+component's Dockerfile uses `FROM ${BASE_IMAGE}`, set the base image in one of
+these ways:
+
+1. Pass the image to the `--base-img` flag:
+
+   ```bash
+   holoscan build-container my_app --base-img nvcr.io/nvidia/clara-holoscan/holoscan:v5.0.0-cuda13
+   ```
+
+2. Set `HOLOSCAN_CLI_BASE_IMAGE` to an exact tagged or digested image. It is
+   used without adding another tag:
+
+   ```bash
+   export HOLOSCAN_CLI_BASE_IMAGE=nvcr.io/nvidia/clara-holoscan/holoscan:v5.0.0-cuda13
+   holoscan build-container my_app
+   ```
+
+3. Set `HOLOSCAN_CLI_BASE_IMAGE` to an image repository (no tag) and
+   `HOLOSCAN_CLI_BASE_SDK_VERSION` to a Holoscan semantic version. The base image
+   then resolves to
+   `$HOLOSCAN_CLI_BASE_IMAGE:v$HOLOSCAN_CLI_BASE_SDK_VERSION-$CUDA_TAG`. The CUDA
+   tag comes from `--cuda`, `HOLOSCAN_CLI_DEFAULT_CUDA_VERSION`, or
+   `tool.holoscan.cuda`; without any of them, from your host:
+
+   ```bash
+   export HOLOSCAN_CLI_BASE_IMAGE=nvcr.io/nvidia/clara-holoscan/holoscan
+   export HOLOSCAN_CLI_BASE_SDK_VERSION=5.0.0
+   # Resolves to nvcr.io/nvidia/clara-holoscan/holoscan:v5.0.0-cuda13
+   holoscan build-container my_app
+   ```
+
+   SDK 5.x supports CUDA 13 only. For those versions the tag is always
+   `cuda13`, and the `CUDA_MAJOR` build argument defaults to `13` instead of
+   following the host driver. Requesting another CUDA version for SDK 5.x is
+   an error.
+
+A standalone Module can also set `[tool.holoscan.base-images]`, which applies
+when neither `--base-img` nor `HOLOSCAN_CLI_BASE_IMAGE` is set. Without any of
+these, an SDK version from `HOLOSCAN_CLI_BASE_SDK_VERSION` or the Module's
+`module.holoscan_sdk.minimum_required_version` selects
+`nvcr.io/nvidia/clara-holoscan/holoscan:v<version>-<cuda_tag>`. If no SDK version
+is set either, the command fails and asks you to configure a base image; the CLI
+never infers one from its own package version.
+
+For custom naming schemes, `HOLOSCAN_CLI_BASE_IMAGE_FORMAT` can use
+`{base_image}`, `{sdk_version}`, and `{cuda_tag}`. The name of the built
+image, set by `HOLOSCAN_CLI_DEFAULT_IMAGE_FORMAT`, can use `{container_prefix}`,
+`{sdk_version}`, and `{cuda_tag}`. An explicit base-image format controls
+composition; without one, tagged images and digests are exact while an
+untagged environment repository uses the SDK/CUDA-derived tag.
 
 ## Command options
 
@@ -161,6 +218,14 @@ holoscan build my_app --cuda 13 --base-img registry.example.com/sdk:reviewed
 - `--docker-opts`, `--configure-args`, and `--forward-env NAME` are repeatable and additive.
 - `--build-with` replaces mode operator dependencies; `--build-with=` selects none.
 
+Arguments after `--` apply only to the selected subcommand's stage. `build`
+appends them to `cmake --build` after its generated options; `build-container`
+adds them after the Docker build argument layers, with the same restrictions on
+CLI-owned build arguments; `run` appends them after `--run-args`. The destination
+tool decides how repeated options combine. See [argument forwarding](CLI_REFERENCE.md#preview-and-execution)
+for examples and the existing `run-container` command behavior.
+
 Add `--dryrun` to preview lifecycle commands and resolved settings with their
-sources. Docker/CMake option values and forwarded environment values stay hidden.
+sources. The configuration report hides Docker/CMake option values and forwarded
+environment values.
 See [preview and execution](CLI_REFERENCE.md#preview-and-execution) for precautions.

@@ -45,7 +45,6 @@ from holoscan_cli.utils.json_output import dumps as json_dumps
 LIST_TYPES = [
     "application",
     "benchmark",
-    "gxf_extension",
     "module",
     "package",
     "operator",

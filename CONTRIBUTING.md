@@ -63,6 +63,28 @@ downstream wrappers document their own repository-specific behavior.
 Documentation-only changes should pass pre-commit and have their commands and
 links checked. They do not require unrelated SDK/GPU builds.
 
+## Source layout
+
+```text
+src/holoscan_cli/
+  cli.py              top-level argparse + dispatch (HoloscanCLI)
+  project_context.py  source-project discovery and standalone Module contracts
+  status.py           `status` display
+  system_check.py     `env-check` host checks
+  version/            `version` command
+  commands/           one file per subcommand + a central registry
+  container/          HoloscanContainer + docker arg helpers + parser builders
+  cmake/              packaged CMake support copied into standalone Modules
+  utils/              shared helpers, e.g. io.py, sdk.py, docker.py,
+                      project.py (effective-configuration reporting),
+                      env_info.py, holohub.py
+  setup_scripts/      bundled bash scripts backing `setup --scripts` and
+                      `build-container --extra-scripts`
+  metadata/           project metadata JSON schemas
+  templates/module/   standalone Module cookiecutter
+  testing/            CTest helpers shipped in the wheel
+```
+
 ## Local development
 
 Verifying changes locally before pushing keeps the CI feedback loop short and
@@ -80,6 +102,12 @@ pre-commit install                         # installs the local Git hooks
 
 `poetry install --with test` mirrors the exact dependency set the `Code Check`
 workflow installs, so passing locally is a strong signal.
+
+The test dependencies require pre-commit 4.7+ and nodeenv 1.11.1+, which
+excludes Node prereleases from automatic selection. Repository and generated
+module hooks select the current Node LTS release. New hook environments can
+select a newer LTS major; cached environments retain their installed runtime
+until refreshed. Changing the CLI template affects newly created modules.
 
 ### Run the same checks CI runs
 
@@ -142,26 +170,14 @@ python -m venv /tmp/holoscan-cli-smoke
 
 The script exercises `--help`, the `version`/`lint`/`list`/`modes` surfaces
 against the in-tree smoke fixture at `tests/fixtures/holohub_smoke/`, and the
-negative surface (removed commands, legacy console scripts). See the
-[README](./README.md#testing-against-an-in-tree-source-project-fixture) for
-how to point the CLI at the fixture directly from your shell.
-
-### Test against the downstream wrappers
-
-The HoloHub / I4H wrapper repos each carry a
-`test_holoscan_cli_consolidation.py` that exercises the unified `holoscan`
-CLI against their respective project trees. Point them at a local checkout
-with `HOLOSCAN_CLI_SOURCE`:
+negative surface (removed commands, legacy console scripts). The fixture is
+one application whose `metadata.json` validates against the application
+schema. To point the CLI at it directly from your shell:
 
 ```bash
-cd /path/to/holohub
-HOLOSCAN_CLI_SOURCE=/path/to/holoscan-cli \
-  python -m pytest -q -o addopts='' utilities/cli/tests/test_holoscan_cli_consolidation.py
+HOLOSCAN_CLI_ROOT=tests/fixtures/holohub_smoke /tmp/holoscan-cli-smoke/bin/holoscan list
+HOLOSCAN_CLI_ROOT=tests/fixtures/holohub_smoke /tmp/holoscan-cli-smoke/bin/holoscan modes smoke_app
 ```
-
-When `HOLOSCAN_CLI_SOURCE` is set, the wrapper prepends that checkout's
-`src/` to `PYTHONPATH` so the in-progress branch is exercised end-to-end
-without publishing a wheel first.
 
 ## Triggering CI
 

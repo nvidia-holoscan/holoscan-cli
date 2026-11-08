@@ -1,6 +1,6 @@
 {
     "module": {
-        "name": "dep_source_missing_git_url",
+        "name": "holoscan-dep-source-missing-git-url",
         "description": "Module with a dependency source missing the required git_url field.",
         "authors": [{ "name": "NVIDIA", "affiliation": "NVIDIA" }],
         "version": "0.1.0",

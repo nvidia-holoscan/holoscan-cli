@@ -36,6 +36,7 @@ import pytest
 from holoscan_cli.container import core as container_core
 from holoscan_cli.container.core import HoloscanContainer
 from holoscan_cli.project_context import ProjectContext
+from holoscan_cli.utils import sdk as sdk_utils
 
 # ---- helpers ----------------------------------------------------------------
 
@@ -314,6 +315,21 @@ def test_standalone_explicit_sdk_parent_resolves_to_concrete_installation(
     assert container.resolve_local_sdk_root(sdk_root) == installation.resolve()
 
 
+def test_local_sdk5_install_pythonpath_uses_site_packages(
+    tmp_path, monkeypatch, make_sdk_directory
+):
+    sdk_root = make_sdk_directory(tmp_path / "sdk")
+    (sdk_root / "lib/python3.12/site-packages/holoscan").mkdir(parents=True)
+    monkeypatch.setattr(container_core, "get_image_pythonpath", lambda img, dryrun: "/image/python")
+    container = _stub_container(tmp_path)
+
+    options = container.get_pythonpath_options(sdk_root, "custom:image")
+
+    assert options[1].startswith(
+        "PYTHONPATH=/workspace/holoscan-sdk/lib/python3.12/site-packages:/image/python:"
+    )
+
+
 def test_explicit_cuda_selects_matching_local_sdk_build(tmp_path, monkeypatch):
     sdk_root = tmp_path / "holoscan-sdk"
     resolver = Mock(return_value=sdk_root)
@@ -513,6 +529,45 @@ def test_build_dryrun_emits_base_and_extra_script_layers(tmp_path, monkeypatch):
     assert layer[resource_index + 1] == "cpuset-cpus=0,1"
 
 
+def test_build_uses_cuda13_for_sdk5_on_cuda12_host(tmp_path, monkeypatch):
+    """SDK 5 images exist only as cuda13, so a CUDA 12 host driver must not
+    select a cuda12 tag or a CUDA 12 build argument."""
+    calls = []
+    monkeypatch.setattr(HoloscanContainer, "BASE_SDK_VERSION", "5.0.0", raising=False)
+    monkeypatch.setattr(HoloscanContainer, "BASE_IMAGE_FORMAT", None, raising=False)
+    monkeypatch.setattr(HoloscanContainer, "DEFAULT_IMAGE_FORMAT", None, raising=False)
+    monkeypatch.setattr(container_core, "get_host_gpu", lambda: "dgpu")
+    monkeypatch.setattr(container_core, "get_compute_capacity", lambda: "90")
+    monkeypatch.setattr(container_core, "get_default_cuda_version", lambda: "12")
+    monkeypatch.setattr(sdk_utils, "get_default_cuda_version", lambda: "12")
+    monkeypatch.setattr(sdk_utils, "get_host_gpu", lambda: "dgpu")
+    monkeypatch.setattr(container_core, "run_command", lambda cmd, **kwargs: calls.append(cmd))
+
+    c = _stub_container(tmp_path, project_metadata=None)
+    c.dryrun = True
+    c.build()
+
+    first = calls[0]
+    assert "BASE_IMAGE=nvcr.io/x/holoscan:v5.0.0-cuda13" in first
+    assert "CUDA_MAJOR=13" in first
+    assert "holohub:ngc-v5.0.0-cuda13" in first
+
+
+def test_build_rejects_cuda12_for_sdk5_even_with_explicit_images(tmp_path, monkeypatch):
+    """SDK 5 supports CUDA 13 only, so an explicit CUDA 12 build must fail."""
+    calls = []
+    monkeypatch.setattr(HoloscanContainer, "BASE_SDK_VERSION", "5.0.0", raising=False)
+    monkeypatch.setattr(container_core, "get_host_gpu", lambda: "dgpu")
+    monkeypatch.setattr(container_core, "get_compute_capacity", lambda: "90")
+    monkeypatch.setattr(container_core, "run_command", lambda cmd, **kwargs: calls.append(cmd))
+
+    c = _stub_container(tmp_path, project_metadata=None)
+    c.dryrun = True
+    with pytest.raises(SystemExit):
+        c.build(img="example/app:test", base_img="example/sdk:5", cuda_version="12")
+    assert calls == []
+
+
 @pytest.mark.parametrize(
     "build_args",
     [
@@ -653,6 +708,8 @@ def test_run_assembles_docker_command_without_ctk_for_custom_runtime(tmp_path, m
     monkeypatch.setenv("NGC_CLI_API_KEY", "secret")
     monkeypatch.setattr(container_core, "get_image_pythonpath", lambda img, dryrun: "/image/python")
     monkeypatch.setattr(container_core, "get_group_id", lambda group: {"video": 44}.get(group))
+    # The default SDK directory depends on the host's SDK install.
+    monkeypatch.setattr(container_core.HoloscanContainer, "SDK_PATH", "/usr")
 
     def record_command(cmd, **kwargs):
         calls.append(cmd)
@@ -693,7 +750,7 @@ def test_run_assembles_docker_command_without_ctk_for_custom_runtime(tmp_path, m
     assert "--cap-add=SYS_ADMIN" in cmd
     assert "/opt/nsys:/opt/nvidia/nsys-host" in cmd
     assert (
-        "PYTHONPATH=/image/python:/opt/nvidia/holoscan/python/lib:/workspace/holohub/benchmarks/holoscan_flow_benchmarking"
+        "PYTHONPATH=/image/python:/usr/python/lib:/workspace/holohub/benchmarks/holoscan_flow_benchmarking"
         in cmd
     )
     assert "NGC_CLI_API_KEY" in cmd
@@ -875,12 +932,22 @@ def test_build_forwards_explicit_build_args_to_docker(tmp_path, monkeypatch):
         project_metadata=_project_metadata(project_dir),
     )
     c.dryrun = True
-    c.build(build_args="--build-arg TEST=value")
+    trailing = [
+        "--label",
+        "description=two words",
+        "--build-arg",
+        "LITERAL=$HOME",
+        "--label",
+        "empty=",
+    ]
+    c.build(build_args="--build-arg TEST=value", extra_args=trailing)
 
     cmd = calls[0]
     assert cmd[:2] == ["docker", "build"]
     assert "--build-arg" in cmd
     assert "TEST=value" in cmd
+    start = cmd.index("--label")
+    assert cmd[start : start + len(trailing)] == trailing
 
 
 def test_default_docker_build_args_env_propagates_to_docker_build(tmp_path, monkeypatch):

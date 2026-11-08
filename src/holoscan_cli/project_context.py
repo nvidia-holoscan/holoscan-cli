@@ -51,7 +51,6 @@ PYPROJECT_FILENAME = "pyproject.toml"
 METADATA_DIRS = (
     "applications",
     "benchmarks",
-    "gxf_extensions",
     "modules",
     "operators",
     "pkg",
@@ -96,6 +95,7 @@ class ProjectContext:
     container_prefix: Optional[str] = None
     workspace_name: Optional[str] = None
     application_name: Optional[str] = None
+    module_name: Optional[str] = None
 
     @property
     def is_module(self) -> bool:
@@ -419,15 +419,6 @@ def _resolve_project_profile(
         str(cuda) if cuda is not None else None
     )
 
-    automatic_candidates: list[tuple[Path, str]] = []
-    if environ.get("HOLOSCAN_CLI_BUILD_LOCAL", "").strip().lower() in _TRUE_ENV_VALUES:
-        automatic_candidates.append(
-            (Path("/workspace/holoscan-sdk"), "container:/workspace/holoscan-sdk")
-        )
-    for candidate in (root / "holoscan-sdk", root.parent / "holoscan-sdk"):
-        if all(candidate != path for path, _source in automatic_candidates):
-            automatic_candidates.append((candidate, f"automatic:{candidate}"))
-
     sdk_root = None
     sdk_source = None
     env_root = environ.get("HOLOSCAN_SDK_ROOT")
@@ -453,12 +444,14 @@ def _resolve_project_profile(
         resolved["warnings"].append(
             f"{env_error} Pass --local-sdk-root to override it for a single command."
         )
-    elif sdk_root is None:
-        for candidate_path, candidate_source in automatic_candidates:
-            sdk_root = resolve_sdk_directory(candidate_path, arch, cuda_version=sdk_cuda)
-            if sdk_root is not None:
-                sdk_source = candidate_source
-                break
+    elif sdk_root is None and (
+        environ.get("HOLOSCAN_CLI_BUILD_LOCAL", "").strip().lower() in _TRUE_ENV_VALUES
+    ):
+        sdk_root = resolve_sdk_directory(
+            Path("/workspace/holoscan-sdk"), arch, cuda_version=sdk_cuda
+        )
+        if sdk_root is not None:
+            sdk_source = "container:/workspace/holoscan-sdk"
     resolved["sdk_root"] = sdk_root
     resolved["sdk_root_source"] = sdk_source
     return resolved
@@ -560,6 +553,7 @@ def _build_module_context(
         root=root,
         kind="module",
         discovery=discovery,
+        module_name=descriptor["name"].strip(),
         repo_prefix=profile.get("repo_prefix", derived_repo_prefix),
         container_prefix=profile.get("container_prefix"),
         workspace_name=profile.get("workspace_name"),

@@ -13,6 +13,7 @@ from argparse import Namespace
 
 import pytest
 
+from holoscan_cli import project_context
 from holoscan_cli.cli import HoloscanCLI
 from holoscan_cli.commands import build as build_cmd
 from holoscan_cli.commands import containers as containers_cmd
@@ -20,6 +21,7 @@ from holoscan_cli.commands import install as install_cmd
 from holoscan_cli.commands import package as package_cmd
 from holoscan_cli.commands import run as run_cmd
 from holoscan_cli.commands import test_cmd
+from holoscan_cli.project_context import ProjectContext
 
 
 class RecordingContainer:
@@ -227,7 +229,8 @@ def test_handle_build_container_applies_mode_build_args(tmp_path, capsys):
     }
     cli = RecordingCLI(tmp_path, project)
 
-    containers_cmd.handle_build_container(cli, _container_args(mode="dev"))
+    trailing = ["--label", "description=two words", "--build-arg", "LITERAL=$HOME"]
+    containers_cmd.handle_build_container(cli, _container_args(mode="dev", _trailing_args=trailing))
 
     assert cli.container.build_calls == [
         {
@@ -239,6 +242,7 @@ def test_handle_build_container_applies_mode_build_args(tmp_path, capsys):
             "mode_build_args": "--build-arg MODE=dev",
             "cuda_version": "13",
             "extra_scripts": [],
+            "extra_args": trailing,
         }
     ]
     assert "Building container for smoke_app in 'dev' mode" in capsys.readouterr().out
@@ -403,8 +407,9 @@ def test_build_project_locally_verbose_redacts_env_mapping(tmp_path, monkeypatch
 
 
 @pytest.mark.parametrize("targets", [None, ["resources", "other resources"]])
+@pytest.mark.parametrize("trailing", [[], ["--verbose", "--", "-d", "two words", ""]])
 def test_handle_build_container_branch_passes_recursive_local_command(
-    tmp_path, monkeypatch, targets
+    tmp_path, monkeypatch, targets, trailing
 ):
     project = {
         "project_name": "smoke_app",
@@ -443,6 +448,7 @@ def test_handle_build_container_branch_passes_recursive_local_command(
             benchmark=True,
             configure_args=["-DCLI=ON"],
             targets=targets,
+            _trailing_args=trailing,
         ),
     )
 
@@ -471,14 +477,45 @@ def test_handle_build_container_branch_passes_recursive_local_command(
         "--benchmark",
         *[f"--target={target}" for target in targets or []],
         "--configure-args=-DCLI=ON",
+        *(["--", *trailing] if trailing else []),
     ]
     assert cli.container.run_calls
 
 
+def test_handle_build_forwards_options_only_to_cmake_build(tmp_path, monkeypatch):
+    cli = RecordingCLI(tmp_path)
+    calls = []
+    monkeypatch.setattr(build_cmd, "run_command", lambda cmd, **kw: calls.append(cmd))
+    monkeypatch.setenv("HOLOSCAN_CLI_ENABLE_SCCACHE", "OFF")
+    trailing = ["--config", "Release", "-j", "2", "--", "-d", "two words", "", "$HOME"]
+
+    build_cmd.handle_build(
+        cli, _project_args(local=True, build_type="debug", parallel="3", _trailing_args=trailing)
+    )
+
+    assert "-DCMAKE_BUILD_TYPE=Debug" in calls[0]
+    assert calls[1] == [
+        "cmake",
+        "--build",
+        str(cli.DEFAULT_BUILD_PARENT_DIR / "smoke_app"),
+        "--config",
+        "Debug",
+        "-j",
+        "3",
+        *trailing,
+    ]
+
+
 @pytest.mark.skipif(shutil.which("cmake") is None, reason="CMake is required")
-@pytest.mark.parametrize("project_type", ["application", "package"])
+@pytest.mark.parametrize(
+    "project_type,target_args",
+    [
+        ("application", ["--", "--target", "resources", "other_resources", "--verbose"]),
+        ("package", ["--target", "resources", "--target", "other_resources", "--", "--verbose"]),
+    ],
+)
 def test_build_targets_configure_fresh_directory_without_building_default_target(
-    tmp_path, monkeypatch, project_type
+    tmp_path, monkeypatch, project_type, target_args
 ):
     cli = RecordingCLI(tmp_path)
     cli.project_data["project_type"] = project_type
@@ -499,20 +536,18 @@ def test_build_targets_configure_fresh_directory_without_building_default_target
         '"message(FATAL_ERROR unexpected_packaging)")\n',
         encoding="utf-8",
     )
-    args = HoloscanCLI().parser.parse_args(
+    parser_cli = HoloscanCLI()
+    parser_cli.subparsers["build"].set_defaults(func=lambda args: build_cmd.handle_build(cli, args))
+    parser_cli.run(
         [
+            "holoscan",
             "build",
             "smoke_app",
             "--local",
             "--configure-args=-DFEATURE=ON",
-            "--target",
-            "resources",
-            "--target",
-            "other_resources",
+            *target_args,
         ]
     )
-
-    build_cmd.handle_build(cli, args)
 
     build_dir = cli.DEFAULT_BUILD_PARENT_DIR / "smoke_app"
     assert (build_dir / "CMakeCache.txt").exists()
@@ -709,7 +744,8 @@ def test_handle_run_profile_without_nsys_on_path(tmp_path, monkeypatch, mounted,
         assert calls[0][:3] == ["/opt/nvidia/nsys-host/bin/nsys", "profile", "--trace=nvtx"]
 
 
-def test_handle_run_container_branch_passes_recursive_local_command(tmp_path, monkeypatch):
+@pytest.mark.parametrize("as_root", [False, True])
+def test_handle_run_container_branch_passes_recursive_local_command(tmp_path, monkeypatch, as_root):
     cli = RecordingCLI(tmp_path)
     captured = {}
 
@@ -725,9 +761,11 @@ def test_handle_run_container_branch_passes_recursive_local_command(tmp_path, mo
             build_type="debug",
             language="python",
             run_args="--once",
-            no_local_build=True,
             pkg_generator="WHEEL",
             docker_opts="--ipc=host",
+            as_root=as_root,
+            no_local_build=not as_root,
+            _trailing_args=["--name", "two words", "", "$HOME", "--no-local-build"],
         ),
     )
 
@@ -741,7 +779,31 @@ def test_handle_run_container_branch_passes_recursive_local_command(tmp_path, mo
     assert "--pkg-generator WHEEL" in command
     assert "--no-local-build" in command
     assert "--run-args=--once" in command
-    assert cli.container.run_calls[0]["extra_args"] == ["-c", command]
+    tokens = shlex.split(command)
+    sep = tokens.index("--")
+    assert "--no-local-build" in tokens[:sep]
+    assert tokens[sep + 1 :] == ["--name", "two words", "", "$HOME", "--no-local-build"]
+    assert cli.container.run_calls[-1]["extra_args"] == ["-c", command]
+    if as_root:
+        builder = shlex.split(cli.container.run_calls[0]["extra_args"][1])
+        assert "--" not in builder
+
+
+@pytest.mark.parametrize("run_args", [None, "--once"])
+def test_handle_run_appends_literal_arguments(tmp_path, monkeypatch, run_args):
+    cli = RecordingCLI(tmp_path)
+    cli.project_data["metadata"]["run"]["command"] = 'python "my app.py"'
+    (cli.DEFAULT_BUILD_PARENT_DIR / "smoke_app").mkdir(parents=True)
+    calls = []
+    monkeypatch.setattr(run_cmd, "run_command", lambda cmd, **kw: calls.append(cmd))
+    trailing = ["--help", "two words", "", "$HOME", "$(echo literal)", "a'b"]
+
+    run_cmd.handle_run(
+        cli,
+        _project_args(local=True, no_local_build=True, run_args=run_args, _trailing_args=trailing),
+    )
+
+    assert calls == [["python", "my app.py", *(["--once"] if run_args else []), *trailing]]
 
 
 def test_handle_run_container_as_root_builds_as_user_then_runs_as_root(tmp_path, monkeypatch):
@@ -845,6 +907,60 @@ def test_handle_install_container_branch_passes_recursive_local_command(tmp_path
     assert "--parallel 4" in command
     assert "--configure-args=-DDEV=ON" in command
     assert cli.container.run_calls[0]["extra_args"] == ["-c", command]
+
+
+def test_build_and_test_pass_module_language_options(tmp_path, monkeypatch):
+    context = ProjectContext(
+        root=tmp_path, kind="module", discovery="cwd", module_name="holoscan-my-sensor"
+    )
+    monkeypatch.setattr(project_context, "get_active_project_context", lambda: context)
+    cli = RecordingCLI(tmp_path)
+    calls = []
+    monkeypatch.setattr(build_cmd, "run_command", lambda cmd, **kwargs: calls.append(cmd))
+    monkeypatch.setattr(build_cmd.shutil, "which", lambda name: None)
+
+    build_cmd.build_project_locally(cli, "smoke_app", language="cpp", dryrun=True)
+    test_cmd.handle_test(cli, _container_args(no_xvfb=True, language="cpp"))
+
+    expected = [
+        "-DHOLOHUB_BUILD_PYTHON=OFF",
+        "-DHOLOHUB_BUILD_CPP=ON",
+        "-DHOLOSCAN_MY_SENSOR_BUILD_PYTHON=OFF",
+        "-DHOLOSCAN_MY_SENSOR_BUILD_CPP=ON",
+    ]
+    assert all(option in calls[0] for option in expected)
+    ctest_command = cli.container.run_calls[0]["extra_args"][1]
+    assert f'-DCONFIGURE_OPTIONS="{";".join(expected)}"' in ctest_command
+
+
+def test_build_and_test_pass_language_options_for_module_in_source_tree(tmp_path, monkeypatch):
+    context = ProjectContext(root=tmp_path, kind="source", discovery="cwd")
+    monkeypatch.setattr(project_context, "get_active_project_context", lambda: context)
+    module = {
+        "project_name": "holoscan-my-sensor",
+        "project_type": "module",
+        "source_folder": tmp_path / "repo/modules/holoscan-my-sensor",
+        "metadata": {"language": "cpp"},
+    }
+    cli = RecordingCLI(tmp_path, project_data=module)
+    calls = []
+    monkeypatch.setattr(build_cmd, "run_command", lambda cmd, **kwargs: calls.append(cmd))
+    monkeypatch.setattr(build_cmd.shutil, "which", lambda name: None)
+
+    build_cmd.build_project_locally(cli, "holoscan-my-sensor", language="python", dryrun=True)
+    test_cmd.handle_test(
+        cli, _container_args(project="holoscan-my-sensor", no_xvfb=True, language="python")
+    )
+
+    expected = [
+        "-DHOLOHUB_BUILD_PYTHON=ON",
+        "-DHOLOHUB_BUILD_CPP=OFF",
+        "-DHOLOSCAN_MY_SENSOR_BUILD_PYTHON=ON",
+        "-DHOLOSCAN_MY_SENSOR_BUILD_CPP=OFF",
+    ]
+    assert all(option in calls[0] for option in expected)
+    ctest_command = cli.container.run_calls[0]["extra_args"][1]
+    assert f'-DCONFIGURE_OPTIONS="{";".join(expected)}"' in ctest_command
 
 
 def test_handle_test_container_adds_coverage_build_args_and_ctest_options(tmp_path):

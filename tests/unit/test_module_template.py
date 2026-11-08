@@ -16,41 +16,32 @@ TEMPLATE = ROOT / "templates/module"
 CMAKE = ROOT / "cmake"
 
 
-def _load_gitutils():
-    path = TEMPLATE / "{{cookiecutter.module_repo_name}}/.github/workflows/scripts/gitutils.py"
-    spec = importlib.util.spec_from_file_location("generated_gitutils", path)
+def _load_script(name):
+    path = TEMPLATE / f"{{{{cookiecutter.module_repo_name}}}}/.github/workflows/scripts/{name}.py"
+    spec = importlib.util.spec_from_file_location(f"generated_{name}", path)
     assert spec and spec.loader
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
 
 
-def test_cmake_support_keeps_export_and_pybind_contracts():
+def test_cmake_support_keeps_export_contracts():
     operator = (
         TEMPLATE
         / "{{cookiecutter.module_repo_name}}/operators"
         / "{{cookiecutter.operator_slug}}/CMakeLists.txt"
     ).read_text(encoding="utf-8")
     config = (CMAKE / "Config.cmake.in").read_text(encoding="utf-8")
-    pybind = (CMAKE / "pybind11_add_holohub_module.cmake").read_text(encoding="utf-8")
     deb = (CMAKE / "holohub_configure_deb.cmake").read_text(encoding="utf-8")
-    initializer = (CMAKE / "pybind11/__init__.py.in").read_text(encoding="utf-8")
 
     assert "PUBLIC holoscan::core" in operator
+    assert "target_link_libraries(holoscan_{{ cookiecutter.module_slug }} INTERFACE" in operator
     assert "find_dependency(holoscan REQUIRED)" in config
-    assert "holoscan::pybind11" in pybind
-    assert "${CMAKE_SUBMODULE_OUT_DIR}" in pybind
-    assert "${CMAKE_BINARY_DIR}/${HOLOSCAN_INSTALL_LIB_DIR}" in pybind
     assert 'set(missingArgs "")' in deb
-    compile(
-        initializer.replace("@MODULE_NAME@", "example").replace("@MODULE_CLASS_NAME@", "ExampleOp"),
-        "cmake/pybind11/__init__.py",
-        "exec",
-    )
 
 
 def test_generated_gitutils_handles_untracked_files_and_safe_revisions(monkeypatch):
-    gitutils = _load_gitutils()
+    gitutils = _load_script("gitutils")
     calls = []
 
     def git(*args):
@@ -70,62 +61,53 @@ def test_generated_gitutils_handles_untracked_files_and_safe_revisions(monkeypat
         gitutils.changed_files_between("--unsafe", "head")
 
 
+def _write_language(path: Path, kind: str, language):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps({kind: {"language": language}}), encoding="utf-8")
+
+
+def test_generated_metadata_check_reports_operator_languages_missing_from_module(tmp_path):
+    validator = _load_script("validate_metadata")
+    _write_language(tmp_path / "metadata.json", "module", ["C++"])
+    _write_language(tmp_path / "operators/a_op/metadata.json", "operator", ["C++", "Python"])
+    _write_language(tmp_path / "operators/b_op/metadata.json", "operator", "C++")
+
+    assert validator.find_undeclared_languages(tmp_path) == [
+        (Path("operators/a_op/metadata.json"), "Python")
+    ]
+
+    _write_language(tmp_path / "metadata.json", "module", ["C++", "Python"])
+    assert validator.find_undeclared_languages(tmp_path) == []
+
+
 def test_direct_cookiecutter_use_cannot_pin_an_arbitrary_cli_release():
     defaults = json.loads((TEMPLATE / "cookiecutter.json").read_text(encoding="utf-8"))
     assert defaults["_holoscan_cli_version"] == "0"
 
 
-@pytest.mark.skipif(shutil.which("cmake") is None, reason="CMake is required")
 @pytest.mark.parametrize(
-    "tests_enabled,gtest_available", [(False, False), (True, False), (True, True)]
+    "sdk_version,prefix", [("4.6.0", "/opt/nvidia/holoscan"), ("5.0.0", "/usr")]
 )
-def test_cpp_test_configuration_explains_missing_gtest(tmp_path, tests_enabled, gtest_available):
-    """Exercise the generated CMake test logic with and without GTest discovery."""
-    cpp_template = next(
-        (TEMPLATE / "{{cookiecutter.module_repo_name}}/tests/cpp").glob("*CMakeLists.txt*")
-    )
-    cpp_cmake = "\n".join(cpp_template.read_text(encoding="utf-8").splitlines()[2:])
-    cpp_cmake = cpp_cmake.replace("{{ cookiecutter.module_slug | upper }}", "MY_MOD")
-    cpp_cmake = cpp_cmake.replace("{{ cookiecutter.operator_slug }}", "my_mod_op")
-
-    tests_dir = tmp_path / "tests/cpp"
-    tests_dir.mkdir(parents=True)
-    (tests_dir / "CMakeLists.txt").write_text(cpp_cmake, encoding="utf-8")
-    (tests_dir / "test_operators.cpp").write_text("int main() { return 0; }\n", encoding="utf-8")
-    (tmp_path / "operators").mkdir()
-    (tmp_path / "CMakeLists.txt").write_text(
+def test_deb_install_prefix_follows_sdk_layout(tmp_path, sdk_version, prefix):
+    cmake = shutil.which("cmake")
+    if cmake is None:
+        pytest.skip("CMake is required to configure the packaging helper")
+    project = tmp_path / "project"
+    project.mkdir()
+    (project / "CMakeLists.txt").write_text(
         "cmake_minimum_required(VERSION 3.24)\n"
-        "project(module_test_config LANGUAGES CXX)\n"
-        "add_library(op INTERFACE)\n"
-        "add_library(holoscan::my_mod_op ALIAS op)\n"
-        "add_library(holoscan::core ALIAS op)\n"
-        'option(MY_MOD_BUILD_TESTING "Build module tests" ON)\n'
-        "if(MY_MOD_BUILD_TESTING)\n"
-        "  enable_testing()\n"
-        "  add_subdirectory(tests/cpp)\n"
-        "endif()\n",
+        "project(example VERSION 1.0.0 LANGUAGES NONE)\n"
+        f'set(holoscan_VERSION "{sdk_version}")\n'
+        f'list(APPEND CMAKE_MODULE_PATH "{CMAKE.as_posix()}")\n'
+        "include(holohub_configure_deb)\n"
+        "holohub_configure_deb(NAME example DESCRIPTION Example VERSION 1.0.0 VENDOR NVIDIA\n"
+        '  CONTACT "dev@example.com" DEPENDS "holoscan")\n',
         encoding="utf-8",
     )
-
-    cmake_args = ["cmake", "-S", str(tmp_path), "-B", str(tmp_path / "build")]
-    if not tests_enabled:
-        cmake_args.append("-DMY_MOD_BUILD_TESTING:BOOL=OFF")
-    if gtest_available:
-        cmake_modules = tmp_path / "cmake"
-        cmake_modules.mkdir()
-        (cmake_modules / "FindGTest.cmake").write_text(
-            "set(GTest_FOUND TRUE)\nadd_library(GTest::gtest_main INTERFACE IMPORTED)\n",
-            encoding="utf-8",
-        )
-        cmake_args.append(f"-DCMAKE_MODULE_PATH={cmake_modules}")
-    else:
-        cmake_args.append("-DCMAKE_DISABLE_FIND_PACKAGE_GTest=TRUE")
-
-    result = subprocess.run(cmake_args, capture_output=True, text=True, check=False)
-    output = result.stdout + result.stderr
-    if tests_enabled and not gtest_available:
-        assert result.returncode != 0
-        assert "GTest is required when MY_MOD_BUILD_TESTING is ON" in output
-        assert "-DMY_MOD_BUILD_TESTING:BOOL=OFF" in output
-    else:
-        assert result.returncode == 0, output
+    build = tmp_path / "build"
+    result = subprocess.run(
+        [cmake, "-S", str(project), "-B", str(build)], capture_output=True, text=True
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    config = (build / "pkg/CPackConfig-example.cmake").read_text(encoding="utf-8")
+    assert f'set(CPACK_PACKAGING_INSTALL_PREFIX "{prefix}")' in config

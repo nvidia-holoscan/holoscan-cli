@@ -98,7 +98,12 @@ function(holohub_configure_deb)
   endif()
 
   # standard configurations
-  set(CPACK_PACKAGING_INSTALL_PREFIX "/opt/nvidia/holoscan")
+  # Holoscan SDK 5 installs under /usr and no longer provides /opt/nvidia/holoscan.
+  if(DEFINED holoscan_VERSION AND holoscan_VERSION VERSION_GREATER_EQUAL 5.0)
+    set(CPACK_PACKAGING_INSTALL_PREFIX "/usr")
+  else()
+    set(CPACK_PACKAGING_INSTALL_PREFIX "/opt/nvidia/holoscan")
+  endif()
   set(CPACK_STRIP_FILES TRUE)
   set(CPACK_GENERATOR DEB) # default, can be overridden with cpack -G <generator>
   set(CPACK_DEBIAN_FILE_NAME DEB-DEFAULT)

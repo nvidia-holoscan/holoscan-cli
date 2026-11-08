@@ -4,7 +4,7 @@ This file guides agents contributing to this CLI repository. For using the CLI
 in another project, read [README.md](README.md),
 [CLI_REFERENCE.md](CLI_REFERENCE.md), and [CONFIGURATION.md](CONFIGURATION.md),
 then follow that project's own guidance. Generated modules have their own
-`README.md` and `DEVELOPER.md`.
+`README.md`, `DEVELOPER.md`, and `AGENTS.md`.
 
 ## Implementation and documentation
 

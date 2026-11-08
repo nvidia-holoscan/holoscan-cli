@@ -1,5 +1,5 @@
 {
-    "$schema": "urn:holohub:application:v1",
+    "$schema": "urn:holoscan:application:v1",
     "application": {
         "name": "{{ cookiecutter.module_slug }}_pipeline",
         "authors": [
@@ -24,10 +24,10 @@
         "default_mode": "default",
         "modes": {
             "default": {
-                "description": "Run the Python {{ cookiecutter.module_slug }} pipeline",
+                "description": "Run the Python {{ cookiecutter.module_slug }} pipeline{% if cookiecutter.__python_bindings == 'yes' %} through the operator bindings{% endif %}",
                 "run": {
                     "command": "python3 <holohub_app_source>/{{ cookiecutter.module_slug }}_pipeline.py",
-                    "workdir": "holohub_app_bin"
+                    "workdir": "holohub_bin"
                 }
             }
         }
