@@ -191,6 +191,33 @@ def test_default_base_image_does_not_probe_host_when_unconfigured(tmp_path, monk
         c.default_base_image()
 
 
+@pytest.mark.parametrize(
+    ("source", "expected"),
+    [("default", None), ("environment", "example.com/from-env:tag")],
+)
+def test_missing_project_base_image_fails_only_without_an_override(
+    tmp_path, monkeypatch, capsys, source, expected
+):
+    error = "pyproject.toml: tool.holoscan.base-images has no entry for 'aarch64'."
+    context = ProjectContext(
+        root=tmp_path, kind="source", discovery="ancestor", base_image_error=error
+    )
+    monkeypatch.setattr(container_core, "get_active_project_context", lambda: context)
+    monkeypatch.setattr(container_core, "activated_environment_source", lambda _name: source)
+    monkeypatch.setattr(HoloscanContainer, "BASE_IMAGE_FORMAT", None, raising=False)
+    monkeypatch.setattr(
+        HoloscanContainer, "BASE_IMAGE_NAME", "example.com/from-env:tag", raising=False
+    )
+    c = _stub_container(tmp_path, project_metadata=None)
+
+    if expected is None:
+        with pytest.raises(SystemExit):
+            c.default_base_image()
+        assert error in capsys.readouterr().err
+    else:
+        assert c.default_base_image() == expected
+
+
 # ---- _format_image_template validation --------------------------------------
 
 

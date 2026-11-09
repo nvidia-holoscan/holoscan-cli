@@ -137,9 +137,10 @@ aarch64 = "registry.example.com/holoscan/sdk-build-aarch64:5.0.0-cuda13"
   project → mode → `HOLOSCAN_CLI_DEFAULT_DOCKER_BUILD_ARGS` or
   `HOLOSCAN_CLI_DEFAULT_DOCKER_RUN_ARGS` → command line. Later options win only
   where Docker supports that behavior.
-- `base-images`, when present, must include the selected architecture. References
-  are used unchanged and cannot be empty or contain whitespace. `--base-img`, then
-  `HOLOSCAN_CLI_BASE_IMAGE`, take precedence; see [base images](#base-images).
+- `base-images` references are used unchanged and cannot be empty or contain
+  whitespace. `--base-img`, then `HOLOSCAN_CLI_BASE_IMAGE`, take precedence; see
+  [base images](#base-images). If the table has no entry for the selected
+  architecture, only a container build without either override fails.
 - `forward-env` accepts valid host variable names, never values. Existing host
   values are inherited without appearing on the Docker command line. Names combine
   with `HOLOSCAN_CLI_FORWARD_ENV` and repeated `--forward-env NAME` options.
