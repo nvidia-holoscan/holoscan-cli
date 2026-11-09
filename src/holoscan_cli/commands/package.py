@@ -28,7 +28,11 @@ from pathlib import Path
 from typing import Optional
 
 from holoscan_cli.commands.registry import help_for
-from holoscan_cli.container.parsers import add_docker_build_args, add_local_container_args
+from holoscan_cli.container.parsers import (
+    add_configure_args,
+    add_docker_build_args,
+    add_local_container_args,
+)
 from holoscan_cli.metadata.utils import resolve_module_name
 from holoscan_cli.utils.docker import (
     apply_container_cli_overrides,
@@ -41,7 +45,7 @@ from holoscan_cli.utils.holohub import (
     is_env_request_local_build,
 )
 from holoscan_cli.utils.io import Color, fatal, run_command
-from holoscan_cli.utils.project import report_effective_configuration
+from holoscan_cli.utils.project import append_configure_args, report_effective_configuration
 from holoscan_cli.utils.sdk import get_sdk_cmake_prefix_path, resolve_local_sdk_dir
 
 
@@ -78,6 +82,7 @@ def register_package_parser(
     )
     parser.add_argument("--language", choices=["cpp", "python"], default=None)
     parser.add_argument("--verbose", action="store_true")
+    add_configure_args(parser)
     add_docker_build_args(parser)
     parser.add_argument("--dryrun", action="store_true", default=False)
     parser.set_defaults(func=lambda args: handle_package(cli, args))
@@ -143,6 +148,7 @@ def handle_package(cli, args: argparse.Namespace) -> None:
             effective_build_type=effective_build_type,
             is_local_mode=True,
             default_sdk_root=cli.DEFAULT_SDK_DIR,
+            include_configure=True,
         )
         project_data = _resolve_module_project(
             cli, args.project, language=getattr(args, "language", None)
@@ -166,6 +172,7 @@ def handle_package(cli, args: argparse.Namespace) -> None:
         container=container,
         include_build=not skip_docker_build,
         include_run=True,
+        include_configure=True,
     )
     if not skip_docker_build:
         container.build(
@@ -191,6 +198,7 @@ def handle_package(cli, args: argparse.Namespace) -> None:
         build_tokens.extend(["--pkg-generator", str(args.pkg_generator)])
     if getattr(args, "language", None):
         build_tokens.extend(["--language", str(args.language)])
+    append_configure_args(build_tokens, args)
     if args.dryrun:
         build_tokens.append("--dryrun")
     if getattr(args, "verbose", False):
@@ -240,6 +248,17 @@ def _package_locally(cli, args: argparse.Namespace, project_data: dict) -> None:
 
     cpack_generators = [g for g in generators if g != "WHEEL"]
     want_wheel = "WHEEL" in generators
+    # Every generator gets the same user CMake options: CMAKE_ARGS, then
+    # --configure-args, so the last value wins. scikit-build-core reads
+    # CMAKE_ARGS for the wheel; the CPack configure gets the same tokens.
+    try:
+        env_cmake_args = shlex.split(build_env.get("CMAKE_ARGS", ""))
+    except ValueError:
+        fatal("CMAKE_ARGS is not a valid shell-quoted list of CMake options.")
+    configure_args = [
+        os.path.expandvars(arg) for arg in getattr(args, "configure_args", None) or []
+    ]
+    user_cmake_args = env_cmake_args + configure_args
 
     if cpack_generators:
         build_dir = cli.DEFAULT_BUILD_PARENT_DIR / package_slug / "package"
@@ -270,7 +289,11 @@ def _package_locally(cli, args: argparse.Namespace, project_data: dict) -> None:
         ]
         if shutil.which("ninja"):
             cmake_args.extend(["-G", "Ninja"])
-        run_command(cmake_args, dry_run=dryrun, env=build_env)
+        display_cmake_args = list(cmake_args)
+        if user_cmake_args:
+            display_cmake_args.append(f"<{len(user_cmake_args)} configured CMake option(s) hidden>")
+        cmake_args.extend(user_cmake_args)
+        run_command(cmake_args, dry_run=dryrun, env=build_env, display_override=display_cmake_args)
 
         parallel_jobs = os.environ.get("CMAKE_BUILD_PARALLEL_LEVEL", os.cpu_count())
         build_cmd = [
@@ -317,6 +340,8 @@ def _package_locally(cli, args: argparse.Namespace, project_data: dict) -> None:
         dist_dir = cli.DEFAULT_BUILD_PARENT_DIR / "dist"
         wheel_env = build_env.copy()
         wheel_env["PYTHONSAFEPATH"] = "1"
+        if configure_args:
+            wheel_env["CMAKE_ARGS"] = shlex.join(user_cmake_args)
         wheel_cmd = [
             sys.executable,
             "-m",
