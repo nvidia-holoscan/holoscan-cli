@@ -303,6 +303,12 @@ Inspect their metadata and payload, then test installation in a clean consumer.
 A DEB needs its declared SDK dependency in the package database; a Python import
 or unpacked archive does not prove that dependency is satisfied.
 
+Every package generator gets the same extra CMake options: `CMAKE_ARGS` first,
+then each `--configure-args`, after the CLI's own options, so the last value
+wins. For example, `--configure-args=-DCMAKE_CUDA_ARCHITECTURES=80` applies to
+DEB, TGZ, and wheel builds. Container packaging forwards `--configure-args`;
+add `--forward-env CMAKE_ARGS` to use the host variable there.
+
 ## Diagnostics and cleanup
 
 `version`, `list`, `modes`, `env-info`, `env-check`, and `status` accept `--json`.
