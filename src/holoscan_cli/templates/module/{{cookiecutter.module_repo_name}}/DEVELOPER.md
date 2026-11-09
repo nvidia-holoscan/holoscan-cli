@@ -405,10 +405,12 @@ installs the Module itself (`[tool.uv].package = false`).{% else %} It does not 
 | `[tool.ruff]` | Lint configuration used by `.pre-commit-config.yaml` and CI |
 
 The supported `[tool.holoscan]` keys are `cuda`, `ctest-script`, `docker-build-args`,
-`docker-run-args`, `forward-env`, `search-paths`, and `base-images.{x86_64,aarch64}`.
-Docker argument arrays contain one command token per element. `search-paths` lists the folders
-searched for projects, replacing the defaults (`applications`, `operators`, `pkg`, and other
-conventional folders); for example, `search-paths = ["operators", "examples"]`.
+`docker-run-args`, `forward-env`, `optional-devices`, `optional-mounts`, `search-paths`, and
+`base-images.{x86_64,aarch64}`. Docker argument arrays contain one command token per element.
+Docker run arguments also reach build containers, so list a device or mount that only some hosts
+have in `optional-devices` or `optional-mounts`; it is added only where it exists. `search-paths`
+lists the folders searched for projects, replacing the defaults (`applications`, `operators`,
+`pkg`, and other conventional folders); for example, `search-paths = ["operators", "examples"]`.
 Do not store credentials or machine paths here; use `HOLOSCAN_SDK_ROOT` or `--local-sdk-root`
 for a machine-specific SDK.
 
