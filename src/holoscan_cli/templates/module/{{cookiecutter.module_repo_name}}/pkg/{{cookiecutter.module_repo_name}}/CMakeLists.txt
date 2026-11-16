@@ -9,8 +9,8 @@ holohub_configure_deb(
     NAME        "{{ cookiecutter.module_repo_name }}"
     DESCRIPTION "${PROJECT_DESCRIPTION}"
     VERSION     "${PROJECT_VERSION}"
-    VENDOR      "{% if cookiecutter.affiliation %}{{ cookiecutter.affiliation }}{% else %}NVIDIA{% endif %}"
-    CONTACT     "{{ cookiecutter.contact_email }}"
+    VENDOR      "{% if cookiecutter.affiliation %}{{ cookiecutter.affiliation | replace('\\', '\\\\') | replace('"', '\\"') | replace('$', '\\$') }}{% else %}NVIDIA{% endif %}"
+    CONTACT     "{{ cookiecutter.contact_email | replace('\\', '\\\\') | replace('"', '\\"') | replace('$', '\\$') }}"
     # "holoscan" is the Debian alias of holoscan-cuda-13 on SDK 5.0 platforms.
     DEPENDS     "holoscan (>= {{ cookiecutter.holoscan_version }})"
     EXPORT_NAME "holoscan_{{ cookiecutter.module_slug }}_targets")

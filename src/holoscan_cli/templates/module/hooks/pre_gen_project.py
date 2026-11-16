@@ -7,6 +7,7 @@
 import keyword
 import re
 import sys
+import unicodedata
 
 PROJECT_NAME = {{ cookiecutter.project_name | tojson }}
 MODULE_SLUG = {{ cookiecutter.module_slug | tojson }}
@@ -15,6 +16,14 @@ OPERATOR_SLUG = {{ cookiecutter.operator_slug | tojson }}
 LANGUAGE = {{ cookiecutter.language | tojson }}
 LICENSE = {{ cookiecutter._license | tojson }}
 HOLOSCAN_VERSION = {{ cookiecutter.holoscan_version | tojson }}
+# Free text is escaped for JSON, TOML, and CMake strings, and it also appears in
+# source comments, so it must stay on one line.
+FREE_TEXT = {
+    "description": {{ cookiecutter.description | tojson }},
+    "full_name": {{ cookiecutter.full_name | tojson }},
+    "affiliation": {{ cookiecutter.affiliation | tojson }},
+    "contact_email": {{ cookiecutter.contact_email | tojson }},
+}
 
 MINIMUM_HOLOSCAN_VERSION = (5, 0, 0)
 
@@ -33,6 +42,12 @@ def reject(message: str) -> None:
 
 if LANGUAGE not in ("cpp", "cpp,python", "python"):
     reject("language must be 'cpp', 'cpp,python', or 'python'.")
+
+for name, value in FREE_TEXT.items():
+    # Control characters (Cc) include newlines and tabs; Zl and Zp are Unicode
+    # line and paragraph separators.
+    if any(unicodedata.category(character) in ("Cc", "Zl", "Zp") for character in value):
+        reject(f"{name} must be a single line without control characters.")
 
 version_match = _SEMVER.fullmatch(HOLOSCAN_VERSION)
 if version_match is None:

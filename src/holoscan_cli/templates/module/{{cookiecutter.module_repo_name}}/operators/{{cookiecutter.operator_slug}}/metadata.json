@@ -4,8 +4,8 @@
         "name": "{{ cookiecutter.operator_slug.split('_')|map('capitalize')|join('') }}",
         "authors": [
             {
-                "name": "{{ cookiecutter.full_name }}",
-                "affiliation": "{{ cookiecutter.affiliation }}"
+                "name": {{ cookiecutter.full_name | jsonify }},
+                "affiliation": {{ cookiecutter.affiliation | jsonify }}
             }
         ],
         "language": [{% if cookiecutter.__pure_python == 'yes' %}"Python"{% elif cookiecutter.__python_bindings == 'yes' %}"C++", "Python"{% else %}"C++"{% endif %}],

@@ -4,8 +4,8 @@
         "name": "{{ cookiecutter.module_slug }}_pipeline",
         "authors": [
             {
-                "name": "{{ cookiecutter.full_name }}",
-                "affiliation": "{{ cookiecutter.affiliation }}"
+                "name": {{ cookiecutter.full_name | jsonify }},
+                "affiliation": {{ cookiecutter.affiliation | jsonify }}
             }
         ],
         "language": ["C++"],

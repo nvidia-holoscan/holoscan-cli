@@ -29,11 +29,11 @@ build-backend = "scikit_build_core.build"
 [project]
 name = "holoscan-{{ cookiecutter.module_slug.replace('_', '-') }}"
 version = "{{ cookiecutter.version }}"
-description = "{{ cookiecutter.description }}"
+description = "{{ cookiecutter.description | replace('\\', '\\\\') | replace('"', '\\"') }}"
 readme = "README.md"
 license = { text = "{{ cookiecutter._license }}" }
 authors = [
-    { name = "{{ cookiecutter.full_name }}" },
+    { name = "{{ cookiecutter.full_name | replace('\\', '\\\\') | replace('"', '\\"') }}" },
 ]
 {% if cookiecutter.__pure_python == 'yes' -%}
 requires-python = ">=3.12"

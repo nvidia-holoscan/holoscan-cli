@@ -8,6 +8,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -614,6 +615,90 @@ def test_module_template_rejects_sdk_module_names(cli, tmp_path, monkeypatch, ca
 
     assert "Hook script failed" in capsys.readouterr().err
     assert not (tmp_path / "output" / f"holoscan-{project.lower()}").exists()
+
+
+# Characters that need escaping in JSON, TOML, or CMake strings, plus non-ASCII text.
+FREE_TEXT = {
+    "description": 'Reads "in-body" frames from C:\\data with ${HOME} 🚀',
+    "full_name": 'Zoë "Q" O\'Brien',
+    "affiliation": 'R&D "Lab" \\ Ca$h',
+    "contact_email": '"Doe, Jane" <jane@example.com>',
+}
+
+
+def _create_with_free_text(cli, tmp_path, monkeypatch, **overrides):
+    pytest.importorskip("cookiecutter")
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    (tmp_path / "home").mkdir()
+    monkeypatch.setattr(create, "_initialize_module_git", lambda _path: False)
+    context = [f"{key}={value}" for key, value in FREE_TEXT.items()]
+    create.handle_create(
+        cli, _args(dryrun=False, directory=tmp_path / "output", context=context, **overrides)
+    )
+    return tmp_path / "output/holoscan-my-mod"
+
+
+def test_packaged_template_keeps_free_text_in_metadata_and_pyproject(cli, tmp_path, monkeypatch):
+    project = _create_with_free_text(cli, tmp_path, monkeypatch, language=["cpp", "python"])
+
+    authors = [{"name": FREE_TEXT["full_name"], "affiliation": FREE_TEXT["affiliation"]}]
+    module = json.loads((project / "metadata.json").read_text(encoding="utf-8"))["module"]
+    assert module["description"] == FREE_TEXT["description"]
+    assert module["authors"] == authors
+    for path, kind in (
+        ("operators/my_mod_op/metadata.json", "operator"),
+        ("applications/my_mod_pipeline/cpp/metadata.json", "application"),
+        ("applications/my_mod_pipeline/python/metadata.json", "application"),
+    ):
+        metadata = json.loads((project / path).read_text(encoding="utf-8"))[kind]
+        assert metadata["authors"] == authors, path
+    _validate_generated_metadata(project)
+
+    pyproject = tomllib.loads((project / "pyproject.toml").read_text(encoding="utf-8"))
+    assert pyproject["project"]["description"] == FREE_TEXT["description"]
+    assert pyproject["project"]["authors"] == [{"name": FREE_TEXT["full_name"]}]
+
+
+@pytest.mark.skipif(shutil.which("cmake") is None, reason="cmake is required")
+def test_packaged_template_keeps_free_text_in_cmake_strings(cli, tmp_path, monkeypatch):
+    project = _create_with_free_text(cli, tmp_path, monkeypatch)
+
+    root = (project / "CMakeLists.txt").read_text(encoding="utf-8")
+    deb = (project / "pkg/holoscan-my-mod/CMakeLists.txt").read_text(encoding="utf-8")
+    quoted = r'\s+"((?:[^"\\]|\\.)*)"$'
+    arguments = {
+        "description": re.search(rf"^\s*DESCRIPTION{quoted}", root, re.MULTILINE).group(1),
+        "affiliation": re.search(rf"^\s*VENDOR{quoted}", deb, re.MULTILINE).group(1),
+        "contact_email": re.search(rf"^\s*CONTACT{quoted}", deb, re.MULTILINE).group(1),
+    }
+    # Let CMake evaluate each generated quoted argument and write back its value.
+    script = tmp_path / "strings.cmake"
+    script.write_text(
+        "".join(f'file(WRITE "${{OUT}}/{key}" "{value}")\n' for key, value in arguments.items()),
+        encoding="utf-8",
+    )
+    subprocess.run(
+        ["cmake", f"-DOUT={tmp_path}", "-P", str(script)], check=True, capture_output=True
+    )
+    for key in arguments:
+        assert (tmp_path / key).read_text(encoding="utf-8") == FREE_TEXT[key], key
+
+
+@pytest.mark.parametrize("key", list(FREE_TEXT))
+def test_module_template_rejects_multiline_free_text(cli, tmp_path, monkeypatch, capfd, key):
+    pytest.importorskip("cookiecutter")
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    (tmp_path / "home").mkdir()
+    monkeypatch.setattr(create, "_initialize_module_git", lambda _path: False)
+
+    with pytest.raises(SystemExit):
+        create.handle_create(
+            cli,
+            _args(dryrun=False, directory=tmp_path / "output", context=[f"{key}=first\nsecond"]),
+        )
+
+    assert f"{key} must be a single line" in capfd.readouterr().err
+    assert not (tmp_path / "output/holoscan-my-mod").exists()
 
 
 def test_packaged_template_creates_a_standalone_module(cli, tmp_path, monkeypatch):
