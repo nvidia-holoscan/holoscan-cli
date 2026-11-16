@@ -19,7 +19,8 @@ function(holohub_configure_deb)
   set(requiredArgs NAME DESCRIPTION VERSION VENDOR CONTACT DEPENDS)
   list(APPEND oneValueArgs ${requiredArgs} SECTION PRIORITY RECOMMENDS SUGGESTS EXPORT_NAME)
   set(multiValueArgs COMPONENTS)
-  cmake_parse_arguments(ARG "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGV})
+  # PARSE_ARGV keeps a value that contains a semicolon, such as a vendor name, whole.
+  cmake_parse_arguments(PARSE_ARGV 0 ARG "${options}" "${oneValueArgs}" "${multiValueArgs}")
 
   # validate required args
   set(missingArgs "")
@@ -126,5 +127,8 @@ function(holohub_configure_deb)
   endforeach()
   set(CPACK_DEBIAN_PACKAGE_CONTROL_EXTRA ${control_scripts})
 
+  # Escape CPACK_* values in the generated CPack config so cpack receives them
+  # exactly, including quotes, backslashes, and ${...} in free text.
+  set(CPACK_VERBATIM_VARIABLES TRUE)
   include(CPack)
 endfunction()

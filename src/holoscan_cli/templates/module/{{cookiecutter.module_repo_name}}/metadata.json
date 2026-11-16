@@ -4,11 +4,11 @@
     "name": "holoscan-{{ cookiecutter.module_slug.replace('_', '-') }}",
     "version": "{{ cookiecutter.version }}",
     "support_level": "community",
-    "description": "{{ cookiecutter.description }}",
+    "description": {{ cookiecutter.description | jsonify }},
     "authors": [
       {
-        "name": "{{ cookiecutter.full_name }}",
-        "affiliation": "{{ cookiecutter.affiliation }}"
+        "name": {{ cookiecutter.full_name | jsonify }},
+        "affiliation": {{ cookiecutter.affiliation | jsonify }}
       }
     ],
     "license": "{{ cookiecutter._license }}",

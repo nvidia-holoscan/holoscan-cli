@@ -9,7 +9,7 @@ cmake_minimum_required(VERSION 3.24)
 # enables no compiled languages.
 project(holoscan_{{ cookiecutter.module_slug }}
     VERSION {{ cookiecutter.version }}
-    DESCRIPTION "{{ cookiecutter.description }}"
+    DESCRIPTION "{{ cookiecutter.description | replace('\\', '\\\\') | replace('"', '\\"') | replace('$', '\\$') }}"
     LANGUAGES NONE
 )
 
@@ -77,7 +77,7 @@ cmake_minimum_required(VERSION 4.0)
 
 project(holoscan_{{ cookiecutter.module_slug }}
     VERSION {{ cookiecutter.version }}
-    DESCRIPTION "{{ cookiecutter.description }}"
+    DESCRIPTION "{{ cookiecutter.description | replace('\\', '\\\\') | replace('"', '\\"') | replace('$', '\\$') }}"
     LANGUAGES CXX
 )
 
