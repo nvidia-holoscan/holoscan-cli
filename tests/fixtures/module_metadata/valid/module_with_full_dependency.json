@@ -1,6 +1,6 @@
 {
     "module": {
-        "name": "module_with_full_dependency",
+        "name": "holoscan-module-with-full-dependency",
         "description": "Module with a fully-specified dependency including source and provides_operators.",
         "authors": [{ "name": "NVIDIA", "affiliation": "NVIDIA" }],
         "version": "0.1.0",

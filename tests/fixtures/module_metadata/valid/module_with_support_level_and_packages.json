@@ -1,0 +1,36 @@
+{
+    "module": {
+        "name": "holoscan-sensor-bridge",
+        "description": "Module declaring its support level and binary package identities.",
+        "authors": [
+            {
+                "name": "NVIDIA",
+                "affiliation": "NVIDIA"
+            }
+        ],
+        "version": "0.1.0",
+        "language": [
+            "Python"
+        ],
+        "platforms": [
+            "x86_64"
+        ],
+        "tags": [
+            "example"
+        ],
+        "holoscan_sdk": {
+            "minimum_required_version": "4.0.0",
+            "tested_versions": [
+                "4.2.0"
+            ]
+        },
+        "support_level": "supported_external",
+        "binary_packages": {
+            "debian": "holoscan-sensor-bridge",
+            "wheel": "holoscan-sensor-bridge",
+            "install_commands": [
+                "sudo apt install holoscan-sensor-bridge"
+            ]
+        }
+    }
+}

@@ -28,6 +28,9 @@ updates:
 
   - package-ecosystem: "pip"
     directory: "/"
+    # The Module template's pyproject.toml is a Jinja template, not TOML.
+    exclude-paths:
+      - "src/holoscan_cli/templates/**"
     open-pull-requests-limit: 10
     schedule:
       interval: "monthly"

@@ -32,11 +32,6 @@ METADATA_DIRECTORY_CONFIG = {
         "schema": "module",
     },
     "benchmarks": {"schema": "benchmark"},
-    "gxf_extensions": {
-        "ignore_patterns": ["utils"],
-        "metadata_is_required": True,
-        "schema": "gxf_extension",
-    },
     "operators": {
         "ignore_patterns": ["template"],
         "metadata_is_required": True,

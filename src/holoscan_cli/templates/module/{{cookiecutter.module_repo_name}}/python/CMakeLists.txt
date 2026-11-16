@@ -1,0 +1,148 @@
+# SPDX-FileCopyrightText: Copyright (c) {% now 'utc', '%Y' %} {{ cookiecutter.full_name }}{% if cookiecutter.affiliation %} / {{ cookiecutter.affiliation }}{% endif %}. All rights reserved.
+# SPDX-License-Identifier: {{ cookiecutter._license }}
+{%- if cookiecutter.__pure_python == 'yes' %}
+
+# Stage the holoscan_{{ cookiecutter.module_slug }} package and its holoscan-{{ cookiecutter.module_slug.replace('_', '-') }} distribution metadata in the
+# build tree, so `holoscan run` and the tests can import it as holoscan_{{ cookiecutter.module_slug }} and as
+# holoscan.{{ cookiecutter.module_slug }}. Operators join the package through
+# holoscan_{{ cookiecutter.module_slug }}_add_python_operator() when their OP_<name> option is ON.
+# Wheel builds install the same component; pyproject.toml supplies the metadata.
+
+set(_package holoscan_{{ cookiecutter.module_slug }})
+set(_python_root "${CMAKE_CURRENT_BINARY_DIR}/lib")
+set({{ cookiecutter.module_slug | upper }}_PYTHON_BUILD_DIR "${_python_root}" PARENT_SCOPE)
+if(SKBUILD)
+    set({{ cookiecutter.module_slug | upper }}_PYTHON_INSTALL_DIR "." CACHE PATH "" FORCE)
+endif()
+set({{ cookiecutter.module_slug | upper }}_PYTHON_INSTALL_DIR
+    "lib/python${Python_VERSION_MAJOR}.${Python_VERSION_MINOR}/site-packages"
+    CACHE PATH "Install directory of the holoscan_{{ cookiecutter.module_slug }} Python package")
+set(_python_install_var {{ cookiecutter.module_slug | upper }}_PYTHON_INSTALL_DIR)
+
+# Drop operators staged by an earlier configure, in case their OP_<name> option is now OFF.
+file(REMOVE_RECURSE "${_python_root}/${_package}/operators")
+
+file(GLOB_RECURSE _package_files RELATIVE "${CMAKE_CURRENT_SOURCE_DIR}" CONFIGURE_DEPENDS
+    "${_package}/*.py" "${_package}/*.pyi" "${_package}/py.typed")
+foreach(package_file IN LISTS _package_files)
+    configure_file("${package_file}" "${_python_root}/${package_file}" COPYONLY)
+endforeach()
+
+# Stage the Python sources of the calling operators/<name>/ directory as
+# holoscan_{{ cookiecutter.module_slug }}.operators.<name>. add_holohub_operator() only adds that directory when
+# OP_<name> is ON, so disabled operators stay out of the build tree and the wheel.
+function(holoscan_{{ cookiecutter.module_slug }}_add_python_operator)
+    get_filename_component(_name "${CMAKE_CURRENT_SOURCE_DIR}" NAME)
+    set(_python_build_var {{ cookiecutter.module_slug | upper }}_PYTHON_BUILD_DIR)
+    file(GLOB _sources RELATIVE "${CMAKE_CURRENT_SOURCE_DIR}" CONFIGURE_DEPENDS "*.py" "*.pyi")
+    foreach(source IN LISTS _sources)
+        configure_file("${source}"
+            "${${_python_build_var}}/holoscan_{{ cookiecutter.module_slug }}/operators/${_name}/${source}"
+            COPYONLY)
+    endforeach()
+endfunction()
+
+if(NOT SKBUILD)
+    set(_dist_info "${_python_root}/holoscan_{{ cookiecutter.module_slug }}-${PROJECT_VERSION}.dist-info")
+    file(WRITE "${_dist_info}/METADATA"
+        "Metadata-Version: 2.1\nName: holoscan-{{ cookiecutter.module_slug.replace('_', '-') }}\nVersion: ${PROJECT_VERSION}\n")
+    # Root-Is-Purelib marks the build as complete without a compiled extension for `holoscan install --dev`.
+    file(WRITE "${_dist_info}/WHEEL"
+        "Wheel-Version: 1.0\nGenerator: holoscan-cli\nRoot-Is-Purelib: true\nTag: py3-none-any\n")
+    file(WRITE "${_dist_info}/entry_points.txt"
+        "[holoscan.modules]\n{{ cookiecutter.module_slug }} = holoscan_{{ cookiecutter.module_slug }}\n")
+endif()
+
+# Install the staged package without a packaging backend:
+#   cmake --install <build> --component holoscan-{{ cookiecutter.module_slug }}-python_libs
+install(DIRECTORY "${_python_root}/"
+    DESTINATION "${${_python_install_var}}"
+    COMPONENT holoscan-{{ cookiecutter.module_slug }}-python_libs)
+{%- else %}
+
+# Python bindings: a nanobind extension that registers this Module's C++ operators with the
+# Holoscan SDK operator registry, wrapped in the holoscan_{{ cookiecutter.module_slug }} package.
+# Python reaches the operators through the SDK's typed registry proxies.
+
+include(GNUInstallDirs)
+
+# Holoscan SDK 5.0 does not ship nanobind; use the version its own bindings are built with.
+find_package(nanobind 3.0.1 CONFIG QUIET)
+if(NOT nanobind_FOUND)
+    include(FetchContent)
+    FetchContent_Declare(nanobind
+        GIT_REPOSITORY https://github.com/wjakob/nanobind.git
+        GIT_TAG db4827f06f6f1680e5d4004c95fc8d69299dba8b  # v3.0.1
+    )
+    FetchContent_MakeAvailable(nanobind)
+endif()
+
+set(_package holoscan_{{ cookiecutter.module_slug }})
+set(_python_root "${CMAKE_CURRENT_BINARY_DIR}/lib")
+set(_package_dir "${_python_root}/${_package}")
+set({{ cookiecutter.module_slug | upper }}_PYTHON_BUILD_DIR "${_python_root}" PARENT_SCOPE)
+if(SKBUILD)
+    # scikit-build-core installs relative to the wheel's platlib root.
+    set({{ cookiecutter.module_slug | upper }}_PYTHON_INSTALL_DIR "." CACHE PATH "" FORCE)
+endif()
+set({{ cookiecutter.module_slug | upper }}_PYTHON_INSTALL_DIR
+    "${CMAKE_INSTALL_LIBDIR}/python${Python_VERSION_MAJOR}.${Python_VERSION_MINOR}/site-packages"
+    CACHE PATH "Install directory of the holoscan_{{ cookiecutter.module_slug }} Python package")
+set(_python_install_var {{ cookiecutter.module_slug | upper }}_PYTHON_INSTALL_DIR)
+set(_package_install "${${_python_install_var}}/${_package}")
+
+# Publish the holoscan-{{ cookiecutter.module_slug.replace('_', '-') }}-cu13 metadata through which the SDK exposes
+# holoscan_{{ cookiecutter.module_slug }} as holoscan.{{ cookiecutter.module_slug }}, in the build tree and the install.
+# Plain CMake builds and installs do not run a Python packaging backend; wheel builds
+# take this metadata from pyproject.toml instead.
+if(NOT SKBUILD)
+    set(HOLOSCAN_PYTHON_MODULE_ROOT "${_python_root}")
+    set(HOLOSCAN_PYTHON_INSTALL_DIR "${${_python_install_var}}")
+    holoscan_install_python_module_metadata(
+        MODULE {{ cookiecutter.module_slug }}
+        REQUIRES "holoscan-core-cu13>={{ cookiecutter.holoscan_version }}")
+endif()
+
+foreach(package_file IN ITEMS __init__.py py.typed operators/__init__.py)
+    configure_file("${_package}/${package_file}" "${_package_dir}/${package_file}" COPYONLY)
+endforeach()
+
+nanobind_add_module({{ cookiecutter.module_slug }}_python NB_STATIC STABLE_ABI
+    _{{ cookiecutter.module_slug }}.cpp)
+target_link_libraries({{ cookiecutter.module_slug }}_python PRIVATE
+    holoscan::{{ cookiecutter.operator_slug }}
+    holoscan::core)
+file(RELATIVE_PATH _install_lib_relative "/${_package_install}" "/${CMAKE_INSTALL_LIBDIR}")
+set_target_properties({{ cookiecutter.module_slug }}_python PROPERTIES
+    LIBRARY_OUTPUT_DIRECTORY "${_package_dir}"
+    OUTPUT_NAME _{{ cookiecutter.module_slug }}
+    INSTALL_RPATH "\$ORIGIN/${_install_lib_relative}"
+    INSTALL_RPATH_USE_LINK_PATH TRUE)
+
+set(_stub_files)
+if(HOLOSCAN_PYTHON_STUBS)
+    # Typed proxy stubs (operators/__init__.pyi) generated from the registry.
+    holoscan_add_operator_stubs(
+        TARGET {{ cookiecutter.module_slug }}_python_stubs
+        ALL
+        OUTPUT "${_package_dir}/operators/__init__.pyi"
+        PROVIDER_MODULES ${_package}
+        REGISTRY_PREFIX holoscan.{{ cookiecutter.module_slug }}.
+        MODULE_DOC "Registered {{ cookiecutter.project_name }} operator proxies."
+        PYTHON_EXECUTABLE "${Python_EXECUTABLE}"
+        PYTHON_PATH "${_python_root}"
+        EXTENSION_TARGETS {{ cookiecutter.module_slug }}_python)
+    list(APPEND _stub_files "${_package_dir}/operators/__init__.pyi")
+endif()
+
+# The component that holoscan_install_python_module_metadata() installs the metadata into.
+# The Debian package carries no Python files: packaging turns the bindings off.
+#   cmake --install <build> --component holoscan-{{ cookiecutter.module_slug }}-python_libs
+set(_component holoscan-{{ cookiecutter.module_slug }}-python_libs)
+install(TARGETS {{ cookiecutter.module_slug }}_python
+    LIBRARY DESTINATION "${_package_install}" COMPONENT ${_component})
+install(FILES "${_package_dir}/__init__.py" "${_package_dir}/py.typed"
+    DESTINATION "${_package_install}" COMPONENT ${_component})
+install(FILES "${_package_dir}/operators/__init__.py" ${_stub_files}
+    DESTINATION "${_package_install}/operators" COMPONENT ${_component})
+{%- endif %}

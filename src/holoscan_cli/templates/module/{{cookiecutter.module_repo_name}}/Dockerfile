@@ -5,8 +5,9 @@
 #
 # Development container for {{ cookiecutter.project_name }}.
 #
-# Extends the Holoscan SDK image with the build tools needed to configure,
-# compile, and test the module from a live source mount. No source is copied
+# Extends the Holoscan SDK image with the {% if cookiecutter.__pure_python == 'yes' %}tools needed to build and test
+# the module{% else %}build tools needed to configure,
+# compile, and test the module{% endif %} from a live source mount. No source is copied
 # into the image; the project tree is bind-mounted by the holoscan-cli at
 # /workspace/{{ cookiecutter.module_slug }} when the container is launched.
 #
@@ -29,15 +30,15 @@ RUN python3 -m pip install --no-cache-dir \
         -r /tmp/requirements-cli.txt \
     && holoscan version
 
+{%- if cookiecutter.__pure_python == 'yes' %}
+
+# TODO: add module-specific runtime dependencies below.
+{%- else %}
+
 # TODO: add module-specific runtime / build dependencies below.
-{% if cookiecutter.language == "cpp" %}RUN apt-get update \
+RUN apt-get update \
     && apt-get install --no-install-recommends -y \
         libgtest-dev \
         clang-format \
-        pybind11-dev \
     && rm -rf /var/lib/apt/lists/*
-{% endif %}
-# Test and wheel-build tooling. Must be in the same interpreter the CLI runs
-# on: build and package pass it to CMake as Python3_EXECUTABLE.
-RUN python3 -m pip install --no-cache-dir \
-        'pytest>=8.2' pytest-timeout build scikit-build-core
+{%- endif %}

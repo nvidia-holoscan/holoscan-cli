@@ -1,6 +1,6 @@
 {
     "module": {
-        "name": "module_advertises_operators",
+        "name": "holoscan-module-advertises-operators",
         "description": "Module that advertises its operators via the operator_names field.",
         "authors": [{ "name": "NVIDIA", "affiliation": "NVIDIA" }],
         "version": "1.2.3",

@@ -1,7 +1,7 @@
 {
     "$schema": "holoscan/module/v2",
     "module": {
-        "name": "module_quality_reporting_extra_field",
+        "name": "holoscan-module-quality-reporting-extra-field",
         "description": "quality_reporting block with an unknown field should fail additionalProperties check.",
         "authors": [{ "name": "NVIDIA", "affiliation": "NVIDIA" }],
         "version": "1.0.0",

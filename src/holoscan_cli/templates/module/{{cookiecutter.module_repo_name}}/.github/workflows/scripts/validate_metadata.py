@@ -18,7 +18,8 @@
 Walks the repository, loads every metadata.json that isn't under an
 excluded directory, and validates it using holoscan_cli's schema
 registry (operator, application, module, package, …).  The correct
-schema is chosen automatically from the top-level envelope key.
+schema is chosen automatically from the top-level envelope key.  The root
+module.language must also list every language its operators declare.
 """
 
 import json
@@ -45,6 +46,26 @@ def iter_metadata_files(repo_root: Path):
         dirnames[:] = [d for d in dirnames if d not in _EXCLUDE_DIRS]
         if "metadata.json" in filenames:
             yield Path(dirpath) / "metadata.json"
+
+
+def _languages(entry):
+    language = entry.get("language", [])
+    return [language] if isinstance(language, str) else language
+
+
+def find_undeclared_languages(repo_root: Path):
+    """Return (operator metadata path, language) pairs absent from the Module."""
+    module = json.loads((repo_root / "metadata.json").read_text(encoding="utf-8"))
+    declared = set(_languages(module.get("module", {})))
+    missing = []
+    for path in sorted((repo_root / "operators").glob("*/metadata.json")):
+        operator = json.loads(path.read_text(encoding="utf-8")).get("operator", {})
+        missing.extend(
+            (path.relative_to(repo_root), language)
+            for language in _languages(operator)
+            if language not in declared
+        )
+    return missing
 
 
 def main():
@@ -77,6 +98,14 @@ def main():
             failed = True
         else:
             print(f"{rel}: ok")
+
+    if not failed:
+        for operator_path, language in find_undeclared_languages(repo_root):
+            print(
+                f"metadata.json: module.language lacks {language!r}, declared by {operator_path}",
+                file=sys.stderr,
+            )
+            failed = True
 
     sys.exit(1 if failed else 0)
 

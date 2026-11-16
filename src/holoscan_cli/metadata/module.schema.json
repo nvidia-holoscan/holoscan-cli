@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:holohub:module:v2",
+  "$id": "urn:holoscan:module:v2",
   "type": "object",
   "$defs": {
     "namespace": {
@@ -19,10 +19,19 @@
       "type": "object",
       "properties": {
         "debian": {
-          "type": "string"
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9.+-]+$",
+          "description": "Debian package name that installs this module (e.g. 'holoscan-gstreamer')."
+        },
+        "wheel": {
+          "type": "string",
+          "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",
+          "description": "Normalized Python wheel distribution name that installs this module (e.g. 'holoscan-gstreamer')."
         },
         "pypi": {
-          "type": "string"
+          "type": "string",
+          "deprecated": true,
+          "description": "Deprecated alias for 'wheel'. Validation warns when present and fails when it disagrees with 'wheel'."
         },
         "install_commands": {
           "type": "array",
@@ -178,34 +187,45 @@
       "type": "object",
       "properties": {
         "name": {
-          "$ref": "urn:holohub:project:v1#/$defs/name"
+          "$ref": "urn:holoscan:project:v1#/$defs/name",
+          "pattern": "^holoscan-[a-z][a-z0-9]*(-[a-z0-9]+)*$",
+          "description": "Module repository name: 'holoscan-' followed by the lowercase, hyphen-separated module slug (e.g. 'holoscan-sensor-bridge')."
         },
         "description": {
-          "$ref": "urn:holohub:project:v1#/$defs/description"
+          "$ref": "urn:holoscan:project:v1#/$defs/description"
         },
         "authors": {
-          "$ref": "urn:holohub:project:v1#/$defs/authors"
+          "$ref": "urn:holoscan:project:v1#/$defs/authors"
         },
         "version": {
-          "$ref": "urn:holohub:project:v1#/$defs/version"
+          "$ref": "urn:holoscan:project:v1#/$defs/version"
+        },
+        "support_level": {
+          "type": "string",
+          "enum": [
+            "community",
+            "supported_external",
+            "supported_core"
+          ],
+          "description": "Self-declared support level of this module (the Holoscan Modules SDD support tier). Rendered on the HoloHub ecosystem page."
         },
         "license": {
           "type": "string"
         },
         "language": {
-          "$ref": "urn:holohub:project:v1#/$defs/multi_language"
+          "$ref": "urn:holoscan:project:v1#/$defs/multi_language"
         },
         "namespace": {
           "$ref": "#/$defs/namespace"
         },
         "platforms": {
-          "$ref": "urn:holohub:project:v1#/$defs/platforms"
+          "$ref": "urn:holoscan:project:v1#/$defs/platforms"
         },
         "tags": {
-          "$ref": "urn:holohub:project:v1#/$defs/tags"
+          "$ref": "urn:holoscan:project:v1#/$defs/tags"
         },
         "holoscan_sdk": {
-          "$ref": "urn:holohub:project:v1#/$defs/sdk_version"
+          "$ref": "urn:holoscan:project:v1#/$defs/sdk_version"
         },
         "sensor_hardware": {
           "type": "array",
@@ -223,10 +243,10 @@
           "type": "string"
         },
         "ranking": {
-          "$ref": "urn:holohub:project:v1#/$defs/ranking"
+          "$ref": "urn:holoscan:project:v1#/$defs/ranking"
         },
         "requirements": {
-          "$ref": "urn:holohub:project:v1#/$defs/requirements"
+          "$ref": "urn:holoscan:project:v1#/$defs/requirements"
         },
         "binary_packages": {
           "$ref": "#/$defs/binary_packages"

@@ -1,6 +1,6 @@
 {
     "module": {
-        "name": "module_with_documentation_and_quality",
+        "name": "holoscan-module-with-documentation-and-quality",
         "description": "Fixture covering documentation, sensor_hardware, homepage, quality_reporting, and install_commands.",
         "authors": [{ "name": "NVIDIA", "affiliation": "NVIDIA" }],
         "version": "1.0.0",
@@ -14,7 +14,7 @@
         "sensor_hardware": ["AJA KONA HDMI"],
         "homepage": "https://example.invalid/my-module",
         "binary_packages": {
-            "pypi": "holoscan-example",
+            "wheel": "holoscan-example",
             "install_commands": ["pip install holoscan-example"]
         },
         "documentation": {

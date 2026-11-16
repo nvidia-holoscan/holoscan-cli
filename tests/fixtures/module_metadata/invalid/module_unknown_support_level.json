@@ -1,0 +1,29 @@
+{
+    "module": {
+        "name": "holoscan-unknown-support-level",
+        "description": "Module declaring a support level outside the enum.",
+        "authors": [
+            {
+                "name": "NVIDIA",
+                "affiliation": "NVIDIA"
+            }
+        ],
+        "version": "0.1.0",
+        "language": [
+            "Python"
+        ],
+        "platforms": [
+            "x86_64"
+        ],
+        "tags": [
+            "example"
+        ],
+        "holoscan_sdk": {
+            "minimum_required_version": "4.0.0",
+            "tested_versions": [
+                "4.2.0"
+            ]
+        },
+        "support_level": "experimental"
+    }
+}

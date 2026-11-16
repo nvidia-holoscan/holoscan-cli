@@ -40,7 +40,7 @@ from holoscan_cli.project_context import (
     discover_project_context,
     get_active_project_context,
 )
-from holoscan_cli.utils.io import format_cmd, info, run_info_command, warn
+from holoscan_cli.utils.io import fatal, format_cmd, info, run_info_command, warn
 from holoscan_cli.utils.project import CMAKE_BUILD_TYPES, resolve_build_type
 from holoscan_cli.utils.text import get_env_bool, is_env_flag_true, slugify
 
@@ -52,7 +52,6 @@ PROJECT_PLACEHOLDER_PREFIX = "project_"
 PROJECT_PREFIXES = {
     "application": "APP",
     "benchmark": "APP",
-    "gxf_extension": "EXT",
     "module": "MODULE",
     "operator": "OP",
     "package": "PKG",
@@ -184,7 +183,13 @@ def resolve_path_prefix(prefix: Optional[str] = None) -> str:
 def _add_project_names(path_mapping: dict[str, str], prefix: str) -> dict[str, str]:
     """Add the ``project_`` name of each placeholder alongside the prefixed one."""
     for key, value in list(path_mapping.items()):
-        path_mapping.setdefault(PROJECT_PLACEHOLDER_PREFIX + key[len(prefix) :], value)
+        project_key = PROJECT_PLACEHOLDER_PREFIX + key[len(prefix) :]
+        if project_key in path_mapping and path_mapping[project_key] != value:
+            fatal(
+                f"Path prefix '{prefix}' conflicts with <{project_key}>. "
+                "Choose a different HOLOSCAN_CLI_PATH_PREFIX."
+            )
+        path_mapping[project_key] = value
     return path_mapping
 
 

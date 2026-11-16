@@ -30,9 +30,9 @@ def _reset_active_project_context():
 def make_sdk_directory():
     """Return a factory for minimal installed or source-build SDK layouts."""
 
-    def make(path, *, build=False, config_name="holoscan-config.cmake"):
-        (path / "lib").mkdir(parents=True, exist_ok=True)
-        config_dir = path if build else path / "lib/cmake/holoscan"
+    def make(path, *, build=False, config_name="holoscan-config.cmake", libdir="lib"):
+        (path / libdir).mkdir(parents=True, exist_ok=True)
+        config_dir = path if build else path / libdir / "cmake/holoscan"
         config_dir.mkdir(parents=True, exist_ok=True)
         (config_dir / config_name).write_text("# config\n", encoding="utf-8")
         return path

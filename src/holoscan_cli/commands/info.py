@@ -49,7 +49,6 @@ from holoscan_cli.utils.json_output import dumps as json_dumps
 LIST_TYPES = [
     "application",
     "benchmark",
-    "gxf_extension",
     "module",
     "package",
     "operator",
@@ -217,7 +216,7 @@ def handle_env_info(cli, args: argparse.Namespace) -> None:
 
         print(
             format_env_info_json(
-                project_root=cli.HOLOHUB_ROOT,
+                holohub_root=cli.HOLOHUB_ROOT,
                 build_dir=cli.DEFAULT_BUILD_PARENT_DIR,
                 data_dir=cli.DEFAULT_DATA_DIR,
                 sdk_dir=cli.DEFAULT_SDK_DIR,
@@ -232,7 +231,7 @@ def handle_env_info(cli, args: argparse.Namespace) -> None:
         data_dir=cli.DEFAULT_DATA_DIR,
         sdk_dir=cli.DEFAULT_SDK_DIR,
     )
-    collect_git_info(project_root=cli.HOLOHUB_ROOT)
+    collect_git_info(holohub_root=cli.HOLOHUB_ROOT)
     collect_env_info()
     print(format_cmd("Complete (Before sharing, please review and remove sensitive information)"))
 

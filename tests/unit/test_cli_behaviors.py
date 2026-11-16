@@ -229,29 +229,38 @@ def test_effective_mode_config_preserves_cli_overrides(capsys):
     assert "overrides mode" in capsys.readouterr().err
 
 
-def test_run_preserves_container_command_after_separator(monkeypatch, tmp_path):
+@pytest.mark.parametrize("command", ["build", "build-container", "run", "run-container"])
+@pytest.mark.parametrize("trailing", [[], ["--help", "hello world", "", "--", "$LITERAL", "a'b"]])
+def test_run_preserves_arguments_after_separator(monkeypatch, tmp_path, command, trailing):
     monkeypatch.setattr(project_cli.HoloscanCLI, "HOLOHUB_ROOT", tmp_path)
     with patch.object(project_cli.metadata_util, "gather_metadata", return_value=[]):
         cli = project_cli.HoloscanCLI(script_name="holoscan")
     captured = {}
-    cli.subparsers["run-container"].set_defaults(func=lambda args: captured.update(vars(args)))
+    cli.subparsers[command].set_defaults(func=lambda args: captured.update(vars(args)))
 
     cli.run(
         [
             "holoscan",
-            "run-container",
-            "--no-docker-build",
+            command,
+            "smoke_app",
+            "--dryrun",
             "--img",
             "smoke:latest",
             "--",
-            "echo",
-            "hello world",
+            *trailing,
         ]
     )
 
     assert captured["img"] == "smoke:latest"
-    assert captured["no_docker_build"] is True
-    assert captured["_trailing_args"] == ["echo", "hello world"]
+    assert captured["dryrun"] is True
+    assert captured.get("_trailing_args", []) == trailing
+
+
+def test_global_dispatch_leaves_forwarded_project_root_untouched():
+    from holoscan_cli.__main__ import _project_dispatch_argv
+
+    argv = ["holoscan", "run", "smoke_app", "--", "--project-root", "app data"]
+    assert _project_dispatch_argv(argv) == ("run", argv, None, None)
 
 
 def test_clear_cache_dryrun_reports_would_remove_paths(tmp_path, monkeypatch, capsys):

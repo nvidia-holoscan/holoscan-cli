@@ -1,0 +1,32 @@
+{
+    "module": {
+        "name": "holoscan-binary-packages-extra-field",
+        "description": "binary_packages with an unknown package identity field.",
+        "authors": [
+            {
+                "name": "NVIDIA",
+                "affiliation": "NVIDIA"
+            }
+        ],
+        "version": "0.1.0",
+        "language": [
+            "Python"
+        ],
+        "platforms": [
+            "x86_64"
+        ],
+        "tags": [
+            "example"
+        ],
+        "holoscan_sdk": {
+            "minimum_required_version": "4.0.0",
+            "tested_versions": [
+                "4.2.0"
+            ]
+        },
+        "binary_packages": {
+            "debian": "holoscan-binary-packages-extra-field",
+            "rpm": "holoscan-binary-packages-extra-field"
+        }
+    }
+}

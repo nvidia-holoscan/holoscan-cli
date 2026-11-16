@@ -181,6 +181,154 @@ def test_package_wheel_requires_python_build_for_real_run(wheel_module, monkeypa
     assert "Python package 'build' is not installed" in capsys.readouterr().err
 
 
+def test_package_cpack_appends_cmake_args_then_configure_args(tmp_path, monkeypatch):
+    project_data = {
+        "project_name": "test-module-fixture",
+        "project_type": "module",
+        "source_folder": tmp_path / "repo" / "modules" / "test-module-fixture",
+        "metadata": {"language": ["C++"]},
+    }
+    cli = _cli(tmp_path, project_data)
+    calls = []
+    monkeypatch.setenv("CMAKE_ARGS", "-DCMAKE_CUDA_ARCHITECTURES=75 -DFROM_ENV=ON")
+    monkeypatch.setattr(
+        package_cmd, "run_command", lambda cmd, **kwargs: calls.append((cmd, kwargs))
+    )
+    monkeypatch.setattr(package_cmd.shutil, "which", lambda _: None)
+
+    package_cmd.handle_package(
+        cli,
+        _args(
+            project="test-module-fixture",
+            pkg_generator="DEB,TGZ",
+            configure_args=["-DCMAKE_CUDA_ARCHITECTURES=80"],
+        ),
+    )
+
+    configure, kwargs = calls[0]
+    assert configure[-3:] == [
+        "-DCMAKE_CUDA_ARCHITECTURES=75",
+        "-DFROM_ENV=ON",
+        "-DCMAKE_CUDA_ARCHITECTURES=80",
+    ]
+    assert configure.index("-DBUILD_ALL=OFF") < configure.index("-DFROM_ENV=ON")
+    assert kwargs["display_override"][-1] == "<3 configured CMake option(s) hidden>"
+    assert "-DFROM_ENV=ON" not in kwargs["display_override"]
+    assert [cmd[-1] for cmd, _ in calls if cmd[0] == "cpack"] == ["DEB", "TGZ"]
+
+
+def test_package_cpack_without_extra_cmake_options(tmp_path, monkeypatch):
+    project_data = {
+        "project_name": "test-module-fixture",
+        "project_type": "module",
+        "source_folder": tmp_path / "repo" / "modules" / "test-module-fixture",
+        "metadata": {"language": ["C++"]},
+    }
+    cli = _cli(tmp_path, project_data)
+    calls = []
+    monkeypatch.delenv("CMAKE_ARGS", raising=False)
+    monkeypatch.setattr(
+        package_cmd, "run_command", lambda cmd, **kwargs: calls.append((cmd, kwargs))
+    )
+    monkeypatch.setattr(package_cmd.shutil, "which", lambda _: None)
+
+    package_cmd.handle_package(cli, _args(project="test-module-fixture"))
+
+    configure, kwargs = calls[0]
+    assert configure[-1] == "-DPKG_test_module_fixture=ON"
+    assert kwargs["display_override"] == configure
+
+
+def test_package_wheel_receives_configure_args_through_cmake_args(wheel_module, monkeypatch):
+    calls = []
+    monkeypatch.setenv("CMAKE_ARGS", "-DFROM_ENV='a b'")
+    monkeypatch.setattr(
+        package_cmd, "run_command", lambda cmd, **kwargs: calls.append((cmd, kwargs))
+    )
+
+    package_cmd.handle_package(
+        wheel_module,
+        _args(
+            project="test-module-fixture",
+            pkg_generator="WHEEL",
+            configure_args=["-DCMAKE_CUDA_ARCHITECTURES=80"],
+        ),
+    )
+
+    _, kwargs = calls[0]
+    assert kwargs["env"]["CMAKE_ARGS"] == "'-DFROM_ENV=a b' -DCMAKE_CUDA_ARCHITECTURES=80"
+
+
+def test_package_wheel_keeps_cmake_args_without_configure_args(wheel_module, monkeypatch):
+    calls = []
+    monkeypatch.setenv("CMAKE_ARGS", "-DFROM_ENV='a b'")
+    monkeypatch.setattr(
+        package_cmd, "run_command", lambda cmd, **kwargs: calls.append((cmd, kwargs))
+    )
+
+    package_cmd.handle_package(
+        wheel_module, _args(project="test-module-fixture", pkg_generator="WHEEL")
+    )
+
+    _, kwargs = calls[0]
+    assert kwargs["env"]["CMAKE_ARGS"] == "-DFROM_ENV='a b'"
+
+
+def test_package_rejects_unparsable_cmake_args(wheel_module, monkeypatch, capsys):
+    monkeypatch.setenv("CMAKE_ARGS", "-DBROKEN='unterminated")
+    monkeypatch.setattr(
+        package_cmd,
+        "run_command",
+        lambda *args, **kwargs: pytest.fail("package should fail before running commands"),
+    )
+
+    with pytest.raises(SystemExit):
+        package_cmd.handle_package(
+            wheel_module, _args(project="test-module-fixture", pkg_generator="WHEEL")
+        )
+
+    err = capsys.readouterr().err
+    assert "CMAKE_ARGS is not a valid" in err
+    assert "unterminated" not in err
+
+
+def test_package_container_forwards_configure_args(tmp_path, monkeypatch):
+    from unittest.mock import MagicMock
+
+    import holoscan_cli.cli as cli_mod
+
+    project_data = {
+        "project_name": "test-module-fixture",
+        "project_type": "module",
+        "source_folder": tmp_path / "repo" / "modules" / "test-module-fixture",
+        "metadata": {"language": ["C++"]},
+    }
+    cli = _cli(tmp_path, project_data)
+    container = MagicMock()
+    cli.make_project_container = lambda project_name, language=None: container
+    commands = []
+    monkeypatch.setattr(
+        package_cmd,
+        "get_entrypoint_command_args",
+        lambda image, cmd, *a, **k: commands.append(cmd) or ("", []),
+    )
+    monkeypatch.setattr(cli_mod, "in_container_cli_command", lambda: "holoscan")
+
+    package_cmd.handle_package(
+        cli,
+        _args(
+            project="test-module-fixture",
+            local=False,
+            no_docker_build=True,
+            configure_args=["-DCMAKE_CUDA_ARCHITECTURES=80", "-DOTHER=ON"],
+        ),
+    )
+
+    assert "--configure-args=-DCMAKE_CUDA_ARCHITECTURES=80 --configure-args=-DOTHER=ON" in (
+        commands[0]
+    )
+
+
 def test_package_rejects_non_module_project(tmp_path):
     cli = _cli(
         tmp_path,

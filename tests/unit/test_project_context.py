@@ -54,7 +54,7 @@ def test_module_discovery_and_activation(tmp_path, monkeypatch):
 
     assert context.root == root
     assert context.module_name == "holoscan-my-sensor"
-    assert context.repo_prefix == "my_sensor"
+    assert context.repo_prefix == "holoscan_my_sensor"
     assert context.base_sdk_version == "4.6.0"
     assert context.forward_env == ()
 
@@ -66,8 +66,25 @@ def test_module_discovery_and_activation(tmp_path, monkeypatch):
     assert os.environ["HOLOSCAN_CLI_ROOT"] == str(root)
     assert os.environ["HOLOSCAN_CLI_BUILD_PARENT_DIR"] == str(root / "build")
     assert os.environ["HOLOSCAN_CLI_DATA_DIR"] == "/custom/data"
-    assert os.environ["HOLOSCAN_CLI_REPO_PREFIX"] == "my_sensor"
-    assert os.environ["HOLOSCAN_CLI_CONTAINER_PREFIX"] == "my-sensor"
+    assert os.environ["HOLOSCAN_CLI_REPO_PREFIX"] == "holoscan_my_sensor"
+    assert os.environ["HOLOSCAN_CLI_CONTAINER_PREFIX"] == "holoscan-my-sensor"
+
+
+@pytest.mark.parametrize(
+    ("namespace", "expected"),
+    [
+        ({"python": "holoscan.my_sensor"}, "holoscan_my_sensor"),
+        ({"python": "holoscan_my_sensor"}, "holoscan_my_sensor"),
+        ({"cpp": "holoscan::my_sensor"}, "my_sensor"),
+    ],
+)
+def test_module_repo_prefix_follows_the_python_namespace(tmp_path, namespace, expected):
+    root = _module(tmp_path / "module")
+    metadata = json.loads((root / "metadata.json").read_text(encoding="utf-8"))
+    metadata["module"]["namespace"] = namespace
+    (root / "metadata.json").write_text(json.dumps(metadata), encoding="utf-8")
+
+    assert discover_project_context(cwd=root, environ={}).repo_prefix == expected
 
 
 def test_implicit_discovery_tolerates_malformed_module_metadata(tmp_path):
@@ -125,9 +142,7 @@ def test_root_precedence_and_invalid_environment_fallback(tmp_path):
     assert fallback.warnings
 
 
-def test_module_pyproject_resolves_project_contract_and_nearby_sdk(
-    tmp_path, monkeypatch, make_sdk_directory
-):
+def test_module_pyproject_resolves_project_contract(tmp_path, monkeypatch, make_sdk_directory):
     root = _module(
         tmp_path / "module",
         pyproject="""
@@ -146,10 +161,10 @@ search-paths = ["examples", "./tools/"]
 x86_64 = "example.test/holoscan:fixed"
 """,
     )
-    sdk = make_sdk_directory(tmp_path / "holoscan-sdk/public/install-x86_64")
+    sdk = make_sdk_directory(tmp_path / "sdk/install-x86_64")
     monkeypatch.setattr("holoscan_cli.project_context.platform.machine", lambda: "x86_64")
 
-    context = discover_project_context(cwd=root, environ={})
+    context = discover_project_context(cwd=root, environ={"HOLOSCAN_SDK_ROOT": str(sdk)})
     profile = context.profile_environment()
 
     assert context.base_image == "example.test/holoscan:fixed"
@@ -180,6 +195,27 @@ x86_64 = "example.test/holoscan:fixed"
     }.isdisjoint(profile)
 
 
+@pytest.mark.parametrize(
+    "sdk_path",
+    [
+        "module/holoscan-sdk/install-x86_64",
+        "holoscan-sdk/install-x86_64",
+        "holoscan-sdk/build-x86_64",
+    ],
+)
+def test_module_ignores_sdk_checkouts_near_the_project(
+    tmp_path, monkeypatch, make_sdk_directory, sdk_path
+):
+    root = _module(tmp_path / "module")
+    make_sdk_directory(tmp_path / sdk_path, build="build-" in sdk_path)
+    monkeypatch.setattr("holoscan_cli.project_context.platform.machine", lambda: "x86_64")
+
+    context = discover_project_context(cwd=root, environ={})
+
+    assert context.sdk_root is None
+    assert context.sdk_root_source is None
+
+
 def test_module_environment_resolves_4x_sdk_build_tree(tmp_path, monkeypatch, make_sdk_directory):
     root = _module(tmp_path / "module")
     sdk_root = tmp_path / "holoscan-sdk"
@@ -200,6 +236,31 @@ def test_module_environment_resolves_4x_sdk_build_tree(tmp_path, monkeypatch, ma
     assert context.sdk_root == build.resolve()
     assert context.sdk_root_source == "HOLOSCAN_SDK_ROOT"
     assert context.warnings == ()
+
+
+@pytest.mark.parametrize(
+    ("triplet", "resolves"),
+    [("aarch64-linux-gnu", True), ("x86_64-linux-gnu", False)],
+)
+def test_module_environment_checks_debian_libdir_for_target_arch(
+    tmp_path, monkeypatch, make_sdk_directory, triplet, resolves
+):
+    root = _module(tmp_path / "module")
+    usr = make_sdk_directory(tmp_path / "usr", libdir=f"lib/{triplet}")
+    monkeypatch.setattr("holoscan_cli.project_context.platform.machine", lambda: "x86_64")
+    monkeypatch.setattr("holoscan_cli.utils.sdk.get_host_arch", lambda: "x86_64")
+
+    context = discover_project_context(
+        cwd=root,
+        environ={"HOLOSCAN_SDK_ROOT": str(usr), "HOLOSCAN_CLI_TARGET_ARCH": "aarch64"},
+    )
+
+    if resolves:
+        assert context.sdk_root == usr.resolve()
+        assert context.sdk_root_source == "HOLOSCAN_SDK_ROOT"
+    else:
+        assert context.sdk_root is None
+        assert any("not a valid SDK directory for aarch64" in w for w in context.warnings)
 
 
 @pytest.mark.parametrize(
@@ -326,3 +387,165 @@ def test_list_uses_search_paths_and_skips_generated_folders(tmp_path):
     assert list_projects() == [example, module]
     assert list_projects(HOLOSCAN_CLI_SEARCH_PATH="operators") == [operator, module]
     assert list_projects(HOLOSCAN_CLI_SEARCH_PATH=".") == [example, operator, module]
+
+
+def _source_project(root: Path, pyproject: str | None = None) -> Path:
+    app = root / "applications/example"
+    app.mkdir(parents=True)
+    (app / "metadata.json").write_text('{"application": {}}', encoding="utf-8")
+    if pyproject is not None:
+        (root / "pyproject.toml").write_text(pyproject, encoding="utf-8")
+    return root
+
+
+def test_source_project_reads_shared_pyproject_defaults(tmp_path, monkeypatch):
+    from holoscan_cli.project_context import activated_environment_source
+
+    root = _source_project(
+        tmp_path / "apps",
+        "[tool.ruff]\nline-length = 100\n\n"
+        "[tool.holoscan]\ncuda = 13\nforward-env = ['IS_CI_BUILD']\n"
+        "docker-run-args = ['--shm-size=1g']\n\n"
+        "[tool.holoscan.base-images]\n"
+        "x86_64 = 'registry.example.com/sdk:x86'\naarch64 = 'registry.example.com/sdk:arm'\n",
+    )
+
+    context = discover_project_context(
+        cwd=root / "applications/example", environ={"HOLOSCAN_CLI_TARGET_ARCH": "aarch64"}
+    )
+
+    assert (context.kind, context.root) == ("source", root)
+    assert context.base_image == "registry.example.com/sdk:arm"
+    assert context.cuda == "13"
+    assert context.forward_env == ("IS_CI_BUILD",)
+    assert context.docker_run_args == "--shm-size=1g"
+    # Module-derived defaults stay off source projects.
+    assert context.profile_environment() == {
+        "HOLOSCAN_CLI_ROOT": str(root),
+        "HOLOSCAN_CLI_DEFAULT_CUDA_VERSION": "13",
+        "HOLOSCAN_CLI_BASE_IMAGE": "registry.example.com/sdk:arm",
+    }
+
+    monkeypatch.setattr(os, "environ", os.environ.copy())
+    monkeypatch.delenv("HOLOSCAN_CLI_BASE_IMAGE", raising=False)
+    activate_project_context(context)
+    assert os.environ["HOLOSCAN_CLI_BASE_IMAGE"] == "registry.example.com/sdk:arm"
+    assert activated_environment_source("HOLOSCAN_CLI_BASE_IMAGE") == "project"
+
+    monkeypatch.setenv("HOLOSCAN_CLI_BASE_IMAGE", "registry.example.com/override:1")
+    activate_project_context(context)
+    assert os.environ["HOLOSCAN_CLI_BASE_IMAGE"] == "registry.example.com/override:1"
+    assert activated_environment_source("HOLOSCAN_CLI_BASE_IMAGE") == "environment"
+
+
+def test_source_project_without_holoscan_table_is_unchanged(tmp_path):
+    root = _source_project(tmp_path / "apps", "[tool.ruff]\nline-length = 100\n")
+
+    context = discover_project_context(cwd=root, environ={})
+
+    assert context.kind == "source"
+    assert context.profile_environment() == {"HOLOSCAN_CLI_ROOT": str(root)}
+
+
+def test_source_project_naming_keys_are_opt_in(tmp_path):
+    root = _source_project(
+        tmp_path / "apps", "[tool.holoscan]\nrepo-prefix = 'holoscan-applications'\n"
+    )
+
+    environment = discover_project_context(cwd=root, environ={}).profile_environment()
+
+    assert environment["HOLOSCAN_CLI_REPO_PREFIX"] == "holoscan-applications"
+    assert environment["HOLOSCAN_CLI_CONTAINER_PREFIX"] == "holoscan-applications"
+    assert "HOLOSCAN_CLI_WORKSPACE_NAME" not in environment
+
+
+@pytest.mark.parametrize(
+    "pyproject",
+    [
+        "[tool.holoscan]\nsearch-paths = ['applications']\n",
+        "[tool.holoscan]\nctest-script = 'ci/container.ctest'\n",
+    ],
+)
+def test_source_project_rejects_module_only_keys(tmp_path, pyproject):
+    root = _source_project(tmp_path / "apps", pyproject)
+
+    with pytest.raises(ProjectContextError, match="can be set only at a Module root"):
+        discover_project_context(cwd=root, environ={})
+
+
+@pytest.mark.parametrize("kind", ["source", "module"])
+def test_missing_base_image_architecture_defers_the_error(tmp_path, kind):
+    pyproject = "[tool.holoscan.base-images]\nx86_64 = 'registry.example.com/sdk:x86'\n"
+    if kind == "source":
+        root = _source_project(tmp_path / "apps", pyproject)
+    else:
+        root = _module(tmp_path / "module", pyproject=pyproject)
+
+    context = discover_project_context(cwd=root, environ={"HOLOSCAN_CLI_TARGET_ARCH": "aarch64"})
+
+    assert context.base_image is None
+    assert "HOLOSCAN_CLI_BASE_IMAGE" not in context.profile_environment()
+    assert "base-images has no entry for 'aarch64'" in context.base_image_error
+
+
+def test_source_project_validates_shared_keys(tmp_path):
+    root = _source_project(tmp_path / "apps", "[tool.holoscan.base-images]\nx86_64 = 'bad image'\n")
+
+    with pytest.raises(ProjectContextError, match="base-images"):
+        discover_project_context(cwd=root, environ={"HOLOSCAN_CLI_TARGET_ARCH": "x86_64"})
+
+
+@pytest.mark.parametrize("kind", ["source", "module"])
+@pytest.mark.parametrize(
+    ("pyproject", "container_prefix"),
+    [
+        (None, None),
+        ("[tool.holoscan]\nrepo-prefix = 'from-file'\n", None),
+        ("[tool.holoscan]\nrepo-prefix = 'from-file'\ncontainer-prefix = 'images'\n", "images"),
+    ],
+)
+def test_environment_repo_prefix_sets_the_default_container_prefix(
+    tmp_path, monkeypatch, kind, pyproject, container_prefix
+):
+    if kind == "source":
+        root = _source_project(tmp_path / "apps", pyproject)
+    else:
+        root = _module(tmp_path / "module", pyproject=pyproject)
+    context = discover_project_context(cwd=root, environ={})
+
+    monkeypatch.setattr(os, "environ", os.environ.copy())
+    monkeypatch.delenv("HOLOSCAN_CLI_CONTAINER_PREFIX", raising=False)
+    monkeypatch.setenv("HOLOSCAN_CLI_REPO_PREFIX", "from-env")
+    activate_project_context(context)
+
+    assert os.environ["HOLOSCAN_CLI_REPO_PREFIX"] == "from-env"
+    assert os.environ.get("HOLOSCAN_CLI_CONTAINER_PREFIX") == container_prefix
+
+
+def test_standalone_application_reads_shared_pyproject_defaults(tmp_path):
+    root = tmp_path / "my_app"
+    root.mkdir()
+    application = {"name": "Example", "holoscan_sdk": {"minimum_required_version": "5.0.0"}}
+    (root / "metadata.json").write_text(json.dumps({"application": application}), encoding="utf-8")
+    defaults = {"HOLOSCAN_CLI_ROOT": str(root), "HOLOSCAN_CLI_SEARCH_PATH": "metadata.json"}
+    environ = {"HOLOSCAN_CLI_TARGET_ARCH": "x86_64"}
+
+    context = discover_project_context(cwd=root, environ=environ)
+    assert (context.kind, context.application_name) == ("application", "my_app")
+    assert context.profile_environment() == defaults
+
+    (root / "pyproject.toml").write_text(
+        "[tool.holoscan.base-images]\nx86_64 = 'registry.example.com/sdk:x86'\n", encoding="utf-8"
+    )
+    context = discover_project_context(cwd=root, environ=environ)
+    assert (context.kind, context.application_name) == ("application", "my_app")
+    assert context.profile_environment() == {
+        **defaults,
+        "HOLOSCAN_CLI_BASE_IMAGE": "registry.example.com/sdk:x86",
+    }
+
+    (root / "pyproject.toml").write_text(
+        "[tool.holoscan]\nctest-script = 'ci/container.ctest'\n", encoding="utf-8"
+    )
+    with pytest.raises(ProjectContextError, match="can be set only at a Module root"):
+        discover_project_context(cwd=root, environ=environ)
