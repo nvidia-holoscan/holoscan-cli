@@ -97,6 +97,10 @@ class ProjectContext:
     cuda: Optional[str] = None
     ctest_script: Optional[str] = None
     base_image: Optional[str] = None
+    # Set when base-images lacks the target architecture. Only commands that
+    # need the project image fail, so --base-img and HOLOSCAN_CLI_BASE_IMAGE
+    # still work.
+    base_image_error: Optional[str] = None
     sdk_root: Optional[Path] = None
     sdk_root_source: Optional[str] = None
     docker_build_args: Optional[str] = None
@@ -397,11 +401,12 @@ def _resolve_project_profile(
         resolved["forward_env"] = forward_env
 
     base_images = config.get("base-images")
-    if base_images is not None:
-        if arch not in base_images:
-            raise ProjectContextError(
-                f"{config_source}: tool.holoscan.base-images has no entry for {arch!r}."
-            )
+    if base_images is not None and arch not in base_images:
+        resolved["base_image_error"] = (
+            f"{config_source}: tool.holoscan.base-images has no entry for {arch!r}. "
+            "Add one, pass --base-img, or set HOLOSCAN_CLI_BASE_IMAGE."
+        )
+    elif base_images is not None:
         try:
             base_image = base_images[arch]
             if not isinstance(base_image, str):
@@ -567,6 +572,7 @@ def _build_module_context(
         cuda=profile.get("cuda"),
         ctest_script=profile.get("ctest_script"),
         base_image=profile.get("base_image"),
+        base_image_error=profile.get("base_image_error"),
         sdk_root=profile.get("sdk_root"),
         sdk_root_source=profile.get("sdk_root_source"),
         docker_build_args=profile.get("docker_build_args"),
@@ -620,6 +626,7 @@ def _build_project_context(
         workspace_name=profile.get("workspace_name"),
         cuda=profile.get("cuda"),
         base_image=profile.get("base_image"),
+        base_image_error=profile.get("base_image_error"),
         docker_build_args=profile.get("docker_build_args"),
         docker_run_args=profile.get("docker_run_args"),
         forward_env=profile.get("forward_env", ()),

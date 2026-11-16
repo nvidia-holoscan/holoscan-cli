@@ -205,6 +205,13 @@ class HoloscanContainer:
 
     @classmethod
     def default_base_image(cls, cuda_version: Optional[Union[str, int]] = None) -> str:
+        context = get_active_project_context()
+        if (
+            context is not None
+            and context.base_image_error
+            and activated_environment_source("HOLOSCAN_CLI_BASE_IMAGE") == "default"
+        ):
+            fatal(context.base_image_error)
         base_image_name = str(cls.BASE_IMAGE_NAME)
         try:
             validate_image_reference(base_image_name)

@@ -472,6 +472,21 @@ def test_source_project_rejects_module_only_keys(tmp_path, pyproject):
         discover_project_context(cwd=root, environ={})
 
 
+@pytest.mark.parametrize("kind", ["source", "module"])
+def test_missing_base_image_architecture_defers_the_error(tmp_path, kind):
+    pyproject = "[tool.holoscan.base-images]\nx86_64 = 'registry.example.com/sdk:x86'\n"
+    if kind == "source":
+        root = _source_project(tmp_path / "apps", pyproject)
+    else:
+        root = _module(tmp_path / "module", pyproject=pyproject)
+
+    context = discover_project_context(cwd=root, environ={"HOLOSCAN_CLI_TARGET_ARCH": "aarch64"})
+
+    assert context.base_image is None
+    assert "HOLOSCAN_CLI_BASE_IMAGE" not in context.profile_environment()
+    assert "base-images has no entry for 'aarch64'" in context.base_image_error
+
+
 def test_source_project_validates_shared_keys(tmp_path):
     root = _source_project(tmp_path / "apps", "[tool.holoscan.base-images]\nx86_64 = 'bad image'\n")
 
@@ -479,17 +494,22 @@ def test_source_project_validates_shared_keys(tmp_path):
         discover_project_context(cwd=root, environ={"HOLOSCAN_CLI_TARGET_ARCH": "x86_64"})
 
 
+@pytest.mark.parametrize("kind", ["source", "module"])
 @pytest.mark.parametrize(
     ("pyproject", "container_prefix"),
     [
+        (None, None),
         ("[tool.holoscan]\nrepo-prefix = 'from-file'\n", None),
         ("[tool.holoscan]\nrepo-prefix = 'from-file'\ncontainer-prefix = 'images'\n", "images"),
     ],
 )
 def test_environment_repo_prefix_sets_the_default_container_prefix(
-    tmp_path, monkeypatch, pyproject, container_prefix
+    tmp_path, monkeypatch, kind, pyproject, container_prefix
 ):
-    root = _source_project(tmp_path / "apps", pyproject)
+    if kind == "source":
+        root = _source_project(tmp_path / "apps", pyproject)
+    else:
+        root = _module(tmp_path / "module", pyproject=pyproject)
     context = discover_project_context(cwd=root, environ={})
 
     monkeypatch.setattr(os, "environ", os.environ.copy())
