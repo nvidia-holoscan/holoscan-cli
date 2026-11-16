@@ -111,3 +111,50 @@ def test_deb_install_prefix_follows_sdk_layout(tmp_path, sdk_version, prefix):
     assert result.returncode == 0, result.stdout + result.stderr
     config = (build / "pkg/CPackConfig-example.cmake").read_text(encoding="utf-8")
     assert f'set(CPACK_PACKAGING_INSTALL_PREFIX "{prefix}")' in config
+
+
+def test_deb_package_config_keeps_free_text_exact(tmp_path):
+    cmake = shutil.which("cmake")
+    if cmake is None:
+        pytest.skip("CMake is required to configure the packaging helper")
+    # Package text from the Module template, keyed by the CPack variable it sets.
+    values = {
+        "CPACK_PACKAGE_DESCRIPTION_SUMMARY": 'Reads "in-body" frames from C:\\data with ${HOME}',
+        "CPACK_PACKAGE_VENDOR": 'R&D "Lab"; Research',
+        "CPACK_PACKAGE_CONTACT": '"Doe, Jane" <jane@example.com>',
+    }
+    # Quote each value the way the Module template renders it.
+    description, vendor, contact = (
+        '"' + value.replace("\\", "\\\\").replace('"', '\\"').replace("$", "\\$") + '"'
+        for value in values.values()
+    )
+    project = tmp_path / "project"
+    project.mkdir()
+    (project / "CMakeLists.txt").write_text(
+        "cmake_minimum_required(VERSION 3.24)\n"
+        "project(example VERSION 1.0.0 LANGUAGES NONE)\n"
+        f'list(APPEND CMAKE_MODULE_PATH "{CMAKE.as_posix()}")\n'
+        "include(holohub_configure_deb)\n"
+        f"holohub_configure_deb(NAME example DESCRIPTION {description} VERSION 1.0.0\n"
+        f'  VENDOR {vendor} CONTACT {contact} DEPENDS "holoscan")\n',
+        encoding="utf-8",
+    )
+    build = tmp_path / "build"
+    result = subprocess.run(
+        [cmake, "-S", str(project), "-B", str(build)], capture_output=True, text=True
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+
+    # cpack reads the generated config; read it the same way and write each value back.
+    script = tmp_path / "read_config.cmake"
+    script.write_text(
+        f'include("{(build / "pkg/CPackConfig-example.cmake").as_posix()}")\n'
+        + "".join(f'file(WRITE "${{OUT}}/{name}" "${{{name}}}")\n' for name in values),
+        encoding="utf-8",
+    )
+    result = subprocess.run(
+        [cmake, f"-DOUT={tmp_path}", "-P", str(script)], capture_output=True, text=True
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    for name, value in values.items():
+        assert (tmp_path / name).read_text(encoding="utf-8") == value, name
