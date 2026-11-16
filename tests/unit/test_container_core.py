@@ -407,6 +407,32 @@ def test_dockerfile_path_strategy_1_metadata_override_wins(tmp_path, placeholder
     assert Path(c.dockerfile_path) == explicit
 
 
+@pytest.mark.parametrize("placeholder", ["holohub_data_dir", "project_data_dir"])
+@pytest.mark.parametrize("override", [False, True])
+def test_dockerfile_metadata_uses_configured_data_directory(
+    tmp_path, monkeypatch, placeholder, override
+):
+    root = tmp_path / "repo"
+    project_dir = root / "applications" / "my_app"
+    project_dir.mkdir(parents=True)
+    (project_dir / "Dockerfile").write_text("WRONG\n", encoding="utf-8")
+    data_dir = tmp_path / "datasets" if override else root / "data"
+    data_dir.mkdir(parents=True)
+    expected = data_dir / "WinningDockerfile"
+    expected.write_text("RIGHT\n", encoding="utf-8")
+    monkeypatch.delenv("HOLOSCAN_CLI_DATA_DIR", raising=False)
+    if override:
+        monkeypatch.setenv("HOLOSCAN_CLI_DATA_DIR", str(data_dir))
+
+    container = _stub_container(
+        root,
+        project_metadata=_project_metadata(
+            project_dir, dockerfile=f"<{placeholder}>/WinningDockerfile"
+        ),
+    )
+    assert container.dockerfile_path == expected
+
+
 def test_dockerfile_path_strategy_2_language_specific(tmp_path):
     """A Dockerfile under ``<source_folder>/<language>/`` wins over the
     bare-source one."""

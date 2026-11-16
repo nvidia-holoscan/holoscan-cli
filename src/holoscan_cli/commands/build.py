@@ -185,7 +185,9 @@ def handle_build(cli, args: argparse.Namespace) -> None:
 
     # Get mode-specific build environment variables
     build_mode_env = mode_config.get("env", {}).copy()
-    update_env(build_mode_env, mode_config.get("build", {}).get("env", {}))
+    update_env(
+        build_mode_env, mode_config.get("build", {}).get("env", {}), preserve_unresolved=True
+    )
     effective_build_type = resolve_effective_build_type(args.build_type, build_mode_env)
 
     # Check if local mode is requested

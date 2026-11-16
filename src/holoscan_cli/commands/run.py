@@ -201,12 +201,14 @@ def handle_run(cli, args: argparse.Namespace) -> None:
 
     # Get mode-specific build environment variables
     build_mode_env = mode_config.get("env", {}).copy()
-    update_env(build_mode_env, mode_config.get("build", {}).get("env", {}))
+    update_env(
+        build_mode_env, mode_config.get("build", {}).get("env", {}), preserve_unresolved=True
+    )
     effective_build_type = resolve_effective_build_type(args.build_type, build_mode_env)
 
     # Get mode-specific run environment variables
     run_mode_env = mode_config.get("env", {}).copy()
-    update_env(run_mode_env, run_config.get("env", {}))
+    update_env(run_mode_env, run_config.get("env", {}), preserve_unresolved=True)
 
     # Check if builds should be skipped
     skip_docker_build, skip_local_build = check_skip_builds(args)
@@ -283,6 +285,7 @@ def handle_run(cli, args: argparse.Namespace) -> None:
         update_env(
             sdk_environment,
             build_mode_env,
+            path_mapping,
             overwrite=False,
             project_defaults_are_lower=True,
         )

@@ -200,6 +200,68 @@ def _project_args(**overrides):
     return Namespace(**defaults)
 
 
+@pytest.mark.parametrize("command", ["build", "install", "run"])
+@pytest.mark.parametrize("placeholder_prefix", ["project_", "holohub_", "custom_"])
+@pytest.mark.parametrize("has_mode_env", [False, True])
+def test_nested_environment_expands_paths_and_host_references(
+    tmp_path, monkeypatch, capsys, make_sdk_directory, command, placeholder_prefix, has_mode_env
+):
+    cli = RecordingCLI(tmp_path)
+    cli.prefix = "custom_" if placeholder_prefix == "custom_" else "holohub_"
+    sdk = make_sdk_directory(cli.HOLOHUB_ROOT / "sdk")
+    mode_env = {"CHAIN": "mode:<CHAIN>"} if has_mode_env else {}
+    nested = {
+        "APP_PATH": f"<{placeholder_prefix}app_bin>",
+        "DATA_PATH": f"<{placeholder_prefix}data_dir>",
+        "INHERITED": "<HOST_VALUE>",
+        "USER_CHOICE": "metadata-default",
+        "CHAIN": "nested:<CHAIN>",
+    }
+    cli.project_data["metadata"]["modes"] = {
+        "dev": {
+            "env": mode_env,
+            "build": {"env": {**nested, "HOLOSCAN_SDK_ROOT": f"<{placeholder_prefix}root>/sdk"}},
+            "run": {"command": "python app.py", "workdir": "", "env": nested},
+        }
+    }
+    monkeypatch.setenv("CHAIN", "host")
+    monkeypatch.setenv("HOST_VALUE", "inherited-value")
+    monkeypatch.setenv("USER_CHOICE", "explicit-process-value")
+    monkeypatch.setenv("HOLOSCAN_CLI_ENABLE_SCCACHE", "OFF")
+    for key in ("APP_PATH", "DATA_PATH", "INHERITED", "HOLOSCAN_SDK_ROOT"):
+        monkeypatch.delenv(key, raising=False)
+
+    calls = []
+
+    def record(cmd, **kwargs):
+        calls.append((cmd, kwargs))
+
+    monkeypatch.setattr(build_cmd, "run_command", record)
+    monkeypatch.setattr(install_cmd, "run_command", record)
+    monkeypatch.setattr(run_cmd, "run_command", record)
+    monkeypatch.setattr(build_cmd.shutil, "which", lambda _name: None)
+    handler = {
+        "build": build_cmd.handle_build,
+        "install": install_cmd.handle_install,
+        "run": run_cmd.handle_run,
+    }[command]
+    handler(cli, _project_args(local=True, mode="dev"))
+
+    assert calls
+    for _cmd, kwargs in calls:
+        environment = kwargs["env"]
+        assert environment["APP_PATH"] == str(
+            cli.DEFAULT_BUILD_PARENT_DIR / "smoke_app" / "applications" / "smoke_app"
+        )
+        assert environment["DATA_PATH"] == str(cli.DEFAULT_DATA_DIR)
+        assert environment["INHERITED"] == "inherited-value"
+        assert environment["USER_CHOICE"] == "explicit-process-value"
+        assert environment["CHAIN"] == ("nested:mode:host" if has_mode_env else "nested:host")
+    if command != "run":
+        assert calls[-1][1]["env"]["HOLOSCAN_SDK_ROOT"] == str(sdk)
+    assert "Placeholder <" not in capsys.readouterr().err
+
+
 @pytest.mark.parametrize(
     "handler",
     [

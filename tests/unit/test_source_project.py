@@ -22,6 +22,40 @@ import pytest
 from holoscan_cli.utils import holohub, source_project
 
 
+def test_environment_composition_defers_unknown_references(tmp_path, capsys):
+    mode = {"CHAIN": "mode:<CHAIN>", "MODE_VALUE": "value"}
+    source_project.update_env(
+        mode,
+        {
+            "CHAIN": "nested:<CHAIN>",
+            "APP": "<project_app_bin>",
+            "INHERITED": "<HOST_VALUE>",
+            "KNOWN": "<MODE_VALUE>",
+        },
+        preserve_unresolved=True,
+    )
+    assert mode["CHAIN"] == "nested:mode:<CHAIN>"
+    assert mode["APP"] == "<project_app_bin>"
+    assert mode["INHERITED"] == "<HOST_VALUE>"
+    assert mode["KNOWN"] == "value"
+    assert capsys.readouterr().err == ""
+
+    environment = {"CHAIN": "host", "HOST_VALUE": "from-host"}
+    source_project.update_env(
+        environment, mode, {"project_app_bin": str(tmp_path)}, overwrite=False
+    )
+    assert environment["CHAIN"] == "nested:mode:host"
+    assert environment["APP"] == str(tmp_path)
+    assert environment["INHERITED"] == "from-host"
+
+
+def test_final_environment_expansion_still_reports_missing_variables(capsys):
+    environment = {"EXISTING": "value"}
+    source_project.update_env(environment, {"UNKNOWN": "prefix:<MISSING>"})
+    assert environment["UNKNOWN"] == "prefix:"
+    assert "Placeholder <MISSING>" in capsys.readouterr().err
+
+
 @pytest.mark.parametrize("prefix", ["holohub_", "myrepo_", "project_"])
 def test_path_mapping_adds_project_names(tmp_path, prefix):
     root = tmp_path / "repo"

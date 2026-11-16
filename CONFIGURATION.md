@@ -68,11 +68,13 @@ the `project_` names remain available. The CLI rejects a prefix if it gives a
 Older CLI versions expand only the HoloHub names. Application and build paths
 require selected project metadata.
 
-Path placeholders in a mode's `env` values are expanded when preparing the
-local command environment. Currently, composing a nested `build.env` or
-`run.env` with a nonempty mode `env` can erase unresolved placeholders before
-that step. Put path-based environment values in the mode's `env` until this
-limitation is resolved.
+Mode `env`, nested `build.env`, and nested `run.env` values support these path
+placeholders and environment references such as `<HOME>`. Unresolved references
+survive metadata-layer composition and expand when preparing the local command
+environment. Self-references such as `extra:<PATH>` compose with the inherited
+value. Explicit process values take precedence over static metadata defaults.
+Dockerfile lookup also honors `HOLOSCAN_CLI_DATA_DIR` for both data-directory
+placeholder names.
 
 ## Module defaults
 

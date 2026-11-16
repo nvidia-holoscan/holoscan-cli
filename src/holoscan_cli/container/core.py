@@ -470,6 +470,9 @@ class HoloscanContainer:
             path_mapping = build_path_mapping(
                 project_root=HoloscanContainer.HOLOHUB_ROOT,
                 project_data=self.project_metadata,
+                data_dir=Path(
+                    os.environ.get("HOLOSCAN_CLI_DATA_DIR", HoloscanContainer.HOLOHUB_ROOT / "data")
+                ),
             )
 
             dockerfile_str = replace_placeholders(dockerfile_from_metadata, path_mapping)

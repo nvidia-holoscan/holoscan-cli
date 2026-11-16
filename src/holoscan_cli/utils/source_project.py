@@ -264,6 +264,8 @@ def replace_placeholders(
     text: str,
     path_mapping: dict[str, str] | None = None,
     env_mapping: dict[str, str] | None = None,
+    *,
+    preserve_unresolved: bool = False,
 ) -> str:
     """Replace placeholders in text using the provided path mapping and environment variables
 
@@ -279,6 +281,7 @@ def replace_placeholders(
         text: The text to replace placeholders in
         path_mapping: The path mapping to use
         env_mapping: The environment variables to use
+        preserve_unresolved: Leave unknown placeholders intact for a later expansion
 
     Returns:
         The text with placeholders replaced
@@ -300,6 +303,8 @@ def replace_placeholders(
         for env_placeholder in env_placeholders:
             # check if placeholder is in env_mapping otherwise warn and continue
             if env_placeholder not in env_mapping:
+                if preserve_unresolved:
+                    continue
                 warn(
                     f"Placeholder <{env_placeholder}> is not in environment variables, "
                     "defaulting to empty string."
@@ -323,6 +328,8 @@ def update_env(
     verbose: bool = False,
     overwrite: bool = True,
     project_defaults_are_lower: bool = False,
+    *,
+    preserve_unresolved: bool = False,
 ) -> None:
     """
     Update the environment variable with the new value from the new environment dictionary.
@@ -343,6 +350,11 @@ def update_env(
     self-referential value such as ``value:<VAR>`` remains an explicit
     composition with the inherited value.
 
+    Set ``preserve_unresolved=True`` when composing metadata layers before
+    project paths and the process environment are available. Known references
+    still compose; unknown references are expanded when preparing the final
+    command environment.
+
     """
     # Default to empty dictionaries if not provided
     path_mapping = path_mapping or {}
@@ -360,7 +372,9 @@ def update_env(
             # layer and may replace those values, but never a real process env.
             if activated_environment_source(key) != "project":
                 continue
-        env[key] = replace_placeholders(value, path_mapping, env)
+        env[key] = replace_placeholders(
+            value, path_mapping, env, preserve_unresolved=preserve_unresolved
+        )
         if verbose:
             # Mode environments can contain credentials or endpoint tokens.
             # Show which name was configured without copying its value to logs.
