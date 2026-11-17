@@ -137,6 +137,11 @@ def resolve_effective_build_type(
         build_type = _explicit_environment_value("CMAKE_BUILD_TYPE")
     if build_type is None and mode_environment:
         build_type = mode_environment.get("CMAKE_BUILD_TYPE")
+        if build_type is not None:
+            # Imported here because source_project imports this module.
+            from holoscan_cli.utils.source_project import expand_mode_value
+
+            build_type = expand_mode_value(build_type, mode_environment)
     return resolve_build_type(build_type, environ={})
 
 

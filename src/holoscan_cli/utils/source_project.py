@@ -78,6 +78,17 @@ def check_skip_builds(args) -> Tuple[bool, bool]:
     return skip_docker_build, skip_local_build
 
 
+def expand_mode_value(value: str, mode_env: Mapping[str, str]) -> str:
+    """Expand the references in a mode value that is read before the command runs.
+
+    Composed mode environments keep unknown references such as ``<USE_LOCAL>``
+    until the command environment is prepared. Settings that decide how to
+    build are read earlier, so expand them now against the process environment,
+    then the mode's own values.
+    """
+    return replace_placeholders(value, None, {**mode_env, **os.environ})
+
+
 def is_env_request_local_build(*mode_envs: Mapping[str, str]) -> bool:
     """Resolve process and mode-local execution settings by precedence."""
     key = "HOLOSCAN_CLI_BUILD_LOCAL"
@@ -85,7 +96,7 @@ def is_env_request_local_build(*mode_envs: Mapping[str, str]) -> bool:
         return is_env_flag_true(os.environ[key])
     for mode_env in reversed(mode_envs):
         if key in mode_env:
-            return is_env_flag_true(mode_env[key])
+            return is_env_flag_true(expand_mode_value(mode_env[key], mode_env))
     return False
 
 

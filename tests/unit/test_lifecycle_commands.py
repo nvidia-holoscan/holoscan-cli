@@ -262,6 +262,73 @@ def test_nested_environment_expands_paths_and_host_references(
     assert "Placeholder <" not in capsys.readouterr().err
 
 
+def _nested_build_env_command(tmp_path, monkeypatch, make_sdk_directory, command, build_env):
+    """Run a command whose mode has a mode env and the given nested build env."""
+    cli = RecordingCLI(tmp_path)
+    monkeypatch.setenv("HOLOSCAN_SDK_ROOT", str(make_sdk_directory(tmp_path / "sdk")))
+    cli.project_data["metadata"]["modes"] = {
+        "dev": {
+            "env": {"MODE_VALUE": "set"},
+            "build": {"env": build_env},
+            "run": {"command": "python app.py", "workdir": ""},
+        }
+    }
+    monkeypatch.setenv("HOLOSCAN_CLI_ENABLE_SCCACHE", "OFF")
+    local_commands = []
+    for module in (build_cmd, install_cmd, run_cmd):
+        monkeypatch.setattr(
+            module, "run_command", lambda cmd, **_kwargs: local_commands.append(cmd)
+        )
+    monkeypatch.setattr(build_cmd.shutil, "which", lambda _name: None)
+    handler = {
+        "build": build_cmd.handle_build,
+        "install": install_cmd.handle_install,
+        "run": run_cmd.handle_run,
+    }[command]
+    return cli, handler, local_commands
+
+
+@pytest.mark.parametrize("command", ["build", "install", "run"])
+@pytest.mark.parametrize(("host_value", "local"), [("OFF", False), ("ON", True)])
+def test_nested_local_build_reference_uses_the_process_value(
+    tmp_path, monkeypatch, make_sdk_directory, command, host_value, local
+):
+    cli, handler, local_commands = _nested_build_env_command(
+        tmp_path,
+        monkeypatch,
+        make_sdk_directory,
+        command,
+        {"HOLOSCAN_CLI_BUILD_LOCAL": "<USE_LOCAL>"},
+    )
+    monkeypatch.delenv("HOLOSCAN_CLI_BUILD_LOCAL", raising=False)
+    monkeypatch.setenv("USE_LOCAL", host_value)
+
+    handler(cli, _project_args(local=None, no_docker_build=True, mode="dev"))
+
+    assert bool(local_commands) is local
+    assert bool(cli.container.run_calls) is not local
+
+
+@pytest.mark.parametrize("command", ["build", "install", "run"])
+def test_nested_build_type_reference_uses_the_process_value(
+    tmp_path, monkeypatch, make_sdk_directory, command
+):
+    cli, handler, local_commands = _nested_build_env_command(
+        tmp_path,
+        monkeypatch,
+        make_sdk_directory,
+        command,
+        {"CMAKE_BUILD_TYPE": "<BUILD_FLAVOR>"},
+    )
+    monkeypatch.delenv("CMAKE_BUILD_TYPE", raising=False)
+    monkeypatch.setenv("BUILD_FLAVOR", "debug")
+
+    handler(cli, _project_args(local=True, mode="dev"))
+
+    configure = [cmd for cmd in local_commands if "-DCMAKE_BUILD_TYPE=Debug" in cmd]
+    assert configure, local_commands
+
+
 @pytest.mark.parametrize(
     "handler",
     [

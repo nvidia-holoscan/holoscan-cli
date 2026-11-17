@@ -71,8 +71,10 @@ require selected project metadata.
 Mode `env`, nested `build.env`, and nested `run.env` values support these path
 placeholders and environment references such as `<HOME>`. Unresolved references
 survive metadata-layer composition and expand when preparing the local command
-environment. Self-references such as `extra:<PATH>` compose with the inherited
-value. Explicit process values take precedence over static metadata defaults.
+environment. References in `HOLOSCAN_CLI_BUILD_LOCAL` and `CMAKE_BUILD_TYPE`
+expand earlier, from the process environment, because they choose between a
+local and a container build and set the build type. Self-references such as
+`extra:<PATH>` compose with the inherited value. Explicit process values take precedence over static metadata defaults.
 Dockerfile lookup also honors `HOLOSCAN_CLI_DATA_DIR` for both data-directory
 placeholder names.
 
