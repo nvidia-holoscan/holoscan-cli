@@ -87,6 +87,9 @@ def test_direct_create_uses_packaged_template_inside_a_source_project(
 
 def test_wrapper_default_selects_application_template(cli, tmp_path, monkeypatch, capsys):
     application_template = _write_template(tmp_path, "applications/template", module=False)
+    (tmp_path / "applications/CMakeLists.txt").write_text(
+        "add_holohub_application(other)\n", encoding="utf-8"
+    )
     monkeypatch.setenv(create.CREATE_TEMPLATE_ENV, "applications/template")
 
     create.handle_create(cli, _args())
@@ -94,7 +97,7 @@ def test_wrapper_default_selects_application_template(cli, tmp_path, monkeypatch
     output = capsys.readouterr().out
     assert f"Template: {application_template}" in output
     assert f"Directory: {tmp_path / 'applications/my_mod'}" in output
-    assert "applications/CMakeLists.txt" in output
+    assert "    add_holohub_application(my_mod)\n" in output
 
 
 def test_explicit_template_beats_the_wrapper_default(cli, tmp_path, monkeypatch, capsys):

@@ -29,7 +29,9 @@ SDK discovery, environment variables, and option precedence.
 ### Standalone applications
 
 An application can keep its Holoscan `metadata.json` directly in its project
-directory, without an `applications/` parent or a Module descriptor:
+directory, without an `applications/` parent or a Module descriptor. Outside a
+project, [`holoscan create my_app --template application`](#create-an-application)
+creates one:
 
 ```text
 my_app/
@@ -61,7 +63,7 @@ rules, file-size limits, and search-path overrides.
 
 | Command | Purpose |
 | --- | --- |
-| `create <name>` | Scaffold an external Holoscan Module or a selected project template. |
+| `create <name>` | Scaffold a Holoscan Module, an application, or a selected project template. |
 | `list` | Discover projects and their types. |
 | `modes <project>` | Inspect a project's supported modes. |
 | `build [project] [mode]` | Configure and build a project. |
@@ -257,6 +259,35 @@ come first. See
 [creation](src/holoscan_cli/commands/create.py). The generated module's
 `README.md` and `DEVELOPER.md` document its implementation and consumer flow,
 and its `AGENTS.md` gives AI coding agents its commands and boundaries.
+
+## Create an application
+
+`holoscan create my_app --template application` uses the packaged application
+template. In a project with an `applications/` folder, such as a module or a
+repository of applications, it creates `applications/my_app` and adds it to
+`applications/CMakeLists.txt` with the registration command that file already
+uses, in sorted order when the existing entries are sorted. Elsewhere, it
+creates `my_app` in the current directory as a
+[standalone application](#standalone-applications), which has no `Dockerfile`
+for container builds, so build and run it with `--local`. `--directory`
+changes the output parent.
+
+In a module created by an earlier CLI release, move `enable_testing()` before
+`add_subdirectory(applications)` in the module's root `CMakeLists.txt` so that
+`holoscan test` finds the application's tests.
+
+`--language cpp`, the default, generates a C++ application, and
+`--language python` a Python one. Each has a `default` mode, a finite `ci` mode
+that checks its own result, CTest tests, and a README with build, run, and test
+commands. Choose the SDK minimum with `--context holoscan_version=<version>`; it
+defaults to `5.0.0` or the configured base SDK version, and older versions are
+rejected. Set the description and author with `--context description=...`,
+`--context full_name=...`, and `--context affiliation=...`. See
+[template defaults](src/holoscan_cli/templates/application/cookiecutter.json).
+
+`--template module` and `--template application` select the packaged templates;
+any other value is a template directory. To use a directory named after a
+packaged template, pass a path such as `./application`.
 
 ## Test, install, and package
 

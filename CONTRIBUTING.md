@@ -82,6 +82,7 @@ src/holoscan_cli/
                       `build-container --extra-scripts`
   metadata/           project metadata JSON schemas
   templates/module/   standalone Module cookiecutter
+  templates/application/  C++ or Python application cookiecutter
   testing/            CTest helpers shipped in the wheel
 ```
 

@@ -21,10 +21,11 @@ import importlib
 import importlib.resources
 import json
 import os
+import re
 import shutil
 import subprocess
 import tempfile
-from contextlib import AbstractContextManager, nullcontext
+from contextlib import AbstractContextManager, nullcontext, suppress
 from pathlib import Path
 from typing import Optional, Union
 
@@ -46,6 +47,18 @@ LOCAL_SOURCE_VERSION = "0.0.0+local"
 RESERVED_CONTEXT_KEYS = {"_holoscan_cli_version", "__python_bindings", "__pure_python"}
 LANGUAGES = ("cpp", "python")
 PRESERVED_DESTINATION_ENTRIES = {".git"}
+# Templates shipped in holoscan_cli/templates, selected by name with --template.
+PACKAGED_TEMPLATES = {
+    "module": "packaged Module template",
+    "application": "packaged application template",
+}
+# The registration command in the CLI's packaged CMake support. It is used when
+# applications/CMakeLists.txt does not register any application yet.
+DEFAULT_REGISTRATION_COMMAND = "add_holohub_application"
+_REGISTRATION_CALL = re.compile(
+    r"(?P<indent>[ \t]*)(?P<command>add_\w*application)[ \t]*\([ \t]*(?P<name>[^\s()#]+)"
+    r"(?P<rest>.*)"
+)
 
 
 def register_create_parser(cli, subparsers) -> argparse.ArgumentParser:
@@ -61,8 +74,8 @@ def register_create_parser(cli, subparsers) -> argparse.ArgumentParser:
         "--template",
         default=None,
         help=(
-            "Path to the template directory to use "
-            "(default: HOLOSCAN_CLI_CREATE_TEMPLATE when set, otherwise the packaged "
+            "Packaged template name ('module' or 'application') or path to a template "
+            "directory (default: HOLOSCAN_CLI_CREATE_TEMPLATE when set, otherwise the packaged "
             "Module template)"
         ),
     )
@@ -76,8 +89,9 @@ def register_create_parser(cli, subparsers) -> argparse.ArgumentParser:
             "Languages for the project (default: cpp). For the packaged Module template, "
             "'cpp python' (or 'cpp,python') adds Python bindings that expose the C++ operators "
             "through the Holoscan SDK operator registry, and 'python' creates a Module whose "
-            "operators and applications are implemented in Python. Custom templates take one "
-            "language. The project name may come before or after --language."
+            "operators and applications are implemented in Python. The packaged application "
+            "template and custom templates take one language. The project name may come before "
+            "or after --language."
         ),
     )
     parser.add_argument(
@@ -89,8 +103,9 @@ def register_create_parser(cli, subparsers) -> argparse.ArgumentParser:
         default=None,
         help=(
             "Output directory for the generated project "
-            "(default: current directory for Module templates; "
-            "applications/ for application templates)"
+            "(default: current directory for Module templates; for application templates, "
+            "the project's applications/ folder when it exists, otherwise the current "
+            "directory)"
         ),
     )
     parser.add_argument(
@@ -180,21 +195,52 @@ def _run_cookiecutter(
         raise AssertionError("fatal() returned unexpectedly")  # pragma: no cover
 
 
-def _add_to_cmakelists(cli, project_name: str) -> None:
-    """Add a new application to applications/CMakeLists.txt if it doesn't exist"""
-    cmakelists_path = cli.HOLOHUB_ROOT / "applications" / "CMakeLists.txt"
-    if not cmakelists_path.exists():
-        return
-    with open(cmakelists_path, "r") as f:
-        lines = f.readlines()
-    target_line = f"add_holohub_application({project_name})"
-    if any(target_line in line.strip() for line in lines):
-        return
+def _application_registration(text: str, project_name: str) -> Optional[tuple[str, str]]:
+    """Return the updated applications/CMakeLists.txt text and the added line.
+
+    The new line uses the registration command the file already uses. It goes
+    in sorted order when the existing registrations are unindented, one per
+    line, and sorted; otherwise it is appended. Returns ``None`` when the
+    application is already registered.
+    """
+    lines = text.splitlines(keepends=True)
+    calls = [
+        (index, match)
+        for index, line in enumerate(lines)
+        if (match := _REGISTRATION_CALL.match(line)) is not None
+    ]
+    if any(match["name"] == project_name for _, match in calls):
+        return None
+    command = calls[0][1]["command"] if calls else DEFAULT_REGISTRATION_COMMAND
+    entry = f"{command}({project_name})"
+    names = [match["name"] for _, match in calls]
+    sortable = (
+        bool(calls)
+        and names == sorted(names)
+        and all(not match["indent"] and ")" in match["rest"].split("#", 1)[0] for _, match in calls)
+    )
+    position = len(lines)
+    if sortable:
+        position = next(
+            (index for index, match in calls if match["name"] > project_name),
+            calls[-1][0] + 1,
+        )
+    if position > 0 and not lines[position - 1].endswith("\n"):
+        lines[position - 1] += "\n"
+    lines.insert(position, f"{entry}\n")
+    return "".join(lines), entry
+
+
+def _add_to_cmakelists(cmakelists_path: Path, project_name: str) -> None:
+    """Register a new application in applications/CMakeLists.txt."""
     try:
-        with open(cmakelists_path, "a") as f:
-            f.write(f"add_holohub_application({project_name})\n")
-    except Exception as e:
-        print(Color.red(f"Failed to add application to applications/CMakeLists.txt: {str(e)}"))
+        with open(cmakelists_path, encoding="utf-8", newline="") as cmakelists:
+            update = _application_registration(cmakelists.read(), project_name)
+        if update is not None:
+            with open(cmakelists_path, "w", encoding="utf-8", newline="") as cmakelists:
+                cmakelists.write(update[0])
+    except (OSError, UnicodeError) as exc:
+        print(Color.red(f"Failed to add application to applications/CMakeLists.txt: {exc}"))
         print(Color.red("Please add the application manually to applications/CMakeLists.txt"))
 
 
@@ -238,25 +284,31 @@ def copy_cmake_support(project_dir: Path) -> None:
         shutil.copytree(source, project_dir / "cmake", dirs_exist_ok=True)
 
 
-def _packaged_module_template() -> AbstractContextManager[Path]:
-    """Extract the wheel's Module template to a real directory for the duration."""
-    resource = importlib.resources.files("holoscan_cli.templates").joinpath("module")
+def _packaged_template(name: str) -> AbstractContextManager[Path]:
+    """Extract a template from the wheel to a real directory for the duration."""
+    resource = importlib.resources.files("holoscan_cli.templates").joinpath(name)
     return importlib.resources.as_file(resource)
 
 
-def _select_template(cli, template: Optional[str]) -> tuple[AbstractContextManager[Path], bool]:
-    """Resolve the template directory and whether it is the packaged Module one.
+def _select_template(
+    cli, template: Optional[str]
+) -> tuple[AbstractContextManager[Path], Optional[str]]:
+    """Resolve the template directory and, for a packaged template, its name.
 
     An explicit ``--template`` wins, then ``HOLOSCAN_CLI_CREATE_TEMPLATE``, then
-    the packaged Module template. Relative paths resolve against the active
-    source-project root so wrappers can set a project-relative default.
+    the packaged Module template. A packaged template name selects that
+    template; other values are directory paths. Relative paths resolve against
+    the active source-project root so wrappers can set a project-relative
+    default.
     """
     if template is not None and not str(template).strip():
-        fatal("--template requires a non-empty directory path.")
+        fatal("--template requires a packaged template name or a non-empty directory path.")
 
     selected = template or os.environ.get(CREATE_TEMPLATE_ENV) or None
     if selected is None:
-        return _packaged_module_template(), True
+        return _packaged_template("module"), "module"
+    if selected in PACKAGED_TEMPLATES:
+        return _packaged_template(selected), selected
 
     resolved = Path(selected).expanduser()
     if not resolved.is_absolute():
@@ -265,13 +317,27 @@ def _select_template(cli, template: Optional[str]) -> tuple[AbstractContextManag
     # The in-tree HoloHub Module template now ships in the wheel; keep the old
     # path working for callers that still pass it.
     if Path(selected) == LEGACY_MODULE_TEMPLATE and not resolved.exists():
-        return _packaged_module_template(), True
+        return _packaged_template("module"), "module"
     if not resolved.is_dir():
         fatal(
             f"Template directory {resolved} does not exist or is not a directory. "
-            "Choose an existing --template path and retry."
+            f"Choose an existing --template path or a packaged template "
+            f"({', '.join(PACKAGED_TEMPLATES)}) and retry."
         )
-    return nullcontext(resolved), False
+    return nullcontext(resolved), None
+
+
+def _main_source(project_dir: Path, slug: str) -> Optional[Path]:
+    """Return the generated application's entry point, relative to the project."""
+    candidates = (
+        *sorted((project_dir / "src").glob(f"{slug}.*")),
+        project_dir / "cpp" / "main.cpp",
+        project_dir / "python" / f"{slug}.py",
+    )
+    for candidate in candidates:
+        if candidate.is_file():
+            return candidate.relative_to(project_dir)
+    return None
 
 
 # ---- handler -----------------------------------------------------------------
@@ -310,7 +376,7 @@ def _take_project_from_languages(args: argparse.Namespace) -> None:
 def handle_create(cli, args: argparse.Namespace) -> None:
     """Scaffold a project from the packaged or caller-selected template."""
     _take_project_from_languages(args)
-    template_manager, use_packaged_template = _select_template(cli, args.template)
+    template_manager, packaged_template = _select_template(cli, args.template)
 
     with template_manager as template_dir:
         template_dir = Path(template_dir)
@@ -334,13 +400,14 @@ def handle_create(cli, args: argparse.Namespace) -> None:
                 "install the checkout into an isolated environment with distribution metadata, "
                 "then retry."
             )
-        # The packaged template combines languages; caller templates keep their
-        # own single-language support.
+        # The packaged Module template combines languages; other templates take
+        # one language.
         languages = _normalize_languages(args.language)
-        if not use_packaged_template and len(languages) > 1:
+        if packaged_template != "module" and len(languages) > 1:
             fatal(
                 f"--language {' '.join(languages)} is only supported by the packaged Module "
-                "template; custom templates take one language."
+                "template; the packaged application template and custom templates take one "
+                "language."
             )
         project_slug = to_snake_case(args.project)
         context = {
@@ -365,13 +432,18 @@ def handle_create(cli, args: argparse.Namespace) -> None:
         context.update(extra_context)
 
         applications_dir = (Path(cli.HOLOHUB_ROOT) / "applications").resolve()
-        if args.directory is None:
-            output_dir = Path.cwd().resolve() if is_module else applications_dir
-        else:
+        if args.directory is not None:
             output_dir = Path(args.directory).expanduser().resolve()
-        # Applications registered in the source project's CMakeLists must be
-        # added there; Modules and out-of-tree destinations never are.
+        elif not is_module and applications_dir.is_dir():
+            output_dir = applications_dir
+        else:
+            # Modules, and applications outside a project with an applications/
+            # folder, are created in the current directory.
+            output_dir = Path.cwd().resolve()
+        # Applications in the project's applications/ folder are registered in
+        # its CMakeLists.txt; Modules and other destinations never are.
         registers_application = not is_module and output_dir == applications_dir
+        registration_file = applications_dir / "CMakeLists.txt"
 
         if not is_module:
             output_folder = str(context.get("project_slug") or project_slug)
@@ -408,7 +480,9 @@ def handle_create(cli, args: argparse.Namespace) -> None:
 
         if args.dryrun:
             print(Color.green("Would create project folder with these parameters (dryrun):"))
-            template_label = "packaged Module template" if use_packaged_template else template_dir
+            template_label = (
+                PACKAGED_TEMPLATES[packaged_template] if packaged_template else template_dir
+            )
             print(f"Template: {template_label}")
             print(f"Directory: {intended_dir}")
             if target_state.kind == "missing":
@@ -418,9 +492,14 @@ def handle_create(cli, args: argparse.Namespace) -> None:
                 print(f"Destination: would populate an existing {target_kind} directory")
             for key, value in context.items():
                 print(f"  {key}: {value}")
-            if registers_application:
+            registration = None
+            if registers_application and registration_file.is_file():
+                with suppress(OSError, UnicodeError):
+                    text = registration_file.read_text(encoding="utf-8")
+                    registration = _application_registration(text, project_slug)
+            if registration is not None:
                 print(Color.green("Would modify `applications/CMakeLists.txt`: "))
-                print(f"    add_holohub_application({project_slug})")
+                print(f"    {registration[1]}")
             return
 
         try:
@@ -480,10 +559,7 @@ def handle_create(cli, args: argparse.Namespace) -> None:
             if is_module:
                 schema_root: Optional[Union[str, Path]] = "modules"
             else:
-                staged_source = staged_project / "src"
-                staged_main = next(staged_source.glob(f"{actual_slug}.*"), None)
-                if staged_main is not None:
-                    main_file_relative = staged_main.relative_to(staged_project)
+                main_file_relative = _main_source(staged_project, actual_slug)
                 schema_path = get_schema_path("applications")
                 schema_root = "applications" if schema_path.exists() else None
             validate_generated_metadata(cli, staged_metadata, schema_root)
@@ -502,8 +578,8 @@ def handle_create(cli, args: argparse.Namespace) -> None:
         metadata_path = project_dir / "metadata.json"
         main_file = project_dir / main_file_relative if main_file_relative is not None else None
 
-        if registers_application:
-            _add_to_cmakelists(cli, actual_slug)
+        if registers_application and registration_file.is_file():
+            _add_to_cmakelists(registration_file, actual_slug)
 
         git_initialized = False
         if is_module and not target_state.entries:
@@ -519,15 +595,29 @@ def handle_create(cli, args: argparse.Namespace) -> None:
                 f"- Follow the Quick Start in {project_dir / 'README.md'}\n"
             )
         else:
-            msg_next = (
-                f"Possible next steps:\n"
-                f"- Add operators to {main_file}\n"
-                f"- Update project metadata in {metadata_path}\n"
-                f"- Review source code license files and headers "
-                f"(e.g. {project_dir / 'LICENSE'})\n"
-                f"- Build and run the application:\n"
-                f"   {cli.script_name} run {actual_slug}"
-            )
+            steps = [
+                f"- Implement the application in {main_file or project_dir}",
+                f"- Update project metadata in {metadata_path}",
+            ]
+            readme = project_dir / "README.md"
+            if readme.is_file():
+                steps.append(f"- Follow the build, run, and test steps in {readme}")
+            license_file = project_dir / "LICENSE"
+            if license_file.is_file():
+                steps.append(
+                    f"- Review source code license files and headers (e.g. {license_file})"
+                )
+            else:
+                steps.append("- Review the license headers in the generated source files")
+            run_command = f"{cli.script_name} run {actual_slug}"
+            if not registers_application:
+                # The CLI discovers an application outside the project's
+                # applications/ folder from the application's own directory,
+                # and builds a container only from a Dockerfile there.
+                local = "" if (project_dir / "Dockerfile").is_file() else " --local"
+                run_command = f"cd {project_dir} && {run_command}{local}"
+            steps.append(f"- Build and run the application:\n   {run_command}")
+            msg_next = "Possible next steps:\n" + "\n".join(steps)
 
         print(
             Color.green(f"Successfully created new project: {args.project}"),

@@ -1,6 +1,9 @@
 # Scan all documentation, including unchanged files that link to a renamed
 # file or heading. Raw Cookiecutter output is not a rendered module checkout.
-exclude_path = ['(^|/)src/holoscan_cli/templates/module/\{\{cookiecutter\.module_repo_name\}\}/']
+exclude_path = [
+  '(^|/)src/holoscan_cli/templates/module/\{\{cookiecutter\.module_repo_name\}\}/',
+  '(^|/)src/holoscan_cli/templates/application/\{\{cookiecutter\.project_slug\}\}/',
+]
 
 no_progress = true
 max_concurrency = 8
