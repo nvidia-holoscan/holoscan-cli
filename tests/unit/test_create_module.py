@@ -515,6 +515,18 @@ def test_packaged_template_generates_a_pure_python_module(cli, tmp_path, monkeyp
             assert "{{" not in text and "{%" not in text, path
 
 
+@pytest.mark.parametrize("language", ["cpp", "python"])
+def test_module_enables_testing_before_adding_applications(cli, tmp_path, monkeypatch, language):
+    """CTest finds tests only in directories added after testing is enabled."""
+    pytest.importorskip("cookiecutter")
+    monkeypatch.setattr(create, "_initialize_module_git", lambda _path: False)
+    create.handle_create(cli, _args(dryrun=False, language=language, directory=tmp_path / "out"))
+
+    root = (tmp_path / "out/holoscan-my-mod/CMakeLists.txt").read_text(encoding="utf-8")
+
+    assert root.index("enable_testing()") < root.index("add_subdirectory(applications)")
+
+
 def test_pure_python_module_stages_its_package_without_an_sdk(cli, tmp_path, monkeypatch):
     """Configure the generated CMake project with only CMake and Python 3.12."""
     pytest.importorskip("cookiecutter")
