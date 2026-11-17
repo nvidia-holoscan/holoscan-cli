@@ -56,9 +56,11 @@ PACKAGED_TEMPLATES = {
 # applications/CMakeLists.txt does not register any application yet.
 DEFAULT_REGISTRATION_COMMAND = "add_holohub_application"
 _REGISTRATION_CALL = re.compile(
-    r"(?P<indent>[ \t]*)(?P<command>add_\w*application)[ \t]*\([ \t]*(?P<name>[^\s()#]+)"
-    r"(?P<rest>.*)"
+    r"[ \t]*(?P<command>add_\w*application)[ \t]*\([ \t]*(?P<name>[^\s()#]+)(?P<rest>.*)",
+    re.IGNORECASE,
 )
+_BLOCK_START = re.compile(r"[ \t]*(?:if|foreach|while|function|macro|block)[ \t]*\(", re.IGNORECASE)
+_BRACKET_COMMENT = re.compile(r"#\[(=*)\[.*?\]\1\]", re.DOTALL)
 
 
 def register_create_parser(cli, subparsers) -> argparse.ArgumentParser:
@@ -199,14 +201,18 @@ def _application_registration(text: str, project_name: str) -> Optional[tuple[st
     """Return the updated applications/CMakeLists.txt text and the added line.
 
     The new line uses the registration command the file already uses. It goes
-    in sorted order when the existing registrations are unindented, one per
-    line, and sorted; otherwise it is appended. Returns ``None`` when the
+    in sorted order when the existing registrations are sorted, one per line,
+    and the file has no blocks such as ``if()``, so the line never lands inside
+    a condition; otherwise it is appended. Returns ``None`` when the
     application is already registered.
     """
     lines = text.splitlines(keepends=True)
+    # Scan without bracket comments, keeping each line at the same index.
+    scanned = _BRACKET_COMMENT.sub(lambda comment: "\n" * (len(comment[0].splitlines()) - 1), text)
+    scanned_lines = scanned.splitlines()
     calls = [
         (index, match)
-        for index, line in enumerate(lines)
+        for index, line in enumerate(scanned_lines)
         if (match := _REGISTRATION_CALL.match(line)) is not None
     ]
     if any(match["name"] == project_name for _, match in calls):
@@ -217,7 +223,8 @@ def _application_registration(text: str, project_name: str) -> Optional[tuple[st
     sortable = (
         bool(calls)
         and names == sorted(names)
-        and all(not match["indent"] and ")" in match["rest"].split("#", 1)[0] for _, match in calls)
+        and all(")" in match["rest"].split("#", 1)[0] for _, match in calls)
+        and not any(_BLOCK_START.match(line) for line in scanned_lines)
     )
     position = len(lines)
     if sortable:

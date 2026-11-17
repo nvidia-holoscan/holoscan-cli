@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import shlex
 import shutil
 import subprocess
 import sys
@@ -16,6 +17,7 @@ from types import SimpleNamespace
 import pytest
 
 from holoscan_cli.commands import create
+from holoscan_cli.utils.holohub import replace_placeholders
 
 # Quotes and backslashes must survive as JSON string values in metadata.json.
 DESCRIPTION = r'Detect "in-body" frames in C:\data'
@@ -166,9 +168,16 @@ def test_python_application_is_created_as_a_standalone_project(tmp_path, monkeyp
     assert not (work / "applications").exists()
     application = _application_metadata(app)
     assert application["language"] == "Python"
-    assert application["modes"]["default"]["run"]["command"] == (
-        "python3 <holohub_app_source>/python/my_app.py --count 100"
-    )
+    command = application["modes"]["default"]["run"]["command"]
+    assert command == "python3 '<holohub_app_source>/python/my_app.py' --count 100"
+    # The CLI splits the command after inserting the application's path.
+    source = "/home/dev/My Projects/my_app"
+    assert shlex.split(replace_placeholders(command, {"holohub_app_source": source})) == [
+        "python3",
+        f"{source}/python/my_app.py",
+        "--count",
+        "100",
+    ]
     tests = (app / "tests/CMakeLists.txt").read_text(encoding="utf-8")
     assert "COMMAND ${Python3_EXECUTABLE} ${script} --count 10 --period-ms 1" in tests
     assert "option(HOLOHUB_BUILD_PYTHON" in (app / "CMakeLists.txt").read_text(encoding="utf-8")
@@ -276,12 +285,27 @@ def test_applications_folder_without_registrations_is_left_alone(tmp_path, capsy
             "if(ENABLE_ALPHA)\n  add_holohub_application(alpha)\nendif()\n"
             "add_holohub_application(my_app)\n",
         ),
+        # Sorted but inside a condition: append after the block, never inside it.
+        (
+            "if(ENABLE_EXAMPLES)\nadd_holoscan_application(alpha)\n"
+            "add_holoscan_application(zulu)\nendif()\n",
+            "if(ENABLE_EXAMPLES)\nadd_holoscan_application(alpha)\n"
+            "add_holoscan_application(zulu)\nendif()\nadd_holoscan_application(my_app)\n",
+        ),
+        # Calls in bracket comments are not registrations.
+        (
+            "#[[\nadd_holohub_application(my_app)\n]]\n"
+            "add_holoscan_application(alpha)\nadd_holoscan_application(zulu)\n",
+            "#[[\nadd_holohub_application(my_app)\n]]\n"
+            "add_holoscan_application(alpha)\nadd_holoscan_application(my_app)\n"
+            "add_holoscan_application(zulu)\n",
+        ),
     ],
 )
 def test_registration_follows_the_existing_file(text, expected):
-    command = "add_holohub_application" if "add_holohub" in expected else "add_holoscan_application"
+    (added,) = [line for line in expected.splitlines() if line not in text.splitlines()]
 
-    assert create._application_registration(text, "my_app") == (expected, f"{command}(my_app)")
+    assert create._application_registration(text, "my_app") == (expected, added)
 
 
 @pytest.mark.parametrize(

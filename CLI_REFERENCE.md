@@ -266,8 +266,9 @@ and its `AGENTS.md` gives AI coding agents its commands and boundaries.
 template. In a project with an `applications/` folder, such as a module or a
 repository of applications, it creates `applications/my_app` and adds it to
 `applications/CMakeLists.txt` with the registration command that file already
-uses, in sorted order when the existing entries are sorted. Elsewhere, it
-creates `my_app` in the current directory as a
+uses. The line goes in sorted order when the existing entries are sorted, one
+per line, and the file has no blocks such as `if()`; otherwise it is appended.
+Elsewhere, it creates `my_app` in the current directory as a
 [standalone application](#standalone-applications), which has no `Dockerfile`
 for container builds, so build and run it with `--local`. `--directory`
 changes the output parent.
