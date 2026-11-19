@@ -440,17 +440,22 @@ def handle_create(cli, args: argparse.Namespace) -> None:
 
         applications_dir = (Path(cli.HOLOHUB_ROOT) / "applications").resolve()
         if args.directory is not None:
-            output_dir = Path(args.directory).expanduser().resolve()
+            output_dir = Path(args.directory).expanduser()
         elif not is_module and applications_dir.is_dir():
             output_dir = applications_dir
         else:
             # Modules, and applications outside a project with an applications/
             # folder, are created in the current directory.
             output_dir = Path.cwd().resolve()
-        # Applications in the project's applications/ folder are registered in
-        # its CMakeLists.txt; Modules and other destinations never are.
-        registers_application = not is_module and output_dir == applications_dir
-        registration_file = applications_dir / "CMakeLists.txt"
+        # An explicit applications/ destination may belong to another project.
+        # Check its name before resolving symlinks, then register in the folder
+        # that actually receives the application rather than the current project.
+        is_applications_dir = output_dir.name == "applications"
+        output_dir = output_dir.resolve()
+        registers_application = not is_module and (
+            output_dir == applications_dir or is_applications_dir
+        )
+        registration_file = output_dir / "CMakeLists.txt"
 
         if not is_module:
             output_folder = str(context.get("project_slug") or project_slug)

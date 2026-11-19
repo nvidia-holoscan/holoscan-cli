@@ -1,5 +1,5 @@
 {%- if cookiecutter.language == 'python' -%}
-{#- Quote the script path: the CLI splits the command after inserting the path. -#}
+{#- Keep the path placeholder in one argument, including for older CLI versions. -#}
 {%- set command = "python3 '<holohub_app_source>/python/" ~ cookiecutter.project_slug ~ ".py'" -%}
 {%- else -%}
 {%- set command = './' ~ cookiecutter.project_slug -%}

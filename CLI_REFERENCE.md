@@ -273,6 +273,11 @@ Elsewhere, it creates `my_app` in the current directory as a
 for container builds, so build and run it with `--local`. `--directory`
 changes the output parent.
 
+When `--directory` selects an `applications/` folder, creation registers the
+application in that destination's existing `CMakeLists.txt`, even when invoked
+from outside its project. Other output folders are not registered. Preview
+with `--dryrun` to see the destination and registration line before creating it.
+
 In a module created by an earlier CLI release, move `enable_testing()` before
 `add_subdirectory(applications)` in the module's root `CMakeLists.txt` so that
 `holoscan test` finds the application's tests.
@@ -289,6 +294,11 @@ rejected. Set the description and author with `--context description=...`,
 `--template module` and `--template application` select the packaged templates;
 any other value is a template directory. To use a directory named after a
 packaged template, pass a path such as `./application`.
+
+For application execution, `run.command` is split into arguments before path
+placeholders are expanded. A resolved path containing spaces, quotes, or
+backslashes stays within its argument. Quote literal multiword arguments in
+the command template as usual.
 
 ## Test, install, and package
 

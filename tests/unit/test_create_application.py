@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import shlex
 import shutil
 import subprocess
@@ -170,7 +171,7 @@ def test_python_application_is_created_as_a_standalone_project(tmp_path, monkeyp
     assert application["language"] == "Python"
     command = application["modes"]["default"]["run"]["command"]
     assert command == "python3 '<holohub_app_source>/python/my_app.py' --count 100"
-    # The CLI splits the command after inserting the application's path.
+    # Keep paths with spaces compatible with older CLIs that expand before splitting.
     source = "/home/dev/My Projects/my_app"
     assert shlex.split(replace_placeholders(command, {"holohub_app_source": source})) == [
         "python3",
@@ -198,6 +199,87 @@ def test_application_in_a_module_uses_the_module_registration(tmp_path, capsys):
     assert (module / "applications/my_app/metadata.json").is_file()
     registrations = (module / "applications/CMakeLists.txt").read_text(encoding="utf-8")
     assert registrations == MODULE_REGISTRATIONS + "add_holohub_application(my_app)\n"
+
+
+@pytest.mark.parametrize(
+    "registrations,entry",
+    [
+        (MODULE_REGISTRATIONS, "add_holohub_application(my_app)"),
+        (SOURCE_PROJECT_REGISTRATIONS, "add_holoscan_application(my_app)"),
+    ],
+)
+@pytest.mark.parametrize("symlink", [False, True])
+def test_explicit_applications_destination_registers_in_its_own_project(
+    cli, project, tmp_path, monkeypatch, capsys, registrations, entry, symlink
+):
+    pytest.importorskip("cookiecutter")
+    destination = tmp_path / "destination" / "applications"
+    destination.mkdir(parents=True)
+    registration_file = destination / "CMakeLists.txt"
+    registration_file.write_text(registrations, encoding="utf-8")
+    if symlink:
+        # Preserve the applications/ convention when its storage has another name.
+        storage = tmp_path / "application-storage"
+        destination.rename(storage)
+        destination.symlink_to(storage, target_is_directory=True)
+    monkeypatch.chdir(project)
+
+    create.handle_create(cli, _args(directory=destination, dryrun=True))
+    assert f"    {entry}\n" in capsys.readouterr().out
+    assert not (destination / "my_app").exists()
+    assert registration_file.read_text(encoding="utf-8") == registrations
+
+    create.handle_create(cli, _args(directory=destination))
+
+    assert (destination / "my_app/metadata.json").is_file()
+    assert f"{entry}\n" in registration_file.read_text(encoding="utf-8")
+    assert (project / "applications/CMakeLists.txt").read_text() == SOURCE_PROJECT_REGISTRATIONS
+    assert not (project / "applications/my_app").exists()
+
+
+def test_other_output_directory_does_not_modify_registrations(cli, project, tmp_path):
+    pytest.importorskip("cookiecutter")
+    destination = tmp_path / "examples"
+    destination.mkdir()
+    registration_file = destination / "CMakeLists.txt"
+    registration_file.write_text(SOURCE_PROJECT_REGISTRATIONS, encoding="utf-8")
+
+    create.handle_create(cli, _args(directory=destination))
+
+    assert (destination / "my_app/metadata.json").is_file()
+    assert registration_file.read_text() == SOURCE_PROJECT_REGISTRATIONS
+    assert (project / "applications/CMakeLists.txt").read_text() == SOURCE_PROJECT_REGISTRATIONS
+
+
+@pytest.mark.parametrize(
+    "directory_name", ["space here", "developer's workspace", 'double"quote', r"back\slash"]
+)
+def test_generated_python_application_run_preview_preserves_directory_name(
+    tmp_path, monkeypatch, directory_name
+):
+    pytest.importorskip("cookiecutter")
+    parent = tmp_path / directory_name
+    parent.mkdir()
+    monkeypatch.chdir(parent)
+    cli = SimpleNamespace(HOLOHUB_ROOT=parent, script_name="holoscan")
+    create.handle_create(cli, _args(language="python"))
+    env = {
+        key: value
+        for key, value in os.environ.items()
+        if not key.startswith("HOLOSCAN_CLI_") and key != "HOLOSCAN_SDK_ROOT"
+    }
+    env["PYTHONPATH"] = str(Path(__file__).resolve().parents[2] / "src")
+
+    result = subprocess.run(
+        [sys.executable, "-m", "holoscan_cli", "run", "my_app", "ci", "--local", "--dryrun"],
+        cwd=parent / "my_app",
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
 
 
 def test_ctest_finds_the_tests_of_an_application_in_a_module(tmp_path, monkeypatch):
@@ -369,7 +451,10 @@ def test_application_template_rejects_invalid_context(cli, project, capfd, overr
 
 
 @pytest.mark.parametrize("language", ["cpp", "python"])
-def test_registered_application_configures_without_the_sdk(cli, project, tmp_path, language):
+@pytest.mark.parametrize("outside", [False, True])
+def test_registered_application_configures_without_the_sdk(
+    cli, project, tmp_path, language, outside
+):
     """Configure the source project with the application's language scope disabled."""
     pytest.importorskip("cookiecutter")
     cmake = shutil.which("cmake")
@@ -388,7 +473,12 @@ def test_registered_application_configures_without_the_sdk(cli, project, tmp_pat
         "add_subdirectory(applications)\n",
         encoding="utf-8",
     )
-    create.handle_create(cli, _args(language=language))
+    if outside:
+        cli.HOLOHUB_ROOT = tmp_path / "elsewhere"
+        cli.HOLOHUB_ROOT.mkdir()
+    create.handle_create(
+        cli, _args(language=language, directory=project / "applications" if outside else None)
+    )
     build = tmp_path / "build"
 
     result = subprocess.run(
