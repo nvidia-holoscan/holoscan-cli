@@ -164,10 +164,13 @@ including empty arguments. The CLI does not expand shell variables in forwarded
 arguments; your shell processes quoting and expansions before invoking the CLI.
 
 `run-container` keeps its shell command behavior. With its normal shell
-entrypoint, quote a multi-argument or compound command as one argument:
+entrypoint, quote a multi-argument or compound command as one argument. The
+shell in the container expands its variables, so single-quote a command that
+reads container values:
 
 ```bash
 uv run --only-group dev holoscan run-container -- "holoscan list --json"
+uv run --only-group dev holoscan run-container -- 'echo "$HOME"'
 ```
 
 ## CPU limits
