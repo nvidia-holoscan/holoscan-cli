@@ -14,6 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import contextlib
 import glob
 import os
 import re
@@ -913,17 +914,23 @@ class HoloscanContainer:
                     signal_name = str(sig)
                 container_id = _read_container_id(cidfile)
                 if container_id:
-                    warn(f"Received {signal_name}; stopping HoloHub container {container_id}")
-                    subprocess.run(
+                    # Stop the container before printing: stderr may be a pipe whose
+                    # reader exited on the same signal, as with `2>&1 | tee`.
+                    stop = subprocess.run(
                         [self.DOCKER_EXE, "stop", "--time", "10", container_id],
                         check=False,
                         stdout=subprocess.DEVNULL,
                     )
+                    outcome = "stopped" if stop.returncode == 0 else "could not stop"
+                    message = f"Received {signal_name}; {outcome} container {container_id}"
                 else:
-                    warn(
+                    message = (
                         f"Received {signal_name}; no container ID was written to {cidfile} yet — "
                         "the container may still be starting. Run `docker ps` to check and stop it manually."
                     )
+                # A failed write must not skip the cleanup below.
+                with contextlib.suppress(OSError):
+                    warn(message)
                 # os.kill below may terminate the process before the outer `finally`
                 # blocks run, so unlink the cidfile and clean display temp files here.
                 if internal_cidfile is not None:
