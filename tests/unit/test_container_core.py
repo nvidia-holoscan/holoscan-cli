@@ -27,6 +27,7 @@ These pin two pieces of the container layer that were uncovered:
 
 from __future__ import annotations
 
+import signal
 import subprocess
 from pathlib import Path
 from unittest.mock import Mock
@@ -787,6 +788,52 @@ def test_run_assembles_docker_command_without_ctk_for_custom_runtime(tmp_path, m
     assert container_core.get_cli_arg_value(cmd, "--runtime") == "runc"
     assert not ctk_checks
     assert cmd[-4:] == ["custom:image", "bash", "-lc", "echo ok"]
+
+
+@pytest.mark.parametrize("stderr_closed", [False, True])
+def test_run_stops_container_on_signal_before_warning(tmp_path, monkeypatch, stderr_closed):
+    """A signal stops the container even when stderr is a closed pipe (`2>&1 | tee`)."""
+    project_dir = tmp_path / "applications" / "my_app"
+    project_dir.mkdir(parents=True)
+    (project_dir / "Dockerfile").write_text("FROM scratch\n", encoding="utf-8")
+    monkeypatch.delenv("DISPLAY", raising=False)
+    monkeypatch.delenv("WAYLAND_DISPLAY", raising=False)
+    monkeypatch.setattr(container_core, "get_image_pythonpath", lambda img, dryrun: "")
+    monkeypatch.setattr(container_core, "get_group_id", lambda group: None)
+    monkeypatch.setattr(container_core.HoloscanContainer, "SDK_PATH", "/usr")
+    events = []
+    kills = []
+
+    def interrupted_launch(cmd, **kwargs):
+        Path(container_core.get_cli_arg_value(cmd, "--cidfile")).write_text("abc123\n")
+        raise container_core._ContainerTerminationSignal(signal.SIGINT)
+
+    def warn(message):
+        if stderr_closed:
+            raise BrokenPipeError
+        events.append(("warn", message))
+
+    def record_run(cmd, **kwargs):
+        events.append(("run", cmd))
+        return subprocess.CompletedProcess(cmd, 0)
+
+    monkeypatch.setattr(container_core, "run_command", interrupted_launch)
+    monkeypatch.setattr(container_core, "warn", warn)
+    monkeypatch.setattr(container_core.subprocess, "run", record_run)
+    # Keep the test process's own signal handling and exit path intact.
+    monkeypatch.setattr(container_core.signal, "signal", lambda signum, handler: None)
+    monkeypatch.setattr(container_core.os, "kill", lambda pid, signum: kills.append(signum))
+
+    c = _stub_container(tmp_path, project_metadata=_project_metadata(project_dir))
+    with pytest.raises(SystemExit) as exit_info:
+        c.run(img="custom:image", docker_opts="--runtime runc")
+
+    expected = [("run", ["docker", "stop", "--time", "10", "abc123"])]
+    if not stderr_closed:
+        expected.append(("warn", "Received SIGINT; stopped container abc123"))
+    assert events == expected
+    assert kills == [signal.SIGINT]
+    assert exit_info.value.code == 128 + signal.SIGINT
 
 
 def test_run_composes_default_args_and_as_root_user_override(tmp_path, monkeypatch):
