@@ -1,0 +1,24 @@
+{
+    "project_name": "my_application",
+    "project_slug": "{{ cookiecutter.project_name.lower().replace(' ', '_').replace('-', '_') }}",
+    "description": "A Holoscan SDK application.",
+    "full_name": "Your Name",
+    "affiliation": "Your Organization",
+    "copyright_holder": "{{ cookiecutter.affiliation }}",
+    "language": "cpp",
+    "version": "0.1.0",
+    "holoscan_version": "5.0.0",
+    "year": "{% now 'utc', '%Y' %}",
+    "__prompts__": {
+        "project_name": "Application name",
+        "project_slug": "Directory and executable name (snake_case)",
+        "description": "One-sentence description",
+        "full_name": "Author name",
+        "affiliation": "Author affiliation",
+        "copyright_holder": "Copyright holder for source headers",
+        "language": "Implementation language: 'cpp' or 'python'",
+        "version": "Initial application version",
+        "holoscan_version": "Minimum Holoscan SDK version (5.0.0 or later)",
+        "year": "Copyright year"
+    }
+}

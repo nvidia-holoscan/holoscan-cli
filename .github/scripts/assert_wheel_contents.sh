@@ -34,6 +34,11 @@ required=(
   'holoscan_cli/templates/module/.+/requirements-cli\.txt$'
   'holoscan_cli/templates/module/.+/\.dockerignore$'
   'holoscan_cli/templates/module/.+/\.github/workflows/scripts/check_copyright\.py$'
+  'holoscan_cli/templates/application/cookiecutter\.json$'
+  'holoscan_cli/templates/application/hooks/pre_gen_project\.py$'
+  'holoscan_cli/templates/application/hooks/post_gen_project\.py$'
+  'holoscan_cli/templates/application/.+/cpp/main\.cpp$'
+  'holoscan_cli/templates/application/.+/python/.+\.py$'
   'holoscan_cli/testing/'
 )
 for pattern in "${required[@]}"; do

@@ -1,0 +1,53 @@
+{%- if cookiecutter.language == 'python' -%}
+{#- Keep the path placeholder in one argument, including for older CLI versions. -#}
+{%- set command = "python3 '<holohub_app_source>/python/" ~ cookiecutter.project_slug ~ ".py'" -%}
+{%- else -%}
+{%- set command = './' ~ cookiecutter.project_slug -%}
+{%- endif -%}
+{
+  "application": {
+    "name": {{ cookiecutter.project_name | jsonify }},
+    "description": {{ cookiecutter.description | jsonify }},
+    "authors": [
+      {
+        "name": {{ cookiecutter.full_name | jsonify }},
+        "affiliation": {{ cookiecutter.affiliation | jsonify }}
+      }
+    ],
+    "language": "{{ 'Python' if cookiecutter.language == 'python' else 'C++' }}",
+    "version": "{{ cookiecutter.version }}",
+    "changelog": {
+      "{{ cookiecutter.version }}": "Initial application."
+    },
+    "holoscan_sdk": {
+      "minimum_required_version": "{{ cookiecutter.holoscan_version }}",
+      "tested_versions": [
+        "{{ cookiecutter.holoscan_version }}"
+      ]
+    },
+    "platforms": [
+      "x86_64",
+      "aarch64"
+    ],
+    "tags": [
+      "Example"
+    ],
+    "ranking": 4,
+    "requirements": {},
+    "default_mode": "default",
+    "modes": {
+      "default": {
+        "description": "Process 100 messages through the pipeline and verify every result.",
+        "run": {
+          "command": "{{ command }} --count 100"
+        }
+      },
+      "ci": {
+        "description": "Finite headless check: process 10 messages without external data.",
+        "run": {
+          "command": "{{ command }} --count 10 --period-ms 1"
+        }
+      }
+    }
+  }
+}

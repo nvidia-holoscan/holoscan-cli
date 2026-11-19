@@ -82,6 +82,23 @@ In an existing generated module, use its `requirements-cli.txt` to provision
 a pip environment. Follow its `README.md` and `DEVELOPER.md` for implementation,
 tests, packaging, and consumer verification.
 
+### Create an application
+
+The packaged application template creates a C++ or Python application for
+Holoscan SDK 5.0.0 or later. Inside a module or a repository of applications, it
+adds the application to the `applications/` folder; anywhere else, it creates a
+standalone application:
+
+```bash
+uvx --from 'holoscan-cli[create]>=5.1.0' holoscan create my_app --template application --interactive false --dryrun
+uvx --from 'holoscan-cli[create]>=5.1.0' holoscan create my_app --template application --interactive false
+```
+
+Add `--language python` for a Python application. The generated `README.md`
+lists its build, run, and test commands. See
+[Create an application](https://github.com/nvidia-holoscan/holoscan-cli/blob/main/CLI_REFERENCE.md#create-an-application)
+for details.
+
 See the [CLI reference](https://github.com/nvidia-holoscan/holoscan-cli/blob/main/CLI_REFERENCE.md) for project selection, command
 semantics, previews, diagnostics, and cleanup.
 

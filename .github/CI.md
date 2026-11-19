@@ -401,6 +401,7 @@ each pattern in two lists:
   * `holoscan_cli/metadata/*.schema.json`
   * `holoscan_cli/setup_scripts/*`
   * `holoscan_cli/templates/module/`
+  * `holoscan_cli/templates/application/`
   * `holoscan_cli/testing/`
 * **forbidden** — paths that must NOT be present (regressions from past
   cleanups):

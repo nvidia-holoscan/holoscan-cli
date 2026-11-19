@@ -12,8 +12,9 @@ then follow that project's own guidance. Generated modules have their own
   dispatch and mode resolution live in `cli.py`.
 - Project configuration and container behavior have separate modules. Preserve
   documented precedence and downstream wrapper compatibility when editing them.
-- The module template, schemas, CMake helpers, and CTest scripts ship in the
-  package. Check installed-wheel behavior when changing these resources.
+- The module and application templates, schemas, CMake helpers, and CTest
+  scripts ship in the package. Check installed-wheel behavior when changing
+  these resources.
 - Keep user-facing command behavior in the CLI reference and configuration
   guide. Keep contributor setup and validation in `CONTRIBUTING.md`.
 - Update relevant documentation when behavior changes. Do not infer SDK

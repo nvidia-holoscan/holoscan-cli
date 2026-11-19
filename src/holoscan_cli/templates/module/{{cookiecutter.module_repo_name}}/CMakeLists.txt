@@ -63,12 +63,17 @@ install(FILES LICENSE NOTICE
 # ---------------------------------------------------------------------------
 # Subprojects
 # ---------------------------------------------------------------------------
+# Enable testing before adding subprojects so CTest also finds the tests that
+# applications register in their own directories.
+if({{ cookiecutter.module_slug | upper }}_BUILD_TESTING)
+    enable_testing()
+endif()
+
 add_subdirectory(python)
 add_subdirectory(operators)
 add_subdirectory(applications)
 
 if({{ cookiecutter.module_slug | upper }}_BUILD_TESTING)
-    enable_testing()
     add_subdirectory(tests)
 endif()
 {%- else %}
@@ -187,6 +192,12 @@ install(FILES LICENSE NOTICE
 # read those values run their `option(OP_<x> ... ${BUILD_ALL})` calls when
 # their subdirectories are processed — those bind the cache value the FIRST
 # time option() is encountered, so the FORCE has to happen before then.
+#
+# Enable testing before adding subprojects so CTest also finds the tests that
+# applications register in their own directories.
+if({{ cookiecutter.module_slug | upper }}_BUILD_TESTING)
+    enable_testing()
+endif()
 
 add_subdirectory(pkg)
 add_subdirectory(operators)
@@ -199,7 +210,6 @@ endif()
 {%- endif %}
 
 if({{ cookiecutter.module_slug | upper }}_BUILD_TESTING)
-    enable_testing()
     add_subdirectory(tests)
 endif()
 

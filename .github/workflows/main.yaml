@@ -268,6 +268,25 @@ jobs:
             )
           done
 
+          # The packaged application template generates one language per
+          # application; outside a project, each is a standalone project.
+          for language in cpp python; do
+            name="artifact_${language}_app"
+            (
+              cd "${create_root}"
+              /tmp/holoscan-cli-smoke/bin/holoscan create "${name}" \
+                --template application \
+                --interactive false \
+                --language "${language}"
+              cd "${name}"
+              test -f "${language}/CMakeLists.txt"
+              /tmp/holoscan-cli-smoke/bin/holoscan list --json | \
+                /tmp/holoscan-cli-smoke/bin/python -c \
+                  'import json,sys; data=json.load(sys.stdin); assert [p["name"] for p in data["projects"]] == [sys.argv[1]], data' \
+                  "${name}"
+            )
+          done
+
       - name: Install sdist in clean venv
         run: |
           python -m venv /tmp/holoscan-cli-sdist-smoke

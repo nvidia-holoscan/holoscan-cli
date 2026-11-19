@@ -87,6 +87,9 @@ def test_direct_create_uses_packaged_template_inside_a_source_project(
 
 def test_wrapper_default_selects_application_template(cli, tmp_path, monkeypatch, capsys):
     application_template = _write_template(tmp_path, "applications/template", module=False)
+    (tmp_path / "applications/CMakeLists.txt").write_text(
+        "add_holohub_application(other)\n", encoding="utf-8"
+    )
     monkeypatch.setenv(create.CREATE_TEMPLATE_ENV, "applications/template")
 
     create.handle_create(cli, _args())
@@ -94,7 +97,7 @@ def test_wrapper_default_selects_application_template(cli, tmp_path, monkeypatch
     output = capsys.readouterr().out
     assert f"Template: {application_template}" in output
     assert f"Directory: {tmp_path / 'applications/my_mod'}" in output
-    assert "applications/CMakeLists.txt" in output
+    assert "    add_holohub_application(my_mod)\n" in output
 
 
 def test_explicit_template_beats_the_wrapper_default(cli, tmp_path, monkeypatch, capsys):
@@ -513,6 +516,18 @@ def test_packaged_template_generates_a_pure_python_module(cli, tmp_path, monkeyp
         if path.is_file() and not {"cmake", "__pycache__"} & set(path.parts):
             text = path.read_text(encoding="utf-8")
             assert "{{" not in text and "{%" not in text, path
+
+
+@pytest.mark.parametrize("language", ["cpp", "python"])
+def test_module_enables_testing_before_adding_applications(cli, tmp_path, monkeypatch, language):
+    """CTest finds tests only in directories added after testing is enabled."""
+    pytest.importorskip("cookiecutter")
+    monkeypatch.setattr(create, "_initialize_module_git", lambda _path: False)
+    create.handle_create(cli, _args(dryrun=False, language=language, directory=tmp_path / "out"))
+
+    root = (tmp_path / "out/holoscan-my-mod/CMakeLists.txt").read_text(encoding="utf-8")
+
+    assert root.index("enable_testing()") < root.index("add_subdirectory(applications)")
 
 
 def test_pure_python_module_stages_its_package_without_an_sdk(cli, tmp_path, monkeypatch):

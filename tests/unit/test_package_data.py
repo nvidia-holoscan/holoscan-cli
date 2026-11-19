@@ -87,6 +87,19 @@ REQUIRED_MODULE_TEMPLATE_FILES = {
     "{{cookiecutter.module_repo_name}}/.github/workflows/scripts/check_copyright.py",
     "{{cookiecutter.module_repo_name}}/.github/workflows/ci.yml",
 }
+REQUIRED_APPLICATION_TEMPLATE_FILES = {
+    "cookiecutter.json",
+    "hooks/pre_gen_project.py",
+    "hooks/post_gen_project.py",
+    "{{cookiecutter.project_slug}}/CMakeLists.txt",
+    "{{cookiecutter.project_slug}}/README.md",
+    "{{cookiecutter.project_slug}}/metadata.json",
+    "{{cookiecutter.project_slug}}/cpp/CMakeLists.txt",
+    "{{cookiecutter.project_slug}}/cpp/main.cpp",
+    "{{cookiecutter.project_slug}}/python/CMakeLists.txt",
+    "{{cookiecutter.project_slug}}/python/{{cookiecutter.project_slug}}.py",
+    "{{cookiecutter.project_slug}}/tests/CMakeLists.txt",
+}
 
 
 PYPROJECT = Path(__file__).resolve().parents[2] / "pyproject.toml"
@@ -177,6 +190,16 @@ def test_standalone_module_template_is_packaged():
     assert not missing, f"missing bundled Module template assets: {missing}"
     assert not template.joinpath("{{cookiecutter.module_repo_name}}/cmake").exists()
     assert not template.joinpath("{{cookiecutter.module_repo_name}}/holohub").exists()
+
+
+def test_application_template_is_packaged():
+    template = importlib.resources.files("holoscan_cli.templates").joinpath("application")
+    missing = [
+        relative
+        for relative in sorted(REQUIRED_APPLICATION_TEMPLATE_FILES)
+        if not template.joinpath(relative).is_file()
+    ]
+    assert not missing, f"missing bundled application template assets: {missing}"
 
 
 def test_bundled_template_script_uses_bundled_requirements(tmp_path):

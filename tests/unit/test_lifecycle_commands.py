@@ -599,6 +599,38 @@ def test_handle_run_local_dryrun_builds_mapping_and_executes_command(tmp_path, m
     assert kwargs["dry_run"] is True
 
 
+@pytest.mark.parametrize(
+    "directory_name", ["space here", "developer's workspace", 'double"quote', r"back\slash"]
+)
+@pytest.mark.parametrize("quoted", [False, True])
+def test_run_expands_source_path_as_one_literal_argument(
+    tmp_path, monkeypatch, directory_name, quoted
+):
+    cli = RecordingCLI(tmp_path)
+    source = cli.HOLOHUB_ROOT / directory_name
+    cli.project_data["source_folder"] = source
+    script = "<holohub_app_source>/python/app.py"
+    cli.project_data["metadata"]["run"]["command"] = (
+        f"python3 '{script}'" if quoted else f"python3 {script}"
+    )
+    calls = []
+    monkeypatch.setattr(
+        run_cmd,
+        "build_project_locally",
+        lambda *args, **kwargs: (cli.DEFAULT_BUILD_PARENT_DIR / "smoke_app", cli.project_data),
+    )
+    monkeypatch.setattr(run_cmd, "run_command", lambda cmd, **kwargs: calls.append(cmd))
+
+    run_cmd.handle_run(
+        cli,
+        _project_args(local=True, run_args='--label "two words"', _trailing_args=["literal tail"]),
+    )
+
+    assert calls == [
+        ["python3", str(source / "python/app.py"), "--label", "two words", "literal tail"]
+    ]
+
+
 @pytest.mark.parametrize("dryrun", [True, False])
 @pytest.mark.parametrize("run_args", [None, '--name "two words" --literal "$(echo literal)"'])
 @pytest.mark.parametrize(

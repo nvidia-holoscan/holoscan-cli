@@ -127,18 +127,19 @@ skip_glob = [
     ".cache/*",
     ".ruff_cache/*",
     "src/holoscan_cli/templates/module/**",
+    "src/holoscan_cli/templates/application/**",
 ]
 
 [tool.black]
 line-length = 100
 target-version = ["py311", "py312", "py313", "py314"]
-force-exclude = 'src/holoscan_cli/templates/module/'
+force-exclude = 'src/holoscan_cli/templates/(module|application)/'
 extend-exclude = '''
 (
   ^\.cache/
   | ^build[^/]*/
   | ^dist/
-  | ^src/holoscan_cli/templates/module/
+  | ^src/holoscan_cli/templates/(module|application)/
   | tests/reports/
 )
 '''
@@ -153,6 +154,7 @@ exclude = [
   "build*",
   "dist",
   "src/holoscan_cli/templates/module",
+  "src/holoscan_cli/templates/application",
   "tests/reports",
 ]
 
