@@ -77,13 +77,26 @@ src/holoscan_cli/
   cmake/              packaged CMake support copied into standalone Modules
   utils/              shared helpers, e.g. io.py, sdk.py, docker.py,
                       project.py (effective-configuration reporting),
-                      env_info.py, holohub.py
+                      env_info.py, source_project.py
   setup_scripts/      bundled bash scripts backing `setup --scripts` and
                       `build-container --extra-scripts`
   metadata/           project metadata JSON schemas
   templates/module/   standalone Module cookiecutter
   testing/            CTest helpers shipped in the wheel
 ```
+
+Use `utils.source_project` for root discovery, setup-script lookup, path
+placeholders, and Git helpers. `utils.holohub` retains the original imports,
+including `build_holohub_path_mapping(holohub_root=...)`. The environment
+collector's `collect_holohub_info` name and existing `holohub_root` keywords
+on information helpers remain for compatibility. New code should use
+`collect_source_project_info(project_root=...)` for project information.
+`HoloscanCLI.HOLOHUB_ROOT` and `HoloscanContainer.HOLOHUB_ROOT` remain writable
+attributes for downstream wrappers and subclasses. CMake helper names and
+variables keep their existing names; see the
+[CLI reference](CLI_REFERENCE.md#preview-and-execution). Legacy metadata path
+placeholders remain supported alongside the
+[project names](CONFIGURATION.md#metadata-placeholders).
 
 ## Local development
 

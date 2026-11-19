@@ -37,8 +37,8 @@ from holoscan_cli.utils.docker import (
     get_entrypoint_command_args,
     resolve_cli_docker_opts,
 )
-from holoscan_cli.utils.holohub import check_skip_builds
 from holoscan_cli.utils.project import report_effective_configuration
+from holoscan_cli.utils.source_project import check_skip_builds
 
 # ---- build-container ---------------------------------------------------------
 

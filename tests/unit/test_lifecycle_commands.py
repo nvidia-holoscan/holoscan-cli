@@ -200,6 +200,135 @@ def _project_args(**overrides):
     return Namespace(**defaults)
 
 
+@pytest.mark.parametrize("command", ["build", "install", "run"])
+@pytest.mark.parametrize("placeholder_prefix", ["project_", "holohub_", "custom_"])
+@pytest.mark.parametrize("has_mode_env", [False, True])
+def test_nested_environment_expands_paths_and_host_references(
+    tmp_path, monkeypatch, capsys, make_sdk_directory, command, placeholder_prefix, has_mode_env
+):
+    cli = RecordingCLI(tmp_path)
+    cli.prefix = "custom_" if placeholder_prefix == "custom_" else "holohub_"
+    sdk = make_sdk_directory(cli.HOLOHUB_ROOT / "sdk")
+    mode_env = {"CHAIN": "mode:<CHAIN>"} if has_mode_env else {}
+    nested = {
+        "APP_PATH": f"<{placeholder_prefix}app_bin>",
+        "DATA_PATH": f"<{placeholder_prefix}data_dir>",
+        "INHERITED": "<HOST_VALUE>",
+        "USER_CHOICE": "metadata-default",
+        "CHAIN": "nested:<CHAIN>",
+    }
+    cli.project_data["metadata"]["modes"] = {
+        "dev": {
+            "env": mode_env,
+            "build": {"env": {**nested, "HOLOSCAN_SDK_ROOT": f"<{placeholder_prefix}root>/sdk"}},
+            "run": {"command": "python app.py", "workdir": "", "env": nested},
+        }
+    }
+    monkeypatch.setenv("CHAIN", "host")
+    monkeypatch.setenv("HOST_VALUE", "inherited-value")
+    monkeypatch.setenv("USER_CHOICE", "explicit-process-value")
+    monkeypatch.setenv("HOLOSCAN_CLI_ENABLE_SCCACHE", "OFF")
+    for key in ("APP_PATH", "DATA_PATH", "INHERITED", "HOLOSCAN_SDK_ROOT"):
+        monkeypatch.delenv(key, raising=False)
+
+    calls = []
+
+    def record(cmd, **kwargs):
+        calls.append((cmd, kwargs))
+
+    monkeypatch.setattr(build_cmd, "run_command", record)
+    monkeypatch.setattr(install_cmd, "run_command", record)
+    monkeypatch.setattr(run_cmd, "run_command", record)
+    monkeypatch.setattr(build_cmd.shutil, "which", lambda _name: None)
+    handler = {
+        "build": build_cmd.handle_build,
+        "install": install_cmd.handle_install,
+        "run": run_cmd.handle_run,
+    }[command]
+    handler(cli, _project_args(local=True, mode="dev"))
+
+    assert calls
+    for _cmd, kwargs in calls:
+        environment = kwargs["env"]
+        assert environment["APP_PATH"] == str(
+            cli.DEFAULT_BUILD_PARENT_DIR / "smoke_app" / "applications" / "smoke_app"
+        )
+        assert environment["DATA_PATH"] == str(cli.DEFAULT_DATA_DIR)
+        assert environment["INHERITED"] == "inherited-value"
+        assert environment["USER_CHOICE"] == "explicit-process-value"
+        assert environment["CHAIN"] == ("nested:mode:host" if has_mode_env else "nested:host")
+    if command != "run":
+        assert calls[-1][1]["env"]["HOLOSCAN_SDK_ROOT"] == str(sdk)
+    assert "Placeholder <" not in capsys.readouterr().err
+
+
+def _nested_build_env_command(tmp_path, monkeypatch, make_sdk_directory, command, build_env):
+    """Run a command whose mode has a mode env and the given nested build env."""
+    cli = RecordingCLI(tmp_path)
+    monkeypatch.setenv("HOLOSCAN_SDK_ROOT", str(make_sdk_directory(tmp_path / "sdk")))
+    cli.project_data["metadata"]["modes"] = {
+        "dev": {
+            "env": {"MODE_VALUE": "set"},
+            "build": {"env": build_env},
+            "run": {"command": "python app.py", "workdir": ""},
+        }
+    }
+    monkeypatch.setenv("HOLOSCAN_CLI_ENABLE_SCCACHE", "OFF")
+    local_commands = []
+    for module in (build_cmd, install_cmd, run_cmd):
+        monkeypatch.setattr(
+            module, "run_command", lambda cmd, **_kwargs: local_commands.append(cmd)
+        )
+    monkeypatch.setattr(build_cmd.shutil, "which", lambda _name: None)
+    handler = {
+        "build": build_cmd.handle_build,
+        "install": install_cmd.handle_install,
+        "run": run_cmd.handle_run,
+    }[command]
+    return cli, handler, local_commands
+
+
+@pytest.mark.parametrize("command", ["build", "install", "run"])
+@pytest.mark.parametrize(("host_value", "local"), [("OFF", False), ("ON", True)])
+def test_nested_local_build_reference_uses_the_process_value(
+    tmp_path, monkeypatch, make_sdk_directory, command, host_value, local
+):
+    cli, handler, local_commands = _nested_build_env_command(
+        tmp_path,
+        monkeypatch,
+        make_sdk_directory,
+        command,
+        {"HOLOSCAN_CLI_BUILD_LOCAL": "<USE_LOCAL>"},
+    )
+    monkeypatch.delenv("HOLOSCAN_CLI_BUILD_LOCAL", raising=False)
+    monkeypatch.setenv("USE_LOCAL", host_value)
+
+    handler(cli, _project_args(local=None, no_docker_build=True, mode="dev"))
+
+    assert bool(local_commands) is local
+    assert bool(cli.container.run_calls) is not local
+
+
+@pytest.mark.parametrize("command", ["build", "install", "run"])
+def test_nested_build_type_reference_uses_the_process_value(
+    tmp_path, monkeypatch, make_sdk_directory, command
+):
+    cli, handler, local_commands = _nested_build_env_command(
+        tmp_path,
+        monkeypatch,
+        make_sdk_directory,
+        command,
+        {"CMAKE_BUILD_TYPE": "<BUILD_FLAVOR>"},
+    )
+    monkeypatch.delenv("CMAKE_BUILD_TYPE", raising=False)
+    monkeypatch.setenv("BUILD_FLAVOR", "debug")
+
+    handler(cli, _project_args(local=True, mode="dev"))
+
+    configure = [cmd for cmd in local_commands if "-DCMAKE_BUILD_TYPE=Debug" in cmd]
+    assert configure, local_commands
+
+
 @pytest.mark.parametrize(
     "handler",
     [
@@ -597,6 +726,48 @@ def test_handle_run_local_dryrun_builds_mapping_and_executes_command(tmp_path, m
     command, kwargs = calls[0]
     assert command == ["python", "app.py", "--frames", "1"]
     assert kwargs["dry_run"] is True
+
+
+@pytest.mark.parametrize("name", ["holohub_app_bin", "project_app_bin"])
+@pytest.mark.parametrize("bracketed_workdir", [False, True])
+def test_handle_run_expands_holohub_and_project_placeholders(
+    tmp_path, monkeypatch, capsys, name, bracketed_workdir
+):
+    monkeypatch.delenv("REVIEW_PLACEHOLDER_DATA", raising=False)
+    data_placeholder = name.removesuffix("app_bin") + "data_dir"
+    project = {
+        "project_name": "smoke_app",
+        "project_type": "application",
+        "source_folder": tmp_path / "repo" / "applications" / "smoke_app",
+        "metadata": {
+            "language": "cpp",
+            "modes": {
+                "default": {
+                    "env": {"REVIEW_PLACEHOLDER_DATA": f"<{data_placeholder}>"},
+                    "run": {
+                        "command": f"<{name}>/app",
+                        "workdir": f"<{name}>" if bracketed_workdir else name,
+                    },
+                }
+            },
+        },
+    }
+    cli = RecordingCLI(tmp_path, project)
+    build_dir = tmp_path / "build" / "smoke_app"
+    calls = []
+    monkeypatch.setattr(
+        run_cmd, "build_project_locally", lambda *args, **kwargs: (build_dir, cli.project_data)
+    )
+    monkeypatch.setattr(run_cmd, "run_command", lambda cmd, **kwargs: calls.append((cmd, kwargs)))
+
+    run_cmd.handle_run(cli, _project_args(local=True, language="cpp", mode="default"))
+
+    app_bin = build_dir / "applications" / "smoke_app"
+    assert len(calls) == 1
+    cmd, kwargs = calls[0]
+    assert cmd == [f"{app_bin}/app"]
+    assert kwargs["env"]["REVIEW_PLACEHOLDER_DATA"] == str(cli.DEFAULT_DATA_DIR)
+    assert f"cd {app_bin}" in capsys.readouterr().out
 
 
 @pytest.mark.parametrize("dryrun", [True, False])

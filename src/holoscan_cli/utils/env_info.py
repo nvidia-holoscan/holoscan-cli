@@ -30,9 +30,9 @@ from pathlib import Path
 from typing import List, Optional
 
 import holoscan_cli
-from holoscan_cli.utils.holohub import get_sccache_dir
 from holoscan_cli.utils.io import Color, run_info_command
 from holoscan_cli.utils.json_output import dumps as json_dumps
+from holoscan_cli.utils.source_project import get_sccache_dir
 from holoscan_cli.utils.text import get_env_bool
 
 
@@ -114,15 +114,22 @@ def collect_python_info() -> None:
     print(f"  Executable: {sys.executable} Path: {sys.path[0] if sys.path else 'N/A'}")
 
 
-def collect_holohub_info(
-    holohub_root: Path, build_dir: Path, data_dir: Path, sdk_dir: Path
+def collect_source_project_info(
+    project_root: Path, build_dir: Path, data_dir: Path, sdk_dir: Path
 ) -> None:
     """Collect and display source-project information"""
     print(f"\n{Color.blue('Source Project Information:')}")
-    print(f"  HOLOSCAN_CLI_ROOT: {holohub_root}")
+    print(f"  HOLOSCAN_CLI_ROOT: {project_root}")
     print(f"  HOLOSCAN_CLI_BUILD_PARENT_DIR: {build_dir}")
     print(f"  HOLOSCAN_CLI_DATA_DIR: {data_dir}")
     print(f"  HOLOSCAN_CLI_SDK_DIR: {sdk_dir}")
+
+
+def collect_holohub_info(
+    holohub_root: Path, build_dir: Path, data_dir: Path, sdk_dir: Path
+) -> None:
+    """Compatibility wrapper retaining the original name and root keyword."""
+    collect_source_project_info(holohub_root, build_dir, data_dir, sdk_dir)
 
 
 def collect_git_info(holohub_root: Path) -> None:

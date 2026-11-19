@@ -43,15 +43,6 @@ from holoscan_cli.utils.external_resolver import (
     parse_module_dependencies,
     parse_module_sites,
 )
-from holoscan_cli.utils.holohub import (
-    build_holohub_path_mapping,
-    check_skip_builds,
-    determine_project_prefix,
-    get_buildtype_str,
-    get_sccache_dir,
-    is_env_request_local_build,
-    update_env,
-)
 from holoscan_cli.utils.io import fatal, info, run_command, warn
 from holoscan_cli.utils.project import (
     append_configure_args,
@@ -60,6 +51,15 @@ from holoscan_cli.utils.project import (
     resolve_effective_build_type,
 )
 from holoscan_cli.utils.sdk import get_sdk_cmake_prefix_path, resolve_local_sdk_dir
+from holoscan_cli.utils.source_project import (
+    build_path_mapping,
+    check_skip_builds,
+    determine_project_prefix,
+    get_buildtype_str,
+    get_sccache_dir,
+    is_env_request_local_build,
+    update_env,
+)
 from holoscan_cli.utils.text import get_env_bool
 
 
@@ -185,7 +185,9 @@ def handle_build(cli, args: argparse.Namespace) -> None:
 
     # Get mode-specific build environment variables
     build_mode_env = mode_config.get("env", {}).copy()
-    update_env(build_mode_env, mode_config.get("build", {}).get("env", {}))
+    update_env(
+        build_mode_env, mode_config.get("build", {}).get("env", {}), preserve_unresolved=True
+    )
     effective_build_type = resolve_effective_build_type(args.build_type, build_mode_env)
 
     # Check if local mode is requested
@@ -340,8 +342,8 @@ def build_project_locally(
     # overrides from the mode's env block are visible to the module resolvers.
     build_env = os.environ.copy()
     if extra_env:
-        path_mapping = build_holohub_path_mapping(
-            holohub_root=cli.HOLOHUB_ROOT,
+        path_mapping = build_path_mapping(
+            project_root=cli.HOLOHUB_ROOT,
             project_data=project_data,
             build_dir=build_dir,
             data_dir=cli.DEFAULT_DATA_DIR,
