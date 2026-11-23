@@ -235,6 +235,16 @@ def test_explicit_applications_destination_registers_in_its_own_project(
     assert f"{entry}\n" in registration_file.read_text(encoding="utf-8")
     assert (project / "applications/CMakeLists.txt").read_text() == SOURCE_PROJECT_REGISTRATIONS
     assert not (project / "applications/my_app").exists()
+    # The next steps run the application from the project that registered it.
+    run_line = capsys.readouterr().out.rstrip().splitlines()[-1]
+    assert shlex.split(run_line) == [
+        "cd",
+        str(destination.parent),
+        "&&",
+        "holoscan",
+        "run",
+        "my_app",
+    ]
 
 
 def test_other_output_directory_does_not_modify_registrations(cli, project, tmp_path):
@@ -255,7 +265,7 @@ def test_other_output_directory_does_not_modify_registrations(cli, project, tmp_
     "directory_name", ["space here", "developer's workspace", 'double"quote', r"back\slash"]
 )
 def test_generated_python_application_run_preview_preserves_directory_name(
-    tmp_path, monkeypatch, directory_name
+    tmp_path, monkeypatch, capsys, directory_name
 ):
     pytest.importorskip("cookiecutter")
     parent = tmp_path / directory_name
@@ -263,6 +273,17 @@ def test_generated_python_application_run_preview_preserves_directory_name(
     monkeypatch.chdir(parent)
     cli = SimpleNamespace(HOLOHUB_ROOT=parent, script_name="holoscan")
     create.handle_create(cli, _args(language="python"))
+    # The printed next step can be pasted into a shell as is.
+    run_line = capsys.readouterr().out.rstrip().splitlines()[-1]
+    assert shlex.split(run_line) == [
+        "cd",
+        str(parent / "my_app"),
+        "&&",
+        "holoscan",
+        "run",
+        "my_app",
+        "--local",
+    ]
     env = {
         key: value
         for key, value in os.environ.items()

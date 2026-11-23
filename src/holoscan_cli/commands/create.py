@@ -22,6 +22,7 @@ import importlib.resources
 import json
 import os
 import re
+import shlex
 import shutil
 import subprocess
 import tempfile
@@ -451,6 +452,7 @@ def handle_create(cli, args: argparse.Namespace) -> None:
         # Check its name before resolving symlinks, then register in the folder
         # that actually receives the application rather than the current project.
         is_applications_dir = output_dir.name == "applications"
+        destination_root = Path(os.path.abspath(output_dir)).parent
         output_dir = output_dir.resolve()
         registers_application = not is_module and (
             output_dir == applications_dir or is_applications_dir
@@ -627,7 +629,11 @@ def handle_create(cli, args: argparse.Namespace) -> None:
                 # applications/ folder from the application's own directory,
                 # and builds a container only from a Dockerfile there.
                 local = "" if (project_dir / "Dockerfile").is_file() else " --local"
-                run_command = f"cd {project_dir} && {run_command}{local}"
+                run_command = f"cd {shlex.quote(str(project_dir))} && {run_command}{local}"
+            elif output_dir != applications_dir:
+                # The CLI finds the project from the current directory, so an
+                # application registered in another project runs from there.
+                run_command = f"cd {shlex.quote(str(destination_root))} && {run_command}"
             steps.append(f"- Build and run the application:\n   {run_command}")
             msg_next = "Possible next steps:\n" + "\n".join(steps)
 

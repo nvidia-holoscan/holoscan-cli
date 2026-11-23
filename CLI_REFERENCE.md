@@ -275,8 +275,9 @@ changes the output parent.
 
 When `--directory` selects an `applications/` folder, creation registers the
 application in that destination's existing `CMakeLists.txt`, even when invoked
-from outside its project. Other output folders are not registered. Preview
-with `--dryrun` to see the destination and registration line before creating it.
+from outside its project, and the next steps run it from that project. Other
+output folders are not registered. Preview with `--dryrun` to see the
+destination and registration line before creating it.
 
 In a module created by an earlier CLI release, move `enable_testing()` before
 `add_subdirectory(applications)` in the module's root `CMakeLists.txt` so that
