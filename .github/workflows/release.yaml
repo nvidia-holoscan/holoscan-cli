@@ -191,12 +191,13 @@ jobs:
       uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        TAG_VERSION: ${{ github.event.inputs.version }}
       with:
         script: |
           github.rest.git.createRef({
             owner: context.repo.owner,
             repo: context.repo.repo,
-            ref: 'refs/tags/${{ github.event.inputs.version }}',
+            ref: 'refs/tags/' + process.env.TAG_VERSION,
             sha: context.sha
           })
 
@@ -286,18 +287,19 @@ jobs:
       if: ${{ inputs.ga == false }}
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        TAG_VERSION: ${{ github.event.inputs.version }}
       with:
         script: |
           try {
             await github.rest.git.deleteRef({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              ref: 'tags/${{ github.event.inputs.version }}'
+              ref: 'tags/' + process.env.TAG_VERSION
             });
-            console.log('Tag ${{ github.event.inputs.version }} deleted successfully');
+            console.log('Tag ' + process.env.TAG_VERSION + ' deleted successfully');
           } catch (error) {
             if (error.status === 422) {
-              console.log('Tag ${{ github.event.inputs.version }} does not exist, skipping deletion');
+              console.log('Tag ' + process.env.TAG_VERSION + ' does not exist, skipping deletion');
             } else {
               throw error;
             }
