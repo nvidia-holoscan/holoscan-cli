@@ -336,21 +336,39 @@ def test_ctest_finds_the_tests_of_an_application_in_a_module(tmp_path, monkeypat
     assert "my_app_rejects_zero_count" in tests
 
 
-def test_applications_folder_without_registrations_is_left_alone(tmp_path, capsys):
+@pytest.mark.parametrize("explicit", [False, True])
+def test_applications_folder_without_registrations_is_left_alone(
+    tmp_path, monkeypatch, capsys, explicit
+):
     pytest.importorskip("cookiecutter")
     root = tmp_path / "project"
-    (root / "applications").mkdir(parents=True)
-    cli = SimpleNamespace(HOLOHUB_ROOT=root, script_name="holoscan")
+    if explicit:
+        # A new applications/ folder in a directory that is not a project yet.
+        outside = tmp_path / "outside"
+        outside.mkdir()
+        monkeypatch.chdir(outside)
+        cli = SimpleNamespace(HOLOHUB_ROOT=outside, script_name="holoscan")
+        directory = root / "applications"
+    else:
+        (root / "applications").mkdir(parents=True)
+        cli = SimpleNamespace(HOLOHUB_ROOT=root, script_name="holoscan")
+        directory = None
 
-    create.handle_create(cli, _args(dryrun=True))
+    create.handle_create(cli, _args(dryrun=True, directory=directory))
     assert "applications/CMakeLists.txt" not in capsys.readouterr().out
 
-    create.handle_create(cli, _args())
+    create.handle_create(cli, _args(directory=directory))
 
     output = capsys.readouterr().out
     assert (root / "applications/my_app/metadata.json").is_file()
     assert not (root / "applications/CMakeLists.txt").exists()
     assert "Failed to add application" not in output
+    # CMake configures the project root, so say that the application still
+    # has to be added to the project's build.
+    assert (
+        "- Add the application to the project's CMake build: "
+        f"{root / 'applications/CMakeLists.txt'} does not exist\n"
+    ) in output
 
 
 @pytest.mark.parametrize(

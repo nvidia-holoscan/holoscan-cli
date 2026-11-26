@@ -164,6 +164,9 @@ automatic CPack for a package project. Existing named options remain supported.
 For `build`, `build-container`, and `run`, argument boundaries are preserved,
 including empty arguments. The CLI does not expand shell variables in forwarded
 arguments; your shell processes quoting and expansions before invoking the CLI.
+`run` splits a mode's `run.command` into arguments before it expands path
+placeholders, so an expanded path with spaces, quotes, or backslashes stays one
+argument. Quote multiword arguments in the command as in a shell.
 
 `run-container` keeps its shell command behavior. With its normal shell
 entrypoint, quote a multi-argument or compound command as one argument:
@@ -276,7 +279,9 @@ changes the output parent.
 When `--directory` selects an `applications/` folder, creation registers the
 application in that destination's existing `CMakeLists.txt`, even when invoked
 from outside its project, and the next steps run it from that project. Other
-output folders are not registered. Preview with `--dryrun` to see the
+output folders are not registered. If the `applications/` folder has no
+`CMakeLists.txt`, nothing is registered, and the next steps say to add the
+application to the project's CMake build. Preview with `--dryrun` to see the
 destination and registration line before creating it.
 
 In a module created by an earlier CLI release, move `enable_testing()` before
@@ -295,11 +300,6 @@ rejected. Set the description and author with `--context description=...`,
 `--template module` and `--template application` select the packaged templates;
 any other value is a template directory. To use a directory named after a
 packaged template, pass a path such as `./application`.
-
-For application execution, `run.command` is split into arguments before path
-placeholders are expanded. A resolved path containing spaces, quotes, or
-backslashes stays within its argument. Quote literal multiword arguments in
-the command template as usual.
 
 ## Test, install, and package
 

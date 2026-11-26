@@ -592,7 +592,8 @@ def handle_create(cli, args: argparse.Namespace) -> None:
         metadata_path = project_dir / "metadata.json"
         main_file = project_dir / main_file_relative if main_file_relative is not None else None
 
-        if registers_application and registration_file.is_file():
+        can_register = registers_application and registration_file.is_file()
+        if can_register:
             _add_to_cmakelists(registration_file, actual_slug)
 
         git_initialized = False
@@ -623,6 +624,13 @@ def handle_create(cli, args: argparse.Namespace) -> None:
                 )
             else:
                 steps.append("- Review the license headers in the generated source files")
+            if registers_application and not can_register:
+                # The CLI builds an application in an applications/ folder from
+                # the folder's parent, which has to add it to its CMake build.
+                steps.append(
+                    "- Add the application to the project's CMake build: "
+                    f"{registration_file} does not exist"
+                )
             run_command = f"{cli.script_name} run {actual_slug}"
             if not registers_application:
                 # The CLI discovers an application outside the project's
