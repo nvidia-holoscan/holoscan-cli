@@ -451,8 +451,9 @@ def handle_create(cli, args: argparse.Namespace) -> None:
         # An explicit applications/ destination may belong to another project.
         # Check its name before resolving symlinks, then register in the folder
         # that actually receives the application rather than the current project.
-        is_applications_dir = output_dir.name == "applications"
-        destination_root = Path(os.path.abspath(output_dir)).parent
+        destination = Path(os.path.abspath(output_dir))
+        is_applications_dir = destination.name == "applications"
+        destination_root = destination.parent
         output_dir = output_dir.resolve()
         registers_application = not is_module and (
             output_dir == applications_dir or is_applications_dir
@@ -510,7 +511,7 @@ def handle_create(cli, args: argparse.Namespace) -> None:
             if registers_application and registration_file.is_file():
                 with suppress(OSError, UnicodeError):
                     text = registration_file.read_text(encoding="utf-8")
-                    registration = _application_registration(text, project_slug)
+                    registration = _application_registration(text, output_folder)
             if registration is not None:
                 print(Color.green("Would modify `applications/CMakeLists.txt`: "))
                 print(f"    {registration[1]}")
@@ -632,16 +633,17 @@ def handle_create(cli, args: argparse.Namespace) -> None:
                     f"{registration_file} does not exist"
                 )
             run_command = f"{cli.script_name} run {actual_slug}"
-            if not registers_application:
-                # The CLI discovers an application outside the project's
-                # applications/ folder from the application's own directory,
-                # and builds a container only from a Dockerfile there.
-                local = "" if (project_dir / "Dockerfile").is_file() else " --local"
-                run_command = f"cd {shlex.quote(str(project_dir))} && {run_command}{local}"
-            elif output_dir != applications_dir:
-                # The CLI finds the project from the current directory, so an
-                # application registered in another project runs from there.
-                run_command = f"cd {shlex.quote(str(destination_root))} && {run_command}"
+            if registers_application:
+                run_root = destination_root
+            else:
+                # An application outside an applications/ folder is a project of
+                # its own, and the CLI builds a container only from a Dockerfile there.
+                run_root = project_dir
+                if not (project_dir / "Dockerfile").is_file():
+                    run_command += " --local"
+            # The CLI finds the project from the current directory.
+            if not Path.cwd().is_relative_to(run_root.resolve()):
+                run_command = f"cd {shlex.quote(str(run_root))} && {run_command}"
             steps.append(f"- Build and run the application:\n   {run_command}")
             msg_next = "Possible next steps:\n" + "\n".join(steps)
 

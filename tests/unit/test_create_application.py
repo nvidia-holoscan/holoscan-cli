@@ -126,8 +126,33 @@ def test_dry_run_previews_the_application_and_its_registration(cli, project, cap
     assert registrations == SOURCE_PROJECT_REGISTRATIONS
 
 
-def test_cpp_application_is_created_and_registered_in_sorted_order(cli, project, capsys):
+def test_dry_run_previews_the_registration_of_the_generated_name(cli, project, capsys):
+    create.handle_create(
+        cli, _args(dryrun=True, context=[*_args().context, "project_slug=other_app"])
+    )
+
+    output = capsys.readouterr().out
+    assert f"Directory: {project / 'applications/other_app'}" in output
+    assert "    add_holoscan_application(other_app)\n" in output
+
+
+@pytest.mark.parametrize("directory", [None, "."])
+def test_current_applications_folder_is_registered(project, monkeypatch, capsys, directory):
+    # Without application metadata yet, the CLI does not detect the project, so
+    # the current directory is the applications/ folder itself.
+    monkeypatch.chdir(project / "applications")
+    cli = SimpleNamespace(HOLOHUB_ROOT=project / "applications", script_name="holoscan")
+
+    create.handle_create(cli, _args(dryrun=True, directory=directory))
+
+    assert "    add_holoscan_application(my_app)\n" in capsys.readouterr().out
+
+
+def test_cpp_application_is_created_and_registered_in_sorted_order(
+    cli, project, monkeypatch, capsys
+):
     pytest.importorskip("cookiecutter")
+    monkeypatch.chdir(project)
 
     create.handle_create(cli, _args())
 
@@ -153,6 +178,29 @@ def test_cpp_application_is_created_and_registered_in_sorted_order(cli, project,
     assert f"- Implement the application in {app / 'cpp/main.cpp'}\n" in output
     assert "- Review the license headers in the generated source files\n" in output
     assert output.rstrip().endswith("   holoscan run my_app")
+
+
+def test_next_steps_change_to_a_project_selected_from_elsewhere(
+    cli, project, tmp_path, monkeypatch, capsys
+):
+    """A project selected with --project-root or HOLOSCAN_CLI_ROOT runs from its root."""
+    pytest.importorskip("cookiecutter")
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    monkeypatch.chdir(elsewhere)
+
+    create.handle_create(cli, _args())
+
+    assert (project / "applications/my_app/metadata.json").is_file()
+    run_line = capsys.readouterr().out.rstrip().splitlines()[-1]
+    assert shlex.split(run_line) == [
+        "cd",
+        str(project.resolve()),
+        "&&",
+        "holoscan",
+        "run",
+        "my_app",
+    ]
 
 
 def test_python_application_is_created_as_a_standalone_project(tmp_path, monkeypatch, capsys):
