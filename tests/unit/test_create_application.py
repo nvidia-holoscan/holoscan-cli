@@ -469,6 +469,19 @@ def test_applications_folder_without_registrations_is_left_alone(
             "add_holoscan_application(alpha)\nadd_holoscan_application(my_app)\n"
             "add_holoscan_application(zulu)\n",
         ),
+        # A plain CMake folder adds its applications with add_subdirectory().
+        (
+            "add_subdirectory(alpha)\nadd_subdirectory(zulu)\n",
+            "add_subdirectory(alpha)\nadd_subdirectory(my_app)\nadd_subdirectory(zulu)\n",
+        ),
+        # Other folders added next to registrations keep the registration command.
+        (
+            "add_subdirectory(common)\n"
+            "add_holoscan_application(alpha)\nadd_holoscan_application(zulu)\n",
+            "add_subdirectory(common)\n"
+            "add_holoscan_application(alpha)\nadd_holoscan_application(my_app)\n"
+            "add_holoscan_application(zulu)\n",
+        ),
     ],
 )
 def test_registration_follows_the_existing_file(text, expected):
@@ -483,6 +496,7 @@ def test_registration_follows_the_existing_file(text, expected):
         "add_holoscan_application(my_app)\n",
         "add_holohub_application(my_app\n    DEPENDS OPERATORS my_op\n)\n",
         "if(ENABLE)\n  add_holohub_application(my_app)\nendif()\n",
+        "add_subdirectory(my_app)\n",
     ],
 )
 def test_registration_skips_a_registered_application(text):

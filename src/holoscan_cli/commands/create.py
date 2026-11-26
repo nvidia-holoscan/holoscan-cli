@@ -57,7 +57,8 @@ PACKAGED_TEMPLATES = {
 # applications/CMakeLists.txt does not register any application yet.
 DEFAULT_REGISTRATION_COMMAND = "add_holohub_application"
 _REGISTRATION_CALL = re.compile(
-    r"[ \t]*(?P<command>add_\w*application)[ \t]*\([ \t]*(?P<name>[^\s()#]+)(?P<rest>.*)",
+    r"[ \t]*(?P<command>add_\w*application|add_subdirectory)"
+    r"[ \t]*\([ \t]*(?P<name>[^\s()#]+)(?P<rest>.*)",
     re.IGNORECASE,
 )
 _BLOCK_START = re.compile(r"[ \t]*(?:if|foreach|while|function|macro|block)[ \t]*\(", re.IGNORECASE)
@@ -201,11 +202,12 @@ def _run_cookiecutter(
 def _application_registration(text: str, project_name: str) -> Optional[tuple[str, str]]:
     """Return the updated applications/CMakeLists.txt text and the added line.
 
-    The new line uses the registration command the file already uses. It goes
-    in sorted order when the existing registrations are sorted, one per line,
-    and the file has no blocks such as ``if()``, so the line never lands inside
-    a condition; otherwise it is appended. Returns ``None`` when the
-    application is already registered.
+    The new line uses the registration command the file already uses: an
+    ``add_*application()`` command, or ``add_subdirectory()`` in a file that
+    has none. It goes in sorted order when the existing registrations are
+    sorted, one per line, and the file has no blocks such as ``if()``, so the
+    line never lands inside a condition; otherwise it is appended. Returns
+    ``None`` when the application is already registered.
     """
     lines = text.splitlines(keepends=True)
     # Scan without bracket comments, keeping each line at the same index.
@@ -218,6 +220,9 @@ def _application_registration(text: str, project_name: str) -> Optional[tuple[st
     ]
     if any(match["name"] == project_name for _, match in calls):
         return None
+    calls = [
+        (index, match) for index, match in calls if match["command"].lower() != "add_subdirectory"
+    ] or calls
     command = calls[0][1]["command"] if calls else DEFAULT_REGISTRATION_COMMAND
     entry = f"{command}({project_name})"
     names = [match["name"] for _, match in calls]
