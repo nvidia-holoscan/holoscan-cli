@@ -27,7 +27,6 @@ import sys
 from pathlib import Path
 
 from holoscan_cli.commands.registry import help_for
-from holoscan_cli.utils.holohub import get_holohub_setup_scripts_dir
 from holoscan_cli.utils.host_setup import (
     install_packages_if_missing,
     setup_cmake,
@@ -37,6 +36,7 @@ from holoscan_cli.utils.host_setup import (
     setup_sccache,
 )
 from holoscan_cli.utils.io import Color, fatal, format_cmd, run_command
+from holoscan_cli.utils.source_project import get_setup_scripts_dir
 
 
 def _build_script_env() -> dict:
@@ -82,7 +82,7 @@ def handle_setup(cli, args: argparse.Namespace) -> None:
     """Handle setup command"""
 
     if args.list_scripts:
-        setup_scripts_dir = get_holohub_setup_scripts_dir()
+        setup_scripts_dir = get_setup_scripts_dir()
         print(format_cmd(f"Listing setup scripts available in {setup_scripts_dir}"))
         print(Color.green("Use with `holoscan setup --scripts <script_name>`"))
         for script in setup_scripts_dir.glob("*.sh"):
@@ -98,9 +98,9 @@ def handle_setup(cli, args: argparse.Namespace) -> None:
         for script in args.scripts:
             if any(sep in script for sep in ("/", "\\")):
                 fatal(f"Invalid script name '{script}': path separators are not allowed")
-            script_path = get_holohub_setup_scripts_dir().resolve() / f"{script}.sh"
+            script_path = get_setup_scripts_dir().resolve() / f"{script}.sh"
             if not script_path.exists():
-                fatal(f"Script {script}.sh not found in {get_holohub_setup_scripts_dir()}")
+                fatal(f"Script {script}.sh not found in {get_setup_scripts_dir()}")
             run_command(["bash", str(script_path)], dry_run=args.dryrun, env=script_env)
         sys.exit(0)
 

@@ -26,8 +26,8 @@
             "default": {
                 "description": "Run the C++ {{ cookiecutter.module_slug }} pipeline",
                 "run": {
-                    "command": "<holohub_app_bin>/{{ cookiecutter.module_slug }}_pipeline",
-                    "workdir": "holohub_app_bin"
+                    "command": "<project_app_bin>/{{ cookiecutter.module_slug }}_pipeline",
+                    "workdir": "project_app_bin"
                 }
             }
         }

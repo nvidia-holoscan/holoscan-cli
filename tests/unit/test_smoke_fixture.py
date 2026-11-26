@@ -116,7 +116,7 @@ def test_autocompletion_list_emits_fixture_project_and_commands(smoke_cli, capsy
 def test_smoke_fixture_root_envvar_honored(monkeypatch, tmp_path):
     """``HOLOSCAN_CLI_ROOT`` overrides the discovery walk; this is the seam
     CI's installed-wheel smoke test uses."""
-    from holoscan_cli.utils import holohub as utils_holohub
+    from holoscan_cli.utils import source_project
 
     monkeypatch.setenv("HOLOSCAN_CLI_ROOT", str(FIXTURE_ROOT))
-    assert utils_holohub._get_holohub_root() == FIXTURE_ROOT
+    assert source_project._get_project_root() == FIXTURE_ROOT

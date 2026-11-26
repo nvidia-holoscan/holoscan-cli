@@ -42,17 +42,17 @@ from holoscan_cli.utils.docker import (
     get_entrypoint_command_args,
     resolve_cli_docker_opts,
 )
-from holoscan_cli.utils.holohub import (
-    build_holohub_path_mapping,
-    check_skip_builds,
-    is_env_request_local_build,
-    update_env,
-)
 from holoscan_cli.utils.io import Color, fatal, run_command, warn
 from holoscan_cli.utils.project import (
     append_configure_args,
     report_effective_configuration,
     resolve_effective_build_type,
+)
+from holoscan_cli.utils.source_project import (
+    build_path_mapping,
+    check_skip_builds,
+    is_env_request_local_build,
+    update_env,
 )
 
 
@@ -165,7 +165,9 @@ def handle_install(cli, args: argparse.Namespace) -> None:
 
     # Get mode-specific build environment variables
     build_mode_env = mode_config.get("env", {}).copy()
-    update_env(build_mode_env, mode_config.get("build", {}).get("env", {}))
+    update_env(
+        build_mode_env, mode_config.get("build", {}).get("env", {}), preserve_unresolved=True
+    )
     effective_build_type = resolve_effective_build_type(args.build_type, build_mode_env)
 
     # Check if local mode is requested
@@ -200,8 +202,8 @@ def handle_install(cli, args: argparse.Namespace) -> None:
         )
 
         # Build path mapping
-        path_mapping = build_holohub_path_mapping(
-            holohub_root=cli.HOLOHUB_ROOT,
+        path_mapping = build_path_mapping(
+            project_root=cli.HOLOHUB_ROOT,
             project_data=project_data,
             build_dir=build_dir,
             data_dir=cli.DEFAULT_DATA_DIR,

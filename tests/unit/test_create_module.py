@@ -383,8 +383,9 @@ def test_packaged_template_generates_python_bindings_for_cpp_python(cli, tmp_pat
     assert apps["python"]["name"] == apps["cpp"]["name"] == "my_mod_pipeline"
     assert apps["python"]["language"] == ["Python"]
     assert apps["python"]["modes"]["default"]["run"]["command"] == (
-        "python3 <holohub_app_source>/my_mod_pipeline.py"
+        "python3 <project_app_source>/my_mod_pipeline.py"
     )
+    assert apps["python"]["modes"]["default"]["run"]["workdir"] == "project_bin"
     developer = (project / "DEVELOPER.md").read_text(encoding="utf-8")
     assert "├── python/" in developer
     assert "│       └── python/" in developer

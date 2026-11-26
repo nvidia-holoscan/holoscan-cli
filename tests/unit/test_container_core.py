@@ -385,7 +385,8 @@ def test_dockerfile_path_strategy_5_env_default(tmp_path, monkeypatch):
     assert Path(c.dockerfile_path) == fake_dockerfile
 
 
-def test_dockerfile_path_strategy_1_metadata_override_wins(tmp_path):
+@pytest.mark.parametrize("placeholder", ["holohub_app_source", "project_app_source"])
+def test_dockerfile_path_strategy_1_metadata_override_wins(tmp_path, placeholder):
     """metadata.json:dockerfile takes priority over folder-search fallbacks."""
     project_dir = tmp_path / "applications" / "my_app"
     project_dir.mkdir(parents=True)
@@ -400,11 +401,37 @@ def test_dockerfile_path_strategy_1_metadata_override_wins(tmp_path):
         "source_folder": str(project_dir),
         "metadata": {
             "language": "python",
-            "dockerfile": str(explicit),
+            "dockerfile": f"<{placeholder}>/WinningDockerfile",
         },
     }
     c = _stub_container(tmp_path, project_metadata=metadata)
     assert Path(c.dockerfile_path) == explicit
+
+
+@pytest.mark.parametrize("placeholder", ["holohub_data_dir", "project_data_dir"])
+@pytest.mark.parametrize("override", [False, True])
+def test_dockerfile_metadata_uses_configured_data_directory(
+    tmp_path, monkeypatch, placeholder, override
+):
+    root = tmp_path / "repo"
+    project_dir = root / "applications" / "my_app"
+    project_dir.mkdir(parents=True)
+    (project_dir / "Dockerfile").write_text("WRONG\n", encoding="utf-8")
+    data_dir = tmp_path / "datasets" if override else root / "data"
+    data_dir.mkdir(parents=True)
+    expected = data_dir / "WinningDockerfile"
+    expected.write_text("RIGHT\n", encoding="utf-8")
+    monkeypatch.delenv("HOLOSCAN_CLI_DATA_DIR", raising=False)
+    if override:
+        monkeypatch.setenv("HOLOSCAN_CLI_DATA_DIR", str(data_dir))
+
+    container = _stub_container(
+        root,
+        project_metadata=_project_metadata(
+            project_dir, dockerfile=f"<{placeholder}>/WinningDockerfile"
+        ),
+    )
+    assert container.dockerfile_path == expected
 
 
 def test_dockerfile_path_strategy_2_language_specific(tmp_path):

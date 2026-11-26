@@ -46,6 +46,38 @@ only regular, non-symlink files up to 1 MiB. Reads stay bounded if a file grows;
 FIFOs are rejected without waiting for a writer. Read and JSON decoding errors,
 including excessive nesting, are reported.
 
+## Metadata placeholders
+
+Metadata refers to project paths with these placeholders. The HoloHub names
+work as before, so existing `metadata.json` files need no change.
+
+| Placeholder | Prefixed name (default `holohub_`) | Path |
+| --- | --- | --- |
+| `<project_root>` | `<holohub_root>` | Project root |
+| `<project_data_dir>` | `<holohub_data_dir>` | `HOLOSCAN_CLI_DATA_DIR`, else `data` under the root |
+| `<project_app_source>` | `<holohub_app_source>` | Folder that contains the project's `metadata.json` |
+| `<project_bin>` | `<holohub_bin>` | Project build folder |
+| `<project_app_bin>` | `<holohub_app_bin>` | The project's source path under the build folder; the default `run.workdir` |
+
+The CLI expands them in `run.command`, `run.workdir`, `env` values, and
+`dockerfile`. `run.workdir` also accepts a name without brackets, such as
+`project_app_bin`. `HOLOSCAN_CLI_PATH_PREFIX` replaces the `holohub_` prefix;
+the `project_` names remain available. The CLI rejects a prefix if it gives a
+`project_` placeholder a conflicting meaning, such as `project_app_` making
+`project_app_bin` refer to both the build folder and the application's folder.
+Older CLI versions expand only the HoloHub names. Application and build paths
+require selected project metadata.
+
+Mode `env`, nested `build.env`, and nested `run.env` values support these path
+placeholders and environment references such as `<HOME>`. Unresolved references
+survive metadata-layer composition and expand when preparing the local command
+environment. References in `HOLOSCAN_CLI_BUILD_LOCAL` and `CMAKE_BUILD_TYPE`
+expand earlier, from the process environment, because they choose between a
+local and a container build and set the build type. Self-references such as
+`extra:<PATH>` compose with the inherited value. Explicit process values take precedence over static metadata defaults.
+Dockerfile lookup also honors `HOLOSCAN_CLI_DATA_DIR` for both data-directory
+placeholder names.
+
 ## Module defaults
 
 Module `metadata.json` supplies the identity, minimum SDK version, Dockerfile,

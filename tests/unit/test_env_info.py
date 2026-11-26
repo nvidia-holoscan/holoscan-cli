@@ -16,6 +16,14 @@ from holoscan_cli.commands import info as info_cmd
 from holoscan_cli.utils import env_info
 
 
+def test_original_project_info_collector_keeps_name_and_keyword(tmp_path, capsys):
+    paths = dict(build_dir=tmp_path / "build", data_dir=tmp_path / "data", sdk_dir=Path("/sdk"))
+    env_info.collect_holohub_info(holohub_root=tmp_path, **paths)
+    original_output = capsys.readouterr().out
+    env_info.collect_source_project_info(project_root=tmp_path, **paths)
+    assert capsys.readouterr().out == original_output
+
+
 def test_collectors_print_available_host_tooling(tmp_path, monkeypatch, capsys):
     responses = {
         ("git", "branch", "--show-current"): "feature/module-cli",
@@ -48,7 +56,7 @@ def test_collectors_print_available_host_tooling(tmp_path, monkeypatch, capsys):
     root = tmp_path / "repo"
     root.mkdir()
 
-    env_info.collect_holohub_info(root, tmp_path / "build", tmp_path / "data", Path("/sdk"))
+    env_info.collect_source_project_info(root, tmp_path / "build", tmp_path / "data", Path("/sdk"))
     env_info.collect_git_info(root)
     env_info.collect_env_info()
 

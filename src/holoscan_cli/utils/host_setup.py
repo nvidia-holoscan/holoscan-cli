@@ -334,9 +334,9 @@ def setup_sccache(min_version: str = "0.12.0-rapids.20", dry_run: bool = False) 
         min_version: Minimum required RAPIDS version string ("[v]MAJOR.MINOR.PATCH-rapids.CUSTOM").
         dry_run: If True, print commands without executing them.
     """
-    from holoscan_cli.utils.holohub import get_holohub_setup_scripts_dir
+    from holoscan_cli.utils.source_project import get_setup_scripts_dir
 
-    script_path = get_holohub_setup_scripts_dir() / "sccache.sh"
+    script_path = get_setup_scripts_dir() / "sccache.sh"
     if not script_path.exists():
         warn(f"sccache setup script not found: {script_path}")
         return
