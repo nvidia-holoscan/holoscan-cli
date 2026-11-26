@@ -313,16 +313,16 @@ def handle_run(cli, args: argparse.Namespace) -> None:
             project_defaults_are_lower=True,
         )
 
-        # Process command template using the path mapping and environment variables
-        cmd = replace_placeholders(run_config["command"], path_mapping)
+        # Parse the template before inserting paths: quotes, backslashes, and
+        # whitespace in a resolved path are literal characters in one argument.
+        cmd = [
+            replace_placeholders(arg, path_mapping) for arg in shlex.split(run_config["command"])
+        ]
 
         # Use effective run args (which may come from mode or CLI)
         effective_run_args = run_args.get("run_args")
         if effective_run_args:
-            cmd_args = shlex.split(effective_run_args)
-            if isinstance(cmd, str):  # Ensure cmd is a list of arguments
-                cmd = shlex.split(cmd)
-            cmd.extend(cmd_args)
+            cmd.extend(shlex.split(effective_run_args))
 
         if language == "cpp":
             if not build_dir.is_dir() and not args.dryrun:
@@ -361,7 +361,7 @@ def handle_run(cli, args: argparse.Namespace) -> None:
         # `run.command` is intentionally executable project configuration. Keep
         # plain strings out of a shell: projects that need shell semantics must
         # request an interpreter explicitly (for example, `bash -c ...`).
-        cmd_to_run = cmd if isinstance(cmd, list) else shlex.split(cmd)
+        cmd_to_run = cmd
         cmd_to_run.extend(getattr(args, "_trailing_args", []))
 
         # Handle Nsight Systems profiling. Nsight checks permissions for the
