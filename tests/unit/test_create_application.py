@@ -523,6 +523,12 @@ def test_application_template_takes_one_language(cli, project, capsys):
         ({"context": ["description=first line\nsecond line"]}, "description must be a single"),
         ({"context": ["copyright_holder=Example\u2028Org"]}, "copyright_holder must be a single"),
         ({"project": "9lives"}, "project_slug '9lives' must be snake_case"),
+        # CMake reserves "test", and "tests" is the tests' build folder.
+        ({"project": "test"}, "project_slug 'test' cannot name a C++ executable"),
+        ({"project": "tests"}, "project_slug 'tests' cannot name a C++ executable"),
+        # The script would be imported in place of these modules.
+        ({"project": "signal", "language": "python"}, "project_slug 'signal' is the name of"),
+        ({"project": "holoscan", "language": "python"}, "project_slug 'holoscan' is the name of"),
     ],
 )
 def test_application_template_rejects_invalid_context(cli, project, capfd, overrides, message):

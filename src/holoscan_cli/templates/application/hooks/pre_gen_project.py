@@ -23,6 +23,22 @@ FREE_TEXT = {
 }
 
 MINIMUM_HOLOSCAN_VERSION = (5, 0, 0)
+# CMake reserves these target names, and the C++ executable is written next to
+# the cpp/ and tests/ build folders.
+RESERVED_CPP_NAMES = {
+    "all",
+    "clean",
+    "cpp",
+    "edit_cache",
+    "help",
+    "install",
+    "package",
+    "package_source",
+    "preinstall",
+    "rebuild_cache",
+    "test",
+    "tests",
+}
 
 _SNAKE_CASE = re.compile(r"[a-z][a-z0-9_]*")
 _VERSION = re.compile(r"(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)")
@@ -41,6 +57,17 @@ if not _SNAKE_CASE.fullmatch(PROJECT_SLUG):
 
 if LANGUAGE not in ("cpp", "python"):
     reject(f"language {LANGUAGE!r} must be 'cpp' or 'python'; an application uses one language.")
+
+if LANGUAGE == "cpp" and PROJECT_SLUG in RESERVED_CPP_NAMES:
+    reject(f"project_slug {PROJECT_SLUG!r} cannot name a C++ executable; choose another name.")
+
+# The script's folder comes first on the module search path, so a script named
+# after a module would be imported in its place.
+if LANGUAGE == "python" and (PROJECT_SLUG in sys.stdlib_module_names or PROJECT_SLUG == "holoscan"):
+    reject(
+        f"project_slug {PROJECT_SLUG!r} is the name of a Python module that the application "
+        "script would hide; choose another name."
+    )
 
 for name, value in FREE_TEXT.items():
     # Control characters (Cc) include newlines and tabs; Zl and Zp are Unicode
